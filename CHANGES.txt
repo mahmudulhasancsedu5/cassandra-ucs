@@ -1,4 +1,5 @@
 2.1.1
+ * Allow compilation in java 8 (CASSANDRA-7208)
  * Ignore fat clients when checking for endpoint collision (CASSANDRA-7939)
  * Make sstablerepairedset take a list of files (CASSANDRA-7995)
  * (cqlsh) Tab completeion for indexes on map keys (CASSANDRA-7972)
