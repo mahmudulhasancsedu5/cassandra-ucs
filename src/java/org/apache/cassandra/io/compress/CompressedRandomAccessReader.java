@@ -17,7 +17,9 @@
  */
 package org.apache.cassandra.io.compress;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
@@ -28,6 +30,7 @@ import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.CompressedPoolingSegmentedFile;
 import org.apache.cassandra.io.util.PoolingSegmentedFile;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -73,16 +76,17 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
     protected CompressedRandomAccessReader(String dataFilePath, CompressionMetadata metadata, PoolingSegmentedFile owner) throws FileNotFoundException
     {
-        super(new File(dataFilePath), metadata.chunkLength(), owner);
+        super(new File(dataFilePath), metadata.compressor().preferredByteBufferPool(), metadata.chunkLength(), owner);
         this.metadata = metadata;
         checksum = metadata.hasPostCompressionAdlerChecksums ? new Adler32() : new CRC32();
-        compressed = ByteBuffer.wrap(new byte[metadata.compressor().initialCompressedBufferLength(metadata.chunkLength())]);
+        compressed = bufferPool.allocate(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()));
     }
 
+    @Override
     protected ByteBuffer allocateBuffer(int bufferSize)
     {
         assert Integer.bitCount(bufferSize) == 1;
-        return ByteBuffer.allocate(bufferSize);
+        return bufferPool.allocate(bufferSize);
     }
 
     @Override
@@ -98,24 +102,20 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             if (channel.position() != chunk.offset)
                 channel.position(chunk.offset);
 
-            if (compressed.capacity() < chunk.length)
-                compressed = ByteBuffer.wrap(new byte[chunk.length]);
-            else
+            if (compressed.capacity() < chunk.length) {
+            	bufferPool.release(compressed);
+                compressed = bufferPool.allocate(chunk.length);
+            } else
                 compressed.clear();
             compressed.limit(chunk.length);
 
             if (channel.read(compressed) != chunk.length)
                 throw new CorruptBlockException(getPath(), chunk);
 
-            // technically flip() is unnecessary since all the remaining work uses the raw array, but if that changes
-            // in the future this will save a lot of hair-pulling
             compressed.flip();
-            buffer.clear();
-            int decompressedBytes;
             try
             {
-                decompressedBytes = metadata.compressor().uncompress(compressed.array(), 0, chunk.length, buffer.array(), 0);
-                buffer.limit(decompressedBytes);
+                metadata.compressor().uncompress(compressed, buffer);
             }
             catch (IOException e)
             {
@@ -125,14 +125,7 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             if (metadata.parameters.getCrcCheckChance() > FBUtilities.threadLocalRandom().nextDouble())
             {
 
-                if (metadata.hasPostCompressionAdlerChecksums)
-                {
-                    checksum.update(compressed.array(), 0, chunk.length);
-                }
-                else
-                {
-                    checksum.update(buffer.array(), 0, decompressedBytes);
-                }
+                ByteBufferUtil.updateChecksum(checksum, metadata.hasPostCompressionAdlerChecksums ? compressed : buffer);
 
                 if (checksum(chunk) != (int) checksum.getValue())
                     throw new CorruptBlockException(getPath(), chunk);
@@ -153,6 +146,14 @@ public class CompressedRandomAccessReader extends RandomAccessReader
         {
             throw new FSReadError(e, getPath());
         }
+    }
+
+    @Override
+    public void deallocate()
+    {
+        bufferPool.release(compressed);
+        compressed = null;
+        super.deallocate();
     }
 
     private int checksum(CompressionMetadata.Chunk chunk) throws IOException

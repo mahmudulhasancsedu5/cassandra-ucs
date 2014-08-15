@@ -25,7 +25,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 
-public class DeflateCompressor implements ICompressor
+public class DeflateCompressor extends ByteArrayCompressor implements ICompressor
 {
     public static final DeflateCompressor instance = new DeflateCompressor();
 

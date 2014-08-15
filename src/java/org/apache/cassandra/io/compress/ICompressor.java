@@ -18,7 +18,10 @@
 package org.apache.cassandra.io.compress;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Set;
+
+import org.apache.cassandra.utils.ByteBuffers;
 
 public interface ICompressor
 {
@@ -27,6 +30,18 @@ public interface ICompressor
     public int compress(byte[] input, int inputOffset, int inputLength, WrappedArray output, int outputOffset) throws IOException;
 
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException;
+    
+    /**
+     * Uncompress using ByteBuffers. The output buffer is cleared, data is uncompressed, and the buffer is then prepared for reading
+     * the uncompressed data (i.e. position is set to 0, limit to the size of the data).
+     */
+    public void uncompress(ByteBuffer input, ByteBuffer output) throws IOException;
+    
+    /**
+     * Specified the preferred type of byte buffers for this compressor. Some can operate on OFF_HEAP (direct) buffers directly,
+     * others would need copying in that case and prefer ON_HEAP (backed by byte[]) buffers.
+     */
+    public ByteBuffers preferredByteBufferPool();
 
     public Set<String> supportedOptions();
 

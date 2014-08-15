@@ -31,8 +31,10 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.zip.Checksum;
 
 import net.nicoulaj.compilecommand.annotations.Inline;
+
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileUtils;
@@ -559,5 +561,39 @@ public class ByteBufferUtil
     {
         int length = readShortLength(bb);
         return readBytes(bb, length);
+    }
+
+    /**
+     * Update a checksum with the contents of a byte buffer. 
+     */
+    public static void updateChecksum(Checksum checksum, ByteBuffer buffer)
+    {
+        // TODO: Replace this with checksum.update(ByteBuffer) calls once Java 8 can be used.
+        if (buffer.hasArray())
+        {
+            checksum.update(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
+        }
+        else
+        {
+            int pos = buffer.position();
+            int remaining = buffer.remaining();
+            int step = 4096;
+            byte[] bytes = new byte[step];
+
+            while (remaining >= step)
+            {
+                buffer.get(bytes, 0, step);
+                checksum.update(bytes, 0, step);
+                remaining -= step;
+            }
+
+            if (remaining > 0)
+            {
+                buffer.get(bytes, 0, remaining);
+                checksum.update(bytes, 0, remaining);
+            }
+
+            buffer.position(pos);
+        }
     }
 }

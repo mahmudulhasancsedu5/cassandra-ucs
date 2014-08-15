@@ -17,18 +17,23 @@
  */
 package org.apache.cassandra.io.util;
 
-import java.io.*;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import org.apache.cassandra.io.FSReadError;
+import org.apache.cassandra.utils.ByteBuffers;
 import org.apache.cassandra.utils.ByteBufferUtil;
+
+import com.google.common.annotations.VisibleForTesting;
 
 public class RandomAccessReader extends AbstractDataInput implements FileDataInput
 {
+	
     public static final long CACHE_FLUSH_INTERVAL_IN_BYTES = (long) Math.pow(2, 27); // 128mb
 
     // default buffer size, 64Kb
@@ -50,10 +55,13 @@ public class RandomAccessReader extends AbstractDataInput implements FileDataInp
     private final long fileLength;
 
     protected final PoolingSegmentedFile owner;
+    
+    protected final ByteBuffers bufferPool;
 
-    protected RandomAccessReader(File file, int bufferSize, PoolingSegmentedFile owner) throws FileNotFoundException
+    protected RandomAccessReader(File file, ByteBuffers bufferPool, int bufferSize, PoolingSegmentedFile owner) throws FileNotFoundException
     {
         this.owner = owner;
+        this.bufferPool = bufferPool;
 
         filePath = file.getAbsolutePath();
 
@@ -85,7 +93,7 @@ public class RandomAccessReader extends AbstractDataInput implements FileDataInp
 
     protected ByteBuffer allocateBuffer(int bufferSize)
     {
-        return ByteBuffer.allocate((int) Math.min(fileLength, bufferSize));
+   	    return bufferPool.allocate((int) Math.min(fileLength, bufferSize));
     }
 
     public static RandomAccessReader open(File file, PoolingSegmentedFile owner)
@@ -103,7 +111,7 @@ public class RandomAccessReader extends AbstractDataInput implements FileDataInp
     {
         try
         {
-            return new RandomAccessReader(file, bufferSize, owner);
+            return new RandomAccessReader(file, ByteBuffers.OFF_HEAP, bufferSize, owner);
         }
         catch (IOException e)
         {
@@ -238,7 +246,9 @@ public class RandomAccessReader extends AbstractDataInput implements FileDataInp
 
     public void deallocate()
     {
+        // FIXME: This breaks for buffer == null (which is possible according to the comment above).
         bufferOffset += buffer.position();
+        bufferPool.release(buffer);
         buffer = null; // makes sure we don't use this after it's ostensibly closed
 
         try

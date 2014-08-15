@@ -26,7 +26,7 @@ import java.util.Set;
 import net.jpountz.lz4.LZ4Exception;
 import net.jpountz.lz4.LZ4Factory;
 
-public class LZ4Compressor implements ICompressor
+public class LZ4Compressor extends ByteArrayCompressor implements ICompressor
 {
 
     private static final int INTEGER_BYTES = 4;

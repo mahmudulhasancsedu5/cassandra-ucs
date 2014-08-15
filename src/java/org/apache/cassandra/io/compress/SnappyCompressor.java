@@ -18,16 +18,18 @@
 package org.apache.cassandra.io.compress;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.utils.ByteBuffers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xerial.snappy.Snappy;
 import org.xerial.snappy.SnappyError;
 
-public class SnappyCompressor implements ICompressor
+public class SnappyCompressor extends ByteArrayCompressor implements ICompressor
 {
     public static final SnappyCompressor instance = new SnappyCompressor();
 
@@ -91,5 +93,26 @@ public class SnappyCompressor implements ICompressor
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException
     {
         return Snappy.rawUncompress(input, inputOffset, inputLength, output, outputOffset);
+    }
+
+    @Override
+    public void uncompress(ByteBuffer input, ByteBuffer output) throws IOException
+    {
+        // Snappy only accepts direct buffers in buffer calls.
+        if (input.isDirect() && output.isDirect())
+        {
+            output.clear();
+            Snappy.uncompress(input, output);
+        }
+        else
+        {
+            super.uncompress(input, output);
+        }
+    }
+
+    @Override
+    public ByteBuffers preferredByteBufferPool()
+    {
+        return ByteBuffers.OFF_HEAP;
     }
 }

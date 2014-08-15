@@ -21,19 +21,18 @@ package org.apache.cassandra.utils;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.Arrays;
-
-import org.junit.Test;
+import java.util.Random;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.io.util.FastByteArrayOutputStream;
+import org.junit.Test;
 
 public class ByteBufferUtilTest
 {
@@ -66,7 +65,6 @@ public class ByteBufferUtilTest
     {
         assert s.equals(ByteBufferUtil.string(ByteBufferUtil.bytes(s)));
 
-        int pos = 10;
         ByteBuffer bb = fromStringWithPosition(s, 10, false);
         assert s.equals(ByteBufferUtil.string(bb, 10, s.length()));
 
@@ -249,5 +247,27 @@ public class ByteBufferUtilTest
         ByteBuffer bb2 = ByteBufferUtil.hexToBytes(s);
         assertEquals(bb, bb2);
         assertEquals("0102", s);
+    }
+    
+    @Test
+    public void testChecksum()
+    {
+        Checksum control = new CRC32();
+        byte[] data = new byte[16383 + 5 + 15];
+        new Random().nextBytes(data);
+        control.update(data, 5, 16383);
+        
+        for (ByteBuffers pool: ByteBuffers.values()) {
+            ByteBuffer buf = pool.allocate(data.length);
+            buf.put(data);
+            buf.flip();
+            buf.position(5);
+            buf.limit(5 + 16383);
+            
+            Checksum c = new CRC32();
+            ByteBufferUtil.updateChecksum(c, buf);
+            assertEquals(control.getValue(), c.getValue());
+            pool.release(buf);
+        }
     }
 }
