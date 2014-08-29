@@ -26,10 +26,12 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.RateLimiter;
@@ -37,7 +39,6 @@ import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.config.CFMetaData;
@@ -441,7 +442,6 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                 }
 
                 MessageOut<Mutation> message = mutation.createMessage();
-                rateLimiter.acquire(message.serializedSize(MessagingService.current_version));
                 Runnable callback = new Runnable()
                 {
                     public void run()
@@ -450,6 +450,33 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                         deleteHint(hostIdBytes, hint.name(), hint.timestamp());
                     }
                 };
+
+                int messageSize = message.serializedSize(MessagingService.current_version);
+                Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(mutation.getKeyspaceName(), mutation.key());
+                if (!naturalEndpoints.contains(endpoint)) {
+                    Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(
+                            StorageService.getPartitioner().getToken(mutation.key()), mutation.getKeyspaceName());
+                    if (!pendingEndpoints.contains(endpoint)) {
+                        // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
+                        // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
+                        // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+                        WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints, pendingEndpoints,
+                                ConsistencyLevel.ONE, null, callback, WriteType.SIMPLE);
+                        for (InetAddress replica: naturalEndpoints) {
+                            rateLimiter.acquire(messageSize);
+                            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+                        }
+                        for (InetAddress replica: pendingEndpoints) {
+                            rateLimiter.acquire(messageSize);
+                            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+                        }
+                        responseHandlers.add(responseHandler);
+                        // Skip the normal write below.
+                        continue;
+                    }
+                }
+
+                rateLimiter.acquire(messageSize);
                 WriteResponseHandler responseHandler = new WriteResponseHandler(endpoint, WriteType.SIMPLE, callback);
                 MessagingService.instance().sendRR(message, endpoint, responseHandler, false);
                 responseHandlers.add(responseHandler);
