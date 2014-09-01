@@ -452,29 +452,9 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                 };
 
                 int messageSize = message.serializedSize(MessagingService.current_version);
-                Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(mutation.getKeyspaceName(), mutation.key());
-                if (!naturalEndpoints.contains(endpoint)) {
-                    Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(
-                            StorageService.getPartitioner().getToken(mutation.key()), mutation.getKeyspaceName());
-                    if (!pendingEndpoints.contains(endpoint)) {
-                        // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
-                        // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
-                        // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
-                        WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints, pendingEndpoints,
-                                ConsistencyLevel.ONE, null, callback, WriteType.SIMPLE);
-                        for (InetAddress replica: naturalEndpoints) {
-                            rateLimiter.acquire(messageSize);
-                            MessagingService.instance().sendRR(message, replica, responseHandler, false);
-                        }
-                        for (InetAddress replica: pendingEndpoints) {
-                            rateLimiter.acquire(messageSize);
-                            MessagingService.instance().sendRR(message, replica, responseHandler, false);
-                        }
-                        responseHandlers.add(responseHandler);
-                        // Skip the normal write below.
-                        continue;
-                    }
-                }
+                if (handleTopologyChangeAtEndpoint(endpoint, mutation,
+                        message, messageSize, rateLimiter, callback, responseHandlers))
+                    continue;
 
                 rateLimiter.acquire(messageSize);
                 WriteResponseHandler responseHandler = new WriteResponseHandler(endpoint, WriteType.SIMPLE, callback);
@@ -507,6 +487,37 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    private boolean handleTopologyChangeAtEndpoint(InetAddress endpoint, Mutation mutation,
+            MessageOut<Mutation> message, int messageSize, RateLimiter rateLimiter,
+            Runnable callback, List<WriteResponseHandler> responseHandlers)
+    {
+        Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(
+                mutation.getKeyspaceName(), mutation.key());
+        if (naturalEndpoints.contains(endpoint))
+            return false;
+        
+        Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(
+                StorageService.getPartitioner().getToken(mutation.key()), mutation.getKeyspaceName());
+        if (pendingEndpoints.contains(endpoint))
+            return false;
+        
+        // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
+        // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
+        // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+        WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints, pendingEndpoints,
+                ConsistencyLevel.ONE, null, callback, WriteType.SIMPLE);
+        for (InetAddress replica: naturalEndpoints) {
+            rateLimiter.acquire(messageSize);
+            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+        }
+        for (InetAddress replica: pendingEndpoints) {
+            rateLimiter.acquire(messageSize);
+            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+        }
+        responseHandlers.add(responseHandler);
+        return true;
     }
 
     // read less columns (mutations) per page if they are very large
