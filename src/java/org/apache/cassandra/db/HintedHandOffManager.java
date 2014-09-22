@@ -510,6 +510,27 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         }
     }
 
+    /**
+     * A write response handler that is triggered when all endpoints have responded, or have a hint written.
+     * Used to ensure hints for no-longer-valid endpoints are only deleted after the hint has been sent or hinted for
+     * all current replicas.
+     */
+    private static class WriteOrHintResponseHandler extends WriteResponseHandler
+    {
+        public WriteOrHintResponseHandler(Collection<InetAddress> writeEndpoints, Collection<InetAddress> pendingEndpoints,
+                Runnable callback)
+        {
+            super(writeEndpoints, pendingEndpoints, ConsistencyLevel.ANY, null, callback, WriteType.SIMPLE);
+        }
+
+        protected int totalBlockFor()
+        {
+            // Block for a response from all endpoints.
+            // Since consistencyLevel == ANY, a response is also triggered on hints.
+            return naturalEndpoints.size() + pendingEndpoints.size();
+        }
+    }
+
     private boolean handleTopologyChangeAtEndpoint(InetAddress endpoint, Mutation mutation,
             MessageOut<Mutation> message, int messageSize, RateLimiter rateLimiter,
             Runnable callback, List<WriteResponseHandler> responseHandlers)
@@ -527,14 +548,11 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         try
         {
             // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
-            // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
+            // Since we don't know which node(s) it has handed over to, send the hint to all replicas.
             // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
-            WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints,
-                                                                            pendingEndpoints,
-                                                                            ConsistencyLevel.ANY,
-                                                                            null,
-                                                                            callback,
-                                                                            WriteType.SIMPLE);
+            WriteResponseHandler responseHandler = new WriteOrHintResponseHandler(naturalEndpoints,
+                                                                                  pendingEndpoints,
+                                                                                  callback);
             final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(
                     FBUtilities.getBroadcastAddress());
             rateLimiter.acquire((naturalEndpoints.size() + pendingEndpoints.size()) * messageSize);
