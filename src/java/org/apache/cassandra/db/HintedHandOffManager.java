@@ -23,37 +23,42 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.RateLimiter;
-import com.google.common.util.concurrent.Uninterruptibles;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.Composites;
-import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.db.filter.*;
+import org.apache.cassandra.db.filter.ColumnSlice;
+import org.apache.cassandra.db.filter.IDiskAtomFilter;
+import org.apache.cassandra.db.filter.NamesQueryFilter;
+import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.exceptions.OverloadedException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.FailureDetector;
@@ -63,11 +68,22 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.metrics.HintedHandoffMetrics;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.service.*;
+import org.apache.cassandra.service.StorageProxy;
+import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.service.WriteResponseHandler;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.RateLimiter;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 /**
  * The hint schema looks like this:
@@ -452,8 +468,13 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                 };
 
                 int messageSize = message.serializedSize(MessagingService.current_version);
-                if (handleTopologyChangeAtEndpoint(endpoint, mutation,
-                        message, messageSize, rateLimiter, callback, responseHandlers))
+                if (handleTopologyChangeAtEndpoint(endpoint,
+                                                   mutation,
+                                                   message,
+                                                   messageSize,
+                                                   rateLimiter,
+                                                   callback,
+                                                   responseHandlers))
                     continue;
 
                 rateLimiter.acquire(messageSize);
@@ -503,20 +524,31 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         if (pendingEndpoints.contains(endpoint))
             return false;
         
-        // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
-        // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
-        // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
-        WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints, pendingEndpoints,
-                ConsistencyLevel.ONE, null, callback, WriteType.SIMPLE);
-        for (InetAddress replica: naturalEndpoints) {
-            rateLimiter.acquire(messageSize);
-            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+        try
+        {
+            // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
+            // Since we don't know which node(s) it has handed over to, try to send the hint to all replicas.
+            // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+            WriteResponseHandler responseHandler = new WriteResponseHandler(naturalEndpoints,
+                                                                            pendingEndpoints,
+                                                                            ConsistencyLevel.ANY,
+                                                                            null,
+                                                                            callback,
+                                                                            WriteType.SIMPLE);
+            final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(
+                    FBUtilities.getBroadcastAddress());
+            rateLimiter.acquire((naturalEndpoints.size() + pendingEndpoints.size()) * messageSize);
+            // Send to all endpoints and write hints for unsuccessful deliveries.
+            StorageProxy.sendToHintedEndpoints(mutation,
+                                               Iterables.concat(naturalEndpoints, pendingEndpoints),
+                                               responseHandler,
+                                               localDataCenter);
+            responseHandlers.add(responseHandler);
         }
-        for (InetAddress replica: pendingEndpoints) {
-            rateLimiter.acquire(messageSize);
-            MessagingService.instance().sendRR(message, replica, responseHandler, false);
+        catch (OverloadedException e)
+        {
+            // Sending failed. Do not delete hint so that we can try again at a later time.
         }
-        responseHandlers.add(responseHandler);
         return true;
     }
 
