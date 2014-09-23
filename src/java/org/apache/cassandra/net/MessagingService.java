@@ -349,13 +349,7 @@ public final class MessagingService implements MessagingServiceMBean
                     });
                 }
 
-                if (expiredCallbackInfo.shouldHint())
-                {
-                    Mutation mutation = (Mutation) ((WriteCallbackInfo) expiredCallbackInfo).sentMessage.payload;
-
-                    return StorageProxy.submitHint(mutation, expiredCallbackInfo.target, null);
-                }
-
+                expiredCallbackInfo.maybeHint();
                 return null;
             }
         };
@@ -562,7 +556,7 @@ public final class MessagingService implements MessagingServiceMBean
         return messageId;
     }
 
-    public int addCallback(IAsyncCallback cb,
+    public int addCallback(AbstractWriteResponseHandler cb,
                            MessageOut<? extends IMutation> message,
                            InetAddress to,
                            long timeout,

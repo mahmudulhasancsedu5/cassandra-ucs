@@ -53,7 +53,7 @@ public class CallbackInfo
         this.failureCallback = failureCallback;
     }
 
-    public boolean shouldHint()
+    public boolean maybeHint()
     {
         return false;
     }

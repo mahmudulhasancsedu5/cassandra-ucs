@@ -890,9 +890,8 @@ public class StorageProxy implements StorageProxyMBean
                 {
                     logger.debug("Adding hint for {}", target);
                     writeHintForMutation(mutation, System.currentTimeMillis(), ttl, target);
-                    // Notify the handler only for CL == ANY
-                    if (responseHandler != null && responseHandler.consistencyLevel == ConsistencyLevel.ANY)
-                        responseHandler.response(null);
+                    if (responseHandler != null)
+                        responseHandler.hintSubmitted();
                 } else
                 {
                     logger.debug("Skipped writing hint for {} (ttl {})", target, ttl);

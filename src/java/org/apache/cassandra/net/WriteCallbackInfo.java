@@ -19,9 +19,12 @@
 package org.apache.cassandra.net;
 
 import java.net.InetAddress;
+import java.util.concurrent.Future;
 
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.service.AbstractWriteResponseHandler;
 import org.apache.cassandra.service.StorageProxy;
 
 public class WriteCallbackInfo extends CallbackInfo
@@ -31,7 +34,7 @@ public class WriteCallbackInfo extends CallbackInfo
     private final boolean allowHints;
 
     public WriteCallbackInfo(InetAddress target,
-                             IAsyncCallback callback,
+                             AbstractWriteResponseHandler callback,
                              MessageOut message,
                              IVersionedSerializer<?> serializer,
                              ConsistencyLevel consistencyLevel,
@@ -44,11 +47,16 @@ public class WriteCallbackInfo extends CallbackInfo
         this.allowHints = allowHints;
     }
 
-    public boolean shouldHint()
+    public boolean maybeHint()
     {
-        return allowHints
-            && sentMessage.verb != MessagingService.Verb.COUNTER_MUTATION
-            && consistencyLevel != ConsistencyLevel.ANY
-            && StorageProxy.shouldHint(target);
+        if (!(allowHints
+              && sentMessage.verb != MessagingService.Verb.COUNTER_MUTATION
+              && consistencyLevel != ConsistencyLevel.ANY
+              && StorageProxy.shouldHint(target)))
+            return false;
+
+        Mutation mutation = (Mutation) sentMessage.payload;
+        StorageProxy.submitHint(mutation, target, (AbstractWriteResponseHandler) callback);
+        return true;
     }
 }

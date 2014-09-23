@@ -79,6 +79,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -371,8 +373,10 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
 
         // rate limit is in bytes per second. Uses Double.MAX_VALUE if disabled (set to 0 in cassandra.yaml).
         // max rate is scaled by the number of nodes in the cluster (CASSANDRA-5272).
-        int throttleInKB = DatabaseDescriptor.getHintedHandoffThrottleInKB()
-                           / (StorageService.instance.getTokenMetadata().getAllEndpoints().size() - 1);
+        int throttleInKB = DatabaseDescriptor.getHintedHandoffThrottleInKB();
+        int endpointsCount = StorageService.instance.getTokenMetadata().getAllEndpoints().size();
+        if (endpointsCount > 1)
+            throttleInKB /= endpointsCount - 1;
         RateLimiter rateLimiter = RateLimiter.create(throttleInKB == 0 ? Double.MAX_VALUE : throttleInKB * 1024);
 
         boolean finished = false;
@@ -520,14 +524,19 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         public WriteOrHintResponseHandler(Collection<InetAddress> writeEndpoints, Collection<InetAddress> pendingEndpoints,
                 Runnable callback)
         {
-            super(writeEndpoints, pendingEndpoints, ConsistencyLevel.ANY, null, callback, WriteType.SIMPLE);
+            super(writeEndpoints, pendingEndpoints, ConsistencyLevel.ALL, null, callback, WriteType.SIMPLE);
         }
 
         protected int totalBlockFor()
         {
-            // Block for a response from all endpoints.
-            // Since consistencyLevel == ANY, a response is also triggered on hints.
+            // Our list of endpoints is pre-filtered by shouldHint; the expected number of responses may be
+            // different from the number required for ConsistencyLevel.ALL.
             return naturalEndpoints.size() + pendingEndpoints.size();
+        }
+
+        protected void hintSubmitted()
+        {
+            response(null);
         }
     }
 
@@ -545,28 +554,51 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         if (pendingEndpoints.contains(endpoint))
             return false;
         
-        try
+        // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
+        // Since we don't know which node(s) it has handed over to, send the hint to all replicas,
+        // writing hints for each one that does not respond. Delete the hint only if the replicas
+        // have responded, or a hint has been written for them.
+        // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+        
+        // Do not send replays to any endpoint that does not take part in hinting.
+        Predicate<InetAddress> shouldHint = new Predicate<InetAddress>() {
+            @Override
+            public boolean apply(InetAddress endpoint)
+            {
+                return StorageProxy.shouldHint(endpoint);
+            }
+        };
+        // Take copies of the lists to avoid the risk of shouldHint of some endpoint changing between uses.
+        naturalEndpoints = ImmutableList.copyOf(Iterables.filter(naturalEndpoints, shouldHint));
+        pendingEndpoints = ImmutableList.copyOf(Iterables.filter(pendingEndpoints, shouldHint));
+        if (naturalEndpoints.size() + pendingEndpoints.size() > 0)
         {
-            // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
-            // Since we don't know which node(s) it has handed over to, send the hint to all replicas.
-            // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
-            WriteResponseHandler responseHandler = new WriteOrHintResponseHandler(naturalEndpoints,
-                                                                                  pendingEndpoints,
-                                                                                  callback);
-            final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(
-                    FBUtilities.getBroadcastAddress());
-            rateLimiter.acquire((naturalEndpoints.size() + pendingEndpoints.size()) * messageSize);
-            // Send to all endpoints and write hints for unsuccessful deliveries.
-            StorageProxy.sendToHintedEndpoints(mutation,
-                                               Iterables.concat(naturalEndpoints, pendingEndpoints),
-                                               responseHandler,
-                                               localDataCenter);
-            responseHandlers.add(responseHandler);
+            try
+            {
+                WriteResponseHandler responseHandler = new WriteOrHintResponseHandler(naturalEndpoints,
+                                                                                      pendingEndpoints,
+                                                                                      callback);
+                final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(
+                        FBUtilities.getBroadcastAddress());
+                rateLimiter.acquire((naturalEndpoints.size() + pendingEndpoints.size()) * messageSize);
+                // Send to all endpoints and write hints for unsuccessful deliveries.
+                StorageProxy.sendToHintedEndpoints(mutation,
+                                                   Iterables.concat(naturalEndpoints, pendingEndpoints),
+                                                   responseHandler,
+                                                   localDataCenter);
+                responseHandlers.add(responseHandler);
+            }
+            catch (OverloadedException e)
+            {
+                // Sending failed. Do not delete hint so that we can try again at a later time.
+            }
         }
-        catch (OverloadedException e)
+        else
         {
-            // Sending failed. Do not delete hint so that we can try again at a later time.
+            // There's no node to pass the hint to. Delete it.
+            callback.run();
         }
+
         return true;
     }
 

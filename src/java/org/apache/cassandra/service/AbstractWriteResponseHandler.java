@@ -105,6 +105,13 @@ public abstract class AbstractWriteResponseHandler implements IAsyncCallback
     /** null message means "response from local write" */
     public abstract void response(MessageIn msg);
 
+    protected void hintSubmitted()
+    {
+        // Notify the handler only for CL == ANY
+        if (consistencyLevel == ConsistencyLevel.ANY)
+            response(null);
+    }
+
     public void assureSufficientLiveNodes() throws UnavailableException
     {
         consistencyLevel.assureSufficientLiveNodes(keyspace, Iterables.filter(Iterables.concat(naturalEndpoints, pendingEndpoints), isAlive));
