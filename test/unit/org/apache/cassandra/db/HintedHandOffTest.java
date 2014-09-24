@@ -22,13 +22,9 @@ package org.apache.cassandra.db;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-
-import junit.framework.Assert;
 
 import org.junit.Test;
 
