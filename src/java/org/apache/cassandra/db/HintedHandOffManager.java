@@ -58,6 +58,7 @@ import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.exceptions.OverloadedException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.FailureDetector;
@@ -572,15 +573,25 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         pendingEndpoints = ImmutableList.copyOf(Iterables.filter(pendingEndpoints, shouldHint));
         if (naturalEndpoints.size() + pendingEndpoints.size() > 0)
         {
-            WriteResponseHandler responseHandler = new WriteOrHintResponseHandler(naturalEndpoints,
-                                                                                  pendingEndpoints,
-                                                                                  callback);
-            for (InetAddress replica: Iterables.concat(naturalEndpoints, pendingEndpoints))
+            try
             {
-                rateLimiter.acquire(messageSize);
-                StorageProxy.sendToHintedEndpoint(message, replica, responseHandler);
+                WriteResponseHandler responseHandler = new WriteOrHintResponseHandler(naturalEndpoints,
+                                                                                      pendingEndpoints,
+                                                                                      callback);
+                final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(
+                        FBUtilities.getBroadcastAddress());
+                rateLimiter.acquire((naturalEndpoints.size() + pendingEndpoints.size()) * messageSize);
+                // Send to all endpoints and write hints for unsuccessful deliveries.
+                StorageProxy.sendToHintedEndpoints(mutation,
+                                                   Iterables.concat(naturalEndpoints, pendingEndpoints),
+                                                   responseHandler,
+                                                   localDataCenter);
+                responseHandlers.add(responseHandler);
             }
-            responseHandlers.add(responseHandler);
+            catch (OverloadedException e)
+            {
+                // Sending failed. Do not delete hint so that we can try again at a later time.
+            }
         }
         else
         {

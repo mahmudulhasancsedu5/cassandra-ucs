@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
@@ -32,18 +31,18 @@ import com.google.common.base.Predicate;
 import com.google.common.cache.CacheLoader;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.Uninterruptibles;
-
 import net.nicoulaj.compilecommand.annotations.Inline;
-
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.db.marshal.UUIDType;
@@ -861,20 +860,6 @@ public class StorageProxy implements StorageProxyMBean
             for (Collection<InetAddress> dcTargets : dcGroups.values())
                 sendMessagesToNonlocalDC(message, dcTargets, responseHandler);
         }
-    }
-
-    public static void sendToHintedEndpoint(MessageOut<Mutation> message, InetAddress endpoint, WriteResponseHandler responseHandler)
-    {
-        if (endpoint.equals(FBUtilities.getBroadcastAddress()) && OPTIMIZE_LOCAL_REQUESTS)
-        {
-            insertLocal(message.payload, responseHandler);
-        }
-        else if (FailureDetector.instance.isAlive(endpoint))
-        {
-            MessagingService.instance().sendRR(message, endpoint, responseHandler, true);
-        }
-        else if (shouldHint(endpoint))
-            submitHint(message.payload, endpoint, responseHandler);
     }
 
     private static AtomicInteger getHintsInProgressFor(InetAddress destination)
@@ -2197,5 +2182,4 @@ public class StorageProxy implements StorageProxyMBean
     public long getReadRepairRepairedBackground() {
         return ReadRepairMetrics.repairedBackground.count();
     }
-
 }
