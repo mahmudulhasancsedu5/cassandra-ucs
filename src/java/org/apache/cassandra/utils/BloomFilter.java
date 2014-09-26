@@ -21,8 +21,9 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.cassandra.utils.concurrent.WrappedSharedCloseable;
 import org.apache.cassandra.utils.obs.IBitSet;
+import org.apache.cassandra.db.TypeSizes;
 
-public abstract class BloomFilter extends WrappedSharedCloseable implements IFilter
+public class BloomFilter extends WrappedSharedCloseable implements IFilter
 {
     private static final ThreadLocal<long[]> reusableIndexes = new ThreadLocal<long[]>()
     {
@@ -49,12 +50,18 @@ public abstract class BloomFilter extends WrappedSharedCloseable implements IFil
         this.bitset = copy.bitset;
     }
 
+    public static final BloomFilterSerializer serializer = new BloomFilterSerializer();
+
+    public long serializedSize()
+    {
+        return serializer.serializedSize(this, TypeSizes.NATIVE);
+    }
+
     // Murmur is faster than an SHA-based approach and provides as-good collision
     // resistance.  The combinatorial generation approach described in
     // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
     // does prove to work in actual tests, and is obviously faster
     // than performing further iterations of murmur.
-    protected abstract void hash(FilterKey key, long[] result);
 
     // tests ask for ridiculous numbers of hashes so here is a special case for them
     // rather than using the threadLocal like we do in production
@@ -62,7 +69,7 @@ public abstract class BloomFilter extends WrappedSharedCloseable implements IFil
     public long[] getHashBuckets(FilterKey key, int hashCount, long max)
     {
         long[] hash = new long[2];
-        hash(key, hash);
+        key.filterHash(hash);
         long[] indexes = new long[hashCount];
         setIndexes(hash[0], hash[1], hashCount, max, indexes);
         return indexes;
@@ -77,7 +84,7 @@ public abstract class BloomFilter extends WrappedSharedCloseable implements IFil
         // we use the same array both for storing the hash result, and for storing the indexes we return,
         // so that we do not need to allocate two arrays.
         long[] indexes = reusableIndexes.get();
-        hash(key, indexes);
+        key.filterHash(indexes);
         setIndexes(indexes[0], indexes[1], hashCount, bitset.capacity(), indexes);
         return indexes;
     }
@@ -116,5 +123,16 @@ public abstract class BloomFilter extends WrappedSharedCloseable implements IFil
     public void clear()
     {
         bitset.clear();
+    }
+
+    public IFilter sharedCopy()
+    {
+        return new BloomFilter(this);
+    }
+
+    @Override
+    public long offHeapSize()
+    {
+        return bitset.offHeapSize();
     }
 }
