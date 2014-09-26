@@ -209,15 +209,19 @@ public class BloomFilterTest
     {
         IPartitioner<?> partitioner = new Murmur3Partitioner();
         Iterator<ByteBuffer> gen = new KeyGenerator.RandomStringGenerator(new Random().nextInt(), FilterTestHelper.ELEMENTS);
+        long[] expected = new long[2];
+        long[] actual = new long[2];
         while (gen.hasNext())
         {
+            expected[0] = 1;
+            expected[1] = 2;
+            actual[0] = 3;
+            actual[1] = 4;
             ByteBuffer key = gen.next();
-            FilterKey expectedKey = FilterTestHelper.wrapCached(key);
+            FilterKey expectedKey = FilterTestHelper.wrap(key);
             FilterKey actualKey = partitioner.decorateKey(key);
-            long[] expected = new long[2];
-            long[] actual = new long[2];
-            Assert.assertTrue(actualKey.retrieveCachedFilterHash(actual));
-            Assert.assertTrue(expectedKey.retrieveCachedFilterHash(expected));
+            actualKey.filterHash(actual);
+            expectedKey.filterHash(expected);
             Assert.assertArrayEquals(expected, actual);
         }
     }

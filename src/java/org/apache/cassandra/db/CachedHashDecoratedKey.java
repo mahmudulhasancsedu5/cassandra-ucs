@@ -20,36 +20,33 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.utils.MurmurHash;
 
 public class CachedHashDecoratedKey extends BufferDecoratedKey
 {
     long hash0;
     long hash1;
-    volatile boolean hashed;
+    volatile boolean hashCached;
 
     public CachedHashDecoratedKey(Token<?> token, ByteBuffer key)
     {
         super(token, key);
-        hashed = false;
+        hashCached = false;
     }
 
     @Override
-    public boolean retrieveCachedFilterHash(long[] dest)
+    public void filterHash(long[] dest)
     {
-        if (hashed)
+        if (hashCached)
         {
             dest[0] = hash0;
             dest[1] = hash1;
         }
         else
         {
-            ByteBuffer key = getKey();
-            MurmurHash.hash3_x64_128(key, key.position(), key.remaining(), 0, dest);
+            super.filterHash(dest);
             hash0 = dest[0];
             hash1 = dest[1];
-            hashed = true;
+            hashCached = true;
         }
-        return true;
     }
 }

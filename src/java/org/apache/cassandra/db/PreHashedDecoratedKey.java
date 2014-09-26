@@ -34,10 +34,9 @@ public class PreHashedDecoratedKey extends BufferDecoratedKey
     }
 
     @Override
-    public boolean retrieveCachedFilterHash(long[] dest)
+    public void filterHash(long[] dest)
     {
         dest[0] = hash0;
         dest[1] = hash1;
-        return true;
     }
 }

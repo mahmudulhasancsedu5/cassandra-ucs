@@ -24,6 +24,7 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.IFilter.FilterKey;
 
 /**
@@ -126,9 +127,9 @@ public abstract class DecoratedKey implements RowPosition, FilterKey
 
     public abstract ByteBuffer getKey();
 
-    public boolean retrieveCachedFilterHash(long[] dest)
+    public void filterHash(long[] dest)
     {
-        // Only read-path keys cache the filter hash.
-        return false;
+        ByteBuffer key = getKey();
+        MurmurHash.hash3_x64_128(key, key.position(), key.remaining(), 0, dest);
     }
 }

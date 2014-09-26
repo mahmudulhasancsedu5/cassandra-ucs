@@ -18,19 +18,13 @@
 package org.apache.cassandra.utils;
 
 import java.io.Closeable;
-import java.nio.ByteBuffer;
 
 public interface IFilter extends Closeable
 {
-    public interface FilterKey {
-        ByteBuffer getKey();
-
-        /**
-         * Places precomputed murmur3 hash of the key, if available.
-         * @param dest Array of size at least two to receive the hash.
-         * @return true if precomputed hash was available, false otherwise.
-         */
-        boolean retrieveCachedFilterHash(long[] dest);
+    public interface FilterKey
+    {
+        /** Places the murmur3 hash of the key in the given long array of size at least two. */
+        void filterHash(long[] dest);
     }
 
     void add(FilterKey key);
