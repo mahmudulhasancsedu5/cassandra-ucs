@@ -21,7 +21,7 @@ package org.apache.cassandra.utils;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.db.BufferDecoratedKey;
-import org.apache.cassandra.db.FilterHashDecoratedKey;
+import org.apache.cassandra.db.CachedHashDecoratedKey;
 import org.apache.cassandra.dht.LongToken;
 import org.apache.cassandra.utils.IFilter.FilterKey;
 
@@ -45,7 +45,7 @@ public class FilterTestHelper
 
     static final FilterKey wrapCached(ByteBuffer buf)
     {
-        return new FilterHashDecoratedKey(new LongToken(0L), buf);
+        return new CachedHashDecoratedKey(new LongToken(0L), buf);
     }
 
     static final ResetableIterator<ByteBuffer> intKeys()

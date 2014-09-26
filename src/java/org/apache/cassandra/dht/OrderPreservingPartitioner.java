@@ -24,7 +24,7 @@ import java.util.*;
 
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.FilterHashDecoratedKey;
+import org.apache.cassandra.db.CachedHashDecoratedKey;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -45,7 +45,7 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
 
     public DecoratedKey decorateKey(ByteBuffer key)
     {
-        return new FilterHashDecoratedKey(getToken(key), key);
+        return new CachedHashDecoratedKey(getToken(key), key);
     }
 
     public StringToken midpoint(Token ltoken, Token rtoken)

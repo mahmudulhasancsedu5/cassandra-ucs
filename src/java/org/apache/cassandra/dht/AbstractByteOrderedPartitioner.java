@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import org.apache.cassandra.config.*;
-import org.apache.cassandra.db.FilterHashDecoratedKey;
+import org.apache.cassandra.db.CachedHashDecoratedKey;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -43,7 +43,7 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
 
     public DecoratedKey decorateKey(ByteBuffer key)
     {
-        return new FilterHashDecoratedKey(getToken(key), key);
+        return new CachedHashDecoratedKey(getToken(key), key);
     }
 
     public BytesToken midpoint(Token ltoken, Token rtoken)

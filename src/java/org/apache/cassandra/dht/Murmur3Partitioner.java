@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.FilterHashDecoratedKey;
+import org.apache.cassandra.db.PreHashedDecoratedKey;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -48,7 +48,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     public DecoratedKey decorateKey(ByteBuffer key)
     {
         long[] hash = getHash(key);
-        return new FilterHashDecoratedKey(getToken(key, hash), key, hash[0], hash[1]);
+        return new PreHashedDecoratedKey(getToken(key, hash), key, hash[0], hash[1]);
     }
 
     public Token midpoint(Token lToken, Token rToken)

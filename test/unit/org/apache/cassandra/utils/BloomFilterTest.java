@@ -34,6 +34,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Murmur3Partitioner;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
 import org.apache.cassandra.io.util.FileUtils;
@@ -199,5 +202,23 @@ public class BloomFilterTest
         BloomFilter filter2 = (BloomFilter) FilterFactory.deserialize(in, true);
         Assert.assertTrue(filter2.isPresent(FilterTestHelper.wrap(test)));
         FileUtils.closeQuietly(in);
+    }
+    
+    @Test
+    public void testMurmur3FilterHash()
+    {
+        IPartitioner<?> partitioner = new Murmur3Partitioner();
+        Iterator<ByteBuffer> gen = new KeyGenerator.RandomStringGenerator(new Random().nextInt(), FilterTestHelper.ELEMENTS);
+        while (gen.hasNext())
+        {
+            ByteBuffer key = gen.next();
+            FilterKey expectedKey = FilterTestHelper.wrapCached(key);
+            FilterKey actualKey = partitioner.decorateKey(key);
+            long[] expected = new long[2];
+            long[] actual = new long[2];
+            Assert.assertTrue(actualKey.retrieveCachedFilterHash(actual));
+            Assert.assertTrue(expectedKey.retrieveCachedFilterHash(expected));
+            Assert.assertArrayEquals(expected, actual);
+        }
     }
 }
