@@ -19,9 +19,9 @@
 package org.apache.cassandra.utils;
 
 import org.apache.cassandra.AbstractSerializationsTester;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
 import org.apache.cassandra.service.StorageService;
-
 import org.junit.Assert;
 import org.junit.Test;
 

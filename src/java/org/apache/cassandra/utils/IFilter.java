@@ -23,9 +23,20 @@ import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 public interface IFilter extends SharedCloseable
 {
-    void add(ByteBuffer key);
+    public interface FilterKey {
+        ByteBuffer getKey();
 
-    boolean isPresent(ByteBuffer key);
+        /**
+         * Places precomputed murmur3 hash of the key, if available.
+         * @param dest Array of size at least two to receive the hash.
+         * @return true if precomputed hash was available, false otherwise.
+         */
+        boolean retrieveCachedFilterHash(long[] dest);
+    }
+
+    void add(FilterKey key);
+
+    boolean isPresent(FilterKey key);
 
     void clear();
 

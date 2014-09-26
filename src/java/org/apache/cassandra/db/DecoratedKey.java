@@ -24,6 +24,7 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.dht.Token.KeyBound;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.IFilter.FilterKey;
 
 /**
  * Represents a decorated key, handy for certain operations
@@ -34,7 +35,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * if this matters, you can subclass RP to use a stronger hash, or use a non-lossy tokenization scheme (as in the
  * OrderPreservingPartitioner classes).
  */
-public abstract class DecoratedKey implements RowPosition
+public abstract class DecoratedKey implements RowPosition, FilterKey
 {
     public static final Comparator<DecoratedKey> comparator = new Comparator<DecoratedKey>()
     {
@@ -129,4 +130,10 @@ public abstract class DecoratedKey implements RowPosition
     }
 
     public abstract ByteBuffer getKey();
+
+    public boolean retrieveCachedFilterHash(long[] dest)
+    {
+        // Only read-path keys cache the filter hash.
+        return false;
+    }
 }

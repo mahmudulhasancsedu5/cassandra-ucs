@@ -15,31 +15,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.db;
 
-public class AlwaysPresentFilter implements IFilter
+import java.nio.ByteBuffer;
+
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.MurmurHash;
+
+public class FilterHashDecoratedKey extends BufferDecoratedKey
 {
-    public boolean isPresent(FilterKey key)
+    long hash0;
+    long hash1;
+
+    public FilterHashDecoratedKey(Token<?> token, ByteBuffer key, long hash0, long hash1)
     {
-        return true;
+        super(token, key);
+        this.hash0 = hash0;
+        this.hash1 = hash1;
     }
 
-    public void add(FilterKey key) { }
-
-    public void clear() { }
-
-    public void close() { }
-
-    public IFilter sharedCopy()
+    public FilterHashDecoratedKey(Token<?> token, ByteBuffer key)
     {
-        return this;
+        super(token, key);
+        long[] hash = new long[2];
+        MurmurHash.hash3_x64_128(key, key.position(), key.remaining(), 0, hash);
+        this.hash0 = hash[0];
+        this.hash1 = hash[1];
     }
-
-    public long serializedSize() { return 0; }
 
     @Override
-    public long offHeapSize()
+    public boolean retrieveCachedFilterHash(long[] dest)
     {
-        return 0;
+        dest[0] = hash0;
+        dest[1] = hash1;
+        return true;
     }
 }
