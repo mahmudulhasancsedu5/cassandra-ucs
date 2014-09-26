@@ -19,13 +19,12 @@
 package org.apache.cassandra.utils;
 
 import org.apache.cassandra.AbstractSerializationsTester;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
 import org.apache.cassandra.service.StorageService;
-
 import org.junit.Test;
 
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 
 public class SerializationsTest extends AbstractSerializationsTester
@@ -34,8 +33,9 @@ public class SerializationsTest extends AbstractSerializationsTester
     private void testBloomFilterWrite(boolean offheap) throws IOException
     {
         IFilter bf = FilterFactory.getFilter(1000000, 0.0001, offheap);
+        IPartitioner<?> partitioner = StorageService.getPartitioner();
         for (int i = 0; i < 100; i++)
-            bf.add(StorageService.getPartitioner().getTokenFactory().toByteArray(StorageService.getPartitioner().getRandomToken()));
+            bf.add(partitioner.decorateKey(partitioner.getTokenFactory().toByteArray(partitioner.getRandomToken())));
         DataOutputStreamAndChannel out = getOutput("utils.BloomFilter.bin");
         FilterFactory.serialize(bf, out);
         out.close();

@@ -22,7 +22,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.FilterHashDecoratedKey;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.marshal.AbstractType;
@@ -46,7 +46,7 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
 
     public DecoratedKey decorateKey(ByteBuffer key)
     {
-        return new BufferDecoratedKey(getToken(key), key);
+        return new FilterHashDecoratedKey(getToken(key), key);
     }
 
     public Token midpoint(Token ltoken, Token rtoken)

@@ -15,31 +15,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.db;
 
-import java.io.Closeable;
 import java.nio.ByteBuffer;
 
-public interface IFilter extends Closeable
-{
-    public interface FilterKey {
-        ByteBuffer getKey();
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.MurmurHash;
 
-        /**
-         * Places precomputed murmur3 hash of the key, if available.
-         * @param dest Array of size at least two to receive the hash.
-         * @return true if precomputed hash was available, false otherwise.
-         */
-        boolean retrieveCachedFilterHash(long[] dest);
+public class FilterHashDecoratedKey extends BufferDecoratedKey
+{
+    long hash0;
+    long hash1;
+
+    public FilterHashDecoratedKey(Token<?> token, ByteBuffer key, long hash0, long hash1)
+    {
+        super(token, key);
+        this.hash0 = hash0;
+        this.hash1 = hash1;
     }
 
-    void add(FilterKey key);
+    public FilterHashDecoratedKey(Token<?> token, ByteBuffer key)
+    {
+        super(token, key);
+        long[] hash = new long[2];
+        MurmurHash.hash3_x64_128(key, key.position(), key.remaining(), 0, hash);
+        this.hash0 = hash[0];
+        this.hash1 = hash[1];
+    }
 
-    boolean isPresent(FilterKey key);
-
-    void clear();
-
-    long serializedSize();
-
-    void close();
+    @Override
+    public boolean retrieveCachedFilterHash(long[] dest)
+    {
+        dest[0] = hash0;
+        dest[1] = hash1;
+        return true;
+    }
 }

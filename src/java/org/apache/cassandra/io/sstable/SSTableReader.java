@@ -799,7 +799,7 @@ public class SSTableReader extends SSTable
                 last = decoratedKey;
 
                 if (recreateBloomFilter)
-                    bf.add(decoratedKey.getKey());
+                    bf.add(decoratedKey);
 
                 // if summary was already read from disk we don't want to re-populate it using primary index
                 if (!summaryLoaded)
@@ -1387,7 +1387,7 @@ public class SSTableReader extends SSTable
         if (op == Operator.EQ)
         {
             assert key instanceof DecoratedKey; // EQ only make sense if the key is a valid row key
-            if (!bf.isPresent(((DecoratedKey)key).getKey()))
+            if (!bf.isPresent((DecoratedKey)key))
             {
                 Tracing.trace("Bloom filter allows skipping sstable {}", descriptor.generation);
                 return null;

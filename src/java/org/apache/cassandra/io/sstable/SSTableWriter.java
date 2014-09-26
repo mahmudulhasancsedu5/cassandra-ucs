@@ -562,7 +562,7 @@ public class SSTableWriter extends SSTable
 
         public void append(DecoratedKey key, RowIndexEntry indexEntry)
         {
-            bf.add(key.getKey());
+            bf.add(key);
             long indexPosition = indexFile.getFilePointer();
             try
             {
