@@ -100,7 +100,10 @@ public class BatchlogManager implements BatchlogManagerMBean
     public int countAllBatches()
     {
         String query = String.format("SELECT count(*) FROM %s.%s", Keyspace.SYSTEM_KS, SystemKeyspace.BATCHLOG_CF);
-        return (int) executeInternal(query).one().getLong("count");
+        UntypedResultSet results = executeInternal(query);
+        if (results.isEmpty())
+            return 0;
+        return (int) results.one().getLong("count");
     }
 
     public long getTotalBatchesReplayed()
