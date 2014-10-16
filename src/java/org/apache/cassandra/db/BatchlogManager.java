@@ -37,7 +37,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.UUIDType;
@@ -119,6 +118,12 @@ public class BatchlogManager implements BatchlogManagerMBean
     {
         // If a replay is already in progress this request will be executed after it completes.
         return batchlogTasks.submit(replayBatchlogRunnable);
+    }
+
+    public long getBatchlogTimeout()
+    {
+    // enough time for the actual write + batchlog entry mutation delivery (two separate requests).
+        return DatabaseDescriptor.getWriteRpcTimeout() * 2;
     }
 
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
@@ -205,8 +210,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         {
             id = row.getUUID("id");
             long writtenAt = row.getLong("written_at");
-            // enough time for the actual write + batchlog entry mutation delivery (two separate requests).
-            long timeout = DatabaseDescriptor.getWriteRpcTimeout() * 2; // enough time for the actual write + BM removal mutation
+            long timeout = getBatchlogTimeout();
             if (System.currentTimeMillis() < writtenAt + timeout)
                 continue; // not ready to replay yet, might still get a deletion.
 
