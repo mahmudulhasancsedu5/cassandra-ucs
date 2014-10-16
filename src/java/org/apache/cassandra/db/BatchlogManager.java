@@ -70,6 +70,14 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     private final AtomicLong totalBatchesReplayed = new AtomicLong();
 
+    private Runnable replayBatchlogRunnable = new WrappedRunnable()
+    {
+        public void runMayThrow() throws ExecutionException, InterruptedException
+        {
+            replayAllFailedBatches();
+        }
+    };
+
     // Single-thread executor service for scheduling and serializing log replay.
     public static final ScheduledExecutorService batchlogTasks = new DebuggableScheduledThreadPoolExecutor("BatchlogTasks");
 
@@ -85,15 +93,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             throw new RuntimeException(e);
         }
 
-        Runnable runnable = new WrappedRunnable()
-        {
-            public void runMayThrow() throws ExecutionException, InterruptedException
-            {
-                replayAllFailedBatches();
-            }
-        };
-
-        batchlogTasks.scheduleWithFixedDelay(runnable, StorageService.RING_DELAY, REPLAY_INTERVAL, TimeUnit.MILLISECONDS);
+        batchlogTasks.scheduleWithFixedDelay(replayBatchlogRunnable, StorageService.RING_DELAY, REPLAY_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     public int countAllBatches()
@@ -117,15 +117,8 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     public Future<?> startBatchlogReplay()
     {
-        Runnable runnable = new WrappedRunnable()
-        {
-            public void runMayThrow() throws ExecutionException, InterruptedException
-            {
-                replayAllFailedBatches();
-            }
-        };
         // If a replay is already in progress this request will be executed after it completes.
-        return batchlogTasks.submit(runnable);
+        return batchlogTasks.submit(replayBatchlogRunnable);
     }
 
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
