@@ -204,12 +204,17 @@ public class BatchlogManager implements BatchlogManagerMBean
             long writtenAt = row.getLong("written_at");
             int version = row.has("version") ? row.getInt("version") : MessagingService.VERSION_12;
             // enough time for the actual write + batchlog entry mutation delivery (two separate requests).
-            long timeout = DatabaseDescriptor.getWriteRpcTimeout() * 2; // enough time for the actual write + BM removal mutation
+            long timeout = getBatchlogTimeout();
             if (System.currentTimeMillis() < writtenAt + timeout)
                 continue; // not ready to replay yet, might still get a deletion.
             replayBatch(id, row.getBytes("data"), writtenAt, version, rateLimiter);
         }
         return id;
+    }
+
+    public long getBatchlogTimeout()
+    {
+        return DatabaseDescriptor.getWriteRpcTimeout() * 2; // enough time for the actual write + BM removal mutation
     }
 
     private void replayBatch(UUID id, ByteBuffer data, long writtenAt, int version, RateLimiter rateLimiter)
