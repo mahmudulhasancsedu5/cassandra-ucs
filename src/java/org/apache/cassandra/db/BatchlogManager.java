@@ -39,13 +39,10 @@ import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.FailureDetector;
-import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
@@ -185,8 +182,6 @@ public class BatchlogManager implements BatchlogManagerMBean
                                   PAGE_SIZE);
             page = executeInternal(query, id, limitUuid);
         }
-
-        cleanup();
 
         logger.debug("Finished replayAllFailedBatches");
     }
@@ -429,18 +424,6 @@ public class BatchlogManager implements BatchlogManagerMBean
         }
     }
 
-    // force flush + compaction to reclaim space from the replayed batches
-    private void cleanup() throws ExecutionException, InterruptedException
-    {
-        ColumnFamilyStore cfs = Keyspace.open(Keyspace.SYSTEM_KS).getColumnFamilyStore(SystemKeyspace.BATCHLOG_CF);
-        cfs.forceBlockingFlush();
-        Collection<Descriptor> descriptors = new ArrayList<>();
-        for (SSTableReader sstr : cfs.getSSTables())
-            descriptors.add(sstr.descriptor);
-        if (!descriptors.isEmpty()) // don't pollute the logs if there is nothing to compact.
-            CompactionManager.instance.submitUserDefined(cfs, descriptors, Integer.MAX_VALUE).get();
-    }
-
     public static class EndpointFilter
     {
         private final String localRack;
@@ -492,7 +475,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             else
             {
                 racks = Lists.newArrayList(validated.keySet());
-                Collections.shuffle((List) racks);
+                Collections.shuffle((List<String>) racks);
             }
 
             // grab a random member of up to two racks
