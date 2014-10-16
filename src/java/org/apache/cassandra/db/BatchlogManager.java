@@ -25,15 +25,16 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.RateLimiter;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -54,6 +55,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.WriteResponseHandler;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
@@ -128,16 +130,9 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
     {
-        return getBatchlogMutationFor(mutations, uuid, version, FBUtilities.timestampMicros());
-    }
-
-    @VisibleForTesting
-    static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version, long now)
-    {
         ColumnFamily cf = ArrayBackedSortedColumns.factory.create(CFMetaData.BatchlogCf);
-        CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), now);
+        CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), UUIDGen.unixTimestamp(uuid));
         adder.add("data", serializeMutations(mutations, version))
-             .add("written_at", new Date(now / 1000))
              .add("version", version);
         return new Mutation(Keyspace.SYSTEM_KS, UUIDType.instance.decompose(uuid), cf);
     }
@@ -168,11 +163,14 @@ public class BatchlogManager implements BatchlogManagerMBean
         // max rate is scaled by the number of nodes in the cluster (same as for HHOM - see CASSANDRA-5272).
         int throttleInKB = DatabaseDescriptor.getBatchlogReplayThrottleInKB() / StorageService.instance.getTokenMetadata().getAllEndpoints().size();
         RateLimiter rateLimiter = RateLimiter.create(throttleInKB == 0 ? Double.MAX_VALUE : throttleInKB * 1024);
-
-        UntypedResultSet page = executeInternal(String.format("SELECT id, data, written_at, version FROM %s.%s LIMIT %d",
-                                                              Keyspace.SYSTEM_KS,
-                                                              SystemKeyspace.BATCHLOG_CF,
-                                                              PAGE_SIZE));
+        
+        UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
+        
+        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?) LIMIT %d",
+                                     Keyspace.SYSTEM_KS,
+                                     SystemKeyspace.BATCHLOG_CF,
+                                     PAGE_SIZE);
+        UntypedResultSet page = executeInternal(query, limitUuid);
 
         while (!page.isEmpty())
         {
@@ -181,11 +179,11 @@ public class BatchlogManager implements BatchlogManagerMBean
             if (page.size() < PAGE_SIZE)
                 break; // we've exhausted the batchlog, next query would be empty.
 
-            page = executeInternal(String.format("SELECT id, data, written_at, version FROM %s.%s WHERE token(id) > token(?) LIMIT %d",
-                                                 Keyspace.SYSTEM_KS,
-                                                 SystemKeyspace.BATCHLOG_CF,
-                                                 PAGE_SIZE), 
-                                   id);
+            query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) > token(?) AND token(id) <= token(?) LIMIT %d",
+                                  Keyspace.SYSTEM_KS,
+                                  SystemKeyspace.BATCHLOG_CF,
+                                  PAGE_SIZE);
+            page = executeInternal(query, id, limitUuid);
         }
 
         cleanup();
@@ -209,13 +207,9 @@ public class BatchlogManager implements BatchlogManagerMBean
         for (UntypedResultSet.Row row : page)
         {
             id = row.getUUID("id");
-            long writtenAt = row.getLong("written_at");
-            long timeout = getBatchlogTimeout();
-            if (System.currentTimeMillis() < writtenAt + timeout)
-                continue; // not ready to replay yet, might still get a deletion.
 
             int version = row.has("version") ? row.getInt("version") : MessagingService.VERSION_12;
-            Batch batch = new Batch(id, writtenAt, row.getBytes("data"), version);
+            Batch batch = new Batch(id, row.getBytes("data"), version);
             try
             {
                 if (batch.replay(rateLimiter) > 0)
@@ -257,10 +251,10 @@ public class BatchlogManager implements BatchlogManagerMBean
 
         private List<ReplayWriteResponseHandler> replayHandlers;
 
-        public Batch(UUID id, long writtenAt, ByteBuffer data, int version)
+        public Batch(UUID id, ByteBuffer data, int version)
         {
             this.id = id;
-            this.writtenAt = writtenAt;
+            this.writtenAt = UUIDGen.unixTimestamp(id);
             this.data = data;
             this.version = version;
         }

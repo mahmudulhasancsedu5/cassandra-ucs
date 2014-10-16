@@ -69,13 +69,12 @@ public class BatchlogManagerTest extends SchemaLoader
             mutation.add("Standard1", comparator.makeCellName(bytes(i)), bytes(i), System.currentTimeMillis());
 
             long timestamp = i < 500
-                           ? (System.currentTimeMillis() - DatabaseDescriptor.getWriteRpcTimeout() * 2) * 1000
-                           : Long.MAX_VALUE;
+                           ? (System.currentTimeMillis() - BatchlogManager.instance.getBatchlogTimeout())
+                           : (System.currentTimeMillis() + BatchlogManager.instance.getBatchlogTimeout());
 
             BatchlogManager.getBatchlogMutationFor(Collections.singleton(mutation),
-                                                   UUIDGen.getTimeUUID(),
-                                                   MessagingService.current_version,
-                                                   timestamp)
+                                                   UUIDGen.getTimeUUID(timestamp, i),
+                                                   MessagingService.current_version)
                            .apply();
         }
 
@@ -129,7 +128,7 @@ public class BatchlogManagerTest extends SchemaLoader
             List<Mutation> mutations = Lists.newArrayList(mutation1, mutation2);
 
             // Make sure it's ready to be replayed, so adjust the timestamp.
-            long timestamp = System.currentTimeMillis() - DatabaseDescriptor.getWriteRpcTimeout() * 2;
+            long timestamp = System.currentTimeMillis() - BatchlogManager.instance.getBatchlogTimeout();
 
             if (i == 500)
                 SystemKeyspace.saveTruncationRecord(Keyspace.open("Keyspace1").getColumnFamilyStore("Standard2"),
@@ -143,9 +142,8 @@ public class BatchlogManagerTest extends SchemaLoader
                 timestamp--;
 
             BatchlogManager.getBatchlogMutationFor(mutations,
-                                                   UUIDGen.getTimeUUID(),
-                                                   MessagingService.current_version,
-                                                   timestamp * 1000)
+                                                   UUIDGen.getTimeUUID(timestamp, i),
+                                                   MessagingService.current_version)
                            .apply();
         }
 
