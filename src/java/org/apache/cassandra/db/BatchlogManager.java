@@ -24,7 +24,6 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -67,7 +66,7 @@ public class BatchlogManager implements BatchlogManagerMBean
     private static final Logger logger = LoggerFactory.getLogger(BatchlogManager.class);
     public static final BatchlogManager instance = new BatchlogManager();
 
-    private final AtomicLong totalBatchesReplayed = new AtomicLong();
+    private long totalBatchesReplayed = 0; // no concurrency protection necessary as only written by replay thread.
 
     private Runnable replayBatchlogRunnable = new WrappedRunnable()
     {
@@ -106,7 +105,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     public long getTotalBatchesReplayed()
     {
-        return totalBatchesReplayed.longValue();
+        return totalBatchesReplayed;
     }
 
     public void forceBatchlogReplay()
@@ -199,7 +198,7 @@ public class BatchlogManager implements BatchlogManagerMBean
                 else
                 {
                     deleteBatch(id); // no write mutations were sent (either expired or all CFs involved truncated).
-                    totalBatchesReplayed.incrementAndGet();
+                    ++totalBatchesReplayed;
                 }
             }
             catch (IOException e)
@@ -225,7 +224,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             batch.finish();
             deleteBatch(batch.id);
         }
-        totalBatchesReplayed.addAndGet(batches.size());
+        totalBatchesReplayed += batches.size();
         batches.clear();
     }
 
