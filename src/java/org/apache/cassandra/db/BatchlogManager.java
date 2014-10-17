@@ -61,7 +61,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 {
     private static final String MBEAN_NAME = "org.apache.cassandra.db:type=BatchlogManager";
     private static final long REPLAY_INTERVAL = 60 * 1000; // milliseconds
-    private static final int PAGE_SIZE = 128; // same as HHOM, for now, w/out using any heuristics. TODO: set based on avg batch size.
+    private static final int DEFAULT_PAGE_SIZE = 128;
 
     private static final Logger logger = LoggerFactory.getLogger(BatchlogManager.class);
     public static final BatchlogManager instance = new BatchlogManager();
@@ -160,15 +160,27 @@ public class BatchlogManager implements BatchlogManagerMBean
         // max rate is scaled by the number of nodes in the cluster (same as for HHOM - see CASSANDRA-5272).
         int throttleInKB = DatabaseDescriptor.getBatchlogReplayThrottleInKB() / StorageService.instance.getTokenMetadata().getAllEndpoints().size();
         RateLimiter rateLimiter = RateLimiter.create(throttleInKB == 0 ? Double.MAX_VALUE : throttleInKB * 1024);
-        
+
         UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
-        
+
+        int pageSize = calculatePageSize();
         String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
                                      Keyspace.SYSTEM_KS,
                                      SystemKeyspace.BATCHLOG_CF);
-        UntypedResultSet batches = executeInternalWithPaging(query, PAGE_SIZE, limitUuid);
-        processBatchlogEntries(batches, rateLimiter);
+        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, limitUuid);
+        processBatchlogEntries(batches, pageSize, rateLimiter);
         logger.debug("Finished replayAllFailedBatches");
+    }
+
+    // read less rows (batches) per page if they are very large
+    private int calculatePageSize()
+    {
+        ColumnFamilyStore hintStore = SystemKeyspace.schemaCFS(SystemKeyspace.BATCHLOG_CF);
+        long averageRowSize = hintStore.getMeanRowSize();
+        if (averageRowSize <= 0)
+            return DEFAULT_PAGE_SIZE;
+
+        return (int) Math.max(1, Math.min(DEFAULT_PAGE_SIZE, 4 * 1024 * 1024 / averageRowSize));
     }
 
     private void deleteBatch(UUID id)
@@ -178,9 +190,10 @@ public class BatchlogManager implements BatchlogManagerMBean
         mutation.apply();
     }
 
-    private void processBatchlogEntries(UntypedResultSet batches, RateLimiter rateLimiter)
+    private void processBatchlogEntries(UntypedResultSet batches, int pageSize, RateLimiter rateLimiter)
     {
-        ArrayList<Batch> unfinishedBatches = new ArrayList<>(PAGE_SIZE);
+        int positionInPage = 0;
+        ArrayList<Batch> unfinishedBatches = new ArrayList<>(pageSize);
 
         // Sending out batches for replay without waiting for them, so that one stuck batch doesn't affect others
         for (UntypedResultSet.Row row : batches)
@@ -207,10 +220,11 @@ public class BatchlogManager implements BatchlogManagerMBean
                 deleteBatch(id);
             }
 
-            if (unfinishedBatches.size() == PAGE_SIZE) {
-                // Outstanding batches list is full. Wait for batches to complete before continuing with the next
-                // batch.
+            if (++positionInPage == pageSize) {
+                // We have reached the end of a batch. To avoid keeping more than a page of mutations in memory,
+                // finish processing the page before requesting the next row.
                 finishAndClearBatches(unfinishedBatches);
+                positionInPage = 0;
             }
         }
         finishAndClearBatches(unfinishedBatches);
