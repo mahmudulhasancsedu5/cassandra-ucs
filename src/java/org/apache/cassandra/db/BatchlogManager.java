@@ -38,10 +38,13 @@ import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.FailureDetector;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
@@ -67,6 +70,7 @@ public class BatchlogManager implements BatchlogManagerMBean
     public static final BatchlogManager instance = new BatchlogManager();
 
     private long totalBatchesReplayed = 0; // no concurrency protection necessary as only written by replay thread.
+    private UUID lastReplayedUuid = UUIDGen.minTimeUUID(0);
 
     private Runnable replayBatchlogRunnable = new WrappedRunnable()
     {
@@ -91,7 +95,26 @@ public class BatchlogManager implements BatchlogManagerMBean
             throw new RuntimeException(e);
         }
 
-        batchlogTasks.scheduleWithFixedDelay(replayBatchlogRunnable, StorageService.RING_DELAY, REPLAY_INTERVAL, TimeUnit.MILLISECONDS);
+        batchlogTasks.schedule(getInitialReplayRunnable(), StorageService.RING_DELAY, TimeUnit.MILLISECONDS);
+
+        batchlogTasks.scheduleWithFixedDelay(replayBatchlogRunnable,
+                                             StorageService.RING_DELAY + REPLAY_INTERVAL,
+                                             REPLAY_INTERVAL,
+                                             TimeUnit.MILLISECONDS);
+    }
+
+    private WrappedRunnable getInitialReplayRunnable()
+    {
+        return new WrappedRunnable() {
+            @Override
+            public void runMayThrow() throws ExecutionException, InterruptedException
+            {
+                // Initial run must take care of non-time-uuid batches as written by Version 1.2.
+                convertOldBatchEntries();
+
+                replayAllFailedBatches();
+            }
+        };
     }
 
     public int countAllBatches()
@@ -119,6 +142,12 @@ public class BatchlogManager implements BatchlogManagerMBean
         return batchlogTasks.submit(replayBatchlogRunnable);
     }
 
+    void performInitialReplay() throws InterruptedException, ExecutionException
+    {
+        // Invokes initial replay. Used for testing only.
+        batchlogTasks.submit(getInitialReplayRunnable()).get();
+    }
+
     public long getBatchlogTimeout()
     {
     // enough time for the actual write + batchlog entry mutation delivery (two separate requests).
@@ -128,13 +157,14 @@ public class BatchlogManager implements BatchlogManagerMBean
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
     {
         ColumnFamily cf = ArrayBackedSortedColumns.factory.create(CFMetaData.BatchlogCf);
-        CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), UUIDGen.unixTimestamp(uuid));
+        CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), UUIDGen.unixTimestamp(uuid) * 1000);
         adder.add("data", serializeMutations(mutations, version))
              .add("version", version);
         return new Mutation(Keyspace.SYSTEM_KS, UUIDType.instance.decompose(uuid), cf);
     }
 
-    private static ByteBuffer serializeMutations(Collection<Mutation> mutations, int version)
+    @VisibleForTesting
+    static ByteBuffer serializeMutations(Collection<Mutation> mutations, int version)
     {
         DataOutputBuffer buf = new DataOutputBuffer();
 
@@ -164,11 +194,12 @@ public class BatchlogManager implements BatchlogManagerMBean
         UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
 
         int pageSize = calculatePageSize();
-        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
+        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) > token(?) AND token(id) <= token(?)",
                                      Keyspace.SYSTEM_KS,
                                      SystemKeyspace.BATCHLOG_CF);
-        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, limitUuid);
+        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, lastReplayedUuid, limitUuid);
         processBatchlogEntries(batches, pageSize, rateLimiter);
+        lastReplayedUuid = limitUuid;
         logger.debug("Finished replayAllFailedBatches");
     }
 
@@ -200,7 +231,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         {
             UUID id = row.getUUID("id");
 
-            int version = row.has("version") ? row.getInt("version") : MessagingService.VERSION_12;
+            int version = row.getInt("version");
             Batch batch = new Batch(id, row.getBytes("data"), version);
             try
             {
@@ -427,6 +458,54 @@ public class BatchlogManager implements BatchlogManagerMBean
                 super.response(m);
             }
         }
+    }
+
+    private void convertOldBatchEntries() throws ExecutionException, InterruptedException
+    {
+        logger.debug("Started convertOldBatchEntries");
+
+        int pageSize = calculatePageSize();
+        // Random UUIDs compare greater than time UUIDs. Looking for anything greater than now should give us only them.
+        String query = String.format("SELECT id, data, written_at, version FROM %s.%s WHERE token(id) > token(?)",
+                                     Keyspace.SYSTEM_KS,
+                                     SystemKeyspace.BATCHLOG_CF);
+        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, UUIDGen.maxTimeUUID(System.currentTimeMillis()));
+        int convertedBatches = 0;
+        for (UntypedResultSet.Row row : batches)
+        {
+            UUID id = row.getUUID("id");
+            if (id.version() != 1) // not a time-based uuid
+            {
+                long timestamp = row.getLong("written_at");
+                int version = row.has("version") ? row.getInt("version") : MessagingService.VERSION_12;
+                ColumnFamily cf = ArrayBackedSortedColumns.factory.create(CFMetaData.BatchlogCf);
+                CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), FBUtilities.timestampMicros());
+                adder.add("data", row.getBytes("data"))
+                     .add("version", version);
+                Mutation addRow = new Mutation(Keyspace.SYSTEM_KS,
+                                               ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timestamp, convertedBatches++)),
+                                               cf);
+                deleteBatch(id);
+                addRow.apply();
+            } else {
+                logger.warn("skipping " + id);
+            }
+        }
+        if (convertedBatches > 0)
+            cleanup();
+        logger.debug("Finished convertOldBatchEntries");
+    }
+
+    // force flush + compaction to reclaim space from the replayed batches
+    private void cleanup() throws ExecutionException, InterruptedException
+    {
+        ColumnFamilyStore cfs = Keyspace.open(Keyspace.SYSTEM_KS).getColumnFamilyStore(SystemKeyspace.BATCHLOG_CF);
+        cfs.forceBlockingFlush();
+        Collection<Descriptor> descriptors = new ArrayList<>();
+        for (SSTableReader sstr : cfs.getSSTables())
+            descriptors.add(sstr.descriptor);
+        if (!descriptors.isEmpty()) // don't pollute the logs if there is nothing to compact.
+            CompactionManager.instance.submitUserDefined(cfs, descriptors, Integer.MAX_VALUE).get();
     }
 
     public static class EndpointFilter

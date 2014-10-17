@@ -17,30 +17,41 @@
  */
 package org.apache.cassandra.db;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.collect.Lists;
+
 import org.junit.Before;
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.io.util.DataOutputStreamPlus;
+import org.apache.cassandra.io.util.FastByteArrayOutputStream;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
 public class BatchlogManagerTest extends SchemaLoader
@@ -176,5 +187,90 @@ public class BatchlogManagerTest extends SchemaLoader
             assertEquals(bytes(i), result.one().getBytes("column1"));
             assertEquals(bytes(i), result.one().getBytes("value"));
         }
+    }
+
+    static Mutation getVersion12MutationFor(Collection<Mutation> mutations, long now) throws IOException
+    {
+        UUID uuid = UUID.randomUUID();
+        ByteBuffer writtenAt = LongType.instance.decompose(now);
+        ByteBuffer data = BatchlogManager.serializeMutations(mutations, MessagingService.VERSION_12);
+
+        ColumnFamily cf = ArrayBackedSortedColumns.factory.create(CFMetaData.BatchlogCf);
+        CFRowAdder adder = new CFRowAdder(cf, CFMetaData.BatchlogCf.comparator.builder().build(), now * 1000);
+        adder.add("written_at", writtenAt)
+             .add("data", data);
+        return new Mutation(Keyspace.SYSTEM_KS, UUIDType.instance.decompose(uuid), cf);
+    }
+
+    @Test
+    public void testVersion12Conversion() throws Exception
+    {
+        long initialAllBatches = BatchlogManager.instance.countAllBatches();
+        long initialReplayedBatches = BatchlogManager.instance.getTotalBatchesReplayed();
+
+        // Generate 1000 mutations and put them all into the batchlog.
+        // Half (500) ready to be replayed, half not.
+        CellNameType comparator = Keyspace.open("Keyspace1").getColumnFamilyStore("Standard1").metadata.comparator;
+        for (int i = 0; i < 1000; i++)
+        {
+            Mutation mutation = new Mutation("Keyspace1", bytes(i));
+            mutation.add("Standard1", comparator.makeCellName(bytes(i)), bytes(i), System.currentTimeMillis());
+
+            long timestamp = i < 500
+                           ? (System.currentTimeMillis() - BatchlogManager.instance.getBatchlogTimeout())
+                           : (System.currentTimeMillis() + BatchlogManager.instance.getBatchlogTimeout());
+
+                           
+            getVersion12MutationFor(Collections.singleton(mutation), timestamp).apply();
+        }
+
+        // Mix in 100 current version mutations, 50 ready for replay.
+        for (int i = 1000; i < 1100; i++)
+        {
+            Mutation mutation = new Mutation("Keyspace1", bytes(i));
+            mutation.add("Standard1", comparator.makeCellName(bytes(i)), bytes(i), System.currentTimeMillis());
+
+            long timestamp = i < 1050
+                           ? (System.currentTimeMillis() - BatchlogManager.instance.getBatchlogTimeout())
+                           : (System.currentTimeMillis() + BatchlogManager.instance.getBatchlogTimeout());
+
+                           
+            BatchlogManager.getBatchlogMutationFor(Collections.singleton(mutation),
+                                                   UUIDGen.getTimeUUID(timestamp, i),
+                                                   MessagingService.current_version)
+                           .apply();
+        }
+
+        // Flush the batchlog to disk (see CASSANDRA-6822).
+        Keyspace.open(Keyspace.SYSTEM_KS).getColumnFamilyStore(SystemKeyspace.BATCHLOG_CF).forceBlockingFlush();
+
+        assertEquals(1100, BatchlogManager.instance.countAllBatches() - initialAllBatches);
+        assertEquals(0, BatchlogManager.instance.getTotalBatchesReplayed() - initialReplayedBatches);
+
+        // Force batchlog replay and wait for it to complete.
+        BatchlogManager.instance.performInitialReplay();
+
+        // Ensure that the first half, and only the first half, got replayed.
+        assertEquals(550, BatchlogManager.instance.countAllBatches() - initialAllBatches);
+        assertEquals(550, BatchlogManager.instance.getTotalBatchesReplayed() - initialReplayedBatches);
+
+        for (int i = 0; i < 1100; i++)
+        {
+            UntypedResultSet result = QueryProcessor.executeInternal(String.format("SELECT * FROM \"Keyspace1\".\"Standard1\" WHERE key = intAsBlob(%d)", i));
+            if (i < 500 || i >= 1000 && i < 1050)
+            {
+                assertEquals(bytes(i), result.one().getBytes("key"));
+                assertEquals(bytes(i), result.one().getBytes("column1"));
+                assertEquals(bytes(i), result.one().getBytes("value"));
+            }
+            else
+            {
+                assertTrue(result.isEmpty());
+            }
+        }
+
+        // Ensure that no stray mutations got somehow applied.
+        UntypedResultSet result = QueryProcessor.executeInternal(String.format("SELECT count(*) FROM \"Keyspace1\".\"Standard1\""));
+        assertEquals(550, result.one().getLong("count"));
     }
 }
