@@ -56,6 +56,7 @@ import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
+import static org.apache.cassandra.cql3.QueryProcessor.executeInternalWithPaging;
 
 public class BatchlogManager implements BatchlogManagerMBean
 {
@@ -163,26 +164,11 @@ public class BatchlogManager implements BatchlogManagerMBean
         
         UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
         
-        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?) LIMIT %d",
+        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
                                      Keyspace.SYSTEM_KS,
-                                     SystemKeyspace.BATCHLOG_CF,
-                                     PAGE_SIZE);
-        UntypedResultSet page = executeInternal(query, limitUuid);
-
-        while (!page.isEmpty())
-        {
-            UUID id = processBatchlogPage(page, rateLimiter);
-
-            if (page.size() < PAGE_SIZE)
-                break; // we've exhausted the batchlog, next query would be empty.
-
-            query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) > token(?) AND token(id) <= token(?) LIMIT %d",
-                                  Keyspace.SYSTEM_KS,
-                                  SystemKeyspace.BATCHLOG_CF,
-                                  PAGE_SIZE);
-            page = executeInternal(query, id, limitUuid);
-        }
-
+                                     SystemKeyspace.BATCHLOG_CF);
+        UntypedResultSet batches = executeInternalWithPaging(query, PAGE_SIZE, limitUuid);
+        processBatchlogEntries(batches, rateLimiter);
         logger.debug("Finished replayAllFailedBatches");
     }
 
@@ -193,15 +179,14 @@ public class BatchlogManager implements BatchlogManagerMBean
         mutation.apply();
     }
 
-    private UUID processBatchlogPage(UntypedResultSet page, RateLimiter rateLimiter)
+    private void processBatchlogEntries(UntypedResultSet batches, RateLimiter rateLimiter)
     {
-        UUID id = null;
-        ArrayList<Batch> batches = new ArrayList<>(page.size());
+        ArrayList<Batch> unfinishedBatches = new ArrayList<>(PAGE_SIZE);
 
         // Sending out batches for replay without waiting for them, so that one stuck batch doesn't affect others
-        for (UntypedResultSet.Row row : page)
+        for (UntypedResultSet.Row row : batches)
         {
-            id = row.getUUID("id");
+            UUID id = row.getUUID("id");
 
             int version = row.has("version") ? row.getInt("version") : MessagingService.VERSION_12;
             Batch batch = new Batch(id, row.getBytes("data"), version);
@@ -209,7 +194,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             {
                 if (batch.replay(rateLimiter) > 0)
                 {
-                    batches.add(batch);
+                    unfinishedBatches.add(batch);
                 }
                 else
                 {
@@ -222,19 +207,26 @@ public class BatchlogManager implements BatchlogManagerMBean
                 logger.warn("Skipped batch replay of {} due to {}", id, e);
                 deleteBatch(id);
             }
-        }
 
-        // now waiting for all batches to complete their processing
+            if (unfinishedBatches.size() == PAGE_SIZE) {
+                // Outstanding batches list is full. Wait for batches to complete before continuing with the next
+                // batch.
+                finishAndClearBatches(unfinishedBatches);
+            }
+        }
+        finishAndClearBatches(unfinishedBatches);
+    }
+
+    private void finishAndClearBatches(ArrayList<Batch> batches)
+    {
         // schedule hints for timed out deliveries
         for (Batch batch : batches)
         {
             batch.finish();
             deleteBatch(batch.id);
         }
-
         totalBatchesReplayed.addAndGet(batches.size());
-
-        return id;
+        batches.clear();
     }
 
     private static class Batch
