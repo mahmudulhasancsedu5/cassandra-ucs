@@ -17,8 +17,9 @@
  */
 package org.apache.cassandra.dht;
 
-public abstract class AbstractPartitioner<T extends Token> implements IPartitioner<T>
+public abstract class AbstractPartitioner<T extends AbstractToken<?>> implements IPartitioner
 {
+    @SuppressWarnings("unchecked")
     public <R extends RingPosition<R>> R minValue(Class<R> klass)
     {
         Token minToken = getMinimumToken();
@@ -26,5 +27,19 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
             return (R)minToken;
         else
             return (R)minToken.minKeyBound();
+    }
+
+    abstract public T midpoint(T left, T right);
+
+    public Token midpoint(Token left, Token right)
+    {
+        return midpoint((AbstractToken<?>) left, (AbstractToken<?>) right);
+    }
+
+    abstract public long getHeapSizeOf(T token);
+
+    public long getHeapSizeOf(Token token)
+    {
+        return getHeapSizeOf((AbstractToken<?>) token);
     }
 }

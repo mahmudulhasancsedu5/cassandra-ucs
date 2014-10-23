@@ -84,7 +84,7 @@ public abstract class Token implements RingPosition<Token>, Serializable
         return this;
     }
 
-    public boolean isMinimum(IPartitioner<?> partitioner)
+    public boolean isMinimum(IPartitioner partitioner)
     {
         return this.equals(partitioner.getMinimumToken());
     }
@@ -137,6 +137,7 @@ public abstract class Token implements RingPosition<Token>, Serializable
         return maxKeyBound(StorageService.getPartitioner());
     }
 
+    @SuppressWarnings("unchecked")
     public <R extends RingPosition<R>> R upperBound(Class<R> klass)
     {
         if (klass.equals(getClass()))

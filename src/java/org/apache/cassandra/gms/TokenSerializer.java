@@ -33,7 +33,7 @@ public class TokenSerializer
 {
     private static final Logger logger = LoggerFactory.getLogger(TokenSerializer.class);
 
-    public static void serialize(IPartitioner<?> partitioner, Collection<Token> tokens, DataOutput out) throws IOException
+    public static void serialize(IPartitioner partitioner, Collection<Token> tokens, DataOutput out) throws IOException
     {
         for (Token token : tokens)
         {
@@ -44,7 +44,7 @@ public class TokenSerializer
         out.writeInt(0);
     }
 
-    public static Collection<Token> deserialize(IPartitioner<?> partitioner, DataInput in) throws IOException
+    public static Collection<Token> deserialize(IPartitioner partitioner, DataInput in) throws IOException
     {
         Collection<Token> tokens = new ArrayList<Token>();
         while (true)
