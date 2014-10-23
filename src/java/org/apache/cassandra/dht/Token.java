@@ -36,13 +36,6 @@ public abstract class Token implements RingPosition<Token>, Serializable
 
     public static final TokenSerializer serializer = new TokenSerializer();
 
-    /**
-     * This determines the comparison for node destination purposes.
-     * Note: This should not be confused with compareTo from RingPosition, which has the
-     * erasure compareTo(Object o).
-     */
-    abstract public int compareTo(Token o);
-
     public static abstract class TokenFactory
     {
         public abstract ByteBuffer toByteArray(Token token);

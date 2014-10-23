@@ -35,7 +35,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Hex;
 import org.apache.cassandra.utils.Pair;
 
-public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner<BytesToken>
+public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
 {
     public static final BytesToken MINIMUM = new BytesToken(ArrayUtils.EMPTY_BYTE_ARRAY);
 
@@ -46,17 +46,34 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public BytesToken midpoint(BytesToken ltoken, BytesToken rtoken)
+    public BytesToken midpoint(Token lt, Token rt)
     {
+        AbstractToken<?> ltoken = (AbstractToken<?>) lt;
+        AbstractToken<?> rtoken = (AbstractToken<?>) rt;
         int ll,rl;
         ByteBuffer lb,rb;
 
-        ll = ltoken.token.length;
-        lb = ByteBuffer.wrap(((byte[])ltoken.token));
+        if(ltoken.token instanceof byte[])
+        {
+            ll = ((byte[])ltoken.token).length;
+            lb = ByteBuffer.wrap(((byte[])ltoken.token));
+        }
+        else
+        {
+            ll = ((ByteBuffer)ltoken.token).remaining();
+            lb = (ByteBuffer)ltoken.token;
+        }
 
-        rl = rtoken.token.length;
-        rb = ByteBuffer.wrap(((byte[])rtoken.token));
-
+        if(rtoken.token instanceof byte[])
+        {
+            rl = ((byte[])rtoken.token).length;
+            rb = ByteBuffer.wrap(((byte[])rtoken.token));
+        }
+        else
+        {
+            rl = ((ByteBuffer)rtoken.token).remaining();
+            rb = (ByteBuffer)rtoken.token;
+        }
         int sigbytes = Math.max(ll, rl);
         BigInteger left = bigForBytes(lb, sigbytes);
         BigInteger right = bigForBytes(rb, sigbytes);

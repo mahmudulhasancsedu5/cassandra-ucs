@@ -155,32 +155,26 @@ public abstract class AbstractBounds<T extends RingPosition<T>> implements Seria
 
         public AbstractBounds<?> deserialize(DataInput in, int version) throws IOException
         {
-            return deserializeTyped(in, version);
-        }
-
-        @SuppressWarnings("unchecked")
-        private <T extends RingPosition<T>> AbstractBounds<T> deserializeTyped(DataInput in, int version) throws IOException
-        {
             int kind = in.readInt();
             boolean isToken = kind >= 0;
             if (!isToken)
                 kind = -(kind+1);
 
-            T left, right;
+            RingPosition<?> left, right;
             if (isToken)
             {
-                left = (T) Token.serializer.deserialize(in);
-                right = (T) Token.serializer.deserialize(in);
+                left = Token.serializer.deserialize(in);
+                right = Token.serializer.deserialize(in);
             }
             else
             {
-                left = (T) RowPosition.serializer.deserialize(in);
-                right = (T) RowPosition.serializer.deserialize(in);
+                left = RowPosition.serializer.deserialize(in);
+                right = RowPosition.serializer.deserialize(in);
             }
 
             if (kind == Type.RANGE.ordinal())
-                return new Range<T>(left, right);
-            return new Bounds<T>(left, right);
+                return new Range(left, right);
+            return new Bounds(left, right);
         }
 
         public long serializedSize(AbstractBounds<?> ab, int version)

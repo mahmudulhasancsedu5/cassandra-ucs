@@ -35,7 +35,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.Pair;
 
-public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
+public class OrderPreservingPartitioner extends AbstractPartitioner
 {
     public static final StringToken MINIMUM = new StringToken("");
 
@@ -48,11 +48,11 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public StringToken midpoint(StringToken ltoken, StringToken rtoken)
+    public StringToken midpoint(Token ltoken, Token rtoken)
     {
-        int sigchars = Math.max(ltoken.token.length(), ((StringToken)rtoken).token.length());
-        BigInteger left = bigForString(ltoken.token, sigchars);
-        BigInteger right = bigForString(rtoken.token, sigchars);
+        int sigchars = Math.max(((StringToken)ltoken).token.length(), ((StringToken)rtoken).token.length());
+        BigInteger left = bigForString(((StringToken)ltoken).token, sigchars);
+        BigInteger right = bigForString(((StringToken)rtoken).token, sigchars);
 
         Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 16*sigchars);
         return new StringToken(stringForBig(midpair.left, sigchars, midpair.right));
@@ -175,9 +175,9 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
         return new StringToken(skey);
     }
 
-    public long getHeapSizeOf(StringToken token)
+    public long getHeapSizeOf(Token token)
     {
-        return EMPTY_SIZE + ObjectSizes.sizeOf(token.token);
+        return EMPTY_SIZE + ObjectSizes.sizeOf(((StringToken) token).token);
     }
 
     public Map<Token, Float> describeOwnership(List<Token> sortedTokens)
