@@ -112,7 +112,7 @@ public class KeyCollisionTest
         rm.applyUnsafe();
     }
 
-    public static class LengthPartitioner extends AbstractPartitioner<BigIntegerToken>
+    public static class LengthPartitioner extends AbstractPartitioner
     {
         public static final BigInteger ZERO = new BigInteger("0");
         public static final BigIntegerToken MINIMUM = new BigIntegerToken("-1");
@@ -122,11 +122,11 @@ public class KeyCollisionTest
             return new BufferDecoratedKey(getToken(key), key);
         }
 
-        public BigIntegerToken midpoint(BigIntegerToken ltoken, BigIntegerToken rtoken)
+        public BigIntegerToken midpoint(Token ltoken, Token rtoken)
         {
             // the symbolic MINIMUM token should act as ZERO: the empty bit array
-            BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ltoken.token;
-            BigInteger right = rtoken.equals(MINIMUM) ? ZERO : rtoken.token;
+            BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)ltoken).token;
+            BigInteger right = rtoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)rtoken).token;
             Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 127);
             // discard the remainder
             return new BigIntegerToken(midpair.left);
@@ -186,7 +186,7 @@ public class KeyCollisionTest
         }
 
         @Override
-        public long getHeapSizeOf(BigIntegerToken token)
+        public long getHeapSizeOf(Token token)
         {
             return 0;
         }

@@ -36,7 +36,7 @@ import org.apache.cassandra.utils.Pair;
 /**
  * This class generates a BigIntegerToken using MD5 hash.
  */
-public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
+public class RandomPartitioner extends AbstractPartitioner
 {
     public static final BigInteger ZERO = new BigInteger("0");
     public static final BigIntegerToken MINIMUM = new BigIntegerToken("-1");
@@ -49,11 +49,11 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public BigIntegerToken midpoint(BigIntegerToken ltoken, BigIntegerToken rtoken)
+    public Token midpoint(Token ltoken, Token rtoken)
     {
         // the symbolic MINIMUM token should act as ZERO: the empty bit array
-        BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ltoken.token;
-        BigInteger right = rtoken.equals(MINIMUM) ? ZERO : rtoken.token;
+        BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)ltoken).token;
+        BigInteger right = rtoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)rtoken).token;
         Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 127);
         // discard the remainder
         return new BigIntegerToken(midpair.left);
@@ -129,7 +129,7 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return new BigIntegerToken(FBUtilities.hashToBigInteger(key));
     }
 
-    public long getHeapSizeOf(BigIntegerToken token)
+    public long getHeapSizeOf(Token token)
     {
         return EMPTY_SIZE;
     }

@@ -38,7 +38,7 @@ import org.apache.cassandra.utils.ObjectSizes;
 /**
  * This class generates a BigIntegerToken using a Murmur3 hash.
  */
-public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
+public class Murmur3Partitioner extends AbstractPartitioner
 {
     public static final LongToken MINIMUM = new LongToken(Long.MIN_VALUE);
     public static final long MAXIMUM = Long.MAX_VALUE;
@@ -50,11 +50,11 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public LongToken midpoint(LongToken lToken, LongToken rToken)
+    public Token midpoint(Token lToken, Token rToken)
     {
         // using BigInteger to avoid long overflow in intermediate operations
-        BigInteger l = BigInteger.valueOf(lToken.token),
-                   r = BigInteger.valueOf(rToken.token),
+        BigInteger l = BigInteger.valueOf(((LongToken) lToken).token),
+                   r = BigInteger.valueOf(((LongToken) rToken).token),
                    midpoint;
 
         if (l.compareTo(r) < 0)
@@ -98,7 +98,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return new LongToken(normalize(hash[0]));
     }
 
-    public long getHeapSizeOf(LongToken token)
+    public long getHeapSizeOf(Token token)
     {
         return HEAP_SIZE;
     }
