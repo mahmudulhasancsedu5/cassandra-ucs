@@ -23,16 +23,16 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.IntegerType;
-import org.apache.cassandra.dht.*;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.*;
+
 import static org.apache.cassandra.Util.dk;
 
 

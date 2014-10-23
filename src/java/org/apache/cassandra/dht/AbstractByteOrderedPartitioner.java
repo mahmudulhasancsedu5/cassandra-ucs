@@ -46,32 +46,17 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public BytesToken midpoint(Token ltoken, Token rtoken)
+    public BytesToken midpoint(BytesToken ltoken, BytesToken rtoken)
     {
         int ll,rl;
         ByteBuffer lb,rb;
 
-        if(ltoken.token instanceof byte[])
-        {
-            ll = ((byte[])ltoken.token).length;
-            lb = ByteBuffer.wrap(((byte[])ltoken.token));
-        }
-        else
-        {
-            ll = ((ByteBuffer)ltoken.token).remaining();
-            lb = (ByteBuffer)ltoken.token;
-        }
+        ll = ltoken.token.length;
+        lb = ByteBuffer.wrap(((byte[])ltoken.token));
 
-        if(rtoken.token instanceof byte[])
-        {
-            rl = ((byte[])rtoken.token).length;
-            rb = ByteBuffer.wrap(((byte[])rtoken.token));
-        }
-        else
-        {
-            rl = ((ByteBuffer)rtoken.token).remaining();
-            rb = (ByteBuffer)rtoken.token;
-        }
+        rl = rtoken.token.length;
+        rb = ByteBuffer.wrap(((byte[])rtoken.token));
+
         int sigbytes = Math.max(ll, rl);
         BigInteger left = bigForBytes(lb, sigbytes);
         BigInteger right = bigForBytes(rb, sigbytes);
@@ -127,19 +112,21 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
         return new BytesToken(buffer);
     }
 
-    private final Token.TokenFactory<byte[]> tokenFactory = new Token.TokenFactory<byte[]>() {
-        public ByteBuffer toByteArray(Token<byte[]> bytesToken)
+    private final Token.TokenFactory tokenFactory = new Token.TokenFactory() {
+        public ByteBuffer toByteArray(Token token)
         {
+            BytesToken bytesToken = (BytesToken) token;
             return ByteBuffer.wrap(bytesToken.token);
         }
 
-        public Token<byte[]> fromByteArray(ByteBuffer bytes)
+        public Token fromByteArray(ByteBuffer bytes)
         {
             return new BytesToken(bytes);
         }
 
-        public String toString(Token<byte[]> bytesToken)
+        public String toString(Token token)
         {
+            BytesToken bytesToken = (BytesToken) token;
             return Hex.bytesToHex(bytesToken.token);
         }
 
@@ -157,7 +144,7 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
             }
         }
 
-        public Token<byte[]> fromString(String string)
+        public Token fromString(String string)
         {
             if (string.length() % 2 == 1)
                 string = "0" + string;
@@ -165,7 +152,7 @@ public abstract class AbstractByteOrderedPartitioner extends AbstractPartitioner
         }
     };
 
-    public Token.TokenFactory<byte[]> getTokenFactory()
+    public Token.TokenFactory getTokenFactory()
     {
         return tokenFactory;
     }
