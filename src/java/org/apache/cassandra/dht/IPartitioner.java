@@ -40,7 +40,7 @@ public interface IPartitioner<T extends Token>
      *
      * @return The approximate midpoint between left and right.
      */
-    public Token midpoint(Token left, Token right);
+    public T midpoint(T left, T right);
 
     /**
      * @return A Token smaller than all others in the range that is being partitioned.
@@ -86,5 +86,5 @@ public interface IPartitioner<T extends Token>
 
     public AbstractType<?> getTokenValidator();
 
-    public <R extends RingPosition> R minValue(Class<R> klass);
+    public <R extends RingPosition<R>> R minValue(Class<R> klass);
 }

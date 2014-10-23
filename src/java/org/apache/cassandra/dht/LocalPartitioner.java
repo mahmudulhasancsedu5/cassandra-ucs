@@ -44,7 +44,7 @@ public class LocalPartitioner extends AbstractPartitioner<LocalToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public Token midpoint(Token left, Token right)
+    public LocalToken midpoint(LocalToken left, LocalToken right)
     {
         throw new UnsupportedOperationException();
     }

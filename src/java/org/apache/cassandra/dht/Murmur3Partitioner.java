@@ -51,11 +51,11 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public Token midpoint(Token lToken, Token rToken)
+    public LongToken midpoint(LongToken lToken, LongToken rToken)
     {
         // using BigInteger to avoid long overflow in intermediate operations
-        BigInteger l = BigInteger.valueOf(((LongToken) lToken).token),
-                   r = BigInteger.valueOf(((LongToken) rToken).token),
+        BigInteger l = BigInteger.valueOf(lToken.token),
+                   r = BigInteger.valueOf(rToken.token),
                    midpoint;
 
         if (l.compareTo(r) < 0)
@@ -123,7 +123,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     public Map<Token, Float> describeOwnership(List<Token> sortedTokens)
     {
         Map<Token, Float> ownerships = new HashMap<Token, Float>();
-        Iterator i = sortedTokens.iterator();
+        Iterator<Token> i = sortedTokens.iterator();
 
         // 0-case
         if (!i.hasNext())
@@ -136,7 +136,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         {
             final BigInteger ri = BigInteger.valueOf(MAXIMUM).subtract(BigInteger.valueOf(MINIMUM.token + 1));  //  (used for addition later)
             final BigDecimal r  = new BigDecimal(ri);
-            Token start = (Token) i.next();BigInteger ti = BigInteger.valueOf(((LongToken)start).token);  // The first token and its value
+            Token start = i.next();BigInteger ti = BigInteger.valueOf(((LongToken)start).token);  // The first token and its value
             Token t; BigInteger tim1 = ti;                                                                // The last token and its value (after loop)
 
             while (i.hasNext())
@@ -155,25 +155,27 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return ownerships;
     }
 
-    public Token.TokenFactory<Long> getTokenFactory()
+    public Token.TokenFactory getTokenFactory()
     {
         return tokenFactory;
     }
 
-    private final Token.TokenFactory<Long> tokenFactory = new Token.TokenFactory<Long>()
+    private final Token.TokenFactory tokenFactory = new Token.TokenFactory()
     {
-        public ByteBuffer toByteArray(Token<Long> longToken)
+        public ByteBuffer toByteArray(Token token)
         {
+            LongToken longToken = (LongToken) token;
             return ByteBufferUtil.bytes(longToken.token);
         }
 
-        public Token<Long> fromByteArray(ByteBuffer bytes)
+        public Token fromByteArray(ByteBuffer bytes)
         {
             return new LongToken(ByteBufferUtil.toLong(bytes));
         }
 
-        public String toString(Token<Long> longToken)
+        public String toString(Token token)
         {
+            LongToken longToken = (LongToken) token;
             return longToken.token.toString();
         }
 
@@ -181,7 +183,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         {
             try
             {
-                Long i = Long.valueOf(token);
+                Long.valueOf(token);
             }
             catch (NumberFormatException e)
             {
@@ -189,7 +191,7 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
             }
         }
 
-        public Token<Long> fromString(String string)
+        public Token fromString(String string)
         {
             try
             {

@@ -48,11 +48,11 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public StringToken midpoint(Token ltoken, Token rtoken)
+    public StringToken midpoint(StringToken ltoken, StringToken rtoken)
     {
-        int sigchars = Math.max(((StringToken)ltoken).token.length(), ((StringToken)rtoken).token.length());
-        BigInteger left = bigForString(((StringToken)ltoken).token, sigchars);
-        BigInteger right = bigForString(((StringToken)rtoken).token, sigchars);
+        int sigchars = Math.max(ltoken.token.length(), ((StringToken)rtoken).token.length());
+        BigInteger left = bigForString(ltoken.token, sigchars);
+        BigInteger right = bigForString(rtoken.token, sigchars);
 
         Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 16*sigchars);
         return new StringToken(stringForBig(midpair.left, sigchars, midpair.right));
@@ -113,14 +113,15 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
         return new StringToken(buffer.toString());
     }
 
-    private final Token.TokenFactory<String> tokenFactory = new Token.TokenFactory<String>()
+    private final Token.TokenFactory tokenFactory = new Token.TokenFactory()
     {
-        public ByteBuffer toByteArray(Token<String> stringToken)
+        public ByteBuffer toByteArray(Token token)
         {
+            StringToken stringToken = (StringToken) token;
             return ByteBufferUtil.bytes(stringToken.token);
         }
 
-        public Token<String> fromByteArray(ByteBuffer bytes)
+        public Token fromByteArray(ByteBuffer bytes)
         {
             try
             {
@@ -132,8 +133,9 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
             }
         }
 
-        public String toString(Token<String> stringToken)
+        public String toString(Token token)
         {
+            StringToken stringToken = (StringToken) token;
             return stringToken.token;
         }
 
@@ -143,13 +145,13 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
                 throw new ConfigurationException("Tokens may not contain the character " + VersionedValue.DELIMITER_STR);
         }
 
-        public Token<String> fromString(String string)
+        public Token fromString(String string)
         {
             return new StringToken(string);
         }
     };
 
-    public Token.TokenFactory<String> getTokenFactory()
+    public Token.TokenFactory getTokenFactory()
     {
         return tokenFactory;
     }

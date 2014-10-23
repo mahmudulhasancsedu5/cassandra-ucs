@@ -19,7 +19,7 @@ package org.apache.cassandra.dht;
 
 public abstract class AbstractPartitioner<T extends Token> implements IPartitioner<T>
 {
-    public <R extends RingPosition> R minValue(Class<R> klass)
+    public <R extends RingPosition<R>> R minValue(Class<R> klass)
     {
         Token minToken = getMinimumToken();
         if (minToken.getClass().equals(klass))

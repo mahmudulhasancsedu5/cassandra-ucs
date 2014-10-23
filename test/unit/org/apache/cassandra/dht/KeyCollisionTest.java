@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.dht;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -24,18 +24,24 @@ import java.util.*;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.Row;
+import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
-import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.IntegerType;
-import org.apache.cassandra.dht.*;
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.*;
+
 import static org.apache.cassandra.Util.dk;
 
 
@@ -48,7 +54,7 @@ import static org.apache.cassandra.Util.dk;
  */
 public class KeyCollisionTest
 {
-    IPartitioner oldPartitioner;
+    IPartitioner<?> oldPartitioner;
     private static final String KEYSPACE1 = "KeyCollisionTest1";
     private static final String CF = "Standard1";
 
@@ -111,18 +117,16 @@ public class KeyCollisionTest
         public static final BigInteger ZERO = new BigInteger("0");
         public static final BigIntegerToken MINIMUM = new BigIntegerToken("-1");
 
-        private static final byte DELIMITER_BYTE = ":".getBytes()[0];
-
         public DecoratedKey decorateKey(ByteBuffer key)
         {
             return new BufferDecoratedKey(getToken(key), key);
         }
 
-        public Token midpoint(Token ltoken, Token rtoken)
+        public BigIntegerToken midpoint(BigIntegerToken ltoken, BigIntegerToken rtoken)
         {
             // the symbolic MINIMUM token should act as ZERO: the empty bit array
-            BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)ltoken).token;
-            BigInteger right = rtoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)rtoken).token;
+            BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ltoken.token;
+            BigInteger right = rtoken.equals(MINIMUM) ? ZERO : rtoken.token;
             Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 127);
             // discard the remainder
             return new BigIntegerToken(midpair.left);
@@ -138,23 +142,25 @@ public class KeyCollisionTest
             return new BigIntegerToken(BigInteger.valueOf(new Random().nextInt(15)));
         }
 
-        private final Token.TokenFactory<BigInteger> tokenFactory = new Token.TokenFactory<BigInteger>() {
-            public ByteBuffer toByteArray(Token<BigInteger> bigIntegerToken)
+        private final Token.TokenFactory tokenFactory = new Token.TokenFactory() {
+            public ByteBuffer toByteArray(Token token)
             {
+                BigIntegerToken bigIntegerToken = (BigIntegerToken) token;
                 return ByteBuffer.wrap(bigIntegerToken.token.toByteArray());
             }
 
-            public Token<BigInteger> fromByteArray(ByteBuffer bytes)
+            public Token fromByteArray(ByteBuffer bytes)
             {
                 return new BigIntegerToken(new BigInteger(ByteBufferUtil.getArray(bytes)));
             }
 
-            public String toString(Token<BigInteger> bigIntegerToken)
+            public String toString(Token token)
             {
+                BigIntegerToken bigIntegerToken = (BigIntegerToken) token;
                 return bigIntegerToken.token.toString();
             }
 
-            public Token<BigInteger> fromString(String string)
+            public Token fromString(String string)
             {
                 return new BigIntegerToken(new BigInteger(string));
             }
@@ -162,7 +168,7 @@ public class KeyCollisionTest
             public void validate(String token) {}
         };
 
-        public Token.TokenFactory<BigInteger> getTokenFactory()
+        public Token.TokenFactory getTokenFactory()
         {
             return tokenFactory;
         }

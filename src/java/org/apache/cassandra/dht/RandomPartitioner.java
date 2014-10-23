@@ -49,11 +49,11 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return new BufferDecoratedKey(getToken(key), key);
     }
 
-    public Token midpoint(Token ltoken, Token rtoken)
+    public BigIntegerToken midpoint(BigIntegerToken ltoken, BigIntegerToken rtoken)
     {
         // the symbolic MINIMUM token should act as ZERO: the empty bit array
-        BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)ltoken).token;
-        BigInteger right = rtoken.equals(MINIMUM) ? ZERO : ((BigIntegerToken)rtoken).token;
+        BigInteger left = ltoken.equals(MINIMUM) ? ZERO : ltoken.token;
+        BigInteger right = rtoken.equals(MINIMUM) ? ZERO : rtoken.token;
         Pair<BigInteger,Boolean> midpair = FBUtilities.midpoint(left, right, 127);
         // discard the remainder
         return new BigIntegerToken(midpair.left);
@@ -72,19 +72,21 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return new BigIntegerToken(token);
     }
 
-    private final Token.TokenFactory<BigInteger> tokenFactory = new Token.TokenFactory<BigInteger>() {
-        public ByteBuffer toByteArray(Token<BigInteger> bigIntegerToken)
+    private final Token.TokenFactory tokenFactory = new Token.TokenFactory() {
+        public ByteBuffer toByteArray(Token token)
         {
+            BigIntegerToken bigIntegerToken = (BigIntegerToken) token;
             return ByteBuffer.wrap(bigIntegerToken.token.toByteArray());
         }
 
-        public Token<BigInteger> fromByteArray(ByteBuffer bytes)
+        public Token fromByteArray(ByteBuffer bytes)
         {
             return new BigIntegerToken(new BigInteger(ByteBufferUtil.getArray(bytes)));
         }
 
-        public String toString(Token<BigInteger> bigIntegerToken)
+        public String toString(Token token)
         {
+            BigIntegerToken bigIntegerToken = (BigIntegerToken) token;
             return bigIntegerToken.token.toString();
         }
 
@@ -104,13 +106,13 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
             }
         }
 
-        public Token<BigInteger> fromString(String string)
+        public Token fromString(String string)
         {
             return new BigIntegerToken(new BigInteger(string));
         }
     };
 
-    public Token.TokenFactory<BigInteger> getTokenFactory()
+    public Token.TokenFactory getTokenFactory()
     {
         return tokenFactory;
     }
