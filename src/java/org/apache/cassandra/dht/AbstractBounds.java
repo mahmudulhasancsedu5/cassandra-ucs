@@ -30,7 +30,7 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.Pair;
 
-public abstract class AbstractBounds<T extends RingPosition> implements Serializable
+public abstract class AbstractBounds<T extends RingPosition<T>> implements Serializable
 {
     private static final long serialVersionUID = 1L;
     public static final AbstractBoundsSerializer serializer = new AbstractBoundsSerializer();
@@ -155,26 +155,32 @@ public abstract class AbstractBounds<T extends RingPosition> implements Serializ
 
         public AbstractBounds<?> deserialize(DataInput in, int version) throws IOException
         {
+            return deserializeTyped(in, version);
+        }
+
+        @SuppressWarnings("unchecked")
+        private <T extends RingPosition<T>> AbstractBounds<T> deserializeTyped(DataInput in, int version) throws IOException
+        {
             int kind = in.readInt();
             boolean isToken = kind >= 0;
             if (!isToken)
                 kind = -(kind+1);
 
-            RingPosition left, right;
+            T left, right;
             if (isToken)
             {
-                left = Token.serializer.deserialize(in);
-                right = Token.serializer.deserialize(in);
+                left = (T) Token.serializer.deserialize(in);
+                right = (T) Token.serializer.deserialize(in);
             }
             else
             {
-                left = RowPosition.serializer.deserialize(in);
-                right = RowPosition.serializer.deserialize(in);
+                left = (T) RowPosition.serializer.deserialize(in);
+                right = (T) RowPosition.serializer.deserialize(in);
             }
 
             if (kind == Type.RANGE.ordinal())
-                return new Range(left, right);
-            return new Bounds(left, right);
+                return new Range<T>(left, right);
+            return new Bounds<T>(left, right);
         }
 
         public long serializedSize(AbstractBounds<?> ab, int version)

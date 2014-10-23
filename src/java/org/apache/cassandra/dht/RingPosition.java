@@ -25,5 +25,5 @@ package org.apache.cassandra.dht;
 public interface RingPosition<C extends RingPosition<C>> extends Comparable<C>
 {
     public Token getToken();
-    public boolean isMinimum(IPartitioner<?> partitioner);
+    public boolean isMinimum(IPartitioner partitioner);
 }

@@ -47,7 +47,7 @@ public class RingCache
 {
     final private static Logger logger = LoggerFactory.getLogger(RingCache.class);
 
-    private final IPartitioner<?> partitioner;
+    private final IPartitioner partitioner;
     private final Configuration conf;
 
     private Multimap<Range<Token>, InetAddress> rangeMap;

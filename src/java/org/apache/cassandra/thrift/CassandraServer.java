@@ -1155,7 +1155,7 @@ public class CassandraServer implements Cassandra.Iface
 
             List<Row> rows = null;
 
-            IPartitioner<?> p = StorageService.getPartitioner();
+            IPartitioner p = StorageService.getPartitioner();
             AbstractBounds<RowPosition> bounds;
             if (range.start_key == null)
             {

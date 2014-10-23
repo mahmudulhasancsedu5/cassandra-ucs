@@ -54,7 +54,7 @@ import static org.apache.cassandra.Util.dk;
  */
 public class KeyCollisionTest
 {
-    IPartitioner<?> oldPartitioner;
+    IPartitioner oldPartitioner;
     private static final String KEYSPACE1 = "KeyCollisionTest1";
     private static final String CF = "Standard1";
 

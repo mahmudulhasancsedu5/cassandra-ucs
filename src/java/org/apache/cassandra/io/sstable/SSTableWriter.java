@@ -129,7 +129,7 @@ public class SSTableWriter extends SSTable
                          long keyCount,
                          long repairedAt,
                          CFMetaData metadata,
-                         IPartitioner<?> partitioner,
+                         IPartitioner partitioner,
                          MetadataCollector sstableMetadataCollector)
     {
         super(Descriptor.fromFilename(filename),
