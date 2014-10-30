@@ -124,6 +124,8 @@ public abstract class AbstractBounds<T extends RingPosition<T>> implements Seria
 
     public abstract AbstractBounds<T> withNewRight(T newRight);
 
+    public abstract AbstractBounds<T> withNewLeft(T newLeft, boolean inclusive);
+
     public static class AbstractBoundsSerializer implements IVersionedSerializer<AbstractBounds<?>>
     {
         public void serialize(AbstractBounds<?> range, DataOutputPlus out, int version) throws IOException
@@ -173,8 +175,8 @@ public abstract class AbstractBounds<T extends RingPosition<T>> implements Seria
             }
 
             if (kind == Type.RANGE.ordinal())
-                return new Range(left, right);
-            return new Bounds(left, right);
+                return new Range(left, right, Token.getSerializationPartitioner());
+            return new Bounds(left, right, Token.getSerializationPartitioner());
         }
 
         public long serializedSize(AbstractBounds<?> ab, int version)

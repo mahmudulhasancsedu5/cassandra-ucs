@@ -73,7 +73,7 @@ public class StreamRequest
             {
                 Token left = Token.serializer.deserialize(in);
                 Token right = Token.serializer.deserialize(in);
-                ranges.add(new Range<>(left, right));
+                ranges.add(new Range<>(left, right, Token.getSerializationPartitioner()));
             }
             int cfCount = in.readInt();
             List<String> columnFamilies = new ArrayList<>(cfCount);

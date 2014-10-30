@@ -23,11 +23,11 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public abstract class Token implements RingPosition<Token>, Serializable
@@ -46,18 +46,25 @@ public abstract class Token implements RingPosition<Token>, Serializable
         public abstract void validate(String token) throws ConfigurationException;
     }
 
+    static public IPartitioner getSerializationPartitioner()
+    {
+        // FIXME(blambov): This is wrong and probably will cause pain. Tokens should be serialized according to their
+        // type. Leaving as is to keep patch size low.
+        return DatabaseDescriptor.getPartitioner();
+    }
+
     public static class TokenSerializer implements ISerializer<Token>
     {
         public void serialize(Token token, DataOutputPlus out) throws IOException
         {
-            IPartitioner p = StorageService.getPartitioner();
+            IPartitioner p = getSerializationPartitioner();
             ByteBuffer b = p.getTokenFactory().toByteArray(token);
             ByteBufferUtil.writeWithLength(b, out);
         }
 
         public Token deserialize(DataInput in) throws IOException
         {
-            IPartitioner p = StorageService.getPartitioner();
+            IPartitioner p = getSerializationPartitioner();
             int size = in.readInt();
             byte[] bytes = new byte[size];
             in.readFully(bytes);
@@ -66,7 +73,7 @@ public abstract class Token implements RingPosition<Token>, Serializable
 
         public long serializedSize(Token object, TypeSizes typeSizes)
         {
-            IPartitioner p = StorageService.getPartitioner();
+            IPartitioner p = getSerializationPartitioner();
             ByteBuffer b = p.getTokenFactory().toByteArray(object);
             return TypeSizes.NATIVE.sizeof(b.remaining()) + b.remaining();
         }
@@ -80,11 +87,6 @@ public abstract class Token implements RingPosition<Token>, Serializable
     public boolean isMinimum(IPartitioner partitioner)
     {
         return this.equals(partitioner.getMinimumToken());
-    }
-
-    public boolean isMinimum()
-    {
-        return isMinimum(StorageService.getPartitioner());
     }
 
     /*
@@ -106,11 +108,6 @@ public abstract class Token implements RingPosition<Token>, Serializable
         return new KeyBound(this, true);
     }
 
-    public KeyBound minKeyBound()
-    {
-        return minKeyBound(null);
-    }
-
     public KeyBound maxKeyBound(IPartitioner partitioner)
     {
         /*
@@ -121,22 +118,17 @@ public abstract class Token implements RingPosition<Token>, Serializable
          * maxKeyBound for the minimun token.
          */
         if (isMinimum(partitioner))
-            return minKeyBound();
+            return minKeyBound(partitioner);
         return new KeyBound(this, false);
     }
 
-    public KeyBound maxKeyBound()
-    {
-        return maxKeyBound(StorageService.getPartitioner());
-    }
-
     @SuppressWarnings("unchecked")
-    public <R extends RingPosition<R>> R upperBound(Class<R> klass)
+    public <R extends RingPosition<R>> R upperBound(Class<R> klass, IPartitioner partitioner)
     {
         if (klass.equals(getClass()))
             return (R)this;
         else
-            return (R)maxKeyBound();
+            return (R)maxKeyBound(partitioner);
     }
 
     public static class KeyBound implements RowPosition
@@ -173,11 +165,6 @@ public abstract class Token implements RingPosition<Token>, Serializable
         public boolean isMinimum(IPartitioner partitioner)
         {
             return getToken().isMinimum(partitioner);
-        }
-
-        public boolean isMinimum()
-        {
-            return isMinimum(StorageService.getPartitioner());
         }
 
         public RowPosition.Kind kind()

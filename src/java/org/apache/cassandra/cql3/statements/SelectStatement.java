@@ -393,13 +393,13 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
              * this special case rule should not apply.
              */
             int cmp = startToken.compareTo(endToken);
-            if (!startToken.isMinimum() && !endToken.isMinimum() && (cmp > 0 || (cmp == 0 && (!includeStart || !includeEnd))))
+            if (!startToken.isMinimum(p) && !endToken.isMinimum(p) && (cmp > 0 || (cmp == 0 && (!includeStart || !includeEnd))))
                 return null;
 
-            RowPosition start = includeStart ? startToken.minKeyBound() : startToken.maxKeyBound();
-            RowPosition end = includeEnd ? endToken.maxKeyBound() : endToken.minKeyBound();
+            RowPosition start = includeStart ? startToken.minKeyBound(p) : startToken.maxKeyBound(p);
+            RowPosition end = includeEnd ? endToken.maxKeyBound(p) : endToken.minKeyBound(p);
 
-            return new Range<RowPosition>(start, end);
+            return new Range<RowPosition>(start, end, p);
         }
         else
         {
@@ -415,14 +415,14 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
             if (includeKeyBound(Bound.START))
             {
                 return includeKeyBound(Bound.END)
-                     ? new Bounds<RowPosition>(startKey, finishKey)
-                     : new IncludingExcludingBounds<RowPosition>(startKey, finishKey);
+                     ? new Bounds<RowPosition>(startKey, finishKey, p)
+                     : new IncludingExcludingBounds<RowPosition>(startKey, finishKey, p);
             }
             else
             {
                 return includeKeyBound(Bound.END)
-                     ? new Range<RowPosition>(startKey, finishKey)
-                     : new ExcludingBounds<RowPosition>(startKey, finishKey);
+                     ? new Range<RowPosition>(startKey, finishKey, p)
+                     : new ExcludingBounds<RowPosition>(startKey, finishKey, p);
             }
         }
     }

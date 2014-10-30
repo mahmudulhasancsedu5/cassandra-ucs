@@ -33,10 +33,12 @@ import static org.apache.cassandra.Util.range;
 
 public class RangeTest
 {
+    static IPartitioner partitioner = new RandomPartitioner();
+
     @Test
     public void testContains()
     {
-        Range left = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"));
+        Range left = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"), partitioner);
         assert !left.contains(new BigIntegerToken("0"));
         assert left.contains(new BigIntegerToken("10"));
         assert left.contains(new BigIntegerToken("100"));
@@ -46,13 +48,13 @@ public class RangeTest
     @Test
     public void testContainsWrapping()
     {
-        Range range = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"));
+        Range range = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"), partitioner);
         assert range.contains(new BigIntegerToken("0"));
         assert range.contains(new BigIntegerToken("10"));
         assert range.contains(new BigIntegerToken("100"));
         assert range.contains(new BigIntegerToken("101"));
 
-        range = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"));
+        range = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"), partitioner);
         assert range.contains(new BigIntegerToken("0"));
         assert !range.contains(new BigIntegerToken("1"));
         assert !range.contains(new BigIntegerToken("100"));
@@ -62,10 +64,10 @@ public class RangeTest
     @Test
     public void testContainsRange()
     {
-        Range one = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"));
-        Range two = new Range(new BigIntegerToken("2"), new BigIntegerToken("5"));
-        Range thr = new Range(new BigIntegerToken("5"), new BigIntegerToken("10"));
-        Range fou = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"));
+        Range one = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"), partitioner);
+        Range two = new Range(new BigIntegerToken("2"), new BigIntegerToken("5"), partitioner);
+        Range thr = new Range(new BigIntegerToken("5"), new BigIntegerToken("10"), partitioner);
+        Range fou = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"), partitioner);
 
         assert one.contains(two);
         assert one.contains(thr);
@@ -87,11 +89,11 @@ public class RangeTest
     @Test
     public void testContainsRangeWrapping()
     {
-        Range one = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"));
-        Range two = new Range(new BigIntegerToken("5"), new BigIntegerToken("3"));
-        Range thr = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"));
-        Range fou = new Range(new BigIntegerToken("2"), new BigIntegerToken("6"));
-        Range fiv = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"));
+        Range one = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"), partitioner);
+        Range two = new Range(new BigIntegerToken("5"), new BigIntegerToken("3"), partitioner);
+        Range thr = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"), partitioner);
+        Range fou = new Range(new BigIntegerToken("2"), new BigIntegerToken("6"), partitioner);
+        Range fiv = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"), partitioner);
 
         assert !one.contains(two);
         assert one.contains(thr);
@@ -118,12 +120,12 @@ public class RangeTest
     @Test
     public void testContainsRangeOneWrapping()
     {
-        Range wrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"));
-        Range wrap2 = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"));
+        Range wrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"), partitioner);
+        Range wrap2 = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"), partitioner);
 
-        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("2"));
-        Range nowrap2 = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"));
-        Range nowrap3 = new Range(new BigIntegerToken("10"), new BigIntegerToken("100"));
+        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("2"), partitioner);
+        Range nowrap2 = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"), partitioner);
+        Range nowrap3 = new Range(new BigIntegerToken("10"), new BigIntegerToken("100"), partitioner);
 
         assert wrap1.contains(nowrap1);
         assert wrap1.contains(nowrap2);
@@ -137,10 +139,10 @@ public class RangeTest
     @Test
     public void testIntersects()
     {
-        Range all = new Range(new BigIntegerToken("0"), new BigIntegerToken("0")); // technically, this is a wrapping range
-        Range one = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"));
-        Range two = new Range(new BigIntegerToken("0"), new BigIntegerToken("8"));
-        Range not = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"));
+        Range all = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"), partitioner); // technically, this is a wrapping range
+        Range one = new Range(new BigIntegerToken("2"), new BigIntegerToken("10"), partitioner);
+        Range two = new Range(new BigIntegerToken("0"), new BigIntegerToken("8"), partitioner);
+        Range not = new Range(new BigIntegerToken("10"), new BigIntegerToken("12"), partitioner);
 
         assert all.intersects(one);
         assert all.intersects(two);
@@ -158,12 +160,12 @@ public class RangeTest
     @Test
     public void testIntersectsWrapping()
     {
-        Range onewrap = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"));
-        Range onecomplement = new Range(onewrap.right, onewrap.left);
-        Range onestartswith = new Range(onewrap.left, new BigIntegerToken("12"));
-        Range oneendswith = new Range(new BigIntegerToken("1"), onewrap.right);
-        Range twowrap = new Range(new BigIntegerToken("5"), new BigIntegerToken("3"));
-        Range not = new Range(new BigIntegerToken("2"), new BigIntegerToken("6"));
+        Range onewrap = new Range(new BigIntegerToken("10"), new BigIntegerToken("2"), partitioner);
+        Range onecomplement = new Range(onewrap.right, onewrap.left, partitioner);
+        Range onestartswith = new Range(onewrap.left, new BigIntegerToken("12"), partitioner);
+        Range oneendswith = new Range(new BigIntegerToken("1"), onewrap.right, partitioner);
+        Range twowrap = new Range(new BigIntegerToken("5"), new BigIntegerToken("3"), partitioner);
+        Range not = new Range(new BigIntegerToken("2"), new BigIntegerToken("6"), partitioner);
 
         assert !onewrap.intersects(onecomplement);
         assert onewrap.intersects(onestartswith);
@@ -200,11 +202,11 @@ public class RangeTest
     @Test
     public void testIntersectionWithAll()
     {
-        Range all0 = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"));
-        Range all10 = new Range(new BigIntegerToken("10"), new BigIntegerToken("10"));
-        Range all100 = new Range(new BigIntegerToken("100"), new BigIntegerToken("100"));
-        Range all1000 = new Range(new BigIntegerToken("1000"), new BigIntegerToken("1000"));
-        Range wraps = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"));
+        Range all0 = new Range(new BigIntegerToken("0"), new BigIntegerToken("0"), partitioner);
+        Range all10 = new Range(new BigIntegerToken("10"), new BigIntegerToken("10"), partitioner);
+        Range all100 = new Range(new BigIntegerToken("100"), new BigIntegerToken("100"), partitioner);
+        Range all1000 = new Range(new BigIntegerToken("1000"), new BigIntegerToken("1000"), partitioner);
+        Range wraps = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"), partitioner);
 
         assertIntersection(all0, wraps, wraps);
         assertIntersection(all10, wraps, wraps);
@@ -215,12 +217,12 @@ public class RangeTest
     @Test
     public void testIntersectionContains()
     {
-        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"));
-        Range wraps2 = new Range(new BigIntegerToken("90"), new BigIntegerToken("20"));
-        Range wraps3 = new Range(new BigIntegerToken("90"), new BigIntegerToken("0"));
-        Range nowrap1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("110"));
-        Range nowrap2 = new Range(new BigIntegerToken("0"), new BigIntegerToken("10"));
-        Range nowrap3 = new Range(new BigIntegerToken("0"), new BigIntegerToken("9"));
+        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"), partitioner);
+        Range wraps2 = new Range(new BigIntegerToken("90"), new BigIntegerToken("20"), partitioner);
+        Range wraps3 = new Range(new BigIntegerToken("90"), new BigIntegerToken("0"), partitioner);
+        Range nowrap1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("110"), partitioner);
+        Range nowrap2 = new Range(new BigIntegerToken("0"), new BigIntegerToken("10"), partitioner);
+        Range nowrap3 = new Range(new BigIntegerToken("0"), new BigIntegerToken("9"), partitioner);
 
         assertIntersection(wraps1, wraps2, wraps1);
         assertIntersection(wraps3, wraps2, wraps3);
@@ -238,11 +240,11 @@ public class RangeTest
     @Test
     public void testNoIntersection()
     {
-        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"));
-        Range wraps2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"));
-        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"));
-        Range nowrap2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("200"));
-        Range nowrap3 = new Range(new BigIntegerToken("10"), new BigIntegerToken("100"));
+        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"), partitioner);
+        Range wraps2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"), partitioner);
+        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"), partitioner);
+        Range nowrap2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("200"), partitioner);
+        Range nowrap3 = new Range(new BigIntegerToken("10"), new BigIntegerToken("100"), partitioner);
 
         assertNoIntersection(wraps1, nowrap3);
         assertNoIntersection(wraps2, nowrap1);
@@ -252,51 +254,51 @@ public class RangeTest
     @Test
     public void testIntersectionOneWraps()
     {
-        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"));
-        Range wraps2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"));
-        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("200"));
-        Range nowrap2 = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"));
+        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("10"), partitioner);
+        Range wraps2 = new Range(new BigIntegerToken("100"), new BigIntegerToken("0"), partitioner);
+        Range nowrap1 = new Range(new BigIntegerToken("0"), new BigIntegerToken("200"), partitioner);
+        Range nowrap2 = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"), partitioner);
 
         assertIntersection(wraps1,
                            nowrap1,
-                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10")),
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
+                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10"), partitioner),
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200"), partitioner));
         assertIntersection(wraps2,
                            nowrap1,
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200"), partitioner));
         assertIntersection(wraps1,
                            nowrap2,
-                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10")));
+                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10"), partitioner));
     }
 
     @Test
     public void testIntersectionTwoWraps()
     {
-        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("20"));
-        Range wraps2 = new Range(new BigIntegerToken("120"), new BigIntegerToken("90"));
-        Range wraps3 = new Range(new BigIntegerToken("120"), new BigIntegerToken("110"));
-        Range wraps4 = new Range(new BigIntegerToken("10"), new BigIntegerToken("0"));
-        Range wraps5 = new Range(new BigIntegerToken("10"), new BigIntegerToken("1"));
-        Range wraps6 = new Range(new BigIntegerToken("30"), new BigIntegerToken("10"));
+        Range wraps1 = new Range(new BigIntegerToken("100"), new BigIntegerToken("20"), partitioner);
+        Range wraps2 = new Range(new BigIntegerToken("120"), new BigIntegerToken("90"), partitioner);
+        Range wraps3 = new Range(new BigIntegerToken("120"), new BigIntegerToken("110"), partitioner);
+        Range wraps4 = new Range(new BigIntegerToken("10"), new BigIntegerToken("0"), partitioner);
+        Range wraps5 = new Range(new BigIntegerToken("10"), new BigIntegerToken("1"), partitioner);
+        Range wraps6 = new Range(new BigIntegerToken("30"), new BigIntegerToken("10"), partitioner);
 
         assertIntersection(wraps1,
                            wraps2,
-                           new Range(new BigIntegerToken("120"), new BigIntegerToken("20")));
+                           new Range(new BigIntegerToken("120"), new BigIntegerToken("20"), partitioner));
         assertIntersection(wraps1,
                            wraps3,
-                           new Range(new BigIntegerToken("120"), new BigIntegerToken("20")),
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("110")));
+                           new Range(new BigIntegerToken("120"), new BigIntegerToken("20"), partitioner),
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("110"), partitioner));
         assertIntersection(wraps1,
                            wraps4,
-                           new Range(new BigIntegerToken("10"), new BigIntegerToken("20")),
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("0")));
+                           new Range(new BigIntegerToken("10"), new BigIntegerToken("20"), partitioner),
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("0"), partitioner));
         assertIntersection(wraps1,
                            wraps5,
-                           new Range(new BigIntegerToken("10"), new BigIntegerToken("20")),
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("1")));
+                           new Range(new BigIntegerToken("10"), new BigIntegerToken("20"), partitioner),
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("1"), partitioner));
         assertIntersection(wraps1,
                            wraps6,
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("10")));
+                           new Range(new BigIntegerToken("100"), new BigIntegerToken("10"), partitioner));
     }
 
     @Test
@@ -321,7 +323,7 @@ public class RangeTest
 
     private Range makeRange(String token1, String token2)
     {
-        return new Range(new BigIntegerToken(token1), new BigIntegerToken(token2));
+        return new Range(new BigIntegerToken(token1), new BigIntegerToken(token2), partitioner);
     }
 
     private Set<Range> makeRanges(String[][] tokenPairs)

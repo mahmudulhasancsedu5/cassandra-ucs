@@ -1573,7 +1573,7 @@ public class StorageProxy implements StorageProxyMBean
                         // Note: it would be slightly more efficient to have CFS.getRangeSlice on the destination nodes unwraps
                         // the range if necessary and deal with it. However, we can't start sending wrapped range without breaking
                         // wire compatibility, so It's likely easier not to bother;
-                        if (range.right.isMinimum())
+                        if (range.right.isMinimum(StorageService.getPartitioner())) // FIXME
                             break;
 
                         List<InetAddress> merged = intersection(liveEndpoints, nextEndpoints);
@@ -1843,7 +1843,7 @@ public class StorageProxy implements StorageProxyMBean
              * asSplitValue() abstracts that choice.
              */
             Token upperBoundToken = ringIter.next();
-            T upperBound = (T)upperBoundToken.upperBound(queryRange.left.getClass());
+            T upperBound = (T)upperBoundToken.upperBound(queryRange.left.getClass(), StorageService.getPartitioner());
             if (!remainder.left.equals(upperBound) && !remainder.contains(upperBound))
                 // no more splits
                 break;

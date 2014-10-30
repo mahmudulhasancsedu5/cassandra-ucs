@@ -65,7 +65,7 @@ public class LocalSyncTaskTest extends SchemaLoader
         final InetAddress ep1 = InetAddress.getByName("127.0.0.1");
         final InetAddress ep2 = InetAddress.getByName("127.0.0.1");
 
-        Range<Token> range = new Range<>(partirioner.getMinimumToken(), partirioner.getRandomToken());
+        Range<Token> range = new Range<>(partirioner.getMinimumToken(), partirioner.getRandomToken(), partirioner);
         RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), KEYSPACE1, "Standard1", range);
 
         MerkleTree tree1 = createInitialTree(desc);
@@ -84,7 +84,7 @@ public class LocalSyncTaskTest extends SchemaLoader
     @Test
     public void testDifference() throws Throwable
     {
-        Range<Token> range = new Range<>(partirioner.getMinimumToken(), partirioner.getRandomToken());
+        Range<Token> range = new Range<>(partirioner.getMinimumToken(), partirioner.getRandomToken(), partirioner);
         UUID parentRepairSession = UUID.randomUUID();
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("Standard1");

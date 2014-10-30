@@ -26,6 +26,6 @@ abstract class AbstractPartitioner implements IPartitioner
         if (minToken.getClass().equals(klass))
             return (R)minToken;
         else
-            return (R)minToken.minKeyBound();
+            return (R)minToken.minKeyBound(this);
     }
 }

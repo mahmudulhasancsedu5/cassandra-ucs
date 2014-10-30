@@ -26,6 +26,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Ordering;
 import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.RateLimiter;
+
 import org.apache.cassandra.cache.CachingOptions;
 import org.apache.cassandra.cache.InstrumentingCache;
 import org.apache.cassandra.cache.KeyCacheKey;
@@ -1152,11 +1153,13 @@ public abstract class SSTableReader extends SSTable
     {
         // use the index to determine a minimal section for each range
         List<Pair<Integer,Integer>> positions = new ArrayList<>();
+        // FIXME: This is not the correct partitioner here.
+        IPartitioner partitioner = StorageService.getPartitioner();
 
         for (Range<Token> range : Range.normalize(ranges))
         {
-            RowPosition leftPosition = range.left.maxKeyBound();
-            RowPosition rightPosition = range.right.maxKeyBound();
+            RowPosition leftPosition = range.left.maxKeyBound(partitioner);
+            RowPosition rightPosition = range.right.maxKeyBound(partitioner);
 
             int left = summary.binarySearch(leftPosition);
             if (left < 0)

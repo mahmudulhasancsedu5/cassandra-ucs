@@ -84,7 +84,7 @@ public class KeyCollisionTest
         insert("key1", "key2", "key3"); // token = 4
         insert("longKey1", "longKey2"); // token = 8
 
-        List<Row> rows = cfs.getRangeSlice(new Bounds<RowPosition>(dk("k2"), dk("key2")), null, new IdentityQueryFilter(), 10000);
+        List<Row> rows = cfs.getRangeSlice(new Bounds<RowPosition>(dk("k2"), dk("key2"), Util.getPartitioner()), null, new IdentityQueryFilter(), 10000);
         assert rows.size() == 4 : "Expecting 4 keys, got " + rows.size();
         assert rows.get(0).key.getKey().equals(ByteBufferUtil.bytes("k2"));
         assert rows.get(1).key.getKey().equals(ByteBufferUtil.bytes("k3"));
@@ -196,7 +196,7 @@ public class KeyCollisionTest
             for (Token node : sortedTokens)
             {
                 allTokens.put(node, new Float(0.0));
-                sortedRanges.add(new Range<Token>(lastToken, node));
+                sortedRanges.add(new Range<Token>(lastToken, node, Util.getPartitioner()));
                 lastToken = node;
             }
 

@@ -23,14 +23,16 @@ import java.util.List;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
+import static org.junit.Assert.assertEquals;
 import static org.apache.cassandra.Util.token;
 import static org.apache.cassandra.Util.rp;
 
+import org.apache.cassandra.Util;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.dht.ExcludingBounds;
@@ -42,42 +44,44 @@ public class StorageProxyTest
 {
     private static Range<RowPosition> range(RowPosition left, RowPosition right)
     {
-        return new Range<RowPosition>(left, right);
+        return new Range<RowPosition>(left, right, Util.getPartitioner());
     }
 
     private static Bounds<RowPosition> bounds(RowPosition left, RowPosition right)
     {
-        return new Bounds<RowPosition>(left, right);
+        return new Bounds<RowPosition>(left, right, Util.getPartitioner());
     }
 
     private static ExcludingBounds<RowPosition> exBounds(RowPosition left, RowPosition right)
     {
-        return new ExcludingBounds<RowPosition>(left, right);
+        return new ExcludingBounds<RowPosition>(left, right, Util.getPartitioner());
     }
 
     private static IncludingExcludingBounds<RowPosition> incExBounds(RowPosition left, RowPosition right)
     {
-        return new IncludingExcludingBounds<RowPosition>(left, right);
+        return new IncludingExcludingBounds<RowPosition>(left, right, Util.getPartitioner());
     }
 
     private static RowPosition startOf(String key)
     {
-        return StorageService.getPartitioner().getToken(ByteBufferUtil.bytes(key)).minKeyBound();
+        IPartitioner partitioner = StorageService.getPartitioner();
+        return partitioner.getToken(ByteBufferUtil.bytes(key)).minKeyBound(partitioner);
     }
 
     private static RowPosition endOf(String key)
     {
-        return StorageService.getPartitioner().getToken(ByteBufferUtil.bytes(key)).maxKeyBound();
+        IPartitioner partitioner = StorageService.getPartitioner();
+        return partitioner.getToken(ByteBufferUtil.bytes(key)).maxKeyBound(partitioner);
     }
 
     private static Range<Token> tokenRange(String left, String right)
     {
-        return new Range<Token>(token(left), token(right));
+        return new Range<Token>(token(left), token(right), Util.getPartitioner());
     }
 
     private static Bounds<Token> tokenBounds(String left, String right)
     {
-        return new Bounds<Token>(token(left), token(right));
+        return new Bounds<Token>(token(left), token(right), Util.getPartitioner());
     }
 
     @BeforeClass

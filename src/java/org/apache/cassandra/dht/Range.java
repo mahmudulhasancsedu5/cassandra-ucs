@@ -36,11 +36,6 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
 {
     public static final long serialVersionUID = 1L;
 
-    public Range(T left, T right)
-    {
-        this(left, right, StorageService.getPartitioner());
-    }
-
     public Range(T left, T right, IPartitioner partitioner)
     {
         super(left, right, partitioner);
@@ -138,7 +133,7 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
         // Same punishment than in Bounds.contains(), we must be carefull if that.left == that.right as
         // as new Range<T>(that.left, that.right) will then cover the full ring which is not what we
         // want.
-        return contains(that.left) || (!that.left.equals(that.right) && intersects(new Range<T>(that.left, that.right)));
+        return contains(that.left) || (!that.left.equals(that.right) && intersects(new Range<T>(that.left, that.right, partitioner)));
     }
 
     @SafeVarargs
@@ -431,7 +426,7 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
                 if (current.left.equals(min))
                     return Collections.<Range<T>>singletonList(current);
 
-                output.add(new Range<T>(current.left, min));
+                output.add(new Range<T>(current.left, min, current.partitioner));
                 return output;
             }
 
@@ -444,7 +439,7 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
                 // We do overlap
                 // (we've handled current.right.equals(min) already)
                 if (next.right.equals(min) || current.right.compareTo(next.right) < 0)
-                    current = new Range<T>(current.left, next.right);
+                    current = new Range<T>(current.left, next.right, current.partitioner);
             }
             else
             {
@@ -479,6 +474,13 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
 
     public AbstractBounds<T> withNewRight(T newRight)
     {
-        return new Range<T>(left, newRight);
+        return new Range<T>(left, newRight, partitioner);
+    }
+
+    public AbstractBounds<T> withNewLeft(T newLeft, boolean inclusive)
+    {
+        return inclusive
+                ? new Bounds<>(newLeft, right, partitioner)
+                : new Range<>(newLeft, right, partitioner);
     }
 }

@@ -141,7 +141,7 @@ public class RepairOption
                 }
                 Token parsedBeginToken = partitioner.getTokenFactory().fromString(rangeStr[0].trim());
                 Token parsedEndToken = partitioner.getTokenFactory().fromString(rangeStr[1].trim());
-                ranges.add(new Range<>(parsedBeginToken, parsedEndToken));
+                ranges.add(new Range<>(parsedBeginToken, parsedEndToken, partitioner));
             }
         }
 

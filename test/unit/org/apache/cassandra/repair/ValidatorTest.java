@@ -80,7 +80,7 @@ public class ValidatorTest
     @Test
     public void testValidatorComplete() throws Throwable
     {
-        Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken());
+        Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken(), partitioner);
         final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, range);
 
         final SimpleCondition lock = new SimpleCondition();
@@ -131,7 +131,7 @@ public class ValidatorTest
 
         // confirm that the tree was validated
         Token min = tree.partitioner().getMinimumToken();
-        assertNotNull(tree.hash(new Range<>(min, min)));
+        assertNotNull(tree.hash(new Range<>(min, min, partitioner)));
 
         if (!lock.isSignaled())
             lock.await();
@@ -162,7 +162,7 @@ public class ValidatorTest
     @Test
     public void testValidatorFailed() throws Throwable
     {
-        Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken());
+        Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getRandomToken(), partitioner);
         final RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspace, columnFamily, range);
 
         final SimpleCondition lock = new SimpleCondition();

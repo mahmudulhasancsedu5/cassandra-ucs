@@ -28,17 +28,18 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
@@ -86,7 +87,7 @@ public class LeveledManifest
         for (int i = 0; i < generations.length; i++)
         {
             generations[i] = new ArrayList<>();
-            lastCompactedKeys[i] = cfs.partitioner.getMinimumToken().minKeyBound();
+            lastCompactedKeys[i] = cfs.partitioner.getMinimumToken().minKeyBound(cfs.partitioner);
         }
         unrepairedL0 = new ArrayList<>();
         compactionCounter = new int[n];
@@ -456,6 +457,7 @@ public class LeveledManifest
             for (int j = 0; j < compactionCounter.length; j++)
                 logger.debug("CompactionCounter: {}: {}", j, compactionCounter[j]);
         }
+        IPartitioner partitioner = cfs.partitioner;
 
         for (int i = generations.length - 1; i > 0; i--)
         {
@@ -477,10 +479,10 @@ public class LeveledManifest
                             max = candidate.last;
                     }
                     Set<SSTableReader> compacting = cfs.getDataTracker().getCompacting();
-                    Range<RowPosition> boundaries = new Range<>(min, max);
+                    Range<RowPosition> boundaries = new Range<>(min, max, partitioner);
                     for (SSTableReader sstable : getLevel(i))
                     {
-                        Range<RowPosition> r = new Range<RowPosition>(sstable.first, sstable.last);
+                        Range<RowPosition> r = new Range<RowPosition>(sstable.first, sstable.last, partitioner);
                         if (boundaries.contains(r) && !compacting.contains(sstable))
                         {
                             logger.info("Adding high-level (L{}) {} to candidates", sstable.getSSTableLevel(), sstable);
@@ -560,26 +562,25 @@ public class LeveledManifest
             first = first.compareTo(sstable.first.getToken()) <= 0 ? first : sstable.first.getToken();
             last = last.compareTo(sstable.last.getToken()) >= 0 ? last : sstable.last.getToken();
         }
-        return overlapping(first, last, others);
+        assert first.compareTo(last) <= 0;
+        return overlapping(new Bounds<>(first, last, sstable.partitioner), others);
     }
 
     @VisibleForTesting
     static Set<SSTableReader> overlapping(SSTableReader sstable, Iterable<SSTableReader> others)
     {
-        return overlapping(sstable.first.getToken(), sstable.last.getToken(), others);
+        return overlapping(new Bounds<>(sstable.first.getToken(), sstable.last.getToken(), sstable.partitioner), others);
     }
 
     /**
-     * @return sstables from @param sstables that contain keys between @param start and @param end, inclusive.
+     * @return sstables from @param sstables that contain keys in the given @param promotedBounds.
      */
-    private static Set<SSTableReader> overlapping(Token start, Token end, Iterable<SSTableReader> sstables)
+    private static Set<SSTableReader> overlapping(Bounds<Token> promotedBounds, Iterable<SSTableReader> sstables)
     {
-        assert start.compareTo(end) <= 0;
         Set<SSTableReader> overlapped = new HashSet<>();
-        Bounds<Token> promotedBounds = new Bounds<Token>(start, end);
         for (SSTableReader candidate : sstables)
         {
-            Bounds<Token> candidateBounds = new Bounds<Token>(candidate.first.getToken(), candidate.last.getToken());
+            Bounds<Token> candidateBounds = new Bounds<Token>(candidate.first.getToken(), candidate.last.getToken(), candidate.partitioner);
             if (candidateBounds.intersects(promotedBounds))
                 overlapped.add(candidate);
         }

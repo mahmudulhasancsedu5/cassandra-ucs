@@ -89,7 +89,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     {
                         return sstable != null &&
                                !(sstable.partitioner instanceof LocalPartitioner) && // exclude SSTables from 2i
-                               new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(Collections.singleton(repairingRange));
+                               new Bounds<>(sstable.first.getToken(), sstable.last.getToken(), sstable.partitioner).intersects(Collections.singleton(repairingRange));
                     }
                 });
                 ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId).addSSTables(cfs.metadata.cfId, snapshottedSSSTables);

@@ -30,7 +30,6 @@ import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +42,7 @@ import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.IAsyncCallbackWithFailure;
 import org.apache.cassandra.net.MessageIn;
@@ -413,7 +413,7 @@ public class ActiveRepairService
             Set<SSTableReader> sstables = new HashSet<>();
             for (SSTableReader sstable : allSSTables)
             {
-                if (new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(Arrays.asList(range)))
+                if (new Bounds<>(sstable.first.getToken(), sstable.last.getToken(), sstable.partitioner).intersects(Arrays.asList(range)))
                     sstables.add(sstable);
                 else
                     sstable.releaseReference();

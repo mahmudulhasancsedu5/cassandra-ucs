@@ -29,12 +29,7 @@ import org.apache.cassandra.utils.Pair;
  */
 public class ExcludingBounds<T extends RingPosition<T>> extends AbstractBounds<T>
 {
-    public ExcludingBounds(T left, T right)
-    {
-        this(left, right, StorageService.getPartitioner());
-    }
-
-    ExcludingBounds(T left, T right, IPartitioner partitioner)
+    public ExcludingBounds(T left, T right, IPartitioner partitioner)
     {
         super(left, right, partitioner);
         // unlike a Range, an ExcludingBounds may not wrap, nor be empty
@@ -109,6 +104,13 @@ public class ExcludingBounds<T extends RingPosition<T>> extends AbstractBounds<T
 
     public AbstractBounds<T> withNewRight(T newRight)
     {
-        return new ExcludingBounds<T>(left, newRight);
+        return new ExcludingBounds<T>(left, newRight, partitioner);
+    }
+
+    public AbstractBounds<T> withNewLeft(T newLeft, boolean inclusive)
+    {
+        return inclusive
+                ? new IncludingExcludingBounds<>(newLeft, right, partitioner)
+                : new ExcludingBounds<>(newLeft, right, partitioner);
     }
 }

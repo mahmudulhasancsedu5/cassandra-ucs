@@ -512,7 +512,7 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         compact();
 
         IPartitioner p = StorageService.getPartitioner();
-        RowPosition minPos = p.getMinimumToken().minKeyBound();
+        RowPosition minPos = p.getMinimumToken().minKeyBound(p);
         Range<RowPosition> range = new Range<RowPosition>(minPos, minPos, p);
         IDiskAtomFilter filter = new NamesQueryFilter(ImmutableSortedSet.<CellName>of());
         List<Row> rows = hintStore.getRangeSlice(range, null, filter, Integer.MAX_VALUE, System.currentTimeMillis());
@@ -595,8 +595,8 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
 
         // From keys "" to ""...
         IPartitioner partitioner = StorageService.getPartitioner();
-        RowPosition minPos = partitioner.getMinimumToken().minKeyBound();
-        Range<RowPosition> range = new Range<RowPosition>(minPos, minPos);
+        RowPosition minPos = partitioner.getMinimumToken().minKeyBound(partitioner);
+        Range<RowPosition> range = new Range<RowPosition>(minPos, minPos, partitioner);
 
         try
         {

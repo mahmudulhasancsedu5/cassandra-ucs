@@ -36,6 +36,7 @@ import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.compaction.ICompactionScanner;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -73,18 +74,19 @@ public class BigTableScanner implements ICompactionScanner
         this.sstable = sstable;
         this.dataRange = dataRange;
         this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata);
+        IPartitioner p = sstable.partitioner;
 
         List<AbstractBounds<RowPosition>> boundsList = new ArrayList<>(2);
-        if (dataRange.isWrapAround() && !dataRange.stopKey().isMinimum(sstable.partitioner))
+        if (dataRange.isWrapAround() && !dataRange.stopKey().isMinimum(p))
         {
             // split the wrapping range into two parts: 1) the part that starts at the beginning of the sstable, and
             // 2) the part that comes before the wrap-around
-            boundsList.add(new Bounds<>(sstable.partitioner.getMinimumToken().minKeyBound(), dataRange.stopKey(), sstable.partitioner));
-            boundsList.add(new Bounds<>(dataRange.startKey(), sstable.partitioner.getMinimumToken().maxKeyBound(), sstable.partitioner));
+            boundsList.add(new Bounds<>(p.getMinimumToken().minKeyBound(p), dataRange.stopKey(), p));
+            boundsList.add(new Bounds<>(dataRange.startKey(), p.getMinimumToken().maxKeyBound(p), p));
         }
         else
         {
-            boundsList.add(new Bounds<>(dataRange.startKey(), dataRange.stopKey(), sstable.partitioner));
+            boundsList.add(new Bounds<>(dataRange.startKey(), dataRange.stopKey(), p));
         }
         this.rangeIterator = boundsList.iterator();
     }

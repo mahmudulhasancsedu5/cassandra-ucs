@@ -237,34 +237,34 @@ public class MoveTest
         Multimap<InetAddress, Range<Token>> keyspace1ranges = keyspaceStrategyMap.get(KEYSPACE1).getAddressRanges();
         Collection<Range<Token>> ranges1 = keyspace1ranges.get(InetAddress.getByName("127.0.0.1"));
         assertEquals(1, collectionSize(ranges1));
-        assertEquals(generateRange(97, 0), ranges1.iterator().next());
+        assertEquals(generateRange(97, 0, partitioner), ranges1.iterator().next());
         Collection<Range<Token>> ranges2 = keyspace1ranges.get(InetAddress.getByName("127.0.0.2"));
         assertEquals(1, collectionSize(ranges2));
-        assertEquals(generateRange(0, 10), ranges2.iterator().next());
+        assertEquals(generateRange(0, 10, partitioner), ranges2.iterator().next());
         Collection<Range<Token>> ranges3 = keyspace1ranges.get(InetAddress.getByName("127.0.0.3"));
         assertEquals(1, collectionSize(ranges3));
-        assertEquals(generateRange(10, 20), ranges3.iterator().next());
+        assertEquals(generateRange(10, 20, partitioner), ranges3.iterator().next());
         Collection<Range<Token>> ranges4 = keyspace1ranges.get(InetAddress.getByName("127.0.0.4"));
         assertEquals(1, collectionSize(ranges4));
-        assertEquals(generateRange(20, 30), ranges4.iterator().next());
+        assertEquals(generateRange(20, 30, partitioner), ranges4.iterator().next());
         Collection<Range<Token>> ranges5 = keyspace1ranges.get(InetAddress.getByName("127.0.0.5"));
         assertEquals(1, collectionSize(ranges5));
-        assertEquals(generateRange(30, 40), ranges5.iterator().next());
+        assertEquals(generateRange(30, 40, partitioner), ranges5.iterator().next());
         Collection<Range<Token>> ranges6 = keyspace1ranges.get(InetAddress.getByName("127.0.0.6"));
         assertEquals(1, collectionSize(ranges6));
-        assertEquals(generateRange(40, 50), ranges6.iterator().next());
+        assertEquals(generateRange(40, 50, partitioner), ranges6.iterator().next());
         Collection<Range<Token>> ranges7 = keyspace1ranges.get(InetAddress.getByName("127.0.0.7"));
         assertEquals(1, collectionSize(ranges7));
-        assertEquals(generateRange(50, 67), ranges7.iterator().next());
+        assertEquals(generateRange(50, 67, partitioner), ranges7.iterator().next());
         Collection<Range<Token>> ranges8 = keyspace1ranges.get(InetAddress.getByName("127.0.0.8"));
         assertEquals(1, collectionSize(ranges8));
-        assertEquals(generateRange(67, 70), ranges8.iterator().next());
+        assertEquals(generateRange(67, 70, partitioner), ranges8.iterator().next());
         Collection<Range<Token>> ranges9 = keyspace1ranges.get(InetAddress.getByName("127.0.0.9"));
         assertEquals(1, collectionSize(ranges9));
-        assertEquals(generateRange(70, 87), ranges9.iterator().next());
+        assertEquals(generateRange(70, 87, partitioner), ranges9.iterator().next());
         Collection<Range<Token>> ranges10 = keyspace1ranges.get(InetAddress.getByName("127.0.0.10"));
         assertEquals(1, collectionSize(ranges10));
-        assertEquals(generateRange(87, 97), ranges10.iterator().next());
+        assertEquals(generateRange(87, 97, partitioner), ranges10.iterator().next());
 
 
         /**
@@ -286,34 +286,34 @@ public class MoveTest
         Multimap<InetAddress, Range<Token>> keyspace3ranges = keyspaceStrategyMap.get(KEYSPACE3).getAddressRanges();
         ranges1 = keyspace3ranges.get(InetAddress.getByName("127.0.0.1"));
         assertEquals(collectionSize(ranges1), 5);
-        assertTrue(ranges1.equals(generateRanges(97, 0, 70, 87, 50, 67, 87, 97, 67, 70)));
+        assertTrue(ranges1.equals(generateRanges(partitioner, 97, 0, 70, 87, 50, 67, 87, 97, 67, 70)));
         ranges2 = keyspace3ranges.get(InetAddress.getByName("127.0.0.2"));
         assertEquals(collectionSize(ranges2), 5);
-        assertTrue(ranges2.equals(generateRanges(97, 0, 70, 87, 87, 97, 0, 10, 67, 70)));
+        assertTrue(ranges2.equals(generateRanges(partitioner, 97, 0, 70, 87, 87, 97, 0, 10, 67, 70)));
         ranges3 = keyspace3ranges.get(InetAddress.getByName("127.0.0.3"));
         assertEquals(collectionSize(ranges3), 5);
-        assertTrue(ranges3.equals(generateRanges(97, 0, 70, 87, 87, 97, 0, 10, 10, 20)));
+        assertTrue(ranges3.equals(generateRanges(partitioner, 97, 0, 70, 87, 87, 97, 0, 10, 10, 20)));
         ranges4 = keyspace3ranges.get(InetAddress.getByName("127.0.0.4"));
         assertEquals(collectionSize(ranges4), 5);
-        assertTrue(ranges4.equals(generateRanges(97, 0, 20, 30, 87, 97, 0, 10, 10, 20)));
+        assertTrue(ranges4.equals(generateRanges(partitioner, 97, 0, 20, 30, 87, 97, 0, 10, 10, 20)));
         ranges5 = keyspace3ranges.get(InetAddress.getByName("127.0.0.5"));
         assertEquals(collectionSize(ranges5), 5);
-        assertTrue(ranges5.equals(generateRanges(97, 0, 30, 40, 20, 30, 0, 10, 10, 20)));
+        assertTrue(ranges5.equals(generateRanges(partitioner, 97, 0, 30, 40, 20, 30, 0, 10, 10, 20)));
         ranges6 = keyspace3ranges.get(InetAddress.getByName("127.0.0.6"));
         assertEquals(collectionSize(ranges6), 5);
-        assertTrue(ranges6.equals(generateRanges(40, 50, 30, 40, 20, 30, 0, 10, 10, 20)));
+        assertTrue(ranges6.equals(generateRanges(partitioner, 40, 50, 30, 40, 20, 30, 0, 10, 10, 20)));
         ranges7 = keyspace3ranges.get(InetAddress.getByName("127.0.0.7"));
         assertEquals(collectionSize(ranges7), 5);
-        assertTrue(ranges7.equals(generateRanges(40, 50, 30, 40, 50, 67, 20, 30, 10, 20)));
+        assertTrue(ranges7.equals(generateRanges(partitioner, 40, 50, 30, 40, 50, 67, 20, 30, 10, 20)));
         ranges8 = keyspace3ranges.get(InetAddress.getByName("127.0.0.8"));
         assertEquals(collectionSize(ranges8), 5);
-        assertTrue(ranges8.equals(generateRanges(40, 50, 30, 40, 50, 67, 20, 30, 67, 70)));
+        assertTrue(ranges8.equals(generateRanges(partitioner, 40, 50, 30, 40, 50, 67, 20, 30, 67, 70)));
         ranges9 = keyspace3ranges.get(InetAddress.getByName("127.0.0.9"));
         assertEquals(collectionSize(ranges9), 5);
-        assertTrue(ranges9.equals(generateRanges(40, 50, 70, 87, 30, 40, 50, 67, 67, 70)));
+        assertTrue(ranges9.equals(generateRanges(partitioner, 40, 50, 70, 87, 30, 40, 50, 67, 67, 70)));
         ranges10 = keyspace3ranges.get(InetAddress.getByName("127.0.0.10"));
         assertEquals(collectionSize(ranges10), 5);
-        assertTrue(ranges10.equals(generateRanges(40, 50, 70, 87, 50, 67, 87, 97, 67, 70)));
+        assertTrue(ranges10.equals(generateRanges(partitioner, 40, 50, 70, 87, 50, 67, 87, 97, 67, 70)));
 
 
         /**
@@ -334,34 +334,34 @@ public class MoveTest
         Multimap<InetAddress, Range<Token>> keyspace4ranges = keyspaceStrategyMap.get(KEYSPACE4).getAddressRanges();
         ranges1 = keyspace4ranges.get(InetAddress.getByName("127.0.0.1"));
         assertEquals(collectionSize(ranges1), 3);
-        assertTrue(ranges1.equals(generateRanges(97, 0, 70, 87, 87, 97)));
+        assertTrue(ranges1.equals(generateRanges(partitioner, 97, 0, 70, 87, 87, 97)));
         ranges2 = keyspace4ranges.get(InetAddress.getByName("127.0.0.2"));
         assertEquals(collectionSize(ranges2), 3);
-        assertTrue(ranges2.equals(generateRanges(97, 0, 87, 97, 0, 10)));
+        assertTrue(ranges2.equals(generateRanges(partitioner, 97, 0, 87, 97, 0, 10)));
         ranges3 = keyspace4ranges.get(InetAddress.getByName("127.0.0.3"));
         assertEquals(collectionSize(ranges3), 3);
-        assertTrue(ranges3.equals(generateRanges(97, 0, 0, 10, 10, 20)));
+        assertTrue(ranges3.equals(generateRanges(partitioner, 97, 0, 0, 10, 10, 20)));
         ranges4 = keyspace4ranges.get(InetAddress.getByName("127.0.0.4"));
         assertEquals(collectionSize(ranges4), 3);
-        assertTrue(ranges4.equals(generateRanges(20, 30, 0, 10, 10, 20)));
+        assertTrue(ranges4.equals(generateRanges(partitioner, 20, 30, 0, 10, 10, 20)));
         ranges5 = keyspace4ranges.get(InetAddress.getByName("127.0.0.5"));
         assertEquals(collectionSize(ranges5), 3);
-        assertTrue(ranges5.equals(generateRanges(30, 40, 20, 30, 10, 20)));
+        assertTrue(ranges5.equals(generateRanges(partitioner, 30, 40, 20, 30, 10, 20)));
         ranges6 = keyspace4ranges.get(InetAddress.getByName("127.0.0.6"));
         assertEquals(collectionSize(ranges6), 3);
-        assertTrue(ranges6.equals(generateRanges(40, 50, 30, 40, 20, 30)));
+        assertTrue(ranges6.equals(generateRanges(partitioner, 40, 50, 30, 40, 20, 30)));
         ranges7 = keyspace4ranges.get(InetAddress.getByName("127.0.0.7"));
         assertEquals(collectionSize(ranges7), 3);
-        assertTrue(ranges7.equals(generateRanges(40, 50, 30, 40, 50, 67)));
+        assertTrue(ranges7.equals(generateRanges(partitioner, 40, 50, 30, 40, 50, 67)));
         ranges8 = keyspace4ranges.get(InetAddress.getByName("127.0.0.8"));
         assertEquals(collectionSize(ranges8), 3);
-        assertTrue(ranges8.equals(generateRanges(40, 50, 50, 67, 67, 70)));
+        assertTrue(ranges8.equals(generateRanges(partitioner, 40, 50, 50, 67, 67, 70)));
         ranges9 = keyspace4ranges.get(InetAddress.getByName("127.0.0.9"));
         assertEquals(collectionSize(ranges9), 3);
-        assertTrue(ranges9.equals(generateRanges(70, 87, 50, 67, 67, 70)));
+        assertTrue(ranges9.equals(generateRanges(partitioner, 70, 87, 50, 67, 67, 70)));
         ranges10 = keyspace4ranges.get(InetAddress.getByName("127.0.0.10"));
         assertEquals(collectionSize(ranges10), 3);
-        assertTrue(ranges10.equals(generateRanges(70, 87, 87, 97, 67, 70)));
+        assertTrue(ranges10.equals(generateRanges(partitioner, 70, 87, 87, 97, 67, 70)));
 
         // pre-calculate the results.
         Map<String, Multimap<Token, InetAddress>> expectedEndpoints = new HashMap<String, Multimap<Token, InetAddress>>();
@@ -583,7 +583,7 @@ public class MoveTest
         return count;
     }
 
-    private Collection<Range<Token>> generateRanges(int... rangePairs)
+    private Collection<Range<Token>> generateRanges(IPartitioner partitioner, int... rangePairs)
     {
         if (rangePairs.length % 2 == 1)
             throw new RuntimeException("generateRanges argument count should be even");
@@ -592,14 +592,14 @@ public class MoveTest
 
         for (int i = 0; i < rangePairs.length; i+=2)
         {
-            ranges.add(generateRange(rangePairs[i], rangePairs[i+1]));
+            ranges.add(generateRange(rangePairs[i], rangePairs[i+1], partitioner));
         }
 
         return ranges;
     }
 
-    private Range<Token> generateRange(int left, int right)
+    private Range<Token> generateRange(int left, int right, IPartitioner partitioner)
     {
-        return new Range<Token>(new BigIntegerToken(String.valueOf(left)), new BigIntegerToken(String.valueOf(right)));
+        return new Range<Token>(new BigIntegerToken(String.valueOf(left)), new BigIntegerToken(String.valueOf(right)), partitioner);
     }
 }

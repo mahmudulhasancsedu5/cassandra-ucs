@@ -36,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
+
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.openmbean.OpenDataException;
@@ -74,6 +75,7 @@ import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
 import org.apache.cassandra.db.index.SecondaryIndexBuilder;
 import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Descriptor;
@@ -612,19 +614,20 @@ public class CompactionManager implements CompactionManagerMBean
         if (sstable.first.getToken().compareTo(firstRange.left) <= 0)
             return true;
 
+        IPartitioner partitioner = sstable.partitioner;
         // then, iterate over all owned ranges and see if the next key beyond the end of the owned
         // range falls before the start of the next range
         for (int i = 0; i < sortedRanges.size(); i++)
         {
             Range<Token> range = sortedRanges.get(i);
-            if (range.right.isMinimum())
+            if (range.right.isMinimum(partitioner))
             {
                 // we split a wrapping range and this is the second half.
                 // there can't be any keys beyond this (and this is the last range)
                 return false;
             }
 
-            DecoratedKey firstBeyondRange = sstable.firstKeyBeyond(range.right.maxKeyBound());
+            DecoratedKey firstBeyondRange = sstable.firstKeyBeyond(range.right.maxKeyBound(partitioner));
             if (firstBeyondRange == null)
             {
                 // we ran off the end of the sstable looking for the next key; we don't need to check any more ranges
@@ -658,7 +661,7 @@ public class CompactionManager implements CompactionManagerMBean
     {
         assert !cfs.isIndex();
 
-        if (!hasIndexes && !new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(ranges))
+        if (!hasIndexes && !new Bounds<>(sstable.first.getToken(), sstable.last.getToken(), sstable.partitioner).intersects(ranges))
         {
             cfs.getDataTracker().markCompactedSSTablesReplaced(Arrays.asList(sstable), Collections.<SSTableReader>emptyList(), OperationType.CLEANUP);
             return;
@@ -923,7 +926,7 @@ public class CompactionManager implements CompactionManagerMBean
                 Set<SSTableReader> sstablesToValidate = new HashSet<>();
                 for (SSTableReader sstable : cfs.getSSTables())
                 {
-                    if (new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(Arrays.asList(validator.desc.range)))
+                    if (new Bounds<>(sstable.first.getToken(), sstable.last.getToken(), sstable.partitioner).intersects(Arrays.asList(validator.desc.range)))
                     {
                         if (!prs.isIncremental || !sstable.isRepaired())
                         {

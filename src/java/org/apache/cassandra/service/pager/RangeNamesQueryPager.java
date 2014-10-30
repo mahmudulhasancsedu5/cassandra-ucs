@@ -100,14 +100,6 @@ public class RangeNamesQueryPager extends AbstractQueryPager
     {
         // We return a range that always exclude lastReturnedKey, since we've already
         // returned it.
-        AbstractBounds<RowPosition> bounds = command.keyRange;
-        if (bounds instanceof Range || bounds instanceof Bounds)
-        {
-            return new Range<RowPosition>(lastReturnedKey, bounds.right);
-        }
-        else
-        {
-            return new ExcludingBounds<RowPosition>(lastReturnedKey, bounds.right);
-        }
+        return command.keyRange.withNewLeft(lastReturnedKey, false);
     }
 }

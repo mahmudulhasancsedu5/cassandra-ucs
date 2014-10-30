@@ -36,6 +36,7 @@ import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.dht.BytesToken;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -188,7 +189,7 @@ public class CompactionsTest
 
         // check that the shadowed column is gone
         SSTableReader sstable = cfs.getSSTables().iterator().next();
-        Range keyRange = new Range<RowPosition>(key, sstable.partitioner.getMinimumToken().maxKeyBound());
+        Range keyRange = new Range<RowPosition>(key, sstable.partitioner.getMinimumToken().maxKeyBound(sstable.partitioner), sstable.partitioner);
         ICompactionScanner scanner = sstable.getScanner(DataRange.forKeyRange(keyRange));
         OnDiskAtomIterator iter = scanner.next();
         assertEquals(key, iter.getKey());
@@ -524,17 +525,18 @@ public class CompactionsTest
         assertTrue("should be empty: " + cf, cf == null || !cf.hasColumns());
     }
 
-    private static Range<Token> rangeFor(int start, int end)
+    private static Range<Token> rangeFor(int start, int end, IPartitioner partitioner)
     {
         return new Range<Token>(new BytesToken(String.format("%03d", start).getBytes()),
-                                new BytesToken(String.format("%03d", end).getBytes()));
+                                new BytesToken(String.format("%03d", end).getBytes()),
+                                partitioner);
     }
 
-    private static Collection<Range<Token>> makeRanges(int ... keys)
+    private static Collection<Range<Token>> makeRanges(IPartitioner partitioner, int ... keys)
     {
         Collection<Range<Token>> ranges = new ArrayList<Range<Token>>(keys.length / 2);
         for (int i = 0; i < keys.length; i += 2)
-            ranges.add(rangeFor(keys[i], keys[i + 1]));
+            ranges.add(rangeFor(keys[i], keys[i + 1], partitioner));
         return ranges;
     }
 
@@ -571,54 +573,55 @@ public class CompactionsTest
 
         assertEquals(1, store.getSSTables().size());
         SSTableReader sstable = store.getSSTables().iterator().next();
+        IPartitioner p = store.partitioner;
 
 
         // contiguous range spans all data
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 209)));
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 210)));
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 209)));
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 210)));
 
         // separate ranges span all data
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                        100, 109,
                                                                        200, 209)));
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 109,
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 109,
                                                                        200, 210)));
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                        100, 210)));
 
         // one range is missing completely
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(100, 109,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 100, 109,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       100, 109)));
 
 
         // the beginning of one range is missing
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(1, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 1, 9,
                                                                       100, 109,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       101, 109,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       100, 109,
                                                                       201, 209)));
 
         // the end of one range is missing
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 8,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 8,
                                                                       100, 109,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       100, 108,
                                                                       200, 209)));
-        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(0, 9,
+        assertTrue(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 9,
                                                                       100, 109,
                                                                       200, 208)));
 
         // some ranges don't contain any data
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 0,
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 0,
                                                                        0, 9,
                                                                        50, 51,
                                                                        100, 109,
@@ -626,7 +629,7 @@ public class CompactionsTest
                                                                        200, 209,
                                                                        300, 301)));
         // same case, but with a middle range not covering some of the existing data
-        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(0, 0,
+        assertFalse(CompactionManager.needsCleanup(sstable, makeRanges(p, 0, 0,
                                                                        0, 9,
                                                                        50, 51,
                                                                        100, 103,

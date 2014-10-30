@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public interface RowPosition extends RingPosition<RowPosition>
@@ -47,14 +46,13 @@ public interface RowPosition extends RingPosition<RowPosition>
     {
         public static RowPosition get(ByteBuffer key, IPartitioner p)
         {
-            return key == null || key.remaining() == 0 ? p.getMinimumToken().minKeyBound() : p.decorateKey(key);
+            return key == null || key.remaining() == 0 ? p.getMinimumToken().minKeyBound(p) : p.decorateKey(key);
         }
     }
 
     public static final RowPositionSerializer serializer = new RowPositionSerializer();
 
     public Kind kind();
-    public boolean isMinimum();
 
     public static class RowPositionSerializer implements ISerializer<RowPosition>
     {
@@ -82,15 +80,16 @@ public interface RowPosition extends RingPosition<RowPosition>
         public RowPosition deserialize(DataInput in) throws IOException
         {
             Kind kind = Kind.fromOrdinal(in.readByte());
+            IPartitioner partitioner = Token.getSerializationPartitioner();
             if (kind == Kind.ROW_KEY)
             {
                 ByteBuffer k = ByteBufferUtil.readWithShortLength(in);
-                return StorageService.getPartitioner().decorateKey(k);
+                return partitioner.decorateKey(k);
             }
             else
             {
                 Token t = Token.serializer.deserialize(in);
-                return kind == Kind.MIN_BOUND ? t.minKeyBound() : t.maxKeyBound();
+                return kind == Kind.MIN_BOUND ? t.minKeyBound(partitioner) : t.maxKeyBound(partitioner);
             }
         }
 

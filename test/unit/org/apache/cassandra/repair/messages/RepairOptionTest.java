@@ -22,7 +22,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.Iterables;
 import org.junit.Test;
 
 import org.apache.cassandra.dht.IPartitioner;
@@ -62,9 +61,9 @@ public class RepairOptionTest
         assertTrue(option.isIncremental());
 
         Set<Range<Token>> expectedRanges = new HashSet<>(3);
-        expectedRanges.add(new Range<>(tokenFactory.fromString("0"), tokenFactory.fromString("10")));
-        expectedRanges.add(new Range<>(tokenFactory.fromString("11"), tokenFactory.fromString("20")));
-        expectedRanges.add(new Range<>(tokenFactory.fromString("21"), tokenFactory.fromString("30")));
+        expectedRanges.add(new Range<>(tokenFactory.fromString("0"), tokenFactory.fromString("10"), partitioner));
+        expectedRanges.add(new Range<>(tokenFactory.fromString("11"), tokenFactory.fromString("20"), partitioner));
+        expectedRanges.add(new Range<>(tokenFactory.fromString("21"), tokenFactory.fromString("30"), partitioner));
         assertEquals(expectedRanges, option.getRanges());
 
         Set<String> expectedCFs = new HashSet<>(3);

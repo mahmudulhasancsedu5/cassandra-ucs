@@ -229,7 +229,7 @@ public class MerkleTree implements Serializable
             throw new IllegalArgumentException("Difference only make sense on tree covering the same range (but " + ltree.fullRange + " != " + rtree.fullRange + ")");
 
         List<TreeRange> diff = new ArrayList<>();
-        TreeDifference active = new TreeDifference(ltree.fullRange.left, ltree.fullRange.right, (byte)0);
+        TreeDifference active = new TreeDifference(ltree.fullRange.left, ltree.fullRange.right, (byte)0, ltree.partitioner);
 
         Hashable lnode = ltree.find(active);
         Hashable rnode = rtree.find(active);
@@ -260,8 +260,8 @@ public class MerkleTree implements Serializable
             return CONSISTENT;
 
         Token midpoint = ltree.partitioner().midpoint(active.left, active.right);
-        TreeDifference left = new TreeDifference(active.left, midpoint, inc(active.depth));
-        TreeDifference right = new TreeDifference(midpoint, active.right, inc(active.depth));
+        TreeDifference left = new TreeDifference(active.left, midpoint, inc(active.depth), ltree.partitioner());
+        TreeDifference right = new TreeDifference(midpoint, active.right, inc(active.depth), ltree.partitioner());
         byte[] lhash, rhash;
         Hashable lnode, rnode;
 
@@ -389,7 +389,7 @@ public class MerkleTree implements Serializable
     {
         try
         {
-            return findHelper(root, new Range<Token>(fullRange.left, fullRange.right), range);
+            return findHelper(root, new Range<Token>(fullRange.left, fullRange.right, partitioner), range);
         }
         catch (StopRecursion e)
         {
@@ -412,8 +412,8 @@ public class MerkleTree implements Serializable
         // else: node.
 
         Inner node = (Inner)current;
-        Range<Token> leftRange = new Range<Token>(activeRange.left, node.token);
-        Range<Token> rightRange = new Range<Token>(node.token, activeRange.right);
+        Range<Token> leftRange = new Range<Token>(activeRange.left, node.token, partitioner);
+        Range<Token> rightRange = new Range<Token>(node.token, activeRange.right, partitioner);
 
         if (find.contains(activeRange))
             // this node is fully contained in the range
@@ -566,9 +566,9 @@ public class MerkleTree implements Serializable
             return rowsOnRight;
         }
 
-        public TreeDifference(Token left, Token right, byte depth)
+        public TreeDifference(Token left, Token right, byte depth, IPartitioner partitioner)
         {
-            super(null, left, right, depth, null);
+            super(null, left, right, depth, null, partitioner);
         }
 
         public long totalRows()
@@ -593,12 +593,17 @@ public class MerkleTree implements Serializable
         public final byte depth;
         private final Hashable hashable;
 
-        TreeRange(MerkleTree tree, Token left, Token right, byte depth, Hashable hashable)
+        TreeRange(MerkleTree tree, Token left, Token right, byte depth, Hashable hashable, IPartitioner partitioner)
         {
-            super(left, right);
+            super(left, right, partitioner);
             this.tree = tree;
             this.depth = depth;
             this.hashable = hashable;
+        }
+
+        TreeRange(MerkleTree tree, Token left, Token right, byte depth, Hashable hashable)
+        {
+            this(tree, left, right, depth, hashable, tree.partitioner);
         }
 
         public void hash(byte[] hash)

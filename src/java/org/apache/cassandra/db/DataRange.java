@@ -27,6 +27,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.dht.*;
+import org.apache.cassandra.service.StorageService;
 
 /**
  * Groups key range and column filter for range queries.
@@ -65,7 +66,7 @@ public class DataRange
 
     public static DataRange allData(IPartitioner partitioner)
     {
-        return forKeyRange(new Range<Token>(partitioner.getMinimumToken(), partitioner.getMinimumToken()));
+        return forKeyRange(new Range<Token>(partitioner.getMinimumToken(), partitioner.getMinimumToken(), partitioner));
     }
 
     public static DataRange forKeyRange(Range<Token> keyRange)
@@ -135,7 +136,7 @@ public class DataRange
 
             // When using a paging range, we don't allow wrapped ranges, as it's unclear how to handle them properly.
             // This is ok for now since we only need this in range slice queries, and the range are "unwrapped" in that case.
-            assert !(range instanceof Range) || !((Range)range).isWrapAround() || range.right.isMinimum() : range;
+            assert !(range instanceof Range) || !((Range)range).isWrapAround() || range.right.isMinimum(StorageService.getPartitioner()) : range; // FIXME
 
             this.sliceFilter = filter;
             this.comparator = comparator;

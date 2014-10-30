@@ -34,6 +34,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import com.google.common.collect.Sets;
+
 import org.apache.cassandra.cache.CachingOptions;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -42,7 +43,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
@@ -60,6 +60,7 @@ import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.ICompactionScanner;
 import org.apache.cassandra.db.composites.Composites;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.LocalToken;
 import org.apache.cassandra.dht.Range;
@@ -85,10 +86,10 @@ public class SSTableReaderTest
     public static final String CF_STANDARD2 = "Standard2";
     public static final String CF_INDEXED = "Indexed1";
     public static final String CF_STANDARDLOWINDEXINTERVAL = "StandardLowIndexInterval";
-
+    
     static Token t(int i)
     {
-        return StorageService.getPartitioner().getToken(ByteBufferUtil.bytes(String.valueOf(i)));
+        return Util.getPartitioner().getToken(ByteBufferUtil.bytes(String.valueOf(i))); // FIXME: Wrong partitioner.
     }
 
     @BeforeClass
@@ -125,15 +126,16 @@ public class SSTableReaderTest
         store.forceBlockingFlush();
         CompactionManager.instance.performMaximal(store);
 
+        IPartitioner partitioner = store.partitioner;
         List<Range<Token>> ranges = new ArrayList<Range<Token>>();
         // 1 key
-        ranges.add(new Range<Token>(t(0), t(1)));
+        ranges.add(new Range<Token>(t(0), t(1), partitioner));
         // 2 keys
-        ranges.add(new Range<Token>(t(2), t(4)));
+        ranges.add(new Range<Token>(t(2), t(4), partitioner));
         // wrapping range from key to end
-        ranges.add(new Range<Token>(t(6), StorageService.getPartitioner().getMinimumToken()));
+        ranges.add(new Range<Token>(t(6), partitioner.getMinimumToken(), partitioner));
         // empty range (should be ignored)
-        ranges.add(new Range<Token>(t(9), t(91)));
+        ranges.add(new Range<Token>(t(9), t(91), partitioner));
 
         // confirm that positions increase continuously
         SSTableReader sstable = store.getSSTables().iterator().next();
@@ -235,7 +237,7 @@ public class SSTableReaderTest
         long p6 = sstable.getPosition(k(6), SSTableReader.Operator.EQ).position;
         long p7 = sstable.getPosition(k(7), SSTableReader.Operator.EQ).position;
 
-        Pair<Long, Long> p = sstable.getPositionsForRanges(makeRanges(t(2), t(6))).get(0);
+        Pair<Long, Long> p = sstable.getPositionsForRanges(makeRanges(t(2), t(6), sstable.partitioner)).get(0);
 
         // range are start exclusive so we should start at 3
         assert p.left == p3;
@@ -371,7 +373,7 @@ public class SSTableReaderTest
         // construct a range which is present in the sstable, but whose
         // keys are not found in the first segment of the index.
         List<Range<Token>> ranges = new ArrayList<Range<Token>>();
-        ranges.add(new Range<Token>(t(98), t(99)));
+        ranges.add(new Range<Token>(t(98), t(99), store.partitioner));
 
         SSTableReader sstable = store.getSSTables().iterator().next();
         List<Pair<Long,Long>> sections = sstable.getPositionsForRanges(ranges);
@@ -428,7 +430,7 @@ public class SSTableReaderTest
                 public void run()
                 {
                     Iterable<DecoratedKey> results = store.keySamples(
-                            new Range<>(sstable.partitioner.getMinimumToken(), sstable.partitioner.getToken(key)));
+                            new Range<>(sstable.partitioner.getMinimumToken(), sstable.partitioner.getToken(key), sstable.partitioner));
                     assertTrue(results.iterator().hasNext());
                 }
             }));
@@ -458,9 +460,9 @@ public class SSTableReaderTest
         assert rows.size() == 1;
     }
 
-    private List<Range<Token>> makeRanges(Token left, Token right)
+    private List<Range<Token>> makeRanges(Token left, Token right, IPartitioner p)
     {
-        return Arrays.asList(new Range<>(left, right));
+        return Arrays.asList(new Range<>(left, right, p));
     }
 
     private DecoratedKey k(int i)

@@ -60,25 +60,30 @@ import static org.junit.Assert.assertTrue;
 public class Util
 {
     private static List<UUID> hostIdPool = new ArrayList<UUID>();
+    
+    public static IPartitioner getPartitioner()
+    {
+        return StorageService.getPartitioner();
+    }
 
     public static DecoratedKey dk(String key)
     {
-        return StorageService.getPartitioner().decorateKey(ByteBufferUtil.bytes(key));
+        return getPartitioner().decorateKey(ByteBufferUtil.bytes(key));
     }
 
     public static DecoratedKey dk(String key, AbstractType type)
     {
-        return StorageService.getPartitioner().decorateKey(type.fromString(key));
+        return getPartitioner().decorateKey(type.fromString(key));
     }
 
     public static DecoratedKey dk(ByteBuffer key)
     {
-        return StorageService.getPartitioner().decorateKey(key);
+        return getPartitioner().decorateKey(key);
     }
 
     public static RowPosition rp(String key)
     {
-        return rp(key, StorageService.getPartitioner());
+        return rp(key, getPartitioner());
     }
 
     public static RowPosition rp(String key, IPartitioner partitioner)
@@ -124,22 +129,22 @@ public class Util
 
     public static Token token(String key)
     {
-        return StorageService.getPartitioner().getToken(ByteBufferUtil.bytes(key));
+        return getPartitioner().getToken(ByteBufferUtil.bytes(key));
     }
 
     public static Range<RowPosition> range(String left, String right)
     {
-        return new Range<RowPosition>(rp(left), rp(right));
+        return new Range<RowPosition>(rp(left), rp(right), getPartitioner());
     }
 
     public static Range<RowPosition> range(IPartitioner p, String left, String right)
     {
-        return new Range<RowPosition>(rp(left, p), rp(right, p));
+        return new Range<RowPosition>(rp(left, p), rp(right, p), p);
     }
 
     public static Bounds<RowPosition> bounds(String left, String right)
     {
-        return new Bounds<RowPosition>(rp(left), rp(right));
+        return new Bounds<RowPosition>(rp(left), rp(right), getPartitioner());
     }
 
     public static void addMutation(Mutation rm, String columnFamilyName, String superColumnName, long columnName, String value, long timestamp)
@@ -179,8 +184,9 @@ public class Util
                                ? new IdentityQueryFilter()
                                : new SliceQueryFilter(SuperColumns.startOf(superColumn), SuperColumns.endOf(superColumn), false, Integer.MAX_VALUE);
 
-        Token min = StorageService.getPartitioner().getMinimumToken();
-        return cfs.getRangeSlice(new Bounds<Token>(min, min).toRowBounds(), null, filter, 10000);
+        IPartitioner partitioner = cfs.partitioner;
+        Token min = partitioner.getMinimumToken();
+        return cfs.getRangeSlice(new Bounds<Token>(min, min, partitioner).toRowBounds(), null, filter, 10000);
     }
 
     /**

@@ -1169,7 +1169,7 @@ public class CassandraServer implements Cassandra.Iface
                 RowPosition end = range.end_key == null
                                 ? p.getTokenFactory().fromString(range.end_token).maxKeyBound(p)
                                 : RowPosition.ForKey.get(range.end_key, p);
-                bounds = new Bounds<RowPosition>(RowPosition.ForKey.get(range.start_key, p), end);
+                bounds = new Bounds<RowPosition>(RowPosition.ForKey.get(range.start_key, p), end, p);
             }
             long now = System.currentTimeMillis();
             schedule(DatabaseDescriptor.getRangeRpcTimeout());
@@ -1257,7 +1257,7 @@ public class CassandraServer implements Cassandra.Iface
                 RowPosition end = range.end_key == null
                                 ? p.getTokenFactory().fromString(range.end_token).maxKeyBound(p)
                                 : RowPosition.ForKey.get(range.end_key, p);
-                bounds = new Bounds<RowPosition>(RowPosition.ForKey.get(range.start_key, p), end);
+                bounds = new Bounds<RowPosition>(RowPosition.ForKey.get(range.start_key, p), end, p);
             }
 
             if (range.row_filter != null && !range.row_filter.isEmpty())
@@ -1340,7 +1340,8 @@ public class CassandraServer implements Cassandra.Iface
 
             IPartitioner p = StorageService.getPartitioner();
             AbstractBounds<RowPosition> bounds = new Bounds<RowPosition>(RowPosition.ForKey.get(index_clause.start_key, p),
-                                                                         p.getMinimumToken().minKeyBound());
+                                                                         p.getMinimumToken().minKeyBound(p),
+                                                                         p);
 
             IDiskAtomFilter filter = ThriftValidation.asIFilter(column_predicate, metadata, column_parent.super_column);
             long now = System.currentTimeMillis();
@@ -1464,8 +1465,9 @@ public class CassandraServer implements Cassandra.Iface
     {
         try
         {
-            Token.TokenFactory tf = StorageService.getPartitioner().getTokenFactory();
-            Range<Token> tr = new Range<Token>(tf.fromString(start_token), tf.fromString(end_token));
+            IPartitioner partitioner = StorageService.getPartitioner();
+            Token.TokenFactory tf = partitioner.getTokenFactory();
+            Range<Token> tr = new Range<Token>(tf.fromString(start_token), tf.fromString(end_token), partitioner);
             List<Pair<Range<Token>, Long>> splits =
                     StorageService.instance.getSplits(state().getKeyspace(), cfName, tr, keys_per_split);
             List<CfSplit> result = new ArrayList<CfSplit>(splits.size());

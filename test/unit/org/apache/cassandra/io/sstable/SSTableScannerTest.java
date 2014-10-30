@@ -24,7 +24,6 @@ import java.util.Collection;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.KSMetaData;
@@ -33,6 +32,7 @@ import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.compaction.ICompactionScanner;
 import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.BytesToken;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.SimpleStrategy;
@@ -62,15 +62,19 @@ public class SSTableScannerTest
 
     private static Bounds<RowPosition> boundsFor(int start, int end)
     {
-        return new Bounds<RowPosition>(new BytesToken(toKey(start).getBytes()).minKeyBound(),
-                                       new BytesToken(toKey(end).getBytes()).maxKeyBound());
+        IPartitioner partitioner = Util.getPartitioner();
+        return new Bounds<RowPosition>(new BytesToken(toKey(start).getBytes()).minKeyBound(partitioner),
+                                       new BytesToken(toKey(end).getBytes()).maxKeyBound(partitioner),
+                                       partitioner);
     }
 
 
     private static Range<Token> rangeFor(int start, int end)
     {
+        IPartitioner partitioner = Util.getPartitioner();
         return new Range<Token>(new BytesToken(toKey(start).getBytes()),
-                                new BytesToken(toKey(end).getBytes()));
+                                new BytesToken(toKey(end).getBytes()),
+                                partitioner);
     }
 
     private static Collection<Range<Token>> makeRanges(int ... keys)

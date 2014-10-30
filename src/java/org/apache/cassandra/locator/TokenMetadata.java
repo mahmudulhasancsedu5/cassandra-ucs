@@ -27,11 +27,12 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.collect.*;
+
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.FailureDetector;
@@ -622,9 +623,10 @@ public class TokenMetadata
 
     public Collection<Range<Token>> getPrimaryRangesFor(Collection<Token> tokens)
     {
+        final IPartitioner partitioner = StorageService.getPartitioner();
         Collection<Range<Token>> ranges = new ArrayList<Range<Token>>(tokens.size());
         for (Token right : tokens)
-            ranges.add(new Range<Token>(getPredecessor(right), right));
+            ranges.add(new Range<Token>(getPredecessor(right), right, partitioner));
         return ranges;
     }
 
@@ -877,11 +879,13 @@ public class TokenMetadata
      */
     public static Iterator<Token> ringIterator(final ArrayList<Token> ring, Token start, boolean includeMin)
     {
+        final IPartitioner partitioner = StorageService.getPartitioner();
+
         if (ring.isEmpty())
-            return includeMin ? Iterators.singletonIterator(StorageService.getPartitioner().getMinimumToken())
+            return includeMin ? Iterators.singletonIterator(partitioner.getMinimumToken())
                               : Iterators.<Token>emptyIterator();
 
-        final boolean insertMin = includeMin && !ring.get(0).isMinimum();
+        final boolean insertMin = includeMin && !ring.get(0).isMinimum(partitioner);
         final int startIndex = firstTokenIndex(ring, start, insertMin);
         return new AbstractIterator<Token>()
         {
@@ -894,7 +898,7 @@ public class TokenMetadata
                 {
                     // return minimum for index == -1
                     if (j == -1)
-                        return StorageService.getPartitioner().getMinimumToken();
+                        return partitioner.getMinimumToken();
                     // return ring token for other indexes
                     return ring.get(j);
                 }

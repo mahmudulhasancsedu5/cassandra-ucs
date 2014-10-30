@@ -117,14 +117,6 @@ public class RangeSliceQueryPager extends AbstractQueryPager
     {
         // We always include lastReturnedKey since we may still be paging within a row,
         // and PagedRangeCommand will move over if we're not anyway
-        AbstractBounds<RowPosition> bounds = command.keyRange;
-        if (bounds instanceof Range || bounds instanceof Bounds)
-        {
-            return new Bounds<RowPosition>(lastReturnedKey, bounds.right);
-        }
-        else
-        {
-            return new IncludingExcludingBounds<RowPosition>(lastReturnedKey, bounds.right);
-        }
+        return command.keyRange.withNewLeft(lastReturnedKey, true);
     }
 }
