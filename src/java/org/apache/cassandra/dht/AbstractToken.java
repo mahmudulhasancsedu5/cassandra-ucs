@@ -17,7 +17,7 @@
  */
 package org.apache.cassandra.dht;
 
-abstract class AbstractToken<C> extends Token
+abstract class AbstractToken<C extends Comparable<C>> extends Token
 {
     private static final long serialVersionUID = 1L;
 
@@ -49,5 +49,15 @@ abstract class AbstractToken<C> extends Token
     public int hashCode()
     {
         return token.hashCode();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public int compareTo(Token o)
+    {
+        if (o.getClass() != getClass())
+            throw new IllegalArgumentException("Invalid type of Token.compareTo() argument.");
+
+        return token.compareTo(((AbstractToken<C>) o).token);
     }
 }

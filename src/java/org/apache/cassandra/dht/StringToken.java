@@ -26,9 +26,4 @@ public class StringToken extends AbstractToken<String>
     {
         super(token);
     }
-
-    public int compareTo(Token o)
-    {
-        return token.compareTo(((StringToken) o).token);
-    }
 }

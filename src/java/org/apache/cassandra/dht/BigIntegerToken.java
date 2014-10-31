@@ -32,9 +32,4 @@ public class BigIntegerToken extends AbstractToken<BigInteger>
     public BigIntegerToken(String token) {
         this(new BigInteger(token));
     }
-
-    public int compareTo(Token o)
-    {
-        return token.compareTo(((BigIntegerToken) o).token);
-    }
 }
