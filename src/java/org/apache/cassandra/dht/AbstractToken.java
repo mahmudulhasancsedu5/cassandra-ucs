@@ -21,7 +21,7 @@ abstract class AbstractToken<C> extends Token
 {
     private static final long serialVersionUID = 1L;
 
-    final C token;
+    final C token;   // Package-private to allow access from subtypes, which should all reside in the dht package.
 
     protected AbstractToken(C token)
     {
