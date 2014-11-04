@@ -30,6 +30,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.IntegerType;
+import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.SimpleStrategy;
@@ -106,7 +107,7 @@ public class KeyCollisionTest
         rm.applyUnsafe();
     }
 
-    public static class LengthPartitioner extends AbstractPartitioner
+    public static class LengthPartitioner implements IPartitioner
     {
         public static final BigInteger ZERO = new BigInteger("0");
         public static final BigIntegerToken MINIMUM = new BigIntegerToken("-1");
@@ -177,12 +178,6 @@ public class KeyCollisionTest
             if (key.remaining() == 0)
                 return MINIMUM;
             return new BigIntegerToken(BigInteger.valueOf(key.remaining()));
-        }
-
-        @Override
-        public long getHeapSizeOf(Token token)
-        {
-            return 0;
         }
 
         public Map<Token, Float> describeOwnership(List<Token> sortedTokens)
