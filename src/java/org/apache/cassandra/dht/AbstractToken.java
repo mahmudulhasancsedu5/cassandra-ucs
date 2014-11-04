@@ -29,6 +29,12 @@ abstract class AbstractToken<C extends Comparable<C>> extends Token
     }
 
     @Override
+    public C getTokenValue()
+    {
+        return token;
+    }
+
+    @Override
     public String toString()
     {
         return token.toString();

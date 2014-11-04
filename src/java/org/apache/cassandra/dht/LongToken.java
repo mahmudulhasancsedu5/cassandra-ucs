@@ -54,4 +54,9 @@ public class LongToken extends Token
     {
         return Long.compare(token, ((LongToken) o).token);
     }
+
+    public Long getTokenValue()
+    {
+        return token;
+    }
 }

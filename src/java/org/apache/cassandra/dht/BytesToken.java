@@ -71,4 +71,10 @@ public class BytesToken extends Token
 
         return Arrays.equals(token, other.token);
     }
+
+    @Override
+    public byte[] getTokenValue()
+    {
+        return token;
+    }
 }
