@@ -19,7 +19,7 @@ package org.apache.cassandra.dht;
 
 import java.math.BigInteger;
 
-public class BigIntegerToken extends AbstractToken<BigInteger>
+public class BigIntegerToken extends ComparableObjectToken<BigInteger>
 {
     static final long serialVersionUID = -5833589141319293006L;
 
