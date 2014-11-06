@@ -465,7 +465,7 @@ public class StorageServiceServerTest
     @Test
     public void testCreateRepairRangeFrom() throws Exception
     {
-        StorageService.instance.setPartitionerUnsafe(new Murmur3Partitioner());
+        StorageService.instance.setPartitionerUnsafe(Murmur3Partitioner.instance);
 
         TokenMetadata metadata = StorageService.instance.getTokenMetadata();
         metadata.clearUnsafe();
