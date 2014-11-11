@@ -2093,9 +2093,18 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return locations;
     }
 
+    @Deprecated
     public String getCommitLogLocation()
     {
-        return FileUtils.getCanonicalPath(DatabaseDescriptor.getCommitLogLocation());
+        return FileUtils.getCanonicalPath(DatabaseDescriptor.getCommitLogLocations()[0]);
+    }
+
+    public String[] getCommitLogLocations()
+    {
+        String[] locations = DatabaseDescriptor.getCommitLogLocations();
+        for (int i = 0; i < locations.length; i++)
+            locations[i] = FileUtils.getCanonicalPath(locations[i]);
+        return locations;
     }
 
     public String getSavedCachesLocation()

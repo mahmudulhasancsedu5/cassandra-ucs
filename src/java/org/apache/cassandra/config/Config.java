@@ -146,7 +146,10 @@ public class Config
     public String saved_caches_directory;
 
     // Commit Log
+    @Deprecated // in favour of commitlog_directories below
     public String commitlog_directory;
+
+    public String[] commitlog_directories;  // post-7075 list of commit-log drives
     public Integer commitlog_total_space_in_mb;
     public CommitLogSync commitlog_sync;
     public Double commitlog_sync_batch_window_in_ms;

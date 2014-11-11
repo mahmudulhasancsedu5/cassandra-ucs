@@ -14,7 +14,8 @@ rpc_port: 9170
 start_native_transport: true
 native_transport_port: 9042
 column_index_size_in_kb: 4
-commitlog_directory: build/test/cassandra/commitlog
+commitlog_directories:
+    - build/test/cassandra/commitlog
 saved_caches_directory: build/test/cassandra/saved_caches
 data_file_directories:
     - build/test/cassandra/data

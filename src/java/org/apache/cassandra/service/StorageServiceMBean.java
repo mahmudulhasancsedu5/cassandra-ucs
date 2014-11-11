@@ -106,10 +106,17 @@ public interface StorageServiceMBean extends NotificationEmitter
     public String[] getAllDataFileLocations();
 
     /**
-     * Get location of the commit log
+     * Get the first of the commit log locations
      * @return a string path
+     * @deprecated Multiple commit log locations are now supported, use getCommitLogLocations.
      */
     public String getCommitLogLocation();
+
+    /**
+     * Get the commit log locations
+     * @return array of all paths
+     */
+    public String[] getCommitLogLocations();
 
     /**
      * Get location of the saved caches dir

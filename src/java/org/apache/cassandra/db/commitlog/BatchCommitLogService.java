@@ -26,7 +26,7 @@ class BatchCommitLogService extends AbstractCommitLogService
         super(commitLog, "COMMIT-LOG-WRITER", (int) DatabaseDescriptor.getCommitLogSyncBatchWindow());
     }
 
-    protected void maybeWaitForSync(CommitLogSegment.Allocation alloc)
+    protected void maybeWaitForSync(Allocation alloc)
     {
         // wait until record has been safely persisted to disk
         pending.incrementAndGet();

@@ -34,7 +34,6 @@ import javax.management.StandardMBean;
 
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.Uninterruptibles;
-import org.hyperic.sigar.SigarException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -202,8 +201,8 @@ public class CassandraDaemon
 
         // check all directories(data, commitlog, saved cache) for existence and permission
         Iterable<String> dirs = Iterables.concat(Arrays.asList(DatabaseDescriptor.getAllDataFileLocations()),
-                                                 Arrays.asList(DatabaseDescriptor.getCommitLogLocation(),
-                                                               DatabaseDescriptor.getSavedCachesLocation()));
+                                                 Arrays.asList(DatabaseDescriptor.getCommitLogLocations()),
+                                                 Arrays.asList(DatabaseDescriptor.getSavedCachesLocation()));
 
         SigarLibrary sigarLibrary = new SigarLibrary();
         if (sigarLibrary.initialized())

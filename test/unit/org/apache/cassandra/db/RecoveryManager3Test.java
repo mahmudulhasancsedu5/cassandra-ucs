@@ -85,11 +85,12 @@ public class RecoveryManager3Test
         keyspace2.getColumnFamilyStore("Standard3").clearUnsafe();
 
         // nuke the header
-        for (File file : new File(DatabaseDescriptor.getCommitLogLocation()).listFiles())
-        {
-            if (file.getName().endsWith(".header"))
-                FileUtils.deleteWithConfirm(file);
-        }
+        for (String logDir : DatabaseDescriptor.getCommitLogLocations())
+            for (File file : new File(logDir).listFiles())
+            {
+                if (file.getName().endsWith(".header"))
+                    FileUtils.deleteWithConfirm(file);
+            }
 
         CommitLog.instance.resetUnsafe(); // disassociate segments from live CL
         CommitLog.instance.recover();

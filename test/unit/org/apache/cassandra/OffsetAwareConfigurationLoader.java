@@ -52,10 +52,11 @@ public class OffsetAwareConfigurationLoader extends YamlConfigurationLoader
         config.native_transport_port += offset;
         config.storage_port += offset;
 
-        config.commitlog_directory += File.pathSeparator + offset;
         config.saved_caches_directory += File.pathSeparator + offset;
         for (int i = 0; i < config.data_file_directories.length; i++)
             config.data_file_directories[i] += File.pathSeparator + offset;
+        for (int i = 0; i < config.commitlog_directories.length; i++)
+            config.commitlog_directories[i] += File.pathSeparator + offset;
 
 
         return config;

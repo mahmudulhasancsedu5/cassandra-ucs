@@ -119,6 +119,11 @@ public class CommitLogDescriptor
         return new CommitLogDescriptor(Integer.parseInt(matcher.group(2)), id);
     }
 
+    public CommitLogDescriptor withId(long newId)
+    {
+        return new CommitLogDescriptor(this.version, newId);
+    }
+
     public int getMessagingVersion()
     {
         switch (version)

@@ -27,7 +27,6 @@ import java.util.TreeSet;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -135,34 +134,37 @@ public class ReadMessageTest
         boolean commitLogMessageFound = false;
         boolean noCommitLogMessageFound = false;
 
-        File commitLogDir = new File(DatabaseDescriptor.getCommitLogLocation());
-
-        byte[] commitBytes = "commit".getBytes("UTF-8");
-
-        for(String filename : commitLogDir.list())
+        for (String logDir : DatabaseDescriptor.getCommitLogLocations())
         {
-            BufferedInputStream is = null;
-            try
+            File commitLogDir = new File(logDir);
+    
+            byte[] commitBytes = "commit".getBytes("UTF-8");
+    
+            for(String filename : commitLogDir.list())
             {
-                is = new BufferedInputStream(new FileInputStream(commitLogDir.getAbsolutePath()+File.separator+filename));
-
-                if (!isEmptyCommitLog(is))
+                BufferedInputStream is = null;
+                try
                 {
-                    while (findPatternInStream(commitBytes, is))
+                    is = new BufferedInputStream(new FileInputStream(commitLogDir.getAbsolutePath()+File.separator+filename));
+    
+                    if (!isEmptyCommitLog(is))
                     {
-                        char c = (char)is.read();
-
-                        if (c == '1')
-                            commitLogMessageFound = true;
-                        else if (c == '2')
-                            noCommitLogMessageFound = true;
+                        while (findPatternInStream(commitBytes, is))
+                        {
+                            char c = (char)is.read();
+    
+                            if (c == '1')
+                                commitLogMessageFound = true;
+                            else if (c == '2')
+                                noCommitLogMessageFound = true;
+                        }
                     }
                 }
-            }
-            finally
-            {
-                if (is != null)
-                    is.close();
+                finally
+                {
+                    if (is != null)
+                        is.close();
+                }
             }
         }
 

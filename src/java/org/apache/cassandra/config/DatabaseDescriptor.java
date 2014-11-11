@@ -37,6 +37,7 @@ import java.util.UUID;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Longs;
+
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,8 +126,8 @@ public class DatabaseDescriptor
         }
         catch (Exception e)
         {
-            JVMStabilityInspector.inspectThrowable(e);
-            throw new ExceptionInInitializerError(e.getMessage() + "\nFatal configuration error; unable to start. See log for stacktrace.");
+            //JVMStabilityInspector.inspectThrowable(e);
+            throw new RuntimeException(e.getMessage() + "\nFatal configuration error; unable to start. See log for stacktrace.", e);
         }
     }
 
@@ -140,6 +141,7 @@ public class DatabaseDescriptor
         return loader.loadConfig();
     }
 
+    @SuppressWarnings("deprecation")
     private static void applyConfig(Config config) throws ConfigurationException
     {
         conf = config;
@@ -470,13 +472,18 @@ public class DatabaseDescriptor
 
         // if data dirs, commitlog dir, or saved caches dir are set in cassandra.yaml, use that.  Otherwise,
         // use -Dcassandra.storagedir (set in cassandra-env.sh) as the parent dir for data/, commitlog/, and saved_caches/
-        if (conf.commitlog_directory == null)
+        if (conf.commitlog_directories == null)
         {
-            conf.commitlog_directory = System.getProperty("cassandra.storagedir", null);
             if (conf.commitlog_directory == null)
-                throw new ConfigurationException("commitlog_directory is missing and -Dcassandra.storagedir is not set");
-            conf.commitlog_directory += File.separator + "commitlog";
+            {
+                conf.commitlog_directory = System.getProperty("cassandra.storagedir", null);
+                if (conf.commitlog_directory == null)
+                    throw new ConfigurationException("commitlog_directory is missing and -Dcassandra.storagedir is not set");
+                conf.commitlog_directory += File.separator + "commitlog";
+            }
+            conf.commitlog_directories = new String[]{conf.commitlog_directory};
         }
+
         if (conf.saved_caches_directory == null)
         {
             conf.saved_caches_directory = System.getProperty("cassandra.storagedir", null);
@@ -495,14 +502,16 @@ public class DatabaseDescriptor
         /* data file and commit log directories. they get created later, when they're needed. */
         for (String datadir : conf.data_file_directories)
         {
-            if (datadir.equals(conf.commitlog_directory))
-                throw new ConfigurationException("commitlog_directory must not be the same as any data_file_directories");
+            for (String commitlogdir : conf.commitlog_directories)
+                if (datadir.equals(commitlogdir))
+                    throw new ConfigurationException("any of the commitlog_directories must not be the same as any data_file_directories");
             if (datadir.equals(conf.saved_caches_directory))
                 throw new ConfigurationException("saved_caches_directory must not be the same as any data_file_directories");
         }
 
-        if (conf.commitlog_directory.equals(conf.saved_caches_directory))
-            throw new ConfigurationException("saved_caches_directory must not be the same as the commitlog_directory");
+        for (String commitlogdir: conf.commitlog_directories)
+            if (commitlogdir.equals(conf.saved_caches_directory))
+                throw new ConfigurationException("saved_caches_directory must not be the same as the commitlog_directory");
 
         if (conf.memtable_flush_writers == null)
             conf.memtable_flush_writers = Math.min(8, Math.max(2, Math.min(FBUtilities.getAvailableProcessors(), conf.data_file_directories.length)));
@@ -708,10 +717,13 @@ public class DatabaseDescriptor
                 FileUtils.createDirectory(dataFileDirectory);
             }
 
-            if (conf.commitlog_directory == null)
-                throw new ConfigurationException("commitlog_directory must be specified");
+            if (conf.commitlog_directories.length == 0)
+                throw new ConfigurationException("At least one commitlog directory must be specified");
 
-            FileUtils.createDirectory(conf.commitlog_directory);
+            for (String commitLogDirectory : conf.commitlog_directories)
+            {
+                FileUtils.createDirectory(commitLogDirectory);
+            }
 
             if (conf.saved_caches_directory == null)
                 throw new ConfigurationException("saved_caches_directory must be specified");
@@ -1071,9 +1083,15 @@ public class DatabaseDescriptor
         return conf.data_file_directories;
     }
 
+    @Deprecated
     public static String getCommitLogLocation()
     {
         return conf.commitlog_directory;
+    }
+
+    public static String[] getCommitLogLocations()
+    {
+        return conf.commitlog_directories;
     }
 
     public static int getTombstoneWarnThreshold()

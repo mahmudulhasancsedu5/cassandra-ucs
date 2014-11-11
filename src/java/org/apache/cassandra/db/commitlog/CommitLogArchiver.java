@@ -35,7 +35,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WrappedRunnable;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -214,7 +213,9 @@ public class CommitLogArchiver
                 if (descriptor.version > CommitLogDescriptor.VERSION_21)
                     throw new IllegalStateException("Unsupported commit log version: " + descriptor.version);
 
-                File toFile = new File(DatabaseDescriptor.getCommitLogLocation(), descriptor.fileName());
+                // If path is not absolute, it was stored with an older Cassandra version and the old path should be first in the list.
+                // TODO: Check all directories? Where do we put restored file if not found?
+                File toFile = new File(DatabaseDescriptor.getCommitLogLocations()[0], descriptor.fileName());
                 if (toFile.exists())
                 {
                     logger.debug("Skipping restore of archive {} as the segment already exists in the restore location {}",

@@ -24,8 +24,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.apache.cassandra.db.commitlog.CommitLogSegment.Allocation;
-
 public abstract class AbstractCommitLogService
 {
     // how often should we log syngs that lag behind our desired period
@@ -153,16 +151,6 @@ public abstract class AbstractCommitLogService
     }
 
     protected abstract void maybeWaitForSync(Allocation alloc);
-
-    /**
-     * Sync immediately, but don't block for the sync to cmplete
-     */
-    public WaitQueue.Signal requestExtraSync()
-    {
-        WaitQueue.Signal signal = syncComplete.register();
-        haveWork.release(1);
-        return signal;
-    }
 
     public void shutdown()
     {

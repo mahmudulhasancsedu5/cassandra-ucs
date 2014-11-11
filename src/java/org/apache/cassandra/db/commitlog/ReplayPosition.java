@@ -40,6 +40,8 @@ public class ReplayPosition implements Comparable<ReplayPosition>
     //  - it will sort before any real replayposition, so it will be effectively ignored by getReplayPosition
     public static final ReplayPosition NONE = new ReplayPosition(-1, 0);
 
+    public static final ReplayPosition MAX_VALUE = new ReplayPosition(Long.MAX_VALUE, Integer.MAX_VALUE);
+
     /**
      * Convenience method to compute the replay position for a group of SSTables.
      * @param sstables

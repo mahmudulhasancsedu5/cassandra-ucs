@@ -29,7 +29,6 @@ import java.util.zip.Checksum;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.Config;
@@ -52,6 +51,8 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.KillerForTests;
+
+import com.google.common.collect.ImmutableList;
 
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
@@ -84,7 +85,7 @@ public class CommitLogTest
     @Test
     public void testRecoveryWithEmptyLog() throws Exception
     {
-        CommitLog.instance.recover(new File[]{ tmpFile() });
+        CommitLog.instance.recover(ImmutableList.of(tmpFile()));
     }
 
     @Test
@@ -284,7 +285,7 @@ public class CommitLogTest
         {
             lout.write(logData);
             //statics make it annoying to test things correctly
-            CommitLog.instance.recover(new File[]{ logFile }); //CASSANDRA-1119 / CASSANDRA-1179 throw on failure*/
+            CommitLog.instance.recover(ImmutableList.of(logFile)); //CASSANDRA-1119 / CASSANDRA-1179 throw on failure*/
         }
     }
     

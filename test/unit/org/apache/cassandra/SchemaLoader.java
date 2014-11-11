@@ -428,7 +428,7 @@ public class SchemaLoader
     public static void cleanup()
     {
         // clean up commitlog
-        String[] directoryNames = { DatabaseDescriptor.getCommitLogLocation(), };
+        String[] directoryNames = DatabaseDescriptor.getCommitLogLocations();
         for (String dirName : directoryNames)
         {
             File dir = new File(dirName);

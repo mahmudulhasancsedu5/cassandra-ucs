@@ -26,11 +26,11 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.apache.commons.lang3.StringUtils;
-
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
@@ -105,25 +105,29 @@ public class CommitLog implements CommitLogMBean
             }
         };
 
-        // submit all existing files in the commit log dir for archiving prior to recovery - CASSANDRA-6904
-        for (File file : new File(DatabaseDescriptor.getCommitLogLocation()).listFiles(unmanagedFilesFilter))
+        int replayed = 0;
+        List<File> files = new ArrayList<>();
+        // submit all existing files in the commit log dirs for archiving prior to recovery - CASSANDRA-6904
+        for (String logDir : DatabaseDescriptor.getCommitLogLocations())
         {
-            archiver.maybeArchive(file.getPath(), file.getName());
-            archiver.maybeWaitForArchiving(file.getName());
+            for (File file : new File(logDir).listFiles(unmanagedFilesFilter))
+            {
+                archiver.maybeArchive(file.getPath(), file.getName());
+                archiver.maybeWaitForArchiving(file.getName());
+            }
+
+            assert archiver.archivePending.isEmpty() : "Not all commit log archive tasks were completed before restore";
+            archiver.maybeRestoreArchive();
+    
+            files.addAll(Arrays.asList(new File(logDir).listFiles(unmanagedFilesFilter)));
         }
 
-        assert archiver.archivePending.isEmpty() : "Not all commit log archive tasks were completed before restore";
-        archiver.maybeRestoreArchive();
-
-        File[] files = new File(DatabaseDescriptor.getCommitLogLocation()).listFiles(unmanagedFilesFilter);
-        int replayed = 0;
-        if (files.length == 0)
+        if (files.size() == 0)
         {
             logger.info("No commitlog files found; skipping replay");
         }
         else
         {
-            Arrays.sort(files, new CommitLogSegmentFileComparator());
             logger.info("Replaying {}", StringUtils.join(files, ", "));
             replayed = recover(files);
             logger.info("Log replay complete, {} replayed mutations", replayed);
@@ -131,7 +135,6 @@ public class CommitLog implements CommitLogMBean
             for (File f : files)
                 CommitLog.instance.allocator.recycleSegment(f);
         }
-
         allocator.enableReserveSegmentCreation();
         return replayed;
     }
@@ -142,7 +145,7 @@ public class CommitLog implements CommitLogMBean
      * @param clogs   the list of commit log files to replay
      * @return the number of mutations replayed
      */
-    public int recover(File... clogs) throws IOException
+    public int recover(List<File> clogs) throws IOException
     {
         CommitLogReplayer recovery = new CommitLogReplayer();
         recovery.recover(clogs);
@@ -154,7 +157,7 @@ public class CommitLog implements CommitLogMBean
      */
     public void recover(String path) throws IOException
     {
-        recover(new File(path));
+        recover(ImmutableList.of(new File(path)));
     }
 
     /**
@@ -163,7 +166,7 @@ public class CommitLog implements CommitLogMBean
      */
     public ReplayPosition getContext()
     {
-        return allocator.allocatingFrom().getContext();
+        return allocator.getContext();
     }
 
     /**
@@ -187,21 +190,7 @@ public class CommitLog implements CommitLogMBean
      */
     public void sync(boolean syncAllSegments)
     {
-        CommitLogSegment current = allocator.allocatingFrom();
-        for (CommitLogSegment segment : allocator.getActiveSegments())
-        {
-            if (!syncAllSegments && segment.id > current.id)
-                return;
-            segment.sync();
-        }
-    }
-
-    /**
-     * Preempts the CLExecutor, telling to to sync immediately
-     */
-    public void requestExtraSync()
-    {
-        executor.requestExtraSync();
+        allocator.sync(syncAllSegments);
     }
 
     /**

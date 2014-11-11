@@ -30,7 +30,7 @@ class PeriodicCommitLogService extends AbstractCommitLogService
         super(commitLog, "PERIODIC-COMMIT-LOG-SYNCER", DatabaseDescriptor.getCommitLogSyncPeriod());
     }
 
-    protected void maybeWaitForSync(CommitLogSegment.Allocation alloc)
+    protected void maybeWaitForSync(Allocation alloc)
     {
         if (waitForSyncToCatchUp(Long.MAX_VALUE))
         {
