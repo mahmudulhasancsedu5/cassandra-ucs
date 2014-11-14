@@ -1,6 +1,9 @@
 package org.apache.cassandra.db.commitlog;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -13,14 +16,25 @@ public class CommitLogSection
     private final static AtomicInteger nextId = new AtomicInteger(1);
     static
     {
-        long maxId = Long.MIN_VALUE;
+        long maxId = System.currentTimeMillis();
+
+        List<CommitLogReplayUnit> units = new ArrayList<>();
         for (String location : DatabaseDescriptor.getCommitLogLocations())
             for (File file : new File(location).listFiles())
             {
-                if (CommitLogDescriptor.isValid(file.getName()))
-                    maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
+                try
+                {
+                    CommitLogReplayUnit.extractUnits(file, maxId, units);
+                }
+                catch (IOException e)
+                {
+                    // TODO: Figure out what to do apart from ignoring the exception.
+                }
+                for (CommitLogReplayUnit unit : units)
+                    maxId = Math.max(unit.id() + 1, maxId);
+                units.clear();
             }
-        idBase = Math.max(System.currentTimeMillis(), maxId + 1);
+        idBase = maxId;
     }
     
     final long id;
@@ -29,11 +43,11 @@ public class CommitLogSection
     final int sectionStart;
     int sectionEnd;
 
-    public CommitLogSection(CommitLogVolume volume, CommitLogSegmentManager mgr)
+    public CommitLogSection(CommitLogVolume volume, CommitLogSegment segment)
     {
         this.id = idBase + nextId.getAndIncrement();
         this.volume = volume;
-        segment = volume.allocatingFrom(mgr);
+        this.segment = segment;
         sectionStart = segment.startSection();
     }
     
@@ -54,13 +68,10 @@ public class CommitLogSection
     }
 
 
-    public boolean finish()
+    public void finish()
     {
+        // called by one thread only
         sectionEnd = segment.finishSection(sectionStart);
-        // Schedules a call to our sync when the volume thread is available.
-        volume.scheduleSync(this);
-
-        return segment.isStillAllocating();
     }
 
 

@@ -68,7 +68,7 @@ public class CommitLogSegmentManager
     private final BlockingQueue<Callable<CommitLogSegment>> segmentManagementTasks = new LinkedBlockingQueue<>();
     
     private final CommitLogVolume[] volumes;
-    private final Queue<CommitLogVolume> queuedVolumes = new LinkedBlockingQueue<>(); // TODO: no priorities for now
+    private final BlockingQueue<CommitLogVolume> queuedVolumes = new LinkedBlockingQueue<>(); // TODO: no priorities for now
 
     /** The segment we are currently allocating commit log records to */
     private volatile CommitLogSection allocatingFrom = null;
@@ -97,7 +97,6 @@ public class CommitLogSegmentManager
         for (int i=0; i<volumeLocations.length; ++i)
         {
             volumes[i] = new CommitLogVolume(volumeLocations[i]);
-            queuedVolumes.add(volumes[i]);
         }
 
         // The run loop for the manager thread
@@ -105,64 +104,70 @@ public class CommitLogSegmentManager
         {
             public void runMayThrow() throws Exception
             {
+                Callable<CommitLogSegment> task = null;
                 while (run)
                 {
                     try
                     {
-                        Callable<CommitLogSegment> task = segmentManagementTasks.poll();
-                        if (task == null)
+                        // Process any requested tasks
+                        while (task != null)
                         {
-                            for (CommitLogVolume volume : volumes)
+                            CommitLogSegment recycled = task.call();
+                            if (recycled != null)
                             {
-                            // if we have no more work to do, check if we should create a new segment
-                                if (!volume.hasAvailableSegments() && (volume.activeSegments.isEmpty() || createReserveSegments))
-                                {
-                                    // If we are creating reserve segments, create one in all volumes.
-                                    logger.debug("No segments in reserve; creating a fresh one");
-                                    size.addAndGet(DatabaseDescriptor.getCommitLogSegmentSize());
-                                    // TODO : some error handling in case we fail to create a new segment
-                                    // TODO : one drive full/bad should not stop the whole node
-                                    CommitLogSegment segment = volume.freshSegment();
-                                    volume.makeAvailable(segment);
-                                }
+                                // if the work resulted in a segment to recycle, publish it
+                                CommitLogVolume volume = recycled.volume;
+                                volume.makeAvailable(recycled);
+                                if (volume.checkNewlyAvailable())
+                                    queuedVolumes.add(volume);
                             }
-
-                            // flush old Cfs if we're full
-                            long unused = unusedCapacity();
-                            if (unused < 0)
-                            {
-                                List<CommitLogSegment> segmentsToRecycle = new ArrayList<>();
-                                long spaceToReclaim = 0;
-                                for (CommitLogVolume volume : volumes)
-                                    for (CommitLogSegment segment : volume.activeSegments)
-                                    {
-                                        if (segment == allocatingFrom.segment)
-                                            break;
-                                        segmentsToRecycle.add(segment);
-                                        spaceToReclaim += DatabaseDescriptor.getCommitLogSegmentSize();
-                                        if (spaceToReclaim + unused >= 0)
-                                            break;
-                                    }
-                                flushDataFrom(segmentsToRecycle, false);
-                            }
-
-                            try
-                            {
-                                // wait for new work to be provided
-                                task = segmentManagementTasks.take();
-                            }
-                            catch (InterruptedException e)
-                            {
-                                // shutdown signal; exit cleanly
-                                continue;
-                            }
+                            task = segmentManagementTasks.poll();
                         }
 
-                        CommitLogSegment recycled = task.call();
-                        if (recycled != null)
+                        // No more requested work, check if we should create new segment(s)
+                        for (CommitLogVolume volume : volumes)
                         {
-                            // if the work resulted in a segment to recycle, publish it
-                            recycled.makeAvailable();
+                            if (!volume.hasAvailableSegments() && (volume.activeSegments.isEmpty() || createReserveSegments))
+                            {
+                                logger.debug("No segments in reserve; creating a fresh one");
+                                size.addAndGet(DatabaseDescriptor.getCommitLogSegmentSize());
+                                // TODO : some error handling in case we fail to create a new segment
+                                // TODO : one drive full/bad should not stop the whole node
+                                CommitLogSegment segment = volume.freshSegment();
+                                volume.makeAvailable(segment);
+                            }
+                            if (volume.checkNewlyAvailable())
+                                queuedVolumes.add(volume);
+                        }
+
+                        // flush old Cfs if we're full
+                        long unused = unusedCapacity();
+                        if (unused < 0)
+                        {
+                            List<CommitLogSegment> segmentsToRecycle = new ArrayList<>();
+                            long spaceToReclaim = 0;
+                            for (CommitLogVolume volume : volumes)
+                                for (CommitLogSegment segment : volume.activeSegments)
+                                {
+                                    if (segment == allocatingFrom.segment)
+                                        break;
+                                    segmentsToRecycle.add(segment);
+                                    spaceToReclaim += DatabaseDescriptor.getCommitLogSegmentSize();
+                                    if (spaceToReclaim + unused >= 0)
+                                        break;
+                                }
+                            flushDataFrom(segmentsToRecycle, false);
+                        }
+
+                        try
+                        {
+                            // wait for new work to be provided
+                            task = segmentManagementTasks.take();
+                        }
+                        catch (InterruptedException e)
+                        {
+                            // shutdown signal; exit cleanly
+                            continue;
                         }
                     }
                     catch (Throwable t)
@@ -206,14 +211,8 @@ public class CommitLogSegmentManager
     {
         if (allocatingFrom != null)
             return allocatingFrom;
-        
-        synchronized(this) {
-            // Check again, someone may have beat us to init.
-            if (allocatingFrom != null)
-                return allocatingFrom;
-            CommitLogVolume volume = queuedVolumes.remove();
-            return allocatingFrom = new CommitLogSection(volume, this);
-        }
+        advanceVolume(null);
+        return allocatingFrom;
     }
 
     /**
@@ -231,21 +230,21 @@ public class CommitLogSegmentManager
             if (allocatingFrom != fromSection)
                 return;
 
-            queuedVolumes.add(fromSection.volume);
-            CommitLogVolume volume = queuedVolumes.remove();
-            allocatingFrom = new CommitLogSection(volume, this); // TODO: This may be slow. Do we want to hold all? Deadlock?
+            if (fromSection != null)
+            {
+                CommitLogVolume fromVolume = fromSection.volume;
+                if (fromVolume.advanceSection() != null)
+                    queuedVolumes.add(fromVolume);  // Put in queue only with available sections.
+                else
+                    wakeManager();
+            }
+            allocatingFrom = Uninterruptibles.takeUninterruptibly(queuedVolumes).section();     // This can take forever. Other write threads should wait too.
         }
-
-        // We're done with this section. Send it to sync.
-        // Note: Only one thread will end up here.
-        boolean hasMoreRoom = fromSection.finish();
-        if (!hasMoreRoom)
-            fromSection.volume.advanceAllocatingFrom(fromSection.segment, this);
     }
 
     public ReplayPosition getContext()
     {
-        return allocatingFrom.getContext();
+        return allocatingFrom().getContext();
     }
 
     // Blocking until sync is complete.
@@ -281,6 +280,7 @@ public class CommitLogSegmentManager
      */
     void forceRecycleAll(Iterable<UUID> droppedCfs)
     {
+        CommitLogSection lastSection = allocatingFrom();
         List<CommitLogSegment> segmentsToRecycle = new ArrayList<>();
         for (CommitLogVolume volume : volumes)
         {
@@ -289,15 +289,14 @@ public class CommitLogSegmentManager
             segmentsToRecycle.addAll(volume.activeSegments);
             // Stop working with the last segment in each volume.
             CommitLogSegment last = segmentsToRecycle.get(segmentsToRecycle.size() - 1);
-            volume.advanceAllocatingFrom(last, this);
+            last.markComplete(); // No more writing allowed to this segment.
+            // Moving to the next segment here is a bit too difficult (managing available segments etc.)
         }
-        CommitLogSection lastSection = allocatingFrom();
-        advanceVolume(lastSection);    // Finish current section.
 
         // make sure the writes have materialized inside of the memtables by waiting for all outstanding writes
         // on the relevant keyspaces to complete
         Set<Keyspace> keyspaces = new HashSet<>();
-        for (UUID cfId : lastSection.segment.getDirtyCFIDs())
+        for (UUID cfId : lastSection.segment.getDirtyCFIDs())   // Is this enough? Segment may be completely empty.
         {
             ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(cfId);
             if (cfs != null)

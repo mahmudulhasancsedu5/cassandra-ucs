@@ -89,14 +89,14 @@ public class CommitLogSegment
     private final static AtomicInteger nextId = new AtomicInteger(1);
     static
     {
-        long maxId = Long.MIN_VALUE;
+        long maxId = 0;
         for (String location : DatabaseDescriptor.getCommitLogLocations())
             for (File file : new File(location).listFiles())
             {
                 if (CommitLogDescriptor.isValid(file.getName()))
                     maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
             }
-        idBase = Math.max(System.currentTimeMillis(), maxId + 1);
+        idBase = maxId + 1;
     }
 
     private final long id;
@@ -210,7 +210,7 @@ public class CommitLogSegment
             {
                 // If an allocation fails, stop allocating in this segment.
                 if (prev < bufferSize) 
-                    discardUnusedTail();
+                    markComplete();
                 return -1;
             }
             if (allocatePosition.compareAndSet(prev, next))
@@ -219,7 +219,7 @@ public class CommitLogSegment
     }
 
     // ensures no more of this segment is writeable, by allocating any unused section at the end and marking it discarded
-    void discardUnusedTail()
+    void markComplete()
     {
         // we guard this with the OpOrdering instead of synchronised due to potential dead-lock with CLSM.advanceAllocatingFrom()
         // this actually isn't strictly necessary, as currently all calls to discardUnusedTail occur within a block
