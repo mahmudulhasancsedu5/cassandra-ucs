@@ -276,6 +276,10 @@ public class CommitLogSegment
      */
     synchronized void sync(long sectionId, int sectionStart, int sectionEnd)
     {
+//        System.out.format("syncing %d from %d to %d\n", sectionId, sectionStart, sectionEnd);
+        if (sectionEnd <= sectionStart)
+            return;
+
         try
         {
             waitForModifications();

@@ -49,7 +49,7 @@ public class CommitLogReplaySection extends CommitLogReplayUnit
             int sectionStart = nextSection + CommitLogSegment.SYNC_MARKER_SIZE;
             if (sectionStart > reader.length())
                 return;
-   
+
             reader.seek(nextSection);
             long id = reader.readLong();
             nextSection = reader.readInt();
@@ -63,8 +63,15 @@ public class CommitLogReplaySection extends CommitLogReplayUnit
             crc.updateInt((int) (id >>> 32));
             crc.updateInt(nextSection);
             if (crc.getCrc() != expectedCrc)
+            {
                 logger.warn("Encountered bad header at position {} of commit log {}, with invalid CRC.", sectionStart, file.getPath());
-
+                return;
+            }
+            if (nextSection < sectionStart || nextSection > reader.length())
+            {
+                logger.warn("Encountered bad header at position {} of commit log {}, with bad position but valid CRC", sectionStart, file.getPath());
+                return;
+            }
             if (id >= startId)
             {
                 CommitLogDescriptor unitDesc = desc.withId(id);

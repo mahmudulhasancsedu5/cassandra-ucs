@@ -221,11 +221,14 @@ public class CommitLogSegmentManager
      */
     private void advanceVolume(CommitLogSection fromSection)
     {
-        // TODO: Fast-path to avoid synchronization in single-drive commit logs?
         if (allocatingFrom != fromSection)
             return;
 
-        synchronized(this)
+        // Lock necessary to ensure atomicity of:
+        // - taking from volumes queue
+        // - setting allocatingFrom
+        // - assigning section id
+        synchronized (this)
         {
             if (allocatingFrom != fromSection)
                 return;
@@ -233,12 +236,13 @@ public class CommitLogSegmentManager
             if (fromSection != null)
             {
                 CommitLogVolume fromVolume = fromSection.volume;
-                if (fromVolume.advanceSection() != null)
-                    queuedVolumes.add(fromVolume);  // Put in queue only with available sections.
+                if (fromVolume.advanceSection(fromSection))
+                    queuedVolumes.add(fromVolume);  // Put in queue only with available segment.
                 else
                     wakeManager();
             }
-            allocatingFrom = Uninterruptibles.takeUninterruptibly(queuedVolumes).section();     // This can take forever. Other write threads should wait too.
+            // ID should be allocated here.
+            allocatingFrom = Uninterruptibles.takeUninterruptibly(queuedVolumes).startSection();     // This can take forever. Other write threads should wait too.
         }
     }
 
@@ -250,11 +254,12 @@ public class CommitLogSegmentManager
     // Blocking until sync is complete.
     public void sync(boolean syncAllSegments)
     {
-        if (allocatingFrom == null)
+        final CommitLogSection currentSection = allocatingFrom;
+        if (currentSection == null)
             return;
-        if (!allocatingFrom.isEmpty())
-            advanceVolume(allocatingFrom);
-        ReplayPosition position = syncAllSegments ? ReplayPosition.MAX_VALUE : getContext();
+        ReplayPosition position = syncAllSegments ? ReplayPosition.MAX_VALUE : currentSection.getContext();
+        if (!currentSection.isEmpty())
+            advanceVolume(currentSection);
 
         for (CommitLogVolume volume : volumes)
             volume.waitForSync(position);
@@ -531,7 +536,9 @@ public class CommitLogSegmentManager
         for (CommitLogVolume volume : volumes)
             volume.resetUnsafe();
 
+        queuedVolumes.clear();
         allocatingFrom = null;
+        wakeManager();
     }
 
     /**

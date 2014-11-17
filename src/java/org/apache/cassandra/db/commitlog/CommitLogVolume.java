@@ -19,8 +19,8 @@ public class CommitLogVolume extends Thread
     /** Active segments, containing unflushed data */
     final ConcurrentLinkedQueue<CommitLogSegment> activeSegments = new ConcurrentLinkedQueue<>();
 
-    /** The section we are currently allocating commit log records to */
-    private volatile CommitLogSection allocatingFrom = null;
+    /** The segment we are currently allocating commit log records to */
+    private volatile CommitLogSegment allocatingFrom = null;
 
     private final BlockingQueue<CommitLogSection> syncQueue = new LinkedBlockingQueue<>();
     private final WaitQueue syncScheduled = new WaitQueue();
@@ -93,23 +93,15 @@ public class CommitLogVolume extends Thread
         availableSegments.add(segment);
     }
 
-    public boolean checkNewlyAvailable()
+    public CommitLogSection startSection()
     {
-        if (allocatingFrom != null || availableSegments.isEmpty())
-            return false;
-        firstSection();
-        return true;
+        assert allocatingFrom != null;
+        return new CommitLogSection(this, allocatingFrom);
     }
 
-    public CommitLogSection section()
+    boolean advanceSection(CommitLogSection old)
     {
-        return allocatingFrom;
-    }
-
-    CommitLogSection advanceSection()
-    {
-        // called by one thread only
-        CommitLogSection old = allocatingFrom;
+        // Called by one thread only (Guarded by synchronization in CLSM.advanceVolume()).
         CommitLogSegment segment = old.segment;
         old.finish();
         scheduleSync(old);
@@ -120,22 +112,34 @@ public class CommitLogVolume extends Thread
             // (Do this here instead of in the recycle call so we can get a head start on the archive.)
             CommitLog.instance.archiver.maybeArchive(segment);
 
-            segment = availableSegments.poll();
-            if (segment == null)
-                return allocatingFrom = null;
-            activeSegments.add(segment);
+            synchronized (this) // race with CLSM thread doing checkNewlyAvailable
+            {
+                segment = availableSegments.poll();
+                if (segment == null)
+                {
+                    allocatingFrom = null;
+                    return false;
+                }
+                activeSegments.add(segment);
+                allocatingFrom = segment;
+            }
         }
-        return allocatingFrom = new CommitLogSection(this, segment);
+        return true;
     }
 
-    CommitLogSection firstSection()
+    boolean checkNewlyAvailable()
     {
-        // called by CSLM thread only
-        assert allocatingFrom == null;
-        CommitLogSegment segment = availableSegments.remove();
-        assert segment != null;
-        activeSegments.add(segment);
-        return allocatingFrom = new CommitLogSection(this, segment);
+        // Called by CSLM thread only
+        if (allocatingFrom != null || availableSegments.isEmpty())
+            return false;
+
+        synchronized (this) // race with writing thread doing advanceSection
+        {
+            CommitLogSegment segment = availableSegments.remove();
+            activeSegments.add(segment);
+            allocatingFrom = segment;
+            return true;
+        }
     }
 
     /**

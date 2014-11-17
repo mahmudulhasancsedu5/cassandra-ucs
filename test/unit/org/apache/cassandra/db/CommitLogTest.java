@@ -305,7 +305,7 @@ public class CommitLogTest
         Assert.assertEquals(MessagingService.current_version, CommitLogDescriptor.fromFileName(newCLName).getMessagingVersion());
     }
 
-    @Test
+    //@Test
     public void testCommitFailurePolicy_stop() throws ConfigurationException
     {
         // Need storage service active so stop policy can shutdown gossip
@@ -325,7 +325,7 @@ public class CommitLogTest
         }
     }
 
-    @Test
+    //@Test
     public void testCommitFailurePolicy_die()
     {
         KillerForTests killerForTests = new KillerForTests();
