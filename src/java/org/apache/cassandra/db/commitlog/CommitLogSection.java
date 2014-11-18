@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.base.Preconditions;
+
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Mutation;
 
@@ -46,8 +48,8 @@ public class CommitLogSection
     public CommitLogSection(CommitLogVolume volume, CommitLogSegment segment)
     {
         this.id = idBase + nextId.getAndIncrement();
-        this.volume = volume;
-        this.segment = segment;
+        this.volume = Preconditions.checkNotNull(volume);
+        this.segment = Preconditions.checkNotNull(segment);
         sectionStart = segment.startSection();
     }
     
@@ -77,7 +79,7 @@ public class CommitLogSection
 
     public boolean isEmpty()
     {
-        return segment.getPosition() == sectionStart;
+        return segment.isAtSectionStart(sectionStart);
     }
 
     public void sync()

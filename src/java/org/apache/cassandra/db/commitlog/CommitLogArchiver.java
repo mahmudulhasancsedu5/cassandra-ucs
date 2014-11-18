@@ -25,8 +25,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.*;
 
@@ -35,6 +40,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.WrappedRunnable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +61,7 @@ public class CommitLogArchiver
     private final String archiveCommand;
     private final String restoreCommand;
     private final String restoreDirectories;
+    private final String restoreDestination;
     public final long restorePointInTime;
     public final TimeUnit precision;
 
@@ -72,6 +79,7 @@ public class CommitLogArchiver
                 archiveCommand = null;
                 restoreCommand = null;
                 restoreDirectories = null;
+                restoreDestination = null;
                 restorePointInTime = Long.MAX_VALUE;
                 precision = TimeUnit.MICROSECONDS;
             }
@@ -95,6 +103,7 @@ public class CommitLogArchiver
                         }
                     }
                 }
+                restoreDestination = commitlog_commands.getProperty("restore_destination", DatabaseDescriptor.getCommitLogLocations()[0]);
                 String targetTime = commitlog_commands.getProperty("restore_point_in_time");
                 precision = TimeUnit.valueOf(commitlog_commands.getProperty("precision", "MICROSECONDS"));
                 try
@@ -183,10 +192,14 @@ public class CommitLogArchiver
         return true;
     }
 
-    public void maybeRestoreArchive()
+    public List<File> maybeRestoreArchive(List<File> existingFiles)
     {
         if (Strings.isNullOrEmpty(restoreDirectories))
-            return;
+            return Collections.emptyList();
+        Set<String> existingNames = new HashSet<String>();
+        for (File f : existingFiles)
+            existingNames.add(f.getName());
+        List<File> restoredFiles = new ArrayList<>();
 
         for (String dir : restoreDirectories.split(DELIMITER))
         {
@@ -210,12 +223,17 @@ public class CommitLogArchiver
                     descriptor = fromHeader;
                 else descriptor = fromName;
 
-                if (descriptor.version > CommitLogDescriptor.VERSION_21)
+                if (descriptor.version > CommitLogDescriptor.VERSION_30)
                     throw new IllegalStateException("Unsupported commit log version: " + descriptor.version);
 
-                // If path is not absolute, it was stored with an older Cassandra version and the old path should be first in the list.
-                // TODO: Check all directories? Where do we put restored file if not found?
-                File toFile = new File(DatabaseDescriptor.getCommitLogLocations()[0], descriptor.fileName());
+                if (existingNames.contains(descriptor.fileName()))
+                {
+                    logger.debug("Skipping restore of archive {} as the segment already exists in the commit log directories",
+                                 fromFile.getPath());
+                    continue;
+                }
+
+                File toFile = new File(restoreDestination, descriptor.fileName());
                 if (toFile.exists())
                 {
                     logger.debug("Skipping restore of archive {} as the segment already exists in the restore location {}",
@@ -228,6 +246,7 @@ public class CommitLogArchiver
                 try
                 {
                     exec(command);
+                    restoredFiles.add(toFile);
                 }
                 catch (IOException e)
                 {
@@ -235,6 +254,7 @@ public class CommitLogArchiver
                 }
             }
         }
+        return restoredFiles;
     }
 
     private void exec(String command) throws IOException

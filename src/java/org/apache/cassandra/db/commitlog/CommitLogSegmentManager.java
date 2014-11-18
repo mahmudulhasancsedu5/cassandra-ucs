@@ -21,10 +21,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -97,6 +97,7 @@ public class CommitLogSegmentManager
         for (int i=0; i<volumeLocations.length; ++i)
         {
             volumes[i] = new CommitLogVolume(volumeLocations[i]);
+            volumes[i].start();
         }
 
         // The run loop for the manager thread
@@ -199,30 +200,29 @@ public class CommitLogSegmentManager
         Allocation alloc;
         while ( null == (alloc = section.allocate(mutation, size)) )
         {
-            // ops below are idempotent
-            advanceVolume(section);   // ID may have changed for same volume, same segment
-            section = allocatingFrom;
+            section = advanceVolume(section);
         }
 
         return alloc;
     }
-    
+
     private CommitLogSection allocatingFrom()
     {
         if (allocatingFrom != null)
             return allocatingFrom;
-        advanceVolume(null);
-        return allocatingFrom;
+        return advanceVolume(null);
     }
 
     /**
-     * Idempotent.
-     * @param fromSection
+     * Switches to the next volume. Idempotent.
+     *
+     * @param fromSection The section we are switching from.
+     * @return New section to use.
      */
-    private void advanceVolume(CommitLogSection fromSection)
+    private CommitLogSection advanceVolume(CommitLogSection fromSection)
     {
         if (allocatingFrom != fromSection)
-            return;
+            return allocatingFrom;
 
         // Lock necessary to ensure atomicity of:
         // - taking from volumes queue
@@ -231,7 +231,7 @@ public class CommitLogSegmentManager
         synchronized (this)
         {
             if (allocatingFrom != fromSection)
-                return;
+                return allocatingFrom;
 
             if (fromSection != null)
             {
@@ -241,8 +241,9 @@ public class CommitLogSegmentManager
                 else
                     wakeManager();
             }
-            // ID should be allocated here.
-            allocatingFrom = Uninterruptibles.takeUninterruptibly(queuedVolumes).startSection();     // This can take forever. Other write threads should wait too.
+            // Section ID is allocated here.
+            // This can take forever. Other write threads should wait too.
+            return allocatingFrom = Uninterruptibles.takeUninterruptibly(queuedVolumes).startSection();
         }
     }
 
@@ -285,18 +286,32 @@ public class CommitLogSegmentManager
      */
     void forceRecycleAll(Iterable<UUID> droppedCfs)
     {
-        CommitLogSection lastSection = allocatingFrom();
-        List<CommitLogSegment> segmentsToRecycle = new ArrayList<>();
-        for (CommitLogVolume volume : volumes)
+        Collection<CommitLogSegment> segmentsToRecycle = getActiveSegments();
+
+        // Queued volumes have an active segment with no attached section. Go through them to advance from that segment.
+        // Synchronization needed to ensure the volumes we work with do not become active, which could create a section
+        // on a closed segment, and that we don't miss a volume because it became active.
+        CommitLogSection lastSection;
+        boolean managementNeeded = false;
+        synchronized (this)
         {
-            if (volume.activeSegments.isEmpty())
-                continue;
-            segmentsToRecycle.addAll(volume.activeSegments);
-            // Stop working with the last segment in each volume.
-            CommitLogSegment last = segmentsToRecycle.get(segmentsToRecycle.size() - 1);
-            last.markComplete(); // No more writing allowed to this segment.
-            // Moving to the next segment here is a bit too difficult (managing available segments etc.)
+            lastSection = allocatingFrom();
+            for (Iterator<CommitLogVolume> it = queuedVolumes.iterator(); it.hasNext(); )
+            {
+                CommitLogVolume volume = it.next();
+                if (!volume.forceSegmentChange())
+                {
+                    it.remove();
+                    managementNeeded = true;
+                }
+            }
         }
+        // Now close the currently active volume's segment. This one contains an active section, so advance by closing
+        // that.
+        lastSection.segment.markComplete();
+        advanceVolume(lastSection);
+        if (managementNeeded)
+            wakeManager();
 
         // make sure the writes have materialized inside of the memtables by waiting for all outstanding writes
         // on the relevant keyspaces to complete
@@ -350,7 +365,7 @@ public class CommitLogSegmentManager
     void recycleSegment(final CommitLogSegment segment)
     {
         boolean archiveSuccess = CommitLog.instance.archiver.maybeWaitForArchiving(segment.getName());
-        segment.makeInactive();
+        segment.volume.makeInactive(segment);
         if (!archiveSuccess)
         {
             // if archiving (command) was not successful then leave the file alone. don't delete or recycle.
@@ -489,7 +504,7 @@ public class CommitLogSegmentManager
      *
      * @return a Future that will finish when all the flushes are complete.
      */
-    private Future<?> flushDataFrom(List<CommitLogSegment> segments, boolean force)
+    private Future<?> flushDataFrom(Collection<CommitLogSegment> segments, boolean force)
     {
         if (segments.isEmpty())
             return Futures.immediateFuture(null);
@@ -567,7 +582,6 @@ public class CommitLogSegmentManager
      */
     Collection<CommitLogSegment> getActiveSegments()
     {
-        // TODO: check synchronization
         ImmutableList.Builder<CommitLogSegment> builder = ImmutableList.builder();
         for (CommitLogVolume volume : volumes)
             builder.addAll(volume.activeSegments);

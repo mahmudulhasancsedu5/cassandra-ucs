@@ -25,7 +25,6 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +58,22 @@ public class CommitLogSegment
 {
     private static final Logger logger = LoggerFactory.getLogger(CommitLogSegment.class);
 
+    private final static long idBase;
+    private final static AtomicInteger nextId = new AtomicInteger(1);
+    static
+    {
+        long maxId = Long.MIN_VALUE;
+        for (String location : DatabaseDescriptor.getCommitLogLocations())
+            for (File file : new File(location).listFiles())
+            {
+                if (CommitLogDescriptor.isValid(file.getName()))
+                    maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
+            }
+        // ID is at least currentTimeMillis to minimize the possibility
+        // of archived segment names/IDs clashing with new ones.
+        idBase = Math.max(System.currentTimeMillis(), maxId + 1);
+    }
+
     // The commit log entry overhead in bytes (int: length + int: head checksum + int: tail checksum)
     public static final int ENTRY_OVERHEAD_SIZE = 4 + 4 + 4;
 
@@ -74,6 +89,7 @@ public class CommitLogSegment
     // each sync are reserved, and point forwards to the next such offset.  The final
     // sync marker in a segment will be zeroed out, or point to EOF.
     volatile int lastSyncedOffset;
+    // Start of the section that will be allocated next.
     volatile int nextSectionStart;
 
     // a signal for writers to wait on to confirm the log message they provided has been written to disk
@@ -84,20 +100,6 @@ public class CommitLogSegment
 
     // a map of Cf->clean position; this is used to permit marking Cfs clean whilst the log is still in use
     private final ConcurrentHashMap<UUID, ReplayPosition> cfClean = new ConcurrentHashMap<>();
-
-    private final static long idBase;
-    private final static AtomicInteger nextId = new AtomicInteger(1);
-    static
-    {
-        long maxId = 0;
-        for (String location : DatabaseDescriptor.getCommitLogLocations())
-            for (File file : new File(location).listFiles())
-            {
-                if (CommitLogDescriptor.isValid(file.getName()))
-                    maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
-            }
-        idBase = maxId + 1;
-    }
 
     private final long id;
 
@@ -218,28 +220,21 @@ public class CommitLogSegment
         }
     }
 
-    // ensures no more of this segment is writeable, by allocating any unused section at the end and marking it discarded
+    // ensures no more of this segment is writeable, by setting the buffer size to the current position.
     void markComplete()
     {
-        // we guard this with the OpOrdering instead of synchronised due to potential dead-lock with CLSM.advanceAllocatingFrom()
-        // this actually isn't strictly necessary, as currently all calls to discardUnusedTail occur within a block
-        // already protected by this OpOrdering, but to prevent future potential mistakes, we duplicate the protection here
-        // so that the contract between discardUnusedTail() and sync() is more explicit.
-        try (OpOrder.Group group = appendOrder.start())  // TODO: necessary? helpful?
+        while (true)
         {
-            while (true)
+            bufferSize = allocatePosition.get();
+            if (allocatePosition.compareAndSet(bufferSize, bufferSize + 1))
             {
-                bufferSize = allocatePosition.get();
-                if (allocatePosition.compareAndSet(bufferSize, bufferSize + 1))
-                {
-                    return;
-                }
+                return;
             }
         }
     }
 
     /**
-     * Wait for any appends or discardUnusedTail() operations started before this method was called
+     * Wait for any appends or markComplete() operations started before this method was called
      */
     void waitForModifications()
     {
@@ -252,10 +247,15 @@ public class CommitLogSegment
         return nextSectionStart;
     }
 
+    public boolean isAtSectionStart(int sectionStart)
+    {
+        return getPosition() == sectionStart + SYNC_MARKER_SIZE;
+    }
+
     public synchronized int finishSection(int sectionStart)
     {
         // check we have more work to do
-        if (allocatePosition.get() <= sectionStart + SYNC_MARKER_SIZE)
+        if (isAtSectionStart(sectionStart))
             return sectionStart;
 
         // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
@@ -271,12 +271,10 @@ public class CommitLogSegment
     }
 
     /**
-     * Forces a disk flush for this segment file.
-     * @param sectionId 
+     * Writes section markers and forces a disk flush for this segment file.
      */
     synchronized void sync(long sectionId, int sectionStart, int sectionEnd)
     {
-//        System.out.format("syncing %d from %d to %d\n", sectionId, sectionStart, sectionEnd);
         if (sectionEnd <= sectionStart)
             return;
 
@@ -351,9 +349,6 @@ public class CommitLogSegment
         return new CommitLogSegment(volume, getPath());
     }
 
-    /**
-     * @return a current ReplayPosition for this log segment with the given section id.
-     */
     public int getPosition()
     {
         return allocatePosition.get();
@@ -373,12 +368,6 @@ public class CommitLogSegment
     public String getName()
     {
         return logFile.getName();
-    }
-
-    public int requestSync()
-    {
-        //volume.scheduleSync(this);
-        return allocatePosition.get();
     }
 
     void waitForSync(int position)
@@ -451,7 +440,7 @@ public class CommitLogSegment
                 return;
             if (map.replace(cfId, i, value))
                 return;
-            value = map.get(cfId);
+            i = map.get(cfId);
         }
     }
 
@@ -537,16 +526,6 @@ public class CommitLogSegment
     public String toString()
     {
         return "CommitLogSegment(" + getPath() + ')';
-    }
-
-    public void makeAvailable()
-    {
-        volume.makeAvailable(this);
-    }
-
-    public void makeInactive()
-    {
-        volume.makeInactive(this);
     }
 
     public boolean isCreatedBefore(CommitLogSegment last)

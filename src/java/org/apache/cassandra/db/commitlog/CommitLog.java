@@ -117,10 +117,11 @@ public class CommitLog implements CommitLogMBean
             }
 
             assert archiver.archivePending.isEmpty() : "Not all commit log archive tasks were completed before restore";
-            archiver.maybeRestoreArchive();
-    
+
             files.addAll(Arrays.asList(new File(logDir).listFiles(unmanagedFilesFilter)));
         }
+
+        files.addAll(archiver.maybeRestoreArchive(files));
 
         if (files.size() == 0)
         {
