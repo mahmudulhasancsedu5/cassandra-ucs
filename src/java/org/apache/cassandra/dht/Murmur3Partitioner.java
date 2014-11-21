@@ -133,6 +133,12 @@ public class Murmur3Partitioner implements IPartitioner
         {
             return HEAP_SIZE;
         }
+
+        @Override
+        public Object getTokenValue()
+        {
+            return token;
+        }
     }
 
     /**

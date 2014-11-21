@@ -104,7 +104,7 @@ public class KeyCollisionTest
         rm.applyUnsafe();
     }
 
-    static class BigIntegerToken extends AbstractToken<BigInteger>
+    static class BigIntegerToken extends ComparableObjectToken<BigInteger>
     {
         private static final long serialVersionUID = 1L;
 

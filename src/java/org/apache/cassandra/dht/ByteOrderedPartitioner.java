@@ -30,6 +30,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Hex;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.Pair;
+
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.math.BigInteger;
@@ -108,6 +109,12 @@ public class ByteOrderedPartitioner implements IPartitioner
         public long getHeapSize()
         {
             return EMPTY_SIZE + ObjectSizes.sizeOfArray(token);
+        }
+
+        @Override
+        public Object getTokenValue()
+        {
+            return token;
         }
     }
 

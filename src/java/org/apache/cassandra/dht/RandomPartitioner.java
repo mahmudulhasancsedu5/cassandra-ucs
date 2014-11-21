@@ -22,6 +22,8 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.db.DecoratedKey;
@@ -42,7 +44,7 @@ public class RandomPartitioner implements IPartitioner
     public static final BigIntegerToken MINIMUM = new BigIntegerToken("-1");
     public static final BigInteger MAXIMUM = new BigInteger("2").pow(127);
 
-    private static final int EMPTY_SIZE = (int) ObjectSizes.measureDeep(new BigIntegerToken(FBUtilities.hashToBigInteger(ByteBuffer.allocate(1))));
+    private static final int HEAP_SIZE = (int) ObjectSizes.measureDeep(new BigIntegerToken(FBUtilities.hashToBigInteger(ByteBuffer.allocate(1))));
     
     public static final RandomPartitioner instance = new RandomPartitioner();
 
@@ -124,7 +126,7 @@ public class RandomPartitioner implements IPartitioner
         return false;
     }
 
-    public static class BigIntegerToken extends AbstractToken<BigInteger>
+    public static class BigIntegerToken extends ComparableObjectToken<BigInteger>
     {
         static final long serialVersionUID = -5833589141319293006L;
 
@@ -134,6 +136,7 @@ public class RandomPartitioner implements IPartitioner
         }
 
         // convenience method for testing
+        @VisibleForTesting
         public BigIntegerToken(String token) {
             this(new BigInteger(token));
         }
@@ -147,8 +150,7 @@ public class RandomPartitioner implements IPartitioner
         @Override
         public long getHeapSize()
         {
-            // TODO: Probably wrong.
-            return EMPTY_SIZE;
+            return HEAP_SIZE;
         }
     }
 

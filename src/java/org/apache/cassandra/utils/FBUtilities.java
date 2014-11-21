@@ -37,11 +37,10 @@ import java.util.zip.Checksum;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.AbstractIterator;
-
-import org.apache.cassandra.io.util.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.auth.IAuthorizer;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -52,6 +51,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.IAllocator;
 import org.apache.cassandra.net.AsyncOneResponse;
 import org.apache.thrift.TBase;
