@@ -57,12 +57,27 @@ public class CommitLogVolume extends Thread
                         signal.cancel();
                     section = syncQueue.peek();
                 }
-                section.sync();
+                section.write();
                 syncQueue.take();
             }
             catch (InterruptedException e)
             {
                 // Continue to shut down cleanly.
+            }
+            catch (Throwable t)
+            {
+                if (!CommitLog.handleCommitError("Failed to persist commits to disk", t))
+                    break;
+
+                // sleep for a second after an error, so we don't spam the log file
+                try
+                {
+                    sleep(1000);
+                }
+                catch (InterruptedException e)
+                {
+                    // Continue to shut down cleanly.
+                }
             }
         }
     }
@@ -94,26 +109,24 @@ public class CommitLogVolume extends Thread
         return file.getParentFile().equals(location);
     }
 
-    void makeAvailable(CommitLogSegment segment)
-    {
-        availableSegments.add(segment);
-    }
-
+    /**
+     * Starts a new section in the currently open segment.
+     */
     CommitLogSection startSection()
     {
         return new CommitLogSection(this, allocatingFrom);
     }
 
     /**
-     * Complete the currently used section and be ready to start a new one.
-     * @param fromSection The section to complete.
-     * @return 
+     * Complete the currently used section and be ready to start a new one and returns true if the volume has a segment
+     * ready for allocation and false if writing to this volume again requires a new segment to be made available.
+     *
+     * Unsafe to call from multiple threads or concurrently with allocation or forceSegmentChange. Caller must ensure
+     * sections are completed serially and in order.
      */
     boolean advanceSection(CommitLogSection fromSection)
     {
         // Called by one thread only (Guarded by synchronization in CLSM.advanceVolume()).
-        // Could be executed at the same time as checkNewlyAvailable, but the latter will only do work if allocatingFrom
-        // is null, which is only set just before leaving this method and cannot be in place when it is entered.
         CommitLogSegment segment = fromSection.segment;
         assert segment == allocatingFrom && segment != null;
         fromSection.finish();
@@ -124,12 +137,19 @@ public class CommitLogVolume extends Thread
         return true;
     }
 
+    /**
+     * Forces close of the currently used segment. Returns true if the volume has a segment ready for allocation and
+     * false if writing to this volume again requires a new segment to be made available.
+     *
+     * Caller must ensure no section is open, and that this method is not called concurrently with allocation or
+     * advanceSection.
+     */
     boolean forceSegmentChange()
     {
         // Can't be called concurrently with advanceSection (Guarded by CLSM synchronization).
         assert allocatingFrom != null;
         CommitLogSegment segment = allocatingFrom;
-        segment.markComplete();         // Not really necessary.
+        segment.markComplete();
         return advanceSegment(segment);
     }
 
@@ -139,37 +159,55 @@ public class CommitLogVolume extends Thread
         // (Do this here instead of in the recycle call so we can get a head start on the archive.)
         CommitLog.instance.archiver.maybeArchive(segment);
 
-        // This does not race with modifications to the same fields in checkNewlyAvailable
-        // as the latter could only start work when allocatingFrom == null
-        segment = availableSegments.poll();
-        if (segment == null)
+        // If not synchronized makeAvailable can miss the transition to null allocatingFrom.
+        synchronized (this)
         {
-            allocatingFrom = null;
-            return false;
+            segment = availableSegments.poll();
+            if (segment == null)
+            {
+                allocatingFrom = null;
+                return false;
+            }
+            else
+            {
+                activeSegments.add(segment);
+                allocatingFrom = segment;
+                return true;
+            }
         }
-        activeSegments.add(segment);
-        allocatingFrom = segment;
-        return true;
     }
 
-    boolean checkNewlyAvailable()
+    /**
+     * Makes a newly created or recycled segment available for use.
+     * Returns true if the volume was previously unavailable for use because no segment was available.
+     *
+     * Safe to use concurrently with all other methods.
+     */
+    boolean makeAvailable(CommitLogSegment segment)
     {
-        // Called by CLSM thread only.
-        if (allocatingFrom != null || availableSegments.isEmpty())
-            return false;
-
-        CommitLogSegment segment = availableSegments.remove();
-        activeSegments.add(segment);
-        allocatingFrom = segment;
-        return true;
+        synchronized (this)
+        {
+            if (allocatingFrom != null)
+            {
+                availableSegments.add(segment);
+                return false;
+            }
+            else
+            {
+                activeSegments.add(segment);
+                allocatingFrom = segment;
+                return true;
+            }
+        }
     }
 
     /**
      * Resets all the segments, for testing purposes. DO NOT USE THIS OUTSIDE OF TESTS.
      */
-    public void resetUnsafe()
+    public synchronized void resetUnsafe()
     {
-        // This could race with advanceSection and checkNewlyAvailable above and cause test crash.
+        while (!syncQueue.isEmpty())
+            Thread.yield();
         for (CommitLogSegment segment : activeSegments)
             segment.close();
         activeSegments.clear();

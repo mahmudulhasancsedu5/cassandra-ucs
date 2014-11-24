@@ -82,9 +82,9 @@ public class CommitLogSection
         return segment.isAtSectionStart(sectionStart);
     }
 
-    public void sync()
+    public void write()
     {
-        segment.sync(id, sectionStart, sectionEnd);
+        segment.write(id, sectionStart, sectionEnd);
     }
 
 

@@ -64,6 +64,8 @@ public class CommitLogSegmentManager
     /**
      * Queue of work to be done by the manager thread.  This is usually a recycle operation, which returns
      * a CommitLogSegment, or a delete operation, which returns null.
+     *
+     * Note: Segment managements tasks cannot synchronize on the CommitLogSegmentManager.
      */
     private final BlockingQueue<Callable<CommitLogSegment>> segmentManagementTasks = new LinkedBlockingQueue<>();
     
@@ -108,6 +110,8 @@ public class CommitLogSegmentManager
                 Callable<CommitLogSegment> task = null;
                 while (run)
                 {
+                    // Management thread cannot call any methods that synchronize on CommitLogSegmentManager.this or
+                    // it will deadlock with advanceVolume().
                     try
                     {
                         // Process any requested tasks
@@ -118,8 +122,7 @@ public class CommitLogSegmentManager
                             {
                                 // if the work resulted in a segment to recycle, publish it
                                 CommitLogVolume volume = recycled.volume;
-                                volume.makeAvailable(recycled);
-                                if (volume.checkNewlyAvailable())
+                                if (volume.makeAvailable(recycled))
                                     queuedVolumes.add(volume);
                             }
                             task = segmentManagementTasks.poll();
@@ -135,15 +138,14 @@ public class CommitLogSegmentManager
                                 // TODO : some error handling in case we fail to create a new segment
                                 // TODO : one drive full/bad should not stop the whole node
                                 CommitLogSegment segment = volume.freshSegment();
-                                volume.makeAvailable(segment);
+                                if (volume.makeAvailable(segment))
+                                    queuedVolumes.add(volume);
                             }
-                            if (volume.checkNewlyAvailable())
-                                queuedVolumes.add(volume);
                         }
 
                         // flush old Cfs if we're full
                         long unused = unusedCapacity();
-                        if (unused < 0)
+                        if (allocatingFrom != null && unused < 0)
                         {
                             List<CommitLogSegment> segmentsToRecycle = new ArrayList<>();
                             long spaceToReclaim = 0;
@@ -228,6 +230,10 @@ public class CommitLogSegmentManager
         // - taking from volumes queue
         // - setting allocatingFrom
         // - assigning section id
+        // Advancing section in the current volume doesn't necessarily need to happen in the same lock (as long as
+        // advance happens before taking an element from the volume queue to ensure single-volume commit logs work);
+        // having it execute within it simplifies the code.
+
         synchronized (this)
         {
             if (allocatingFrom != fromSection)
@@ -307,7 +313,7 @@ public class CommitLogSegmentManager
             }
         }
         // Now close the currently active volume's segment. This one contains an active section, so advance by closing
-        // that.
+        // that. These actions are idempotent and don't need to be done synchronized.
         lastSection.segment.markComplete();
         advanceVolume(lastSection);
         if (managementNeeded)
@@ -553,6 +559,7 @@ public class CommitLogSegmentManager
 
         queuedVolumes.clear();
         allocatingFrom = null;
+        size.set(0);
         wakeManager();
     }
 

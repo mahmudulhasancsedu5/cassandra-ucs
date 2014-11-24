@@ -90,7 +90,11 @@ public class CommitLogSegment
     // sync marker in a segment will be zeroed out, or point to EOF.
     volatile int lastSyncedOffset;
     // Start of the section that will be allocated next.
-    volatile int nextSectionStart;
+    private volatile int nextSectionStart;
+
+    // the amount of the tail of the file we have allocated but not used - this is used when we discard a log segment
+    // to ensure nobody writes to it after we've decided we're done with it
+    private int discardedTailFrom;
 
     // a signal for writers to wait on to confirm the log message they provided has been written to disk
     final WaitQueue syncComplete = new WaitQueue();
@@ -108,7 +112,6 @@ public class CommitLogSegment
     private final int fd;
 
     private final MappedByteBuffer buffer;
-    private volatile int bufferSize;
 
     public final CommitLogDescriptor descriptor;
     
@@ -160,7 +163,6 @@ public class CommitLogSegment
             fd = CLibrary.getfd(logFileAccessor.getFD());
 
             buffer = logFileAccessor.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, DatabaseDescriptor.getCommitLogSegmentSize());
-            bufferSize = buffer.capacity();
             // write the header
             CommitLogDescriptor.writeHeader(buffer, descriptor);
             // mark the initial sync marker as uninitialised
@@ -204,6 +206,7 @@ public class CommitLogSegment
     // allocate bytes in the segment, or return -1 if not enough space
     private int allocate(int size)
     {
+        int bufferSize = buffer.capacity();
         while (true)
         {
             int prev = allocatePosition.get();
@@ -225,9 +228,14 @@ public class CommitLogSegment
     {
         while (true)
         {
-            bufferSize = allocatePosition.get();
-            if (allocatePosition.compareAndSet(bufferSize, bufferSize + 1))
+            int prev = allocatePosition.get();
+            // we set allocatePosition past buffer.capacity() to make sure we always set discardedTailFrom
+            int next = buffer.capacity() + 1;
+            if (prev == next)
+                return;
+            if (allocatePosition.compareAndSet(prev, next))
             {
+                discardedTailFrom = prev;
                 return;
             }
         }
@@ -242,41 +250,60 @@ public class CommitLogSegment
         appendOrder.awaitNewBarrier();
     }
 
+    /**
+     * Start a new section and return its start position.
+     */
     public int startSection()
     {
         return nextSectionStart;
     }
 
+    /**
+     * Check if the given section has not been written to.
+     */
     public boolean isAtSectionStart(int sectionStart)
     {
         return getPosition() == sectionStart + SYNC_MARKER_SIZE;
     }
 
-    public synchronized int finishSection(int sectionStart)
+    /**
+     * Finish a section and return the section end position.
+     * Unsafe to call from multiple threads or concurrently with allocation.
+     *
+     * Caller must ensure section start and finish calls are done serially and in order.
+     */
+    public int finishSection(int sectionStart)
     {
-        // check we have more work to do
+        // check if something was written to the section
         if (isAtSectionStart(sectionStart))
             return sectionStart;
+        // Sections need to be started and finished in order.
+        assert sectionStart == nextSectionStart;
 
         // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
         // the point at which we can safely consider records to have been completely written to
         int nextMarker = allocate(SYNC_MARKER_SIZE);
         if (nextMarker < 0)
-            nextMarker = bufferSize;
+            nextMarker = discardedTailFrom;
 
         assert nextMarker > sectionStart;
-        assert nextMarker <= bufferSize;
+        assert nextMarker <= buffer.capacity();
         nextSectionStart = nextMarker;
         return nextMarker;
     }
 
     /**
      * Writes section markers and forces a disk flush for this segment file.
+     * Safe to call concurrently with allocation and segment start/finish.
+     * Unsafe the call from multiple threads; caller must ensure writing is done serially and in order.
      */
-    synchronized void sync(long sectionId, int sectionStart, int sectionEnd)
+    void write(long sectionId, int sectionStart, int sectionEnd)
     {
+        // If nothing was written to the section there's nothing to do here.
         if (sectionEnd <= sectionStart)
             return;
+        // Sections must be written in order.
+        assert sectionEnd > lastSyncedOffset;
 
         try
         {
@@ -303,7 +330,7 @@ public class CommitLogSegment
             // actually perform the sync and signal those waiting for it
             buffer.force();
 
-            boolean close = sectionEnd == bufferSize;
+            boolean close = sectionEnd == discardedTailFrom;
             if (close)
                 sectionEnd = buffer.capacity();
 
@@ -320,9 +347,12 @@ public class CommitLogSegment
         }
     }
 
+    /**
+     * Returns true if the segment can still allocate.
+     */
     public boolean isStillAllocating()
     {
-        return allocatePosition.get() < bufferSize;
+        return allocatePosition.get() < buffer.capacity();
     }
 
     /**
@@ -389,7 +419,7 @@ public class CommitLogSegment
 
     void waitForFinalSync()
     {
-        waitForSync(bufferSize);
+        waitForSync(buffer.capacity());
     }
 
     /**
