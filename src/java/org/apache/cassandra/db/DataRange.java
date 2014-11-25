@@ -70,7 +70,7 @@ public class DataRange
 
     public static DataRange forKeyRange(Range<Token> keyRange)
     {
-        return new DataRange(keyRange.toRowBounds(), new IdentityQueryFilter());
+        return new DataRange(Range.makeRowRange(keyRange), new IdentityQueryFilter());
     }
 
     public AbstractBounds<RowPosition> keyRange()
