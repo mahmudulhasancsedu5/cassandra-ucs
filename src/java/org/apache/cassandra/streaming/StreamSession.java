@@ -303,7 +303,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             {
                 List<AbstractBounds<RowPosition>> rowBoundsList = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
-                    rowBoundsList.add(range.toRowBounds());
+                    rowBoundsList.add(Range.makeRowRange(range));
                 ColumnFamilyStore.ViewFragment view = cfStore.selectAndReference(cfStore.viewFilter(rowBoundsList));
                 sstables.addAll(view.sstables);
             }

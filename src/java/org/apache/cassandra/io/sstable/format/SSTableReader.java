@@ -1249,7 +1249,7 @@ public abstract class SSTableReader extends SSTable
         List<Pair<Long,Long>> positions = new ArrayList<>();
         for (Range<Token> range : Range.normalize(ranges))
         {
-            AbstractBounds<RowPosition> keyRange = range.toRowBounds();
+            AbstractBounds<RowPosition> keyRange = Range.makeRowRange(range);
             RowIndexEntry idxLeft = getPosition(keyRange.left, Operator.GT);
             long left = idxLeft == null ? -1 : idxLeft.position;
             if (left == -1)
