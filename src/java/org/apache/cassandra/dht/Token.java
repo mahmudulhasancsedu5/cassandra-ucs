@@ -67,14 +67,6 @@ public abstract class Token implements RingPosition<Token>, Serializable
             ByteBuffer b = p.getTokenFactory().toByteArray(object);
             return TypeSizes.NATIVE.sizeof(b.remaining()) + b.remaining();
         }
-
-        /**
-         * Convenience method to deserialize tokens where the type of token is specified by an existing token.
-         */
-        public Token deserialize(DataInput in, Token typeSample, int version) throws IOException
-        {
-            return deserialize(in, typeSample.getPartitioner(), version);
-        }
     }
 
     abstract public IPartitioner getPartitioner();
