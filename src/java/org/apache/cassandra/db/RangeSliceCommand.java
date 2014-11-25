@@ -172,6 +172,7 @@ class RangeSliceCommandSerializer implements IVersionedSerializer<RangeSliceComm
                 expr.writeTo(out);
             }
         }
+        assert MessagingService.verifyPartitioner(sliceCommand.keyRange);
         AbstractBounds.serializer.serialize(sliceCommand.keyRange, out, version);
         out.writeInt(sliceCommand.maxResults);
         out.writeBoolean(sliceCommand.countCQL3Rows);
@@ -195,7 +196,7 @@ class RangeSliceCommandSerializer implements IVersionedSerializer<RangeSliceComm
         {
             rowFilter.add(IndexExpression.readFrom(in));
         }
-        AbstractBounds<RowPosition> range = AbstractBounds.serializer.deserialize(in, version).toRowBounds();
+        AbstractBounds<RowPosition> range = AbstractBounds.serializer.deserialize(in, MessagingService.serializationPartitioner(), version).toRowBounds();
 
         int maxResults = in.readInt();
         boolean countCQL3Rows = in.readBoolean();
