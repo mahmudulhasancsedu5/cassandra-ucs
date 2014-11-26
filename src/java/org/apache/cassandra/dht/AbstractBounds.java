@@ -136,8 +136,8 @@ public abstract class AbstractBounds<T extends RingPosition<T>> implements Seria
              * sign). We use negative kind for keys so as to preserve the serialization of token from older version.
              */
             out.writeInt(kindInt(range));
-            serializer.serialize((T) range.left, out, version);
-            serializer.serialize((T) range.right, out, version);
+            serializer.serialize(range.left, out, version);
+            serializer.serialize(range.right, out, version);
         }
 
         public AbstractBounds<T> deserialize(DataInput in, IPartitioner p, int version) throws IOException
