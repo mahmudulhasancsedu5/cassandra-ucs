@@ -50,7 +50,7 @@ public class CompositesIndexOnRegular extends CompositesIndex
     public static CellNameType buildIndexComparator(CFMetaData baseMetadata, ColumnDefinition columnDef)
     {
         int prefixSize = columnDef.position();
-        List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(prefixSize + 1);
+        List<AbstractType> types = new ArrayList<AbstractType>(prefixSize + 1);
         types.add(SecondaryIndex.keyComparator);
         for (int i = 0; i < prefixSize; i++)
             types.add(baseMetadata.comparator.subtype(i));
@@ -82,7 +82,7 @@ public class CompositesIndexOnRegular extends CompositesIndex
     @Override
     public boolean indexes(CellName name)
     {
-        AbstractType<?> comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
+        AbstractType comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
         return name.size() > columnDef.position()
             && comp.compare(name.get(columnDef.position()), columnDef.name.bytes) == 0;
     }

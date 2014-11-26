@@ -50,8 +50,8 @@ public final class JavaSourceUDFFactory
 
     static UDFunction buildUDF(FunctionName name,
                                List<ColumnIdentifier> argNames,
-                               List<AbstractType<?>> argTypes,
-                               AbstractType<?> returnType,
+                               List<AbstractType> argTypes,
+                               AbstractType returnType,
                                String body,
                                boolean deterministic)
     throws InvalidRequestException
@@ -243,7 +243,7 @@ public final class JavaSourceUDFFactory
     }
 
     // Used by execute() implementations of generated java source UDFs.
-    public static Object compose(List<AbstractType<?>> argTypes, List<ByteBuffer> parameters, int param)
+    public static Object compose(List<AbstractType> argTypes, List<ByteBuffer> parameters, int param)
     {
         ByteBuffer bb = parameters.get(param);
         return bb == null ? null : argTypes.get(param).compose(bb);

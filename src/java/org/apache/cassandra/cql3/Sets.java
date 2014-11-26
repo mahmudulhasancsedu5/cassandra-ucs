@@ -45,7 +45,7 @@ public abstract class Sets
 
     public static ColumnSpecification valueSpecOf(ColumnSpecification column)
     {
-        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("value(" + column.name + ")", true), ((SetType)column.type).getElementsType());
+        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("value(" + column.name + ")", true), ((SetType<?>)column.type).getElementsType());
     }
 
     public static class Literal implements Term.Raw
@@ -81,7 +81,7 @@ public abstract class Sets
 
                 values.add(t);
             }
-            DelayedValue value = new DelayedValue(((SetType)receiver.type).getElementsType(), values);
+            DelayedValue value = new DelayedValue(((SetType<?>)receiver.type).getElementsType(), values);
             return allTerminal ? value.bind(QueryOptions.DEFAULT) : value;
         }
 
@@ -140,7 +140,7 @@ public abstract class Sets
             this.elements = elements;
         }
 
-        public static Value fromSerialized(ByteBuffer value, SetType type, int version) throws InvalidRequestException
+        public static Value fromSerialized(ByteBuffer value, SetType<?> type, int version) throws InvalidRequestException
         {
             try
             {
@@ -168,7 +168,7 @@ public abstract class Sets
             return CollectionSerializer.pack(new ArrayList<>(elements), elements.size(), protocolVersion);
         }
 
-        public boolean equals(SetType st, Value v)
+        public boolean equals(SetType<?> st, Value v)
         {
             if (elements.size() != v.elements.size())
                 return false;
@@ -239,7 +239,7 @@ public abstract class Sets
         public Value bind(QueryOptions options) throws InvalidRequestException
         {
             ByteBuffer value = options.getValues().get(bindIndex);
-            return value == null ? null : Value.fromSerialized(value, (SetType)receiver.type, options.getProtocolVersion());
+            return value == null ? null : Value.fromSerialized(value, (SetType<?>)receiver.type, options.getProtocolVersion());
         }
     }
 

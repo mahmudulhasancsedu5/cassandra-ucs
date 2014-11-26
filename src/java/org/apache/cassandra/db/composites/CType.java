@@ -60,7 +60,7 @@ public interface CType extends Comparator<Composite>
     /**
      * Gets a subtype of this CType.
      */
-    public AbstractType<?> subtype(int i);
+    public AbstractType subtype(int i);
 
     /**
      * A builder of Composite.
@@ -94,7 +94,7 @@ public interface CType extends Comparator<Composite>
      * Returns a new CType that is equivalent to this CType but with
      * one of the subtype replaced by the provided new type.
      */
-    public CType setSubtype(int position, AbstractType<?> newType);
+    public CType setSubtype(int position, AbstractType newType);
 
     /**
      * Deserialize a Composite from a ByteBuffer.
@@ -113,7 +113,7 @@ public interface CType extends Comparator<Composite>
      * This is only meant to be use for backward compatibility (particularly for
      * thrift) but it's not meant to be used internally.
      */
-    public AbstractType<?> asAbstractType();
+    public AbstractType asAbstractType();
 
 
     /**********************************************************/

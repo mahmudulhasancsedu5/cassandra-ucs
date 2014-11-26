@@ -217,8 +217,8 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         protected List<KeySlice> rows;
         protected int totalRead = 0;
         protected final boolean isSuper;
-        protected final AbstractType<?> comparator;
-        protected final AbstractType<?> subComparator;
+        protected final AbstractType comparator;
+        protected final AbstractType subComparator;
         protected final IPartitioner partitioner;
 
         private RowIterator()
@@ -411,7 +411,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
             totalRead++;
             KeySlice ks = rows.get(i++);
-            AbstractType<?> comp = isSuper ? CompositeType.getInstance(comparator, subComparator) : comparator;
+            AbstractType comp = isSuper ? CompositeType.getInstance(comparator, subComparator) : comparator;
             SortedMap<ByteBuffer, Cell> map = new TreeMap<ByteBuffer, Cell>(comp);
             for (ColumnOrSuperColumn cosc : ks.columns)
             {
@@ -525,7 +525,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
 
             protected Pair<ByteBuffer, SortedMap<ByteBuffer, Cell>> computeNext()
             {
-                AbstractType<?> comp = isSuper ? CompositeType.getInstance(comparator, subComparator) : comparator;
+                AbstractType comp = isSuper ? CompositeType.getInstance(comparator, subComparator) : comparator;
                 while (true)
                 {
                     if (columns.hasNext())

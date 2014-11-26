@@ -46,7 +46,7 @@ public class CompositeTypeTest
     private static final CompositeType comparator;
     static
     {
-        List<AbstractType<?>> subComparators = new ArrayList<AbstractType<?>>();
+        List<AbstractType> subComparators = new ArrayList<AbstractType>();
         subComparators.add(BytesType.instance);
         subComparators.add(TimeUUIDType.instance);
         subComparators.add(IntegerType.instance);
@@ -64,7 +64,7 @@ public class CompositeTypeTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
-        AbstractType<?> composite = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
+        AbstractType composite = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     SimpleStrategy.class,
@@ -240,7 +240,7 @@ public class CompositeTypeTest
     @Test
     public void testEscapeUnescape()
     {
-        List<AbstractType<?>> subComparators = new ArrayList<AbstractType<?>>(){{;
+        List<AbstractType> subComparators = new ArrayList<AbstractType>(){{;
             add(UTF8Type.instance);
             add(UTF8Type.instance);
         }};

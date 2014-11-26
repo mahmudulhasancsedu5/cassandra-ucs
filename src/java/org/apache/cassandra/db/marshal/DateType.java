@@ -29,7 +29,7 @@ import org.apache.cassandra.serializers.TimestampSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class DateType extends AbstractType<Date>
+public class DateType extends ConcreteType<Date>
 {
     private static final Logger logger = LoggerFactory.getLogger(DateType.class);
 
@@ -55,7 +55,7 @@ public class DateType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (super.isCompatibleWith(previous))
             return true;
@@ -78,7 +78,7 @@ public class DateType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == TimestampType.instance || otherType == LongType.instance;
     }
@@ -92,5 +92,10 @@ public class DateType extends AbstractType<Date>
     public TypeSerializer<Date> getSerializer()
     {
         return TimestampSerializer.instance;
+    }
+
+    public Date cast(Object value)
+    {
+        return (Date) value;
     }
 }

@@ -543,7 +543,7 @@ public abstract class AggregateFcts
      * @param inputType the function input and output type
      * @return a MAX function for the specified type.
      */
-    public static AggregateFunction makeMaxFunction(final AbstractType<?> inputType)
+    public static AggregateFunction makeMaxFunction(final AbstractType inputType)
     {
         return new NativeAggregateFunction("max", inputType, inputType)
         {
@@ -584,7 +584,7 @@ public abstract class AggregateFcts
      * @param inputType the function input and output type
      * @return a MIN function for the specified type.
      */
-    public static AggregateFunction makeMinFunction(final AbstractType<?> inputType)
+    public static AggregateFunction makeMinFunction(final AbstractType inputType)
     {
         return new NativeAggregateFunction("min", inputType, inputType)
         {
@@ -625,7 +625,7 @@ public abstract class AggregateFcts
      * @param inputType the function input type
      * @return a COUNT function for the specified type.
      */
-    public static AggregateFunction makeCountFunction(AbstractType<?> inputType)
+    public static AggregateFunction makeCountFunction(AbstractType inputType)
     {
         return new NativeAggregateFunction("count", LongType.instance, inputType)
         {

@@ -26,7 +26,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
  */
 public abstract class NativeFunction extends AbstractFunction
 {
-    protected NativeFunction(String name, AbstractType<?> returnType, AbstractType<?>... argTypes)
+    protected NativeFunction(String name, AbstractType returnType, AbstractType... argTypes)
     {
         super(FunctionName.nativeFunction(name), Arrays.asList(argTypes), returnType);
     }

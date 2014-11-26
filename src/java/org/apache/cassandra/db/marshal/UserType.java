@@ -41,7 +41,7 @@ public class UserType extends TupleType
     public final ByteBuffer name;
     private final List<ByteBuffer> fieldNames;
 
-    public UserType(String keyspace, ByteBuffer name, List<ByteBuffer> fieldNames, List<AbstractType<?>> fieldTypes)
+    public UserType(String keyspace, ByteBuffer name, List<ByteBuffer> fieldNames, List<? extends AbstractType> fieldTypes)
     {
         super(fieldTypes);
         assert fieldNames.size() == fieldTypes.size();
@@ -56,7 +56,7 @@ public class UserType extends TupleType
         String keyspace = params.left.left;
         ByteBuffer name = params.left.right;
         List<ByteBuffer> columnNames = new ArrayList<>(params.right.size());
-        List<AbstractType<?>> columnTypes = new ArrayList<>(params.right.size());
+        List<AbstractType> columnTypes = new ArrayList<>(params.right.size());
         for (Pair<ByteBuffer, AbstractType> p : params.right)
         {
             columnNames.add(p.left);
@@ -65,12 +65,12 @@ public class UserType extends TupleType
         return new UserType(keyspace, name, columnNames, columnTypes);
     }
 
-    public AbstractType<?> fieldType(int i)
+    public AbstractType fieldType(int i)
     {
         return type(i);
     }
 
-    public List<AbstractType<?>> fieldTypes()
+    public List<AbstractType> fieldTypes()
     {
         return types;
     }

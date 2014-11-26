@@ -24,7 +24,7 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.UTF8Serializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class UTF8Type extends AbstractType<String>
+public class UTF8Type extends ConcreteType<String>
 {
     public static final UTF8Type instance = new UTF8Type();
 
@@ -41,7 +41,7 @@ public class UTF8Type extends AbstractType<String>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         // Anything that is ascii is also utf8, and they both use bytes
         // comparison
@@ -61,5 +61,10 @@ public class UTF8Type extends AbstractType<String>
     public TypeSerializer<String> getSerializer()
     {
         return UTF8Serializer.instance;
+    }
+
+    public String cast(Object value)
+    {
+        return (String) value;
     }
 }

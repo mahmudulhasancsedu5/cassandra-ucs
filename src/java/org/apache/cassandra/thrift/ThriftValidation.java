@@ -209,7 +209,7 @@ public class ThriftValidation
             if (metadata.cfType == ColumnFamilyType.Standard)
                 throw new org.apache.cassandra.exceptions.InvalidRequestException("supercolumn specified to table " + metadata.cfName + " containing normal columns");
         }
-        AbstractType<?> comparator = SuperColumns.getComparatorFor(metadata, superColumnName);
+        AbstractType comparator = SuperColumns.getComparatorFor(metadata, superColumnName);
         boolean isCQL3Table = !metadata.isThriftCompatible();
         for (ByteBuffer name : column_names)
         {
@@ -274,7 +274,7 @@ public class ThriftValidation
         if (range.finish.remaining() > maxNameLength)
             throw new org.apache.cassandra.exceptions.InvalidRequestException("range finish length cannot be larger than " + maxNameLength);
 
-        AbstractType<?> comparator = SuperColumns.getComparatorFor(metadata, column_parent.super_column);
+        AbstractType comparator = SuperColumns.getComparatorFor(metadata, column_parent.super_column);
         try
         {
             comparator.validate(range.start);
@@ -444,7 +444,7 @@ public class ThriftValidation
                     : metadata.comparator.makeCellName(scName, column.name);
         try
         {
-            AbstractType<?> validator = metadata.getValueValidator(cn);
+            AbstractType validator = metadata.getValueValidator(cn);
             if (validator != null)
                 validator.validate(column.value);
         }
@@ -575,7 +575,7 @@ public class ThriftValidation
             return false;
 
         SecondaryIndexManager idxManager = Keyspace.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager;
-        AbstractType<?> nameValidator = SuperColumns.getComparatorFor(metadata, null);
+        AbstractType nameValidator = SuperColumns.getComparatorFor(metadata, null);
 
         boolean isIndexed = false;
         for (IndexExpression expression : index_clause)
@@ -596,7 +596,7 @@ public class ThriftValidation
                 throw new org.apache.cassandra.exceptions.InvalidRequestException("Index expression values may not be larger than 64K");
 
             CellName name = metadata.comparator.cellFromByteBuffer(expression.column_name);
-            AbstractType<?> valueValidator = metadata.getValueValidator(name);
+            AbstractType valueValidator = metadata.getValueValidator(name);
             try
             {
                 valueValidator.validate(expression.value);

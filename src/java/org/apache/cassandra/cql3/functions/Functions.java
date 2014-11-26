@@ -183,7 +183,7 @@ public abstract class Functions
         return declared.get(name);
     }
 
-    public static Function find(FunctionName name, List<AbstractType<?>> argTypes)
+    public static Function find(FunctionName name, List<AbstractType> argTypes)
     {
         assert name.hasKeyspace() : "function name not fully qualified";
         for (Function f : declared.get(name))
@@ -271,7 +271,7 @@ public abstract class Functions
     }
 
     // Same remarks than for addFunction
-    public static void removeFunction(FunctionName name, List<AbstractType<?>> argsTypes)
+    public static void removeFunction(FunctionName name, List<AbstractType> argsTypes)
     {
         Function old = find(name, argsTypes);
         assert old != null && !old.isNative();

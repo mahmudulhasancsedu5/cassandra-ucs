@@ -53,7 +53,7 @@ public class CompositesIndexOnClusteringKey extends CompositesIndex
         // Index cell names are rk ck_0 ... ck_{i-1} ck_{i+1} ck_n, so n
         // components total (where n is the number of clustering keys)
         int ckCount = baseMetadata.clusteringColumns().size();
-        List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(ckCount);
+        List<AbstractType> types = new ArrayList<AbstractType>(ckCount);
         types.add(SecondaryIndex.keyComparator);
         for (int i = 0; i < columnDef.position(); i++)
             types.add(baseMetadata.clusteringColumns().get(i).type);

@@ -110,14 +110,14 @@ public class SchemaLoader
 
         AbstractType bytes = BytesType.instance;
 
-        AbstractType<?> composite = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
-        AbstractType<?> compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, IntegerType.instance}));
-        Map<Byte, AbstractType<?>> aliases = new HashMap<Byte, AbstractType<?>>();
+        AbstractType composite = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
+        AbstractType compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, IntegerType.instance}));
+        Map<Byte, AbstractType> aliases = new HashMap<Byte, AbstractType>();
         aliases.put((byte)'b', BytesType.instance);
         aliases.put((byte)'t', TimeUUIDType.instance);
         aliases.put((byte)'B', ReversedType.getInstance(BytesType.instance));
         aliases.put((byte)'T', ReversedType.getInstance(TimeUUIDType.instance));
-        AbstractType<?> dynamicComposite = DynamicCompositeType.getInstance(aliases);
+        AbstractType dynamicComposite = DynamicCompositeType.getInstance(aliases);
 
         // Make it easy to test compaction
         Map<String, String> compactionOptions = new HashMap<String, String>();
@@ -398,7 +398,7 @@ public class SchemaLoader
     }
     public static CFMetaData compositeIndexCFMD(String ksName, String cfName, final Boolean withIdxType) throws ConfigurationException
     {
-        final CompositeType composite = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{UTF8Type.instance, UTF8Type.instance})); 
+        final CompositeType composite = CompositeType.getInstance(Arrays.asList(new AbstractType[]{UTF8Type.instance, UTF8Type.instance})); 
         CFMetaData cfm = CFMetaData.sparseCFMetaData(ksName, cfName, composite);
 
         ByteBuffer cName = ByteBufferUtil.bytes("col1");

@@ -26,7 +26,7 @@ import java.util.List;
 
 public class CTypeTest
 {
-    static final List<AbstractType<?>> types = Lists.newArrayList();
+    static final List<AbstractType> types = Lists.newArrayList();
     static
     {
         types.add(UTF8Type.instance);

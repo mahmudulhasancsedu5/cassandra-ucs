@@ -29,10 +29,10 @@ import org.apache.cassandra.db.marshal.AbstractType;
 public abstract class AbstractFunction implements Function
 {
     protected final FunctionName name;
-    protected final List<AbstractType<?>> argTypes;
-    protected final AbstractType<?> returnType;
+    protected final List<AbstractType> argTypes;
+    protected final AbstractType returnType;
 
-    protected AbstractFunction(FunctionName name, List<AbstractType<?>> argTypes, AbstractType<?> returnType)
+    protected AbstractFunction(FunctionName name, List<AbstractType> argTypes, AbstractType returnType)
     {
         this.name = name;
         this.argTypes = argTypes;
@@ -44,12 +44,12 @@ public abstract class AbstractFunction implements Function
         return name;
     }
 
-    public List<AbstractType<?>> argTypes()
+    public List<AbstractType> argTypes()
     {
         return argTypes;
     }
 
-    public AbstractType<?> returnType()
+    public AbstractType returnType()
     {
         return returnType;
     }

@@ -433,7 +433,7 @@ public class SSTableImport
      * @param columnFamily column family instance
      * @return key validator for given column family
      */
-    private AbstractType<?> getKeyValidator(ColumnFamily columnFamily) {
+    private AbstractType getKeyValidator(ColumnFamily columnFamily) {
         // this is a fix to support backward compatibility
         // which allows to skip the current key validator
         // please, take a look onto CASSANDRA-7498 for more details
@@ -544,7 +544,7 @@ public class SSTableImport
      * @param type type to use for conversion
      * @return byte buffer representation of the given string
      */
-    private static ByteBuffer stringAsType(String content, AbstractType<?> type)
+    private static ByteBuffer stringAsType(String content, AbstractType type)
     {
         try
         {

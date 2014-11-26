@@ -59,7 +59,7 @@ public abstract class AbstractSimplePerColumnSecondaryIndex extends PerColumnSec
                                                              indexedCfMetadata);
     }
 
-    protected AbstractType<?> getIndexKeyComparator()
+    protected AbstractType getIndexKeyComparator()
     {
         return columnDef.type;
     }

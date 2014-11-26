@@ -89,37 +89,37 @@ public class ColumnDefinition extends ColumnSpecification
      */
     private final Integer componentIndex;
 
-    public static ColumnDefinition partitionKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator, Integer componentIndex)
+    public static ColumnDefinition partitionKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType validator, Integer componentIndex)
     {
         return new ColumnDefinition(cfm, name, validator, componentIndex, Kind.PARTITION_KEY);
     }
 
-    public static ColumnDefinition partitionKeyDef(String ksName, String cfName, ByteBuffer name, AbstractType<?> validator, Integer componentIndex)
+    public static ColumnDefinition partitionKeyDef(String ksName, String cfName, ByteBuffer name, AbstractType validator, Integer componentIndex)
     {
         return new ColumnDefinition(ksName, cfName, new ColumnIdentifier(name, UTF8Type.instance), validator, null, null, null, componentIndex, Kind.PARTITION_KEY);
     }
 
-    public static ColumnDefinition clusteringKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator, Integer componentIndex)
+    public static ColumnDefinition clusteringKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType validator, Integer componentIndex)
     {
         return new ColumnDefinition(cfm, name, validator, componentIndex, Kind.CLUSTERING_COLUMN);
     }
 
-    public static ColumnDefinition regularDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator, Integer componentIndex)
+    public static ColumnDefinition regularDef(CFMetaData cfm, ByteBuffer name, AbstractType validator, Integer componentIndex)
     {
         return new ColumnDefinition(cfm, name, validator, componentIndex, Kind.REGULAR);
     }
 
-    public static ColumnDefinition staticDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator, Integer componentIndex)
+    public static ColumnDefinition staticDef(CFMetaData cfm, ByteBuffer name, AbstractType validator, Integer componentIndex)
     {
         return new ColumnDefinition(cfm, name, validator, componentIndex, Kind.STATIC);
     }
 
-    public static ColumnDefinition compactValueDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator)
+    public static ColumnDefinition compactValueDef(CFMetaData cfm, ByteBuffer name, AbstractType validator)
     {
         return new ColumnDefinition(cfm, name, validator, null, Kind.COMPACT_VALUE);
     }
 
-    public ColumnDefinition(CFMetaData cfm, ByteBuffer name, AbstractType<?> validator, Integer componentIndex, Kind kind)
+    public ColumnDefinition(CFMetaData cfm, ByteBuffer name, AbstractType validator, Integer componentIndex, Kind kind)
     {
         this(cfm.ksName,
              cfm.cfName,
@@ -136,7 +136,7 @@ public class ColumnDefinition extends ColumnSpecification
     public ColumnDefinition(String ksName,
                             String cfName,
                             ColumnIdentifier name,
-                            AbstractType<?> validator,
+                            AbstractType validator,
                             IndexType indexType,
                             Map<String, String> indexOptions,
                             String indexName,
@@ -161,7 +161,7 @@ public class ColumnDefinition extends ColumnSpecification
         return new ColumnDefinition(ksName, cfName, newName, type, indexType, indexOptions, indexName, componentIndex, kind);
     }
 
-    public ColumnDefinition withNewType(AbstractType<?> newType)
+    public ColumnDefinition withNewType(AbstractType newType)
     {
         return new ColumnDefinition(ksName, cfName, name, newType, indexType, indexOptions, indexName, componentIndex, kind);
     }
@@ -313,7 +313,7 @@ public class ColumnDefinition extends ColumnSpecification
      * @param serializedColumns storage-level partition containing the column definitions
      * @return the list of processed ColumnDefinitions
      */
-    public static List<ColumnDefinition> fromSchema(UntypedResultSet serializedColumns, String ksName, String cfName, AbstractType<?> rawComparator, boolean isSuper)
+    public static List<ColumnDefinition> fromSchema(UntypedResultSet serializedColumns, String ksName, String cfName, AbstractType rawComparator, boolean isSuper)
     {
         List<ColumnDefinition> cds = new ArrayList<>();
         for (UntypedResultSet.Row row : serializedColumns)
@@ -330,10 +330,10 @@ public class ColumnDefinition extends ColumnSpecification
 
             // Note: we save the column name as string, but we should not assume that it is an UTF8 name, we
             // we need to use the comparator fromString method
-            AbstractType<?> comparator = getComponentComparator(rawComparator, componentIndex, kind);
+            AbstractType comparator = getComponentComparator(rawComparator, componentIndex, kind);
             ColumnIdentifier name = new ColumnIdentifier(comparator.fromString(row.getString(COLUMN_NAME)), comparator);
 
-            AbstractType<?> validator;
+            AbstractType validator;
             try
             {
                 validator = TypeParser.parse(row.getString(TYPE));
@@ -361,7 +361,7 @@ public class ColumnDefinition extends ColumnSpecification
         return cds;
     }
 
-    public static AbstractType<?> getComponentComparator(AbstractType<?> rawComparator, Integer componentIndex, ColumnDefinition.Kind kind)
+    public static AbstractType getComponentComparator(AbstractType rawComparator, Integer componentIndex, ColumnDefinition.Kind kind)
     {
         switch (kind)
         {

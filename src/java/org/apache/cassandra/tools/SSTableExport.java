@@ -146,7 +146,7 @@ public class SSTableExport
         }
         else
         {
-            AbstractType<?> validator = cfMetaData.getValueValidator(cell.name());
+            AbstractType validator = cfMetaData.getValueValidator(cell.name());
             serializedColumn.add(validator.getString(cell.value()));
         }
 

@@ -60,7 +60,7 @@ public final class UTMetaData
             for (String rawColumn : rawColumns)
                 columns.add(ByteBufferUtil.bytes(rawColumn));
 
-            List<AbstractType<?>> types = new ArrayList<>(rawTypes.size());
+            List<AbstractType> types = new ArrayList<>(rawTypes.size());
             for (String rawType : rawTypes)
                 types.add(TypeParser.parse(rawType));
 

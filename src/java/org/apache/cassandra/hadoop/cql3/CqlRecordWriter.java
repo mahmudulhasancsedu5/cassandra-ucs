@@ -73,7 +73,7 @@ class CqlRecordWriter extends AbstractColumnFamilyRecordWriter<Map<String, ByteB
 
     protected final String cql;
 
-    protected AbstractType<?> keyValidator;
+    protected AbstractType keyValidator;
     protected String [] partitionKeyColumns;
     protected List<String> clusterColumns;
 
@@ -368,7 +368,7 @@ class CqlRecordWriter extends AbstractColumnFamilyRecordWriter<Map<String, ByteB
         clusterColumns = FBUtilities.fromJsonList(clusterColumnString);
     }
 
-    private AbstractType<?> parseType(String type) throws ConfigurationException
+    private AbstractType parseType(String type) throws ConfigurationException
     {
         try
         {

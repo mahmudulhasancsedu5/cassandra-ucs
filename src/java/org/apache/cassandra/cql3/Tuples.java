@@ -81,7 +81,7 @@ public class Tuples
                 throw new InvalidRequestException(String.format("Expected %d elements in value tuple, but got %d: %s", receivers.size(), elements.size(), this));
 
             List<Term> values = new ArrayList<>(elements.size());
-            List<AbstractType<?>> types = new ArrayList<>(elements.size());
+            List<AbstractType> types = new ArrayList<>(elements.size());
             boolean allTerminal = true;
             for (int i = 0; i < elements.size(); i++)
             {
@@ -203,7 +203,7 @@ public class Tuples
                 // Inside tuples, we must force the serialization of collections to v3 whatever protocol
                 // version is in use since we're going to store directly that serialized value.
                 if (version < 3 && type.type(i).isCollection())
-                    buffers[i] = ((CollectionType)type.type(i)).getSerializer().reserializeToV3(buffers[i]);
+                    buffers[i] = ((CollectionType<?>)type.type(i)).getSerializer().reserializeToV3(buffers[i]);
             }
             return buffers;
         }
@@ -240,7 +240,7 @@ public class Tuples
             this.elements = items;
         }
 
-        public static InValue fromSerialized(ByteBuffer value, ListType type, QueryOptions options) throws InvalidRequestException
+        public static InValue fromSerialized(ByteBuffer value, ListType<?> type, QueryOptions options) throws InvalidRequestException
         {
             try
             {
@@ -287,7 +287,7 @@ public class Tuples
 
         private static ColumnSpecification makeReceiver(List<? extends ColumnSpecification> receivers)
         {
-            List<AbstractType<?>> types = new ArrayList<>(receivers.size());
+            List<AbstractType> types = new ArrayList<>(receivers.size());
             StringBuilder inName = new StringBuilder("(");
             for (int i = 0; i < receivers.size(); i++)
             {
@@ -328,7 +328,7 @@ public class Tuples
 
         private static ColumnSpecification makeInReceiver(List<? extends ColumnSpecification> receivers) throws InvalidRequestException
         {
-            List<AbstractType<?>> types = new ArrayList<>(receivers.size());
+            List<AbstractType> types = new ArrayList<>(receivers.size());
             StringBuilder inName = new StringBuilder("in(");
             for (int i = 0; i < receivers.size(); i++)
             {
@@ -392,7 +392,7 @@ public class Tuples
         public InValue bind(QueryOptions options) throws InvalidRequestException
         {
             ByteBuffer value = options.getValues().get(bindIndex);
-            return value == null ? null : InValue.fromSerialized(value, (ListType)receiver.type, options);
+            return value == null ? null : InValue.fromSerialized(value, (ListType<?>)receiver.type, options);
         }
     }
 

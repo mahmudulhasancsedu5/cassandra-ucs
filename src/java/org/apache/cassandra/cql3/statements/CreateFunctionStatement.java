@@ -110,13 +110,13 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
             throw new InvalidRequestException(String.format("duplicate argument names for given function %s with argument names %s",
                                                             functionName, argNames));
 
-        List<AbstractType<?>> argTypes = new ArrayList<>(argRawTypes.size());
+        List<AbstractType> argTypes = new ArrayList<>(argRawTypes.size());
         for (CQL3Type.Raw rawType : argRawTypes)
             // We have no proper keyspace to give, which means that this will break (NPE currently)
             // for UDT: #7791 is open to fix this
             argTypes.add(rawType.prepare(functionName.keyspace).getType());
 
-        AbstractType<?> returnType = rawReturnType.prepare(null).getType();
+        AbstractType returnType = rawReturnType.prepare(null).getType();
 
         Function old = Functions.find(functionName, argTypes);
         if (old != null)

@@ -1251,7 +1251,7 @@ public class SelectStatement implements CQLStatement
             List<Cell> cells = row.getMultiCellColumn(def.name);
             ByteBuffer buffer = cells == null
                              ? null
-                             : ((CollectionType)def.type).serializeForNativeProtocol(cells, options.getProtocolVersion());
+                             : ((CollectionType<?>)def.type).serializeForNativeProtocol(cells, options.getProtocolVersion());
             result.add(buffer);
             return;
         }
@@ -2137,7 +2137,7 @@ public class SelectStatement implements CQLStatement
         private static ColumnSpecification makeCollectionReceiver(ColumnSpecification collection, boolean isKey)
         {
             assert collection.type.isCollection();
-            switch (((CollectionType)collection.type).kind)
+            switch (((CollectionType<?>)collection.type).kind)
             {
                 case LIST:
                     assert !isKey;

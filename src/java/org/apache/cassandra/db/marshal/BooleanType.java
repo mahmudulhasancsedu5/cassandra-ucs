@@ -24,13 +24,8 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.BooleanSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-public class BooleanType extends AbstractType<Boolean>
+public class BooleanType extends ConcreteType<Boolean>
 {
-    private static final Logger logger = LoggerFactory.getLogger(BooleanType.class);
-
     public static final BooleanType instance = new BooleanType();
 
     BooleanType() {} // singleton
@@ -68,5 +63,10 @@ public class BooleanType extends AbstractType<Boolean>
     public TypeSerializer<Boolean> getSerializer()
     {
         return BooleanSerializer.instance;
+    }
+
+    public Boolean cast(Object value)
+    {
+        return (Boolean) value;
     }
 }

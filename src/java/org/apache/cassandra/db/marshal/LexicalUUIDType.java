@@ -26,7 +26,7 @@ import org.apache.cassandra.serializers.UUIDSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
 
-public class LexicalUUIDType extends AbstractType<UUID>
+public class LexicalUUIDType extends ConcreteType<UUID>
 {
     public static final LexicalUUIDType instance = new LexicalUUIDType();
 
@@ -61,5 +61,10 @@ public class LexicalUUIDType extends AbstractType<UUID>
     public TypeSerializer<UUID> getSerializer()
     {
         return UUIDSerializer.instance;
+    }
+
+    public UUID cast(Object value)
+    {
+        return (UUID) value;
     }
 }

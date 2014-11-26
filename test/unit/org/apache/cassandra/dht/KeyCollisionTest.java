@@ -243,7 +243,7 @@ public class KeyCollisionTest
             return allTokens;
         }
 
-        public AbstractType<?> getTokenValidator()
+        public AbstractType getTokenValidator()
         {
             return IntegerType.instance;
         }

@@ -21,14 +21,13 @@ import java.nio.ByteBuffer;
 
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
-
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /** for sorting columns representing row keys in the row ordering as determined by a partitioner.
  * Not intended for user-defined CFs, and will in fact error out if used with such. */
-public class LocalByPartionerType extends AbstractType<ByteBuffer>
+public class LocalByPartionerType extends ConcreteType<ByteBuffer>
 {
     private final IPartitioner partitioner;
 
@@ -44,7 +43,7 @@ public class LocalByPartionerType extends AbstractType<ByteBuffer>
     }
 
     @Override
-    public ByteBuffer decompose(ByteBuffer bytes)
+    public ByteBuffer decompose(Object bytes)
     {
         throw new UnsupportedOperationException("You can't do this with a local partitioner.");
     }
@@ -72,6 +71,12 @@ public class LocalByPartionerType extends AbstractType<ByteBuffer>
     }
 
     public TypeSerializer<ByteBuffer> getSerializer()
+    {
+        throw new UnsupportedOperationException("You can't do this with a local partitioner.");
+    }
+
+    @Override
+    public ByteBuffer cast(Object value)
     {
         throw new UnsupportedOperationException("You can't do this with a local partitioner.");
     }

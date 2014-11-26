@@ -63,8 +63,8 @@ public class ScriptBasedUDF extends UDFunction
 
     ScriptBasedUDF(FunctionName name,
                    List<ColumnIdentifier> argNames,
-                   List<AbstractType<?>> argTypes,
-                   AbstractType<?> returnType,
+                   List<AbstractType> argTypes,
+                   AbstractType returnType,
                    String language,
                    String body,
                    boolean deterministic)

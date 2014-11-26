@@ -192,7 +192,7 @@ public class RandomPartitioner implements IPartitioner
         return ownerships;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return IntegerType.instance;
     }

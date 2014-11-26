@@ -162,14 +162,14 @@ public class ColumnCondition
             return null;
         }
 
-        protected boolean isSatisfiedByValue(ByteBuffer value, Cell c, AbstractType<?> type, Operator operator, long now) throws InvalidRequestException
+        protected boolean isSatisfiedByValue(ByteBuffer value, Cell c, AbstractType type, Operator operator, long now) throws InvalidRequestException
         {
             ByteBuffer columnValue = (c == null || !c.isLive(now)) ? null : c.value();
             return compareWithOperator(operator, type, value, columnValue);
         }
 
         /** Returns true if the operator is satisfied (i.e. "value operator otherValue == true"), false otherwise. */
-        protected boolean compareWithOperator(Operator operator, AbstractType<?> type, ByteBuffer value, ByteBuffer otherValue) throws InvalidRequestException
+        protected boolean compareWithOperator(Operator operator, AbstractType type, ByteBuffer value, ByteBuffer otherValue) throws InvalidRequestException
         {
             if (value == null)
             {
@@ -303,7 +303,7 @@ public class ColumnCondition
 
             if (column.type instanceof MapType)
             {
-                MapType mapType = (MapType) column.type;
+                MapType<?, ?> mapType = (MapType<?, ?>) column.type;
                 if (column.type.isMultiCell())
                 {
                     Cell cell = current.getColumn(current.metadata().comparator.create(rowPrefix, column, collectionElement));
@@ -319,7 +319,7 @@ public class ColumnCondition
             }
 
             // sets don't have element access, so it's a list
-            ListType listType = (ListType) column.type;
+            ListType<?> listType = (ListType<?>) column.type;
             if (column.type.isMultiCell())
             {
                 ByteBuffer columnValue = getListItem(
@@ -388,8 +388,8 @@ public class ColumnCondition
             CellNameType nameType = current.metadata().comparator;
             if (column.type instanceof MapType)
             {
-                MapType mapType = (MapType) column.type;
-                AbstractType<?> valueType = mapType.getValuesType();
+                MapType<?, ?> mapType = (MapType<?, ?>) column.type;
+                AbstractType valueType = mapType.getValuesType();
                 if (column.type.isMultiCell())
                 {
                     CellName name = nameType.create(rowPrefix, column, collectionElement);
@@ -422,8 +422,8 @@ public class ColumnCondition
                 }
             }
 
-            ListType listType = (ListType) column.type;
-            AbstractType<?> elementsType = listType.getElementsType();
+            ListType<?> listType = (ListType<?>) column.type;
+            AbstractType elementsType = listType.getElementsType();
             if (column.type.isMultiCell())
             {
                 ByteBuffer columnValue = ElementAccessBound.getListItem(
@@ -474,7 +474,7 @@ public class ColumnCondition
 
         public boolean appliesTo(Composite rowPrefix, ColumnFamily current, final long now) throws InvalidRequestException
         {
-            CollectionType type = (CollectionType)column.type;
+            CollectionType<?> type = (CollectionType<?>)column.type;
 
             if (type.isMultiCell())
             {
@@ -516,21 +516,21 @@ public class ColumnCondition
             return compareWithOperator(operator, type, conditionValue, cell.value());
         }
 
-        static boolean valueAppliesTo(CollectionType type, Iterator<Cell> iter, Term.Terminal value, Operator operator)
+        static boolean valueAppliesTo(CollectionType<?> type, Iterator<Cell> iter, Term.Terminal value, Operator operator)
         {
             if (value == null)
                 return !iter.hasNext();
 
             switch (type.kind)
             {
-                case LIST: return listAppliesTo((ListType)type, iter, ((Lists.Value)value).elements, operator);
-                case SET: return setAppliesTo((SetType)type, iter, ((Sets.Value)value).elements, operator);
-                case MAP: return mapAppliesTo((MapType)type, iter, ((Maps.Value)value).map, operator);
+                case LIST: return listAppliesTo((ListType<?>)type, iter, ((Lists.Value)value).elements, operator);
+                case SET: return setAppliesTo((SetType<?>)type, iter, ((Sets.Value)value).elements, operator);
+                case MAP: return mapAppliesTo((MapType<?, ?>)type, iter, ((Maps.Value)value).map, operator);
             }
             throw new AssertionError();
         }
 
-        private static boolean setOrListAppliesTo(AbstractType<?> type, Iterator<Cell> iter, Iterator<ByteBuffer> conditionIter, Operator operator, boolean isSet)
+        private static boolean setOrListAppliesTo(AbstractType type, Iterator<Cell> iter, Iterator<ByteBuffer> conditionIter, Operator operator, boolean isSet)
         {
             while(iter.hasNext())
             {
@@ -571,12 +571,12 @@ public class ColumnCondition
             }
         }
 
-        static boolean listAppliesTo(ListType type, Iterator<Cell> iter, List<ByteBuffer> elements, Operator operator)
+        static boolean listAppliesTo(ListType<?> type, Iterator<Cell> iter, List<ByteBuffer> elements, Operator operator)
         {
             return setOrListAppliesTo(type.getElementsType(), iter, elements.iterator(), operator, false);
         }
 
-        static boolean setAppliesTo(SetType type, Iterator<Cell> iter, Set<ByteBuffer> elements, Operator operator)
+        static boolean setAppliesTo(SetType<?> type, Iterator<Cell> iter, Set<ByteBuffer> elements, Operator operator)
         {
             ArrayList<ByteBuffer> sortedElements = new ArrayList<>(elements.size());
             sortedElements.addAll(elements);
@@ -584,7 +584,7 @@ public class ColumnCondition
             return setOrListAppliesTo(type.getElementsType(), iter, sortedElements.iterator(), operator, true);
         }
 
-        static boolean mapAppliesTo(MapType type, Iterator<Cell> iter, Map<ByteBuffer, ByteBuffer> elements, Operator operator)
+        static boolean mapAppliesTo(MapType<?, ?> type, Iterator<Cell> iter, Map<ByteBuffer, ByteBuffer> elements, Operator operator)
         {
             Iterator<Map.Entry<ByteBuffer, ByteBuffer>> conditionIter = elements.entrySet().iterator();
             while(iter.hasNext())
@@ -627,11 +627,11 @@ public class ColumnCondition
             if (condition.inValues == null)
             {
                 // We have a list of serialized collections that need to be deserialized for later comparisons
-                CollectionType collectionType = (CollectionType) column.type;
+                CollectionType<?> collectionType = (CollectionType<?>) column.type;
                 Lists.Marker inValuesMarker = (Lists.Marker) condition.value;
                 if (column.type instanceof ListType)
                 {
-                    ListType deserializer = ListType.getInstance(collectionType.valueComparator(), false);
+                    ListType<?> deserializer = ListType.getInstance(collectionType.valueComparator(), false);
                     for (ByteBuffer buffer : inValuesMarker.bind(options).elements)
                     {
                         if (buffer == null)
@@ -642,7 +642,7 @@ public class ColumnCondition
                 }
                 else if (column.type instanceof MapType)
                 {
-                    MapType deserializer = MapType.getInstance(collectionType.nameComparator(), collectionType.valueComparator(), false);
+                    MapType<?, ?> deserializer = MapType.getInstance(collectionType.nameComparator(), collectionType.valueComparator(), false);
                     for (ByteBuffer buffer : inValuesMarker.bind(options).elements)
                     {
                         if (buffer == null)
@@ -653,7 +653,7 @@ public class ColumnCondition
                 }
                 else if (column.type instanceof SetType)
                 {
-                    SetType deserializer = SetType.getInstance(collectionType.valueComparator(), false);
+                    SetType<?> deserializer = SetType.getInstance(collectionType.valueComparator(), false);
                     for (ByteBuffer buffer : inValuesMarker.bind(options).elements)
                     {
                         if (buffer == null)
@@ -672,7 +672,7 @@ public class ColumnCondition
 
         public boolean appliesTo(Composite rowPrefix, ColumnFamily current, final long now) throws InvalidRequestException
         {
-            CollectionType type = (CollectionType)column.type;
+            CollectionType<?> type = (CollectionType<?>)column.type;
             CellName name = current.metadata().comparator.create(rowPrefix, column);
             if (type.isMultiCell())
             {
@@ -787,7 +787,7 @@ public class ColumnCondition
                 throw new InvalidRequestException(String.format("Invalid element access syntax for non-collection column %s", receiver.name));
 
             ColumnSpecification elementSpec, valueSpec;
-            switch ((((CollectionType)receiver.type).kind))
+            switch ((((CollectionType<?>)receiver.type).kind))
             {
                 case LIST:
                     elementSpec = Lists.indexSpecOf(receiver);

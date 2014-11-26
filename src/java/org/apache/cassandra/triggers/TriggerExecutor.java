@@ -136,7 +136,7 @@ public class TriggerExecutor
         return groupedMutations.values();
     }
 
-    private void validateForSinglePartition(AbstractType<?> keyValidator,
+    private void validateForSinglePartition(AbstractType keyValidator,
                                             UUID cfId,
                                             ByteBuffer key,
                                             Collection<Mutation> tmutations)

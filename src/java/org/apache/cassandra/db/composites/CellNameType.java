@@ -103,14 +103,14 @@ public interface CellNameType extends CType
      * Return the new type obtained by adding/updating to the new collection type for the provided column name
      * to this type.
      */
-    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType newCollection);
+    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType<?> newCollection);
 
     /**
      * Returns a new CellNameType that is equivalent to this one but with one
      * of the subtype replaced by the provided new type.
      */
     @Override
-    public CellNameType setSubtype(int position, AbstractType<?> newType);
+    public CellNameType setSubtype(int position, AbstractType newType);
 
     /**
      * Creates a row marker for the CQL3 having the provided clustering prefix.

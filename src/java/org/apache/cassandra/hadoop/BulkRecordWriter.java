@@ -95,7 +95,7 @@ public final class BulkRecordWriter extends AbstractBulkRecordWriter<ByteBuffer,
         
         if (writer == null)
         {
-            AbstractType<?> subcomparator = null;
+            AbstractType subcomparator = null;
 
             if (cfType == CFType.SUPER)
                 subcomparator = BytesType.instance;

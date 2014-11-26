@@ -57,7 +57,7 @@ public abstract class AbstractCompoundCellNameType extends AbstractCellNameType
         return fullSize;
     }
 
-    public AbstractType<?> subtype(int i)
+    public AbstractType subtype(int i)
     {
         return fullType.subtype(i);
     }
@@ -104,7 +104,7 @@ public abstract class AbstractCompoundCellNameType extends AbstractCellNameType
         return makeWith(elements, i, Composite.EOC.from(eoc), isStatic);
     }
 
-    public AbstractType<?> asAbstractType()
+    public AbstractType asAbstractType()
     {
         return CompositeType.getInstance(fullType.types);
     }
@@ -175,7 +175,7 @@ public abstract class AbstractCompoundCellNameType extends AbstractCellNameType
                 if (!hasComponent(i))
                     return nextEOC == Composite.EOC.END ? 1 : -1;
 
-                AbstractType<?> comparator = type.subtype(i);
+                AbstractType comparator = type.subtype(i);
                 ByteBuffer value1 = nextComponents[i];
                 ByteBuffer value2 = composite.get(i);
 

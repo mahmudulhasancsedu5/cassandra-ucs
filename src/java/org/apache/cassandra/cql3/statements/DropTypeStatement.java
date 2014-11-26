@@ -89,7 +89,7 @@ public class DropTypeStatement extends SchemaAlteringStatement
         }
     }
 
-    private boolean isUsedBy(AbstractType<?> toCheck) throws RequestValidationException
+    private boolean isUsedBy(AbstractType toCheck) throws RequestValidationException
     {
         if (toCheck instanceof UserType)
         {
@@ -97,31 +97,31 @@ public class DropTypeStatement extends SchemaAlteringStatement
             if (name.getKeyspace().equals(ut.keyspace) && name.getUserTypeName().equals(ut.name))
                 return true;
 
-            for (AbstractType<?> subtype : ut.fieldTypes())
+            for (AbstractType subtype : ut.fieldTypes())
                 if (isUsedBy(subtype))
                     return true;
         }
         else if (toCheck instanceof CompositeType)
         {
             CompositeType ct = (CompositeType)toCheck;
-            for (AbstractType<?> subtype : ct.types)
+            for (AbstractType subtype : ct.types)
                 if (isUsedBy(subtype))
                     return true;
         }
         else if (toCheck instanceof ColumnToCollectionType)
         {
-            for (CollectionType collection : ((ColumnToCollectionType)toCheck).defined.values())
+            for (CollectionType<?> collection : ((ColumnToCollectionType)toCheck).defined.values())
                 if (isUsedBy(collection))
                     return true;
         }
         else if (toCheck instanceof CollectionType)
         {
             if (toCheck instanceof ListType)
-                return isUsedBy(((ListType)toCheck).getElementsType());
+                return isUsedBy(((ListType<?>)toCheck).getElementsType());
             else if (toCheck instanceof SetType)
-                return isUsedBy(((SetType)toCheck).getElementsType());
+                return isUsedBy(((SetType<?>)toCheck).getElementsType());
             else
-                return isUsedBy(((MapType)toCheck).getKeysType()) || isUsedBy(((MapType)toCheck).getKeysType());
+                return isUsedBy(((MapType<?, ?>)toCheck).getKeysType()) || isUsedBy(((MapType<?, ?>)toCheck).getKeysType());
         }
         return false;
     }

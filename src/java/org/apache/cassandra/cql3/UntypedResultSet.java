@@ -269,19 +269,19 @@ public abstract class UntypedResultSet implements Iterable<UntypedResultSet.Row>
             return LongType.instance.compose(data.get(column));
         }
 
-        public <T> Set<T> getSet(String column, AbstractType<T> type)
+        public <T> Set<T> getSet(String column, ConcreteType<T> type)
         {
             ByteBuffer raw = data.get(column);
             return raw == null ? null : SetType.getInstance(type, true).compose(raw);
         }
 
-        public <T> List<T> getList(String column, AbstractType<T> type)
+        public <T> List<T> getList(String column, ConcreteType<T> type)
         {
             ByteBuffer raw = data.get(column);
             return raw == null ? null : ListType.getInstance(type, true).compose(raw);
         }
 
-        public <K, V> Map<K, V> getMap(String column, AbstractType<K> keyType, AbstractType<V> valueType)
+        public <K, V> Map<K, V> getMap(String column, ConcreteType<K> keyType, ConcreteType<V> valueType)
         {
             ByteBuffer raw = data.get(column);
             return raw == null ? null : MapType.getInstance(keyType, valueType, true).compose(raw);

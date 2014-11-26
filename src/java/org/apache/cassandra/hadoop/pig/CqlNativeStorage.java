@@ -102,7 +102,7 @@ public class CqlNativeStorage extends CqlStorage
                 if (columnValue != null)
                 {
                     Cell cell = new BufferCell(CellNames.simpleDense(cdef.name), columnValue);
-                    AbstractType<?> validator = getValidatorMap(cfDef).get(cdef.name);
+                    AbstractType validator = getValidatorMap(cfDef).get(cdef.name);
                     setTupleValue(tuple, i, cqlColumnToObj(cell, cfDef), validator);
                 }
                 else

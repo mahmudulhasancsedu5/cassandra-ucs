@@ -120,10 +120,10 @@ public abstract class AbstractCType implements CType
         this.isByteOrderComparable = isByteOrderComparable;
     }
 
-    protected static boolean isByteOrderComparable(Iterable<AbstractType<?>> types)
+    protected static boolean isByteOrderComparable(Iterable<AbstractType> types)
     {
         boolean isByteOrderComparable = true;
-        for (AbstractType<?> type : types)
+        for (AbstractType type : types)
             isByteOrderComparable &= type.isByteOrderComparable();
         return isByteOrderComparable;
     }
@@ -207,7 +207,7 @@ public abstract class AbstractCType implements CType
         ByteBuffer previous = null;
         for (int i = 0; i < name.size(); i++)
         {
-            AbstractType<?> comparator = subtype(i);
+            AbstractType comparator = subtype(i);
             ByteBuffer value = name.get(i);
             comparator.validateCollectionMember(value, previous);
             previous = value;
@@ -225,8 +225,8 @@ public abstract class AbstractCType implements CType
 
         for (int i = 0; i < previous.size(); i++)
         {
-            AbstractType<?> tprev = previous.subtype(i);
-            AbstractType<?> tnew = subtype(i);
+            AbstractType tprev = previous.subtype(i);
+            AbstractType tnew = subtype(i);
             if (!tnew.isCompatibleWith(tprev))
                 return false;
         }

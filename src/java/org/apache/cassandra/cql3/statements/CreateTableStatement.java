@@ -44,8 +44,8 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 public class CreateTableStatement extends SchemaAlteringStatement
 {
     public CellNameType comparator;
-    private AbstractType<?> defaultValidator;
-    private AbstractType<?> keyValidator;
+    private AbstractType defaultValidator;
+    private AbstractType keyValidator;
 
     private final List<ByteBuffer> keyAliases = new ArrayList<ByteBuffer>();
     private final List<ByteBuffer> columnAliases = new ArrayList<ByteBuffer>();
@@ -199,16 +199,16 @@ public class CreateTableStatement extends SchemaAlteringStatement
 
             CreateTableStatement stmt = new CreateTableStatement(cfName, properties, ifNotExists, staticColumns);
 
-            Map<ByteBuffer, CollectionType> definedMultiCellCollections = null;
+            Map<ByteBuffer, CollectionType<?>> definedMultiCellCollections = null;
             for (Map.Entry<ColumnIdentifier, CQL3Type.Raw> entry : definitions.entrySet())
             {
                 ColumnIdentifier id = entry.getKey();
                 CQL3Type pt = entry.getValue().prepare(keyspace());
-                if (pt.isCollection() && ((CollectionType) pt.getType()).isMultiCell())
+                if (pt.isCollection() && ((CollectionType<?>) pt.getType()).isMultiCell())
                 {
                     if (definedMultiCellCollections == null)
                         definedMultiCellCollections = new HashMap<>();
-                    definedMultiCellCollections.put(id.bytes, (CollectionType) pt.getType());
+                    definedMultiCellCollections.put(id.bytes, (CollectionType<?>) pt.getType());
                 }
                 stmt.columns.put(id, pt.getType()); // we'll remove what is not a column below
             }
@@ -220,11 +220,11 @@ public class CreateTableStatement extends SchemaAlteringStatement
 
             List<ColumnIdentifier> kAliases = keyAliases.get(0);
 
-            List<AbstractType<?>> keyTypes = new ArrayList<AbstractType<?>>(kAliases.size());
+            List<AbstractType> keyTypes = new ArrayList<AbstractType>(kAliases.size());
             for (ColumnIdentifier alias : kAliases)
             {
                 stmt.keyAliases.add(alias.bytes);
-                AbstractType<?> t = getTypeAndRemove(stmt.columns, alias);
+                AbstractType t = getTypeAndRemove(stmt.columns, alias);
                 if (t instanceof CounterColumnType)
                     throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", alias));
                 if (staticColumns.contains(alias))
@@ -254,8 +254,8 @@ public class CreateTableStatement extends SchemaAlteringStatement
                 else
                 {
                     stmt.comparator = definedMultiCellCollections == null
-                                    ? new CompoundSparseCellNameType(Collections.<AbstractType<?>>emptyList())
-                                    : new CompoundSparseCellNameType.WithCollection(Collections.<AbstractType<?>>emptyList(), ColumnToCollectionType.getInstance(definedMultiCellCollections));
+                                    ? new CompoundSparseCellNameType(Collections.<AbstractType>emptyList())
+                                    : new CompoundSparseCellNameType.WithCollection(Collections.<AbstractType>emptyList(), ColumnToCollectionType.getInstance(definedMultiCellCollections));
                 }
             }
             else
@@ -272,19 +272,19 @@ public class CreateTableStatement extends SchemaAlteringStatement
                         throw new InvalidRequestException(String.format("Static column %s cannot be part of the PRIMARY KEY", alias));
 
                     stmt.columnAliases.add(alias.bytes);
-                    AbstractType<?> at = getTypeAndRemove(stmt.columns, alias);
+                    AbstractType at = getTypeAndRemove(stmt.columns, alias);
                     if (at instanceof CounterColumnType)
                         throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", stmt.columnAliases.get(0)));
                     stmt.comparator = new SimpleDenseCellNameType(at);
                 }
                 else
                 {
-                    List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(columnAliases.size() + 1);
+                    List<AbstractType> types = new ArrayList<AbstractType>(columnAliases.size() + 1);
                     for (ColumnIdentifier t : columnAliases)
                     {
                         stmt.columnAliases.add(t.bytes);
 
-                        AbstractType<?> type = getTypeAndRemove(stmt.columns, t);
+                        AbstractType type = getTypeAndRemove(stmt.columns, t);
                         if (type instanceof CounterColumnType)
                             throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", t));
                         if (staticColumns.contains(t))
@@ -380,7 +380,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
             return new ParsedStatement.Prepared(stmt);
         }
 
-        private AbstractType<?> getTypeAndRemove(Map<ColumnIdentifier, AbstractType> columns, ColumnIdentifier t) throws InvalidRequestException
+        private AbstractType getTypeAndRemove(Map<ColumnIdentifier, AbstractType> columns, ColumnIdentifier t) throws InvalidRequestException
         {
             AbstractType type = columns.get(t);
             if (type == null)

@@ -25,7 +25,7 @@ import org.apache.cassandra.serializers.DoubleSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class DoubleType extends AbstractType<Double>
+public class DoubleType extends ConcreteType<Double>
 {
     public static final DoubleType instance = new DoubleType();
 
@@ -66,5 +66,10 @@ public class DoubleType extends AbstractType<Double>
     public TypeSerializer<Double> getSerializer()
     {
         return DoubleSerializer.instance;
+    }
+
+    public Double cast(Object value)
+    {
+        return (Double) value;
     }
 }

@@ -20,48 +20,55 @@ package org.apache.cassandra.db.marshal;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.transport.Server;
-import org.apache.cassandra.utils.Pair;
 
 public class MapType<K, V> extends CollectionType<Map<K, V>>
 {
     // interning instances
-    private static final Map<Pair<AbstractType<?>, AbstractType<?>>, MapType> instances = new HashMap<>();
-    private static final Map<Pair<AbstractType<?>, AbstractType<?>>, MapType> frozenInstances = new HashMap<>();
+    private static final Table<ConcreteType<?>, ConcreteType<?>, MapType<?, ?>> instances = HashBasedTable.create();
+    private static final Table<ConcreteType<?>, ConcreteType<?>, MapType<?, ?>> frozenInstances = HashBasedTable.create();
 
-    private final AbstractType<K> keys;
-    private final AbstractType<V> values;
+    private final ConcreteType<K> keys;
+    private final ConcreteType<V> values;
     private final MapSerializer<K, V> serializer;
     private final boolean isMultiCell;
 
     public static MapType<?, ?> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> l = parser.getTypeParameters();
+        List<AbstractType> l = parser.getTypeParameters();
         if (l.size() != 2)
-            throw new ConfigurationException("MapType takes exactly 2 type parameters");
+            throw new ConfigurationException("MapType<?, ?> takes exactly 2 type parameters");
 
         return getInstance(l.get(0), l.get(1), true);
     }
 
-    public static synchronized <K, V> MapType<K, V> getInstance(AbstractType<K> keys, AbstractType<V> values, boolean isMultiCell)
+    public static MapType<?, ?> getInstance(AbstractType keys, AbstractType values, boolean isMultiCell)
     {
-        Map<Pair<AbstractType<?>, AbstractType<?>>, MapType> internMap = isMultiCell ? instances : frozenInstances;
-        Pair<AbstractType<?>, AbstractType<?>> p = Pair.<AbstractType<?>, AbstractType<?>>create(keys, values);
-        MapType<K, V> t = internMap.get(p);
+        return getInstance((ConcreteType<?>) keys, (ConcreteType<?>) values, isMultiCell);
+    }
+
+    public static synchronized <K, V> MapType<K, V> getInstance(ConcreteType<K> keys, ConcreteType<V> values, boolean isMultiCell)
+    {
+        Table<ConcreteType<?>, ConcreteType<?>, MapType<?, ?>> internMap = isMultiCell ? instances : frozenInstances;
+        @SuppressWarnings("unchecked")
+        MapType<K, V> t = (MapType<K, V>) internMap.get(keys, values);
         if (t == null)
         {
             t = new MapType<>(keys, values, isMultiCell);
-            internMap.put(p, t);
+            internMap.put(keys, values, t);
         }
         return t;
     }
 
-    private MapType(AbstractType<K> keys, AbstractType<V> values, boolean isMultiCell)
+    private MapType(ConcreteType<K> keys, ConcreteType<V> values, boolean isMultiCell)
     {
         super(Kind.MAP);
         this.keys = keys;
@@ -70,22 +77,22 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
         this.isMultiCell = isMultiCell;
     }
 
-    public AbstractType<K> getKeysType()
+    public AbstractType getKeysType()
     {
         return keys;
     }
 
-    public AbstractType<V> getValuesType()
+    public AbstractType getValuesType()
     {
         return values;
     }
 
-    public AbstractType<K> nameComparator()
+    public AbstractType nameComparator()
     {
         return keys;
     }
 
-    public AbstractType<V> valueComparator()
+    public AbstractType valueComparator()
     {
         return values;
     }
@@ -97,7 +104,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     }
 
     @Override
-    public AbstractType<?> freeze()
+    public AbstractType freeze()
     {
         if (isMultiCell)
             return getInstance(this.keys, this.values, false);
@@ -109,7 +116,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     public boolean isCompatibleWithFrozen(CollectionType<?> previous)
     {
         assert !isMultiCell;
-        MapType tprev = (MapType) previous;
+        MapType<?, ?> tprev = (MapType<?, ?>) previous;
         return keys.isCompatibleWith(tprev.keys) && values.isCompatibleWith(tprev.values);
     }
 
@@ -117,7 +124,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
     {
         assert !isMultiCell;
-        MapType tprev = (MapType) previous;
+        MapType<?, ?> tprev = (MapType<?, ?>) previous;
         return keys.isCompatibleWith(tprev.keys) && values.isValueCompatibleWith(tprev.values);
     }
 
@@ -127,7 +134,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
         return compareMaps(keys, values, o1, o2);
     }
 
-    public static int compareMaps(AbstractType<?> keysComparator, AbstractType<?> valuesComparator, ByteBuffer o1, ByteBuffer o2)
+    public static int compareMaps(AbstractType keysComparator, AbstractType valuesComparator, ByteBuffer o1, ByteBuffer o2)
     {
          if (!o1.hasRemaining() || !o2.hasRemaining())
             return o1.hasRemaining() ? 1 : o2.hasRemaining() ? -1 : 0;
@@ -176,7 +183,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
         StringBuilder sb = new StringBuilder();
         if (includeFrozenType)
             sb.append(FrozenType.class.getName()).append("(");
-        sb.append(getClass().getName()).append(TypeParser.stringifyTypeParameters(Arrays.asList(keys, values), ignoreFreezing || !isMultiCell));
+        sb.append(getClass().getName()).append(TypeParser.stringifyTypeParameters(Arrays.<AbstractType>asList(keys, values), ignoreFreezing || !isMultiCell));
         if (includeFrozenType)
             sb.append(")");
         return sb.toString();
@@ -192,5 +199,11 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
             bbs.add(c.value());
         }
         return bbs;
+    }
+
+    @Override
+    public Map<K, V> cast(Object value)
+    {
+        return (Map<K, V>) (Map<?, ?>) value;
     }
 }

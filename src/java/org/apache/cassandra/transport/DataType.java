@@ -101,7 +101,7 @@ public enum DataType implements OptionCodec.Codecable<DataType>
                 ByteBuffer name = UTF8Type.instance.decompose(CBUtil.readString(cb));
                 int n = cb.readUnsignedShort();
                 List<ByteBuffer> fieldNames = new ArrayList<>(n);
-                List<AbstractType<?>> fieldTypes = new ArrayList<>(n);
+                List<AbstractType> fieldTypes = new ArrayList<>(n);
                 for (int i = 0; i < n; i++)
                 {
                     fieldNames.add(UTF8Type.instance.decompose(CBUtil.readString(cb)));
@@ -110,7 +110,7 @@ public enum DataType implements OptionCodec.Codecable<DataType>
                 return new UserType(ks, name, fieldNames, fieldTypes);
             case TUPLE:
                 n = cb.readUnsignedShort();
-                List<AbstractType<?>> types = new ArrayList<>(n);
+                List<AbstractType> types = new ArrayList<>(n);
                 for (int i = 0; i < n; i++)
                     types.add(DataType.toType(codec.decodeOne(cb, version)));
                 return new TupleType(types);
@@ -214,16 +214,16 @@ public enum DataType implements OptionCodec.Codecable<DataType>
             {
                 if (type instanceof ListType)
                 {
-                    return Pair.<DataType, Object>create(LIST, ((ListType)type).getElementsType());
+                    return Pair.<DataType, Object>create(LIST, ((ListType<?>)type).getElementsType());
                 }
                 else if (type instanceof MapType)
                 {
-                    MapType mt = (MapType)type;
+                    MapType<?, ?> mt = (MapType<?, ?>)type;
                     return Pair.<DataType, Object>create(MAP, Arrays.asList(mt.getKeysType(), mt.getValuesType()));
                 }
                 else if (type instanceof SetType)
                 {
-                    return Pair.<DataType, Object>create(SET, ((SetType)type).getElementsType());
+                    return Pair.<DataType, Object>create(SET, ((SetType<?>)type).getElementsType());
                 }
                 throw new AssertionError();
             }

@@ -51,7 +51,7 @@ public class TypeCast implements Term.Raw
     {
         try
         {
-            AbstractType<?> castedType = type.prepare(keyspace).getType();
+            AbstractType castedType = type.prepare(keyspace).getType();
             if (receiver.type.equals(castedType))
                 return AssignmentTestable.TestResult.EXACT_MATCH;
             else if (receiver.type.isValueCompatibleWith(castedType))

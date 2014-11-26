@@ -74,7 +74,7 @@ public class CFRowAdder
     {
         ColumnDefinition def = getDefinition(cql3ColumnName);
         assert def.type instanceof MapType;
-        MapType mt = (MapType)def.type;
+        MapType<?, ?> mt = (MapType<?, ?>)def.type;
         CellName name = cf.getComparator().create(prefix, def, mt.getKeysType().decompose(key));
         return add(name, def, value);
     }
@@ -101,7 +101,7 @@ public class CFRowAdder
         else
         {
             AbstractType valueType = def.type.isCollection()
-                                   ? ((CollectionType) def.type).valueComparator()
+                                   ? ((CollectionType<?>) def.type).valueComparator()
                                    : def.type;
             cf.addColumn(new BufferCell(name, value instanceof ByteBuffer ? (ByteBuffer)value : valueType.decompose(value), timestamp));
         }

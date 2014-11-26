@@ -558,7 +558,7 @@ public abstract class AbstractNativeCell extends AbstractCell implements CellNam
         else
         {
             // it's safe to simply grab based on clusteringPrefixSize() as we are only called if not a dense type
-            AbstractType<?> type = cfMetaData.comparator.subtype(cfMetaData.comparator.clusteringPrefixSize());
+            AbstractType type = cfMetaData.comparator.subtype(cfMetaData.comparator.clusteringPrefixSize());
             return new ColumnIdentifier(HeapAllocator.instance.clone(name), type);
         }
     }

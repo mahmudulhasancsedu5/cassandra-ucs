@@ -27,7 +27,7 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TimeUUIDSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class TimeUUIDType extends AbstractType<UUID>
+public class TimeUUIDType extends ConcreteType<UUID>
 {
     public static final TimeUUIDType instance = new TimeUUIDType();
 
@@ -116,5 +116,10 @@ public class TimeUUIDType extends AbstractType<UUID>
     public TypeSerializer<UUID> getSerializer()
     {
         return TimeUUIDSerializer.instance;
+    }
+
+    public UUID cast(Object value)
+    {
+        return (UUID) value;
     }
 }

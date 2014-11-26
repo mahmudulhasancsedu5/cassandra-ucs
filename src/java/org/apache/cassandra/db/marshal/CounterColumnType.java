@@ -25,7 +25,7 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.CounterSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class CounterColumnType extends AbstractType<Long>
+public class CounterColumnType extends ConcreteType<Long>
 {
     public static final CounterColumnType instance = new CounterColumnType();
 
@@ -48,9 +48,9 @@ public class CounterColumnType extends AbstractType<Long>
     }
 
     @Override
-    public ByteBuffer decompose(Long value)
+    public ByteBuffer decompose(Object value)
     {
-        return ByteBufferUtil.bytes(value);
+        return ByteBufferUtil.bytes((Long) value);
     }
 
     public int compare(ByteBuffer o1, ByteBuffer o2)
@@ -76,5 +76,10 @@ public class CounterColumnType extends AbstractType<Long>
     public TypeSerializer<Long> getSerializer()
     {
         return CounterSerializer.instance;
+    }
+
+    public Long cast(Object value)
+    {
+        return (Long) value;
     }
 }

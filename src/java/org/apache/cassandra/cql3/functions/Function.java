@@ -28,8 +28,8 @@ import org.github.jamm.Unmetered;
 public interface Function
 {
     public FunctionName name();
-    public List<AbstractType<?>> argTypes();
-    public AbstractType<?> returnType();
+    public List<AbstractType> argTypes();
+    public AbstractType returnType();
 
     /**
      * Checks whether the function is a pure function (as in doesn't depend on, nor produce side effects) or not.

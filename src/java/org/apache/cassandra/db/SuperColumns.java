@@ -134,12 +134,12 @@ public class SuperColumns
         return new SimpleDenseCellNameType(type.subtype(0));
     }
 
-    public static AbstractType<?> getComparatorFor(CFMetaData metadata, ByteBuffer superColumn)
+    public static AbstractType getComparatorFor(CFMetaData metadata, ByteBuffer superColumn)
     {
         return getComparatorFor(metadata, superColumn != null);
     }
 
-    public static AbstractType<?> getComparatorFor(CFMetaData metadata, boolean subColumn)
+    public static AbstractType getComparatorFor(CFMetaData metadata, boolean subColumn)
     {
         return metadata.isSuper()
              ? metadata.comparator.subtype(subColumn ? 1 : 0)

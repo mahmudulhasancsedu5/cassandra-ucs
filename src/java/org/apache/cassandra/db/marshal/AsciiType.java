@@ -29,7 +29,7 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.AsciiSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class AsciiType extends AbstractType<String>
+public class AsciiType extends ConcreteType<String>
 {
     public static final AsciiType instance = new AsciiType();
 
@@ -78,5 +78,10 @@ public class AsciiType extends AbstractType<String>
     public boolean isByteOrderComparable()
     {
         return true;
+    }
+
+    public String cast(Object value)
+    {
+        return (String) value;
     }
 }

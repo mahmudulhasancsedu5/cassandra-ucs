@@ -34,7 +34,7 @@ public interface CQL3Type
     static final Logger logger = LoggerFactory.getLogger(CQL3Type.class);
 
     public boolean isCollection();
-    public AbstractType<?> getType();
+    public AbstractType getType();
 
     public enum Native implements CQL3Type
     {
@@ -55,9 +55,9 @@ public interface CQL3Type
         VARINT   (IntegerType.instance),
         TIMEUUID (TimeUUIDType.instance);
 
-        private final AbstractType<?> type;
+        private final AbstractType type;
 
-        private Native(AbstractType<?> type)
+        private Native(AbstractType type)
         {
             this.type = type;
         }
@@ -67,7 +67,7 @@ public interface CQL3Type
             return false;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -81,9 +81,9 @@ public interface CQL3Type
 
     public static class Custom implements CQL3Type
     {
-        private final AbstractType<?> type;
+        private final AbstractType type;
 
-        public Custom(AbstractType<?> type)
+        public Custom(AbstractType type)
         {
             this.type = type;
         }
@@ -98,7 +98,7 @@ public interface CQL3Type
             return false;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -128,14 +128,14 @@ public interface CQL3Type
 
     public static class Collection implements CQL3Type
     {
-        private final CollectionType type;
+        private final CollectionType<?> type;
 
-        public Collection(CollectionType type)
+        public Collection(CollectionType<?> type)
         {
             this.type = type;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -169,16 +169,16 @@ public interface CQL3Type
             switch (type.kind)
             {
                 case LIST:
-                    AbstractType<?> listType = ((ListType)type).getElementsType();
+                    AbstractType listType = ((ListType<?>)type).getElementsType();
                     sb.append("list<").append(listType.asCQL3Type());
                     break;
                 case SET:
-                    AbstractType<?> setType = ((SetType)type).getElementsType();
+                    AbstractType setType = ((SetType<?>)type).getElementsType();
                     sb.append("set<").append(setType.asCQL3Type());
                     break;
                 case MAP:
-                    AbstractType<?> keysType = ((MapType)type).getKeysType();
-                    AbstractType<?> valuesType = ((MapType)type).getValuesType();
+                    AbstractType keysType = ((MapType<?, ?>)type).getKeysType();
+                    AbstractType valuesType = ((MapType<?, ?>)type).getValuesType();
                     sb.append("map<").append(keysType.asCQL3Type()).append(", ").append(valuesType.asCQL3Type());
                     break;
                 default:
@@ -213,7 +213,7 @@ public interface CQL3Type
             return false;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -260,7 +260,7 @@ public interface CQL3Type
             return false;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -554,7 +554,7 @@ public interface CQL3Type
                 if (!frozen)
                     freeze();
 
-                List<AbstractType<?>> ts = new ArrayList<>(types.size());
+                List<AbstractType> ts = new ArrayList<>(types.size());
                 for (CQL3Type.Raw t : types)
                 {
                     if (t.isCounter())

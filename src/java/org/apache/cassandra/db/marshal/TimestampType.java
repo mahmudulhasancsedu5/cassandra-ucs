@@ -22,6 +22,7 @@ import java.util.Date;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
@@ -35,7 +36,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * pre-unix-epoch dates, sorting them *after* post-unix-epoch ones (due to it's
  * use of unsigned bytes comparison).
  */
-public class TimestampType extends AbstractType<Date>
+public class TimestampType extends ConcreteType<Date>
 {
     private static final Logger logger = LoggerFactory.getLogger(TimestampType.class);
 
@@ -58,7 +59,7 @@ public class TimestampType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (super.isCompatibleWith(previous))
             return true;
@@ -75,7 +76,7 @@ public class TimestampType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == DateType.instance || otherType == LongType.instance;
     }
@@ -88,5 +89,10 @@ public class TimestampType extends AbstractType<Date>
     public TypeSerializer<Date> getSerializer()
     {
         return TimestampSerializer.instance;
+    }
+
+    public Date cast(Object value)
+    {
+        return (Date) value;
     }
 }

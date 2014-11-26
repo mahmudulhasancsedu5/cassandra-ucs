@@ -25,35 +25,36 @@ import java.util.List;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TypeSerializer;
 
-public class ReversedType<T> extends AbstractType<T>
+public class ReversedType extends AbstractType
 {
     // interning instances
-    private static final Map<AbstractType<?>, ReversedType> instances = new HashMap<AbstractType<?>, ReversedType>();
+    private static final Map<AbstractType, ReversedType> instances = new HashMap<AbstractType, ReversedType>();
 
-    public final AbstractType<T> baseType;
+    public final AbstractType baseType;
 
-    public static <T> ReversedType<T> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
+    public static ReversedType getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> types = parser.getTypeParameters();
+        List<AbstractType> types = parser.getTypeParameters();
         if (types.size() != 1)
             throw new ConfigurationException("ReversedType takes exactly one argument, " + types.size() + " given");
-        return getInstance((AbstractType<T>) types.get(0));
+        return getInstance((AbstractType) types.get(0));
     }
 
-    public static synchronized <T> ReversedType<T> getInstance(AbstractType<T> baseType)
+    public static synchronized ReversedType getInstance(AbstractType baseType)
     {
-        ReversedType<T> type = instances.get(baseType);
+        ReversedType type = instances.get(baseType);
         if (type == null)
         {
-            type = new ReversedType<T>(baseType);
+            type = new ReversedType(baseType);
             instances.put(baseType, type);
         }
         return type;
     }
 
-    private ReversedType(AbstractType<T> baseType)
+    private ReversedType(AbstractType baseType)
     {
         this.baseType = baseType;
     }
@@ -84,7 +85,7 @@ public class ReversedType<T> extends AbstractType<T>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> otherType)
+    public boolean isCompatibleWith(AbstractType otherType)
     {
         if (!(otherType instanceof ReversedType))
             return false;
@@ -93,7 +94,7 @@ public class ReversedType<T> extends AbstractType<T>
     }
 
     @Override
-    public boolean isValueCompatibleWith(AbstractType<?> otherType)
+    public boolean isValueCompatibleWith(AbstractType otherType)
     {
         return this.baseType.isValueCompatibleWith(otherType);
     }
@@ -104,9 +105,28 @@ public class ReversedType<T> extends AbstractType<T>
         return baseType.asCQL3Type();
     }
 
-    public TypeSerializer<T> getSerializer()
+    @Override
+    public TypeSerializer<?> getSerializer()
     {
         return baseType.getSerializer();
+    }
+
+    @Override
+    public Object compose(ByteBuffer bytes)
+    {
+        return baseType.compose(bytes);
+    }
+
+    @Override
+    public ByteBuffer decompose(Object value)
+    {
+        return baseType.decompose(value);
+    }
+
+    @Override
+    public void validate(ByteBuffer bytes) throws MarshalException
+    {
+        baseType.validate(bytes);
     }
 
     @Override

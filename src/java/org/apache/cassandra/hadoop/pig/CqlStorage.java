@@ -114,7 +114,7 @@ public class CqlStorage extends AbstractCassandraStorage
                 if (columnValue != null)
                 {
                     Cell cell = new BufferCell(CellNames.simpleDense(cdef.name), columnValue);
-                    AbstractType<?> validator = getValidatorMap(cfDef).get(cdef.name);
+                    AbstractType validator = getValidatorMap(cfDef).get(cdef.name);
                     setTupleValue(tuple, i, cqlColumnToObj(cell, cfDef), validator);
                 }
                 else
@@ -130,7 +130,7 @@ public class CqlStorage extends AbstractCassandraStorage
     }
 
     /** set the value to the position of the tuple */
-    protected void setTupleValue(Tuple tuple, int position, Object value, AbstractType<?> validator) throws ExecException
+    protected void setTupleValue(Tuple tuple, int position, Object value, AbstractType validator) throws ExecException
     {
         if (validator instanceof CollectionType)
             setCollectionTupleValues(tuple, position, value, validator);
@@ -139,7 +139,7 @@ public class CqlStorage extends AbstractCassandraStorage
     }
 
     /** set the values of set/list at and after the position of the tuple */
-    private void setCollectionTupleValues(Tuple tuple, int position, Object value, AbstractType<?> validator) throws ExecException
+    private void setCollectionTupleValues(Tuple tuple, int position, Object value, AbstractType validator) throws ExecException
     {
         if (validator instanceof MapType)
         {
@@ -165,10 +165,10 @@ public class CqlStorage extends AbstractCassandraStorage
     }
 
     /** set the values of set/list at and after the position of the tuple */
-    private void setMapTupleValues(Tuple tuple, int position, Object value, AbstractType<?> validator) throws ExecException
+    private void setMapTupleValues(Tuple tuple, int position, Object value, AbstractType validator) throws ExecException
     {
-        AbstractType<?> keyValidator = ((MapType<?, ?>) validator).getKeysType();
-        AbstractType<?> valueValidator = ((MapType<?, ?>) validator).getValuesType();
+        AbstractType keyValidator = ((MapType<?, ?>) validator).getKeysType();
+        AbstractType valueValidator = ((MapType<?, ?>) validator).getValuesType();
         
         int i = 0;
         Tuple innerTuple = TupleFactory.getInstance().newTuple(((Map<?,?>) value).size());
@@ -557,12 +557,12 @@ public class CqlStorage extends AbstractCassandraStorage
 
             String validator = ByteBufferUtil.string(ByteBuffer.wrap(cqlRow.columns.get(2).getValue()));
             logger.debug("row key validator: {}", validator);
-            AbstractType<?> keyValidator = parseType(validator);
+            AbstractType keyValidator = parseType(validator);
 
             Iterator<ColumnDef> keyItera = keys.iterator();
             if (keyValidator instanceof CompositeType)
             {
-                Iterator<AbstractType<?>> typeItera = ((CompositeType) keyValidator).types.iterator();
+                Iterator<AbstractType> typeItera = ((CompositeType) keyValidator).types.iterator();
                 while (typeItera.hasNext())
                     keyItera.next().validation_class = typeItera.next().toString();
             }
@@ -574,11 +574,11 @@ public class CqlStorage extends AbstractCassandraStorage
 
             if (keyItera.hasNext() && validator != null && !validator.isEmpty())
             {
-                AbstractType<?> clusterKeyValidator = parseType(validator);
+                AbstractType clusterKeyValidator = parseType(validator);
 
                 if (clusterKeyValidator instanceof CompositeType)
                 {
-                    Iterator<AbstractType<?>> typeItera = ((CompositeType) clusterKeyValidator).types.iterator();
+                    Iterator<AbstractType> typeItera = ((CompositeType) clusterKeyValidator).types.iterator();
                     while (keyItera.hasNext())
                         keyItera.next().validation_class = typeItera.next().toString();
                 }
@@ -593,7 +593,7 @@ public class CqlStorage extends AbstractCassandraStorage
                 {
                     String compactValidator = ByteBufferUtil.string(ByteBuffer.wrap(cqlRow.columns.get(6).getValue()));
                     logger.debug("default validator: {}", compactValidator);
-                    AbstractType<?> defaultValidator = parseType(compactValidator);
+                    AbstractType defaultValidator = parseType(compactValidator);
 
                     ColumnDef cDef = new ColumnDef();
                     cDef.name = cqlRow.columns.get(5).value;

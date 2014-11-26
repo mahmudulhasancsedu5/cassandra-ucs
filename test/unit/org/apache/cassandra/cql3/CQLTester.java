@@ -573,7 +573,7 @@ public abstract class CQLTester
             return ((TupleValue)value).toCQLString();
 
         // We need to reach inside collections for TupleValue. Besides, for some reason the format
-        // of collection that CollectionType.getString gives us is not at all 'CQL compatible'
+        // of collection that CollectionType<?>.getString gives us is not at all 'CQL compatible'
         if (value instanceof Collection || value instanceof Map)
         {
             StringBuilder sb = new StringBuilder();
@@ -645,14 +645,14 @@ public abstract class CQLTester
         return type.decompose(value);
     }
 
-    private static String formatValue(ByteBuffer bb, AbstractType<?> type)
+    private static String formatValue(ByteBuffer bb, AbstractType type)
     {
         if (bb == null)
             return "null";
 
         if (type instanceof CollectionType)
         {
-            // CollectionType override getString() to use hexToBytes. We can't change that
+            // CollectionType<?> override getString() to use hexToBytes. We can't change that
             // without breaking SSTable2json, but the serializer for collection have the
             // right getString so using it directly instead.
             TypeSerializer ser = type.getSerializer();

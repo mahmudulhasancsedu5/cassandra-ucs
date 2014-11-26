@@ -77,5 +77,5 @@ public interface IPartitioner
      */
     public Map<Token, Float> describeOwnership(List<Token> sortedTokens);
 
-    public AbstractType<?> getTokenValidator();
+    public AbstractType getTokenValidator();
 }

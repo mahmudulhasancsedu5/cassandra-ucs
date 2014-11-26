@@ -218,7 +218,7 @@ public abstract class AbstractCellNameType extends AbstractCType implements Cell
         throw new UnsupportedOperationException();
     }
 
-    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType newCollection)
+    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType<?> newCollection)
     {
         throw new UnsupportedOperationException();
     }
@@ -241,7 +241,7 @@ public abstract class AbstractCellNameType extends AbstractCType implements Cell
             }
             else
             {
-                AbstractType<?> type = subtype(i);
+                AbstractType type = subtype(i);
                 // If it's a collection type, we need to find the right collection and use the key comparator (since we're building a cell name)
                 if (type instanceof ColumnToCollectionType)
                 {

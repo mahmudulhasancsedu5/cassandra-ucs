@@ -31,7 +31,7 @@ public abstract class CellNames
 {
     private CellNames() {}
 
-    public static CellNameType fromAbstractType(AbstractType<?> type, boolean isDense)
+    public static CellNameType fromAbstractType(AbstractType type, boolean isDense)
     {
         if (isDense)
         {
@@ -48,7 +48,7 @@ public abstract class CellNames
         {
             if (type instanceof CompositeType)
             {
-                List<AbstractType<?>> types = ((CompositeType)type).types;
+                List<AbstractType> types = ((CompositeType)type).types;
                 if (types.get(types.size() - 1) instanceof ColumnToCollectionType)
                 {
                     // We don't allow collection for super columns, so the "name" type *must* be UTF8
@@ -57,7 +57,7 @@ public abstract class CellNames
                 }
                 else
                 {
-                    AbstractType<?> nameType = types.get(types.size() - 1);
+                    AbstractType nameType = types.get(types.size() - 1);
                     return new CompoundSparseCellNameType(types.subList(0, types.size() - 1), nameType);
                 }
             }

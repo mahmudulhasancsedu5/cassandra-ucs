@@ -137,10 +137,10 @@ public abstract class Constants
             return new Value(parsedValue(receiver.type));
         }
 
-        private ByteBuffer parsedValue(AbstractType<?> validator) throws InvalidRequestException
+        private ByteBuffer parsedValue(AbstractType validator) throws InvalidRequestException
         {
-            if (validator instanceof ReversedType<?>)
-                validator = ((ReversedType<?>) validator).baseType;
+            if (validator instanceof ReversedType)
+                validator = ((ReversedType) validator).baseType;
             try
             {
                 // BytesType doesn't want it's input prefixed by '0x'.

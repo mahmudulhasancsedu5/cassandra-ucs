@@ -201,7 +201,7 @@ public abstract class Selectable
                                                    List<ColumnDefinition> defs) throws InvalidRequestException
         {
             Selector.Factory factory = selected.newSelectorFactory(cfm, defs);
-            AbstractType<?> type = factory.newInstance().getType();
+            AbstractType type = factory.newInstance().getType();
             if (!(type instanceof UserType))
                 throw new InvalidRequestException(
                         String.format("Invalid field selection: %s of type %s is not a user type",

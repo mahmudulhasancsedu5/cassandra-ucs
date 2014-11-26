@@ -27,7 +27,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
 
 public class SimpleDenseCellNameType extends AbstractSimpleCellNameType
 {
-    public SimpleDenseCellNameType(AbstractType<?> type)
+    public SimpleDenseCellNameType(AbstractType type)
     {
         super(type);
     }
@@ -43,7 +43,7 @@ public class SimpleDenseCellNameType extends AbstractSimpleCellNameType
         return builder();
     }
 
-    public CellNameType setSubtype(int position, AbstractType<?> newType)
+    public CellNameType setSubtype(int position, AbstractType newType)
     {
         if (position != 0)
             throw new IllegalArgumentException();

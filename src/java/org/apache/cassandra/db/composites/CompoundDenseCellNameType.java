@@ -29,7 +29,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
 
 public class CompoundDenseCellNameType extends AbstractCompoundCellNameType
 {
-    public CompoundDenseCellNameType(List<AbstractType<?>> types)
+    public CompoundDenseCellNameType(List<AbstractType> types)
     {
         this(new CompoundCType(types));
     }
@@ -39,7 +39,7 @@ public class CompoundDenseCellNameType extends AbstractCompoundCellNameType
         super(type, type);
     }
 
-    public CellNameType setSubtype(int position, AbstractType<?> newType)
+    public CellNameType setSubtype(int position, AbstractType newType)
     {
         if (position != 0)
             throw new IllegalArgumentException();

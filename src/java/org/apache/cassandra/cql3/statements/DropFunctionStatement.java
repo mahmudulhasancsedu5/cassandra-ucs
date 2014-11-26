@@ -101,7 +101,7 @@ public final class DropFunctionStatement extends SchemaAlteringStatement
                                                             "'DESCRIBE FUNCTION %s' command to find all overloads",
                                                             functionName, functionName, functionName));
 
-        List<AbstractType<?>> argTypes = new ArrayList<>(argRawTypes.size());
+        List<AbstractType> argTypes = new ArrayList<>(argRawTypes.size());
         for (CQL3Type.Raw rawType : argRawTypes)
             argTypes.add(rawType.prepare(functionName.keyspace).getType());
 

@@ -52,7 +52,7 @@ public class CompositesIndexOnPartitionKey extends CompositesIndex
     public static CellNameType buildIndexComparator(CFMetaData baseMetadata, ColumnDefinition columnDef)
     {
         int ckCount = baseMetadata.clusteringColumns().size();
-        List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(ckCount + 1);
+        List<AbstractType> types = new ArrayList<AbstractType>(ckCount + 1);
         types.add(SecondaryIndex.keyComparator);
         for (int i = 0; i < ckCount; i++)
             types.add(baseMetadata.comparator.subtype(i));

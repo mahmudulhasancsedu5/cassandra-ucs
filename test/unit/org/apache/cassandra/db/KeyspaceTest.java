@@ -71,7 +71,7 @@ public class KeyspaceTest
     public static void defineSchema() throws ConfigurationException
     {
         SchemaLoader.prepareServer();
-        AbstractType<?> compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, IntegerType.instance}));
+        AbstractType compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, IntegerType.instance}));
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     SimpleStrategy.class,
                                     KSMetaData.optsWithRF(1),

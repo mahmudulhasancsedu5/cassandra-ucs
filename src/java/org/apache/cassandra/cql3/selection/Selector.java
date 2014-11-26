@@ -113,7 +113,7 @@ public abstract class Selector implements AssignmentTestable
          *
          * @return the selector output type
          */
-        protected abstract AbstractType<?> getReturnType();
+        protected abstract AbstractType getReturnType();
 
     }
 
@@ -138,7 +138,7 @@ public abstract class Selector implements AssignmentTestable
      *
      * @return the <code>Selector</code> output type.
      */
-    public abstract AbstractType<?> getType();
+    public abstract AbstractType getType();
 
     /**
      * Checks if this <code>Selector</code> is creating aggregates.

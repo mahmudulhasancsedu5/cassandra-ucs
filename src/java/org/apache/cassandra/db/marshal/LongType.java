@@ -25,7 +25,7 @@ import org.apache.cassandra.serializers.LongSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class LongType extends AbstractType<Long>
+public class LongType extends ConcreteType<Long>
 {
     public static final LongType instance = new LongType();
 
@@ -69,7 +69,7 @@ public class LongType extends AbstractType<Long>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == DateType.instance || otherType == TimestampType.instance;
     }
@@ -84,4 +84,8 @@ public class LongType extends AbstractType<Long>
         return LongSerializer.instance;
     }
 
+    public Long cast(Object value)
+    {
+        return (Long) value;
+    }
 }

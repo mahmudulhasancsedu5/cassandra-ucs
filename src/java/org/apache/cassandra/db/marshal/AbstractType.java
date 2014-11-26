@@ -39,7 +39,7 @@ import org.github.jamm.Unmetered;
  * represent a valid ByteBuffer for the type being compared.
  */
 @Unmetered
-public abstract class AbstractType<T> implements Comparator<ByteBuffer>
+public abstract class AbstractType implements Comparator<ByteBuffer>
 {
     public final Comparator<ByteBuffer> reverseComparator;
 
@@ -63,33 +63,20 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         };
     }
 
-    public T compose(ByteBuffer bytes)
-    {
-        return getSerializer().deserialize(bytes);
-    }
+    public abstract Object compose(ByteBuffer bytes);
 
-    public ByteBuffer decompose(T value)
-    {
-        return getSerializer().serialize(value);
-    }
+    public abstract ByteBuffer decompose(Object value);
 
     /** get a string representation of the bytes suitable for log messages */
-    public String getString(ByteBuffer bytes)
-    {
-        TypeSerializer<T> serializer = getSerializer();
-        serializer.validate(bytes);
-
-        return serializer.toString(serializer.deserialize(bytes));
-    }
+    public abstract String getString(ByteBuffer bytes);
 
     /** get a byte representation of the given string. */
     public abstract ByteBuffer fromString(String source) throws MarshalException;
 
     /* validate that the byte array is a valid sequence for the type we are supposed to be comparing */
-    public void validate(ByteBuffer bytes) throws MarshalException
-    {
-        getSerializer().validate(bytes);
-    }
+    public abstract void validate(ByteBuffer bytes) throws MarshalException;
+
+    public abstract TypeSerializer<?> getSerializer();
 
     /**
      * Validate cell value. Unlike {@linkplain #validate(java.nio.ByteBuffer)},
@@ -110,8 +97,6 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         return new CQL3Type.Custom(this);
     }
 
-    public abstract TypeSerializer<T> getSerializer();
-
     /* convenience method */
     public String getString(Collection<ByteBuffer> names)
     {
@@ -128,7 +113,7 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         return false;
     }
 
-    public static AbstractType<?> parseDefaultParameters(AbstractType<?> baseType, TypeParser parser) throws SyntaxException
+    public static AbstractType parseDefaultParameters(AbstractType baseType, TypeParser parser) throws SyntaxException
     {
         Map<String, String> parameters = parser.getKeyValueParameters();
         String reversed = parameters.get("reversed");
@@ -152,7 +137,7 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
      * Note that a type should be compatible with at least itself and when in
      * doubt, keep the default behavior of not being compatible with any other comparator!
      */
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         return this.equals(previous);
     }
@@ -168,7 +153,7 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
      *
      * Note that a type should be compatible with at least itself.
      */
-    public boolean isValueCompatibleWith(AbstractType<?> otherType)
+    public boolean isValueCompatibleWith(AbstractType otherType)
     {
         return isValueCompatibleWithInternal((otherType instanceof ReversedType) ? ((ReversedType) otherType).baseType : otherType);
     }
@@ -177,7 +162,7 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
      * Needed to handle ReversedType in value-compatibility checks.  Subclasses should implement this instead of
      * isValueCompatibleWith().
      */
-    protected boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    protected boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return isCompatibleWith(otherType);
     }
@@ -224,7 +209,7 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
         return false;
     }
 
-    public AbstractType<?> freeze()
+    public AbstractType freeze()
     {
         return this;
     }
@@ -250,9 +235,9 @@ public abstract class AbstractType<T> implements Comparator<ByteBuffer>
      * Return a list of the "subcomponents" this type has.
      * This always return a singleton list with the type itself except for CompositeType.
      */
-    public List<AbstractType<?>> getComponents()
+    public List<AbstractType> getComponents()
     {
-        return Collections.<AbstractType<?>>singletonList(this);
+        return Collections.<AbstractType>singletonList(this);
     }
 
     /**

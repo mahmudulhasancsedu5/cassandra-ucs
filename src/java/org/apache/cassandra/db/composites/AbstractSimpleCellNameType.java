@@ -30,7 +30,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 
 public abstract class AbstractSimpleCellNameType extends AbstractCellNameType
 {
-    protected final AbstractType<?> type;
+    protected final AbstractType type;
 
     static final Comparator<Cell> rightNativeCell = new Comparator<Cell>()
     {
@@ -65,7 +65,7 @@ public abstract class AbstractSimpleCellNameType extends AbstractCellNameType
         }
     };
 
-    protected AbstractSimpleCellNameType(AbstractType<?> type)
+    protected AbstractSimpleCellNameType(AbstractType type)
     {
         super(type.isByteOrderComparable());
         this.type = type;
@@ -112,7 +112,7 @@ public abstract class AbstractSimpleCellNameType extends AbstractCellNameType
         return asymmetricNeitherNativeCell;
     }
 
-    public AbstractType<?> subtype(int i)
+    public AbstractType subtype(int i)
     {
         if (i != 0)
             throw new IllegalArgumentException();
@@ -130,7 +130,7 @@ public abstract class AbstractSimpleCellNameType extends AbstractCellNameType
         return new SimpleCType.SimpleCBuilder(this);
     }
 
-    public AbstractType<?> asAbstractType()
+    public AbstractType asAbstractType()
     {
         return type;
     }

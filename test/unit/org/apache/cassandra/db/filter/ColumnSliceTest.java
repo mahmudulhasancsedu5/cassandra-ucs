@@ -38,7 +38,7 @@ public class ColumnSliceTest
     @Test
     public void testIntersectsSingleSlice()
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
@@ -309,7 +309,7 @@ public class ColumnSliceTest
     @Test
     public void testDifferentMinMaxLengths()
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
@@ -406,7 +406,7 @@ public class ColumnSliceTest
 
     private static Composite composite(Integer ... components)
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);

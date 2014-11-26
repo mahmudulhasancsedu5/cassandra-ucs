@@ -52,7 +52,7 @@ public class CompositesIndexOnCollectionKey extends CompositesIndex
     public static CellNameType buildIndexComparator(CFMetaData baseMetadata, ColumnDefinition columnDef)
     {
         int count = 1 + baseMetadata.clusteringColumns().size(); // row key + clustering prefix
-        List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(count);
+        List<AbstractType> types = new ArrayList<AbstractType>(count);
         types.add(SecondaryIndex.keyComparator);
         for (int i = 0; i < count - 1; i++)
             types.add(baseMetadata.comparator.subtype(i));
@@ -60,9 +60,9 @@ public class CompositesIndexOnCollectionKey extends CompositesIndex
     }
 
     @Override
-    protected AbstractType<?> getIndexKeyComparator()
+    protected AbstractType getIndexKeyComparator()
     {
-        return ((CollectionType)columnDef.type).nameComparator();
+        return ((CollectionType<?>)columnDef.type).nameComparator();
     }
 
     protected ByteBuffer getIndexedValue(ByteBuffer rowKey, Cell cell)
@@ -100,7 +100,7 @@ public class CompositesIndexOnCollectionKey extends CompositesIndex
     public boolean indexes(CellName name)
     {
         // We index if the CQL3 column name is the one of the collection we index
-        AbstractType<?> comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
+        AbstractType comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
         return name.size() > columnDef.position()
             && comp.compare(name.get(columnDef.position()), columnDef.name.bytes) == 0;
     }

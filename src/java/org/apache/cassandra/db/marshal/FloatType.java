@@ -26,7 +26,7 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 
-public class FloatType extends AbstractType<Float>
+public class FloatType extends ConcreteType<Float>
 {
     public static final FloatType instance = new FloatType();
 
@@ -65,5 +65,10 @@ public class FloatType extends AbstractType<Float>
     public TypeSerializer<Float> getSerializer()
     {
         return FloatSerializer.instance;
+    }
+
+    public Float cast(Object value)
+    {
+        return (Float) value;
     }
 }

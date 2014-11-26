@@ -24,7 +24,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
  */
 public abstract class NativeScalarFunction extends NativeFunction implements ScalarFunction
 {
-    protected NativeScalarFunction(String name, AbstractType<?> returnType, AbstractType<?>... argsType)
+    protected NativeScalarFunction(String name, AbstractType returnType, AbstractType... argsType)
     {
         super(name, returnType, argsType);
     }

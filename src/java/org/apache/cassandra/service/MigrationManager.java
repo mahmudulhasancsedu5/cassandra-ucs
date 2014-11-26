@@ -196,10 +196,10 @@ public class MigrationManager
             listener.onDropFunction(udf.name().keyspace, udf.name().name);
     }
 
-    private List<String> asString(List<AbstractType<?>> abstractTypes)
+    private List<String> asString(List<AbstractType> abstractTypes)
     {
         List<String> r = new ArrayList<>(abstractTypes.size());
-        for (AbstractType<?> abstractType : abstractTypes)
+        for (AbstractType abstractType : abstractTypes)
             r.add(abstractType.asCQL3Type().toString());
         return r;
     }

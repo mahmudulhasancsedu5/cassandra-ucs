@@ -25,7 +25,7 @@ import org.apache.cassandra.serializers.Int32Serializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class Int32Type extends AbstractType<Integer>
+public class Int32Type extends ConcreteType<Integer>
 {
     public static final Int32Type instance = new Int32Type();
 
@@ -75,4 +75,8 @@ public class Int32Type extends AbstractType<Integer>
         return Int32Serializer.instance;
     }
 
+    public Integer cast(Object value)
+    {
+        return (Integer) value;
+    }
 }

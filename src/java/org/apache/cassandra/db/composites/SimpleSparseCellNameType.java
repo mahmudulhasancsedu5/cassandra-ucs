@@ -33,12 +33,12 @@ public class SimpleSparseCellNameType extends AbstractSimpleCellNameType
     // be those that have been declared and we can intern the whole CellName instances.
     private final Map<ByteBuffer, CellName> internedNames;
 
-    public SimpleSparseCellNameType(AbstractType<?> type)
+    public SimpleSparseCellNameType(AbstractType type)
     {
         this(type, new HashMap<ByteBuffer, CellName>());
     }
 
-    private SimpleSparseCellNameType(AbstractType<?> type, Map<ByteBuffer, CellName> internedNames)
+    private SimpleSparseCellNameType(AbstractType type, Map<ByteBuffer, CellName> internedNames)
     {
         super(type);
         this.internedNames = internedNames;
@@ -49,7 +49,7 @@ public class SimpleSparseCellNameType extends AbstractSimpleCellNameType
         return 0;
     }
 
-    public CellNameType setSubtype(int position, AbstractType<?> newType)
+    public CellNameType setSubtype(int position, AbstractType newType)
     {
         if (position != 0)
             throw new IllegalArgumentException();

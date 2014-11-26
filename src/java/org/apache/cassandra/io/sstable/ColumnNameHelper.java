@@ -115,7 +115,7 @@ public class ColumnNameHelper
      * @param comparator the comparator to use
      * @return the smallest column according to comparator
      */
-    private static ByteBuffer min(ByteBuffer b1, ByteBuffer b2, AbstractType<?> comparator)
+    private static ByteBuffer min(ByteBuffer b1, ByteBuffer b2, AbstractType comparator)
     {
         if (b1 == null)
             return b2;
@@ -137,7 +137,7 @@ public class ColumnNameHelper
      * @param comparator the comparator to use
      * @return the biggest column according to comparator
      */
-    private static ByteBuffer max(ByteBuffer b1, ByteBuffer b2, AbstractType<?> comparator)
+    private static ByteBuffer max(ByteBuffer b1, ByteBuffer b2, AbstractType comparator)
     {
         if (b1 == null)
             return b2;

@@ -27,9 +27,9 @@ import org.apache.cassandra.db.marshal.AbstractType;
  */
 public class SimpleCType extends AbstractCType
 {
-    protected final AbstractType<?> type;
+    protected final AbstractType type;
 
-    public SimpleCType(AbstractType<?> type)
+    public SimpleCType(AbstractType type)
     {
         super(type.isByteOrderComparable());
         this.type = type;
@@ -57,7 +57,7 @@ public class SimpleCType extends AbstractCType
         return type.compare(c1.get(0), c2.get(0));
     }
 
-    public AbstractType<?> subtype(int i)
+    public AbstractType subtype(int i)
     {
         if (i != 0)
             throw new IndexOutOfBoundsException();
@@ -74,7 +74,7 @@ public class SimpleCType extends AbstractCType
         return new SimpleCBuilder(this);
     }
 
-    public CType setSubtype(int position, AbstractType<?> newType)
+    public CType setSubtype(int position, AbstractType newType)
     {
         if (position != 0)
             throw new IndexOutOfBoundsException();
@@ -82,7 +82,7 @@ public class SimpleCType extends AbstractCType
     }
 
     // Use sparingly, it defeats the purpose
-    public AbstractType<?> asAbstractType()
+    public AbstractType asAbstractType()
     {
         return type;
     }

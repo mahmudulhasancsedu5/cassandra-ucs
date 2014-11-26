@@ -83,9 +83,9 @@ public class NativeCellTest
                           {
                               new Name(simpleDense(bytes("a")), new SimpleDenseCellNameType(UTF8Type.instance)),
                               new Name(simpleSparse(new ColumnIdentifier("a", true)), new SimpleSparseCellNameType(UTF8Type.instance)),
-                              new Name(compositeDense(bytes("a"), bytes("b")), new CompoundDenseCellNameType(Arrays.<AbstractType<?>>asList(UTF8Type.instance, UTF8Type.instance))),
-                              new Name(compositeSparse(bytess("b", "c"), new ColumnIdentifier("a", true), false), new CompoundSparseCellNameType(Arrays.<AbstractType<?>>asList(UTF8Type.instance, UTF8Type.instance))),
-                              new Name(compositeSparse(bytess("b", "c"), new ColumnIdentifier("a", true), true), new CompoundSparseCellNameType(Arrays.<AbstractType<?>>asList(UTF8Type.instance, UTF8Type.instance)))
+                              new Name(compositeDense(bytes("a"), bytes("b")), new CompoundDenseCellNameType(Arrays.<AbstractType>asList(UTF8Type.instance, UTF8Type.instance))),
+                              new Name(compositeSparse(bytess("b", "c"), new ColumnIdentifier("a", true), false), new CompoundSparseCellNameType(Arrays.<AbstractType>asList(UTF8Type.instance, UTF8Type.instance))),
+                              new Name(compositeSparse(bytess("b", "c"), new ColumnIdentifier("a", true), true), new CompoundSparseCellNameType(Arrays.<AbstractType>asList(UTF8Type.instance, UTF8Type.instance)))
                           };
 
     private static final CFMetaData metadata = new CFMetaData("", "", ColumnFamilyType.Standard, null);

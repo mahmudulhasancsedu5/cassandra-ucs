@@ -52,7 +52,7 @@ public class ColumnIdentifier extends org.apache.cassandra.cql3.selection.Select
         this.bytes = ByteBufferUtil.bytes(this.text);
     }
 
-    public ColumnIdentifier(ByteBuffer bytes, AbstractType<?> type)
+    public ColumnIdentifier(ByteBuffer bytes, AbstractType type)
     {
         this.bytes = bytes;
         this.text = type.getString(bytes);
@@ -137,7 +137,7 @@ public class ColumnIdentifier extends org.apache.cassandra.cql3.selection.Select
 
         public ColumnIdentifier prepare(CFMetaData cfm)
         {
-            AbstractType<?> comparator = cfm.comparator.asAbstractType();
+            AbstractType comparator = cfm.comparator.asAbstractType();
             if (cfm.getIsDense() || comparator instanceof CompositeType || comparator instanceof UTF8Type)
                 return new ColumnIdentifier(text, true);
 

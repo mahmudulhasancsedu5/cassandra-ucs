@@ -26,7 +26,7 @@ import org.apache.cassandra.serializers.InetAddressSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class InetAddressType extends AbstractType<InetAddress>
+public class InetAddressType extends ConcreteType<InetAddress>
 {
     public static final InetAddressType instance = new InetAddressType();
 
@@ -70,5 +70,10 @@ public class InetAddressType extends AbstractType<InetAddress>
     public boolean isByteOrderComparable()
     {
         return true;
+    }
+
+    public InetAddress cast(Object value)
+    {
+        return (InetAddress) value;
     }
 }

@@ -26,7 +26,7 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Hex;
 
-public class BytesType extends AbstractType<ByteBuffer>
+public class BytesType extends ConcreteType<ByteBuffer>
 {
     public static final BytesType instance = new BytesType();
 
@@ -50,7 +50,7 @@ public class BytesType extends AbstractType<ByteBuffer>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         // Both asciiType and utf8Type really use bytes comparison and
         // bytesType validate everything, so it is compatible with the former.
@@ -58,7 +58,7 @@ public class BytesType extends AbstractType<ByteBuffer>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         // BytesType can read anything
         return true;
@@ -77,5 +77,10 @@ public class BytesType extends AbstractType<ByteBuffer>
     public TypeSerializer<ByteBuffer> getSerializer()
     {
         return BytesSerializer.instance;
+    }
+
+    public ByteBuffer cast(Object value)
+    {
+        return (ByteBuffer) value;
     }
 }

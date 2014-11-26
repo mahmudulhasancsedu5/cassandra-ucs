@@ -30,10 +30,10 @@ import org.apache.cassandra.db.marshal.CompositeType;
  */
 public class CompoundCType extends AbstractCType
 {
-    final List<AbstractType<?>> types;
+    final List<AbstractType> types;
 
     // It's up to the caller to pass a list that is effectively immutable
-    public CompoundCType(List<AbstractType<?>> types)
+    public CompoundCType(List<AbstractType> types)
     {
         super(isByteOrderComparable(types));
         this.types = types;
@@ -49,7 +49,7 @@ public class CompoundCType extends AbstractCType
         return types.size();
     }
 
-    public AbstractType<?> subtype(int i)
+    public AbstractType subtype(int i)
     {
         return types.get(i);
     }
@@ -89,14 +89,14 @@ public class CompoundCType extends AbstractCType
         return new CompoundCBuilder(this);
     }
 
-    public CompoundCType setSubtype(int position, AbstractType<?> newType)
+    public CompoundCType setSubtype(int position, AbstractType newType)
     {
-        List<AbstractType<?>> newTypes = new ArrayList<AbstractType<?>>(types);
+        List<AbstractType> newTypes = new ArrayList<AbstractType>(types);
         newTypes.set(position, newType);
         return new CompoundCType(newTypes);
     }
 
-    public AbstractType<?> asAbstractType()
+    public AbstractType asAbstractType()
     {
         return CompositeType.getInstance(types);
     }

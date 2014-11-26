@@ -50,8 +50,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
 
     protected UDFunction(FunctionName name,
                          List<ColumnIdentifier> argNames,
-                         List<AbstractType<?>> argTypes,
-                         AbstractType<?> returnType,
+                         List<AbstractType> argTypes,
+                         AbstractType returnType,
                          String language,
                          String body,
                          boolean deterministic)
@@ -71,8 +71,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
 
     public static UDFunction create(FunctionName name,
                                     List<ColumnIdentifier> argNames,
-                                    List<AbstractType<?>> argTypes,
-                                    AbstractType<?> returnType,
+                                    List<AbstractType> argTypes,
+                                    AbstractType returnType,
                                     String language,
                                     String body,
                                     boolean deterministic)
@@ -85,7 +85,7 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
         }
     }
 
-    static Class<?>[] javaParamTypes(List<AbstractType<?>> argTypes)
+    static Class<?>[] javaParamTypes(List<AbstractType> argTypes)
     {
         Class<?> paramTypes[] = new Class[argTypes.size()];
         for (int i = 0; i < paramTypes.length; i++)
@@ -93,7 +93,7 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
         return paramTypes;
     }
 
-    static Class<?> javaType(AbstractType<?> type)
+    static Class<?> javaType(AbstractType type)
     {
         return type.getSerializer().getType();
     }
@@ -109,8 +109,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
      */
     private static UDFunction createBrokenFunction(FunctionName name,
                                                   List<ColumnIdentifier> argNames,
-                                                  List<AbstractType<?>> argTypes,
-                                                  AbstractType<?> returnType,
+                                                  List<AbstractType> argTypes,
+                                                  AbstractType returnType,
                                                   String language,
                                                   String body,
                                                   final InvalidRequestException reason)
@@ -131,10 +131,10 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
     // using a "signature" UDT that would be comprised of the function name and argument types,
     // which we could then use as clustering column. But as we haven't yet used UDT in system tables,
     // We'll left that decision to #6717).
-    private static ByteBuffer computeSignature(List<AbstractType<?>> argTypes)
+    private static ByteBuffer computeSignature(List<AbstractType> argTypes)
     {
         MessageDigest digest = FBUtilities.newMessageDigest("SHA-1");
-        for (AbstractType<?> type : argTypes)
+        for (AbstractType type : argTypes)
             digest.update(type.toString().getBytes(StandardCharsets.UTF_8));
         return ByteBuffer.wrap(digest.digest());
     }
@@ -210,7 +210,7 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
                 argNames.add(new ColumnIdentifier(arg, true));
         }
 
-        List<AbstractType<?>> argTypes;
+        List<AbstractType> argTypes;
         if (types == null)
             argTypes = Collections.emptyList();
         else
@@ -220,7 +220,7 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
                 argTypes.add(parseType(type));
         }
 
-        AbstractType<?> returnType = parseType(row.getString("return_type"));
+        AbstractType returnType = parseType(row.getString("return_type"));
 
         boolean deterministic = row.getBoolean("deterministic");
         String language = row.getString("language");
@@ -237,7 +237,7 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
         }
     }
 
-    private static AbstractType<?> parseType(String str)
+    private static AbstractType parseType(String str)
     {
         // We only use this when reading the schema where we shouldn't get an error
         try

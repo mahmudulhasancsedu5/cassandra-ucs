@@ -61,7 +61,7 @@ public class SSTableMetadataTest
     @BeforeClass
     public static void defineSchema() throws Exception
     {
-        AbstractType<?> compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, IntegerType.instance}));
+        AbstractType compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, IntegerType.instance}));
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     SimpleStrategy.class,

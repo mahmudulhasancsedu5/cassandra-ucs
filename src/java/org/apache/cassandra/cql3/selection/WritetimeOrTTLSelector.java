@@ -41,7 +41,7 @@ final class WritetimeOrTTLSelector extends Selector
                 return String.format("%s(%s)", isWritetime ? "writetime" : "ttl", columnName);
             }
 
-            protected AbstractType<?> getReturnType()
+            protected AbstractType getReturnType()
             {
                 return isWritetime ? LongType.instance : Int32Type.instance;
             }
@@ -87,7 +87,7 @@ final class WritetimeOrTTLSelector extends Selector
         current = null;
     }
 
-    public AbstractType<?> getType()
+    public AbstractType getType()
     {
         return isWritetime ? LongType.instance : Int32Type.instance;
     }

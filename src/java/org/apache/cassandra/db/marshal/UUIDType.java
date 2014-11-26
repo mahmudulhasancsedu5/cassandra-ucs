@@ -37,7 +37,7 @@ import org.apache.cassandra.utils.UUIDGen;
  *
  * @see "com.fasterxml.uuid.UUIDComparator"
  */
-public class UUIDType extends AbstractType<UUID>
+public class UUIDType extends ConcreteType<UUID>
 {
     public static final UUIDType instance = new UUIDType();
 
@@ -177,7 +177,7 @@ public class UUIDType extends AbstractType<UUID>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == TimeUUIDType.instance;
     }
@@ -192,4 +192,8 @@ public class UUIDType extends AbstractType<UUID>
         return UUIDSerializer.instance;
     }
 
+    public UUID cast(Object value)
+    {
+        return (UUID) value;
+    }
 }

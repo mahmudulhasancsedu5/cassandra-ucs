@@ -119,7 +119,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 if (meta.isCounter() && meta.getDroppedColumns().containsKey(columnName))
                     throw new InvalidRequestException(String.format("Cannot re-add previously dropped counter column %s", columnName));
 
-                AbstractType<?> type = validator.getType();
+                AbstractType type = validator.getType();
                 if (type.isCollection() && type.isMultiCell())
                 {
                     if (!cfm.comparator.supportCollections())
@@ -132,13 +132,13 @@ public class AlterTableStatement extends SchemaAlteringStatement
                     // reason mean that we can't allow adding a new collection with that name (see the ticket for details).
                     if (cfm.comparator.hasCollections())
                     {
-                        CollectionType previous = cfm.comparator.collectionType() == null ? null : cfm.comparator.collectionType().defined.get(columnName.bytes);
+                        CollectionType<?> previous = cfm.comparator.collectionType() == null ? null : cfm.comparator.collectionType().defined.get(columnName.bytes);
                         if (previous != null && !type.isCompatibleWith(previous))
                             throw new InvalidRequestException(String.format("Cannot add a collection with the name %s " +
                                         "because a collection with the same name and a different type has already been used in the past", columnName));
                     }
 
-                    cfm.comparator = cfm.comparator.addOrUpdateCollection(columnName, (CollectionType)type);
+                    cfm.comparator = cfm.comparator.addOrUpdateCollection(columnName, (CollectionType<?>)type);
                 }
 
                 Integer componentIndex = cfm.comparator.isCompound() ? cfm.comparator.clusteringPrefixSize() : null;
@@ -152,7 +152,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 if (def == null)
                     throw new InvalidRequestException(String.format("Column %s was not found in table %s", columnName, columnFamily()));
 
-                AbstractType<?> validatorType = validator.getType();
+                AbstractType validatorType = validator.getType();
                 switch (def.kind)
                 {
                     case PARTITION_KEY:
@@ -160,14 +160,14 @@ public class AlterTableStatement extends SchemaAlteringStatement
                             throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", columnName));
                         if (cfm.getKeyValidator() instanceof CompositeType)
                         {
-                            List<AbstractType<?>> oldTypes = ((CompositeType) cfm.getKeyValidator()).types;
+                            List<AbstractType> oldTypes = ((CompositeType) cfm.getKeyValidator()).types;
                             if (!validatorType.isValueCompatibleWith(oldTypes.get(def.position())))
                                 throw new ConfigurationException(String.format("Cannot change %s from type %s to type %s: types are incompatible.",
                                                                                columnName,
                                                                                oldTypes.get(def.position()).asCQL3Type(),
                                                                                validator));
 
-                            List<AbstractType<?>> newTypes = new ArrayList<AbstractType<?>>(oldTypes);
+                            List<AbstractType> newTypes = new ArrayList<AbstractType>(oldTypes);
                             newTypes.set(def.position(), validatorType);
                             cfm.keyValidator(CompositeType.getInstance(newTypes));
                         }
@@ -182,7 +182,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                         }
                         break;
                     case CLUSTERING_COLUMN:
-                        AbstractType<?> oldType = cfm.comparator.subtype(def.position());
+                        AbstractType oldType = cfm.comparator.subtype(def.position());
                         // Note that CFMetaData.validateCompatibility already validate the change we're about to do. However, the error message it
                         // sends is a bit cryptic for a CQL3 user, so validating here for a sake of returning a better error message
                         // Do note that we need isCompatibleWith here, not just isValueCompatibleWith.
@@ -221,7 +221,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                         // change the underlying sorting order, but we still don't want to have a discrepancy between the type
                         // in the comparator and the one in the ColumnDefinition as that would be dodgy).
                         if (validatorType.isCollection() && validatorType.isMultiCell())
-                            cfm.comparator = cfm.comparator.addOrUpdateCollection(def.name, (CollectionType)validatorType);
+                            cfm.comparator = cfm.comparator.addOrUpdateCollection(def.name, (CollectionType<?>)validatorType);
 
                         break;
                 }

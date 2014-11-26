@@ -28,26 +28,32 @@ import org.apache.cassandra.serializers.SetSerializer;
 public class SetType<T> extends CollectionType<Set<T>>
 {
     // interning instances
-    private static final Map<AbstractType<?>, SetType> instances = new HashMap<>();
-    private static final Map<AbstractType<?>, SetType> frozenInstances = new HashMap<>();
+    private static final Map<ConcreteType<?>, SetType<?>> instances = new HashMap<>();
+    private static final Map<ConcreteType<?>, SetType<?>> frozenInstances = new HashMap<>();
 
-    private final AbstractType<T> elements;
+    private final ConcreteType<T> elements;
     private final SetSerializer<T> serializer;
     private final boolean isMultiCell;
 
     public static SetType<?> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> l = parser.getTypeParameters();
+        List<AbstractType> l = parser.getTypeParameters();
         if (l.size() != 1)
-            throw new ConfigurationException("SetType takes exactly 1 type parameter");
+            throw new ConfigurationException("SetType<?> takes exactly 1 type parameter");
 
         return getInstance(l.get(0), true);
     }
 
-    public static synchronized <T> SetType<T> getInstance(AbstractType<T> elements, boolean isMultiCell)
+    public static SetType<?> getInstance(AbstractType elements, boolean isMultiCell)
     {
-        Map<AbstractType<?>, SetType> internMap = isMultiCell ? instances : frozenInstances;
-        SetType<T> t = internMap.get(elements);
+        return getInstance((ConcreteType<?>) elements, isMultiCell);
+    }
+
+    public static synchronized <T> SetType<T> getInstance(ConcreteType<T> elements, boolean isMultiCell)
+    {
+        Map<ConcreteType<?>, SetType<?>> internMap = isMultiCell ? instances : frozenInstances;
+        @SuppressWarnings("unchecked")
+        SetType<T> t = (SetType<T>) internMap.get(elements);
         if (t == null)
         {
             t = new SetType<T>(elements, isMultiCell);
@@ -56,7 +62,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         return t;
     }
 
-    public SetType(AbstractType<T> elements, boolean isMultiCell)
+    public SetType(ConcreteType<T> elements, boolean isMultiCell)
     {
         super(Kind.SET);
         this.elements = elements;
@@ -64,17 +70,17 @@ public class SetType<T> extends CollectionType<Set<T>>
         this.isMultiCell = isMultiCell;
     }
 
-    public AbstractType<T> getElementsType()
+    public AbstractType getElementsType()
     {
         return elements;
     }
 
-    public AbstractType<T> nameComparator()
+    public AbstractType nameComparator()
     {
         return elements;
     }
 
-    public AbstractType<?> valueComparator()
+    public AbstractType valueComparator()
     {
         return EmptyType.instance;
     }
@@ -86,7 +92,7 @@ public class SetType<T> extends CollectionType<Set<T>>
     }
 
     @Override
-    public AbstractType<?> freeze()
+    public AbstractType freeze()
     {
         if (isMultiCell)
             return getInstance(this.elements, false);
@@ -98,7 +104,7 @@ public class SetType<T> extends CollectionType<Set<T>>
     public boolean isCompatibleWithFrozen(CollectionType<?> previous)
     {
         assert !isMultiCell;
-        return this.elements.isCompatibleWith(((SetType) previous).elements);
+        return this.elements.isCompatibleWith(((SetType<?>) previous).elements);
     }
 
     @Override
@@ -133,7 +139,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         if (includeFrozenType)
             sb.append(FrozenType.class.getName()).append("(");
         sb.append(getClass().getName());
-        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType<?>>singletonList(elements), ignoreFreezing || !isMultiCell));
+        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType>singletonList(elements), ignoreFreezing || !isMultiCell));
         if (includeFrozenType)
             sb.append(")");
         return sb.toString();
@@ -145,5 +151,11 @@ public class SetType<T> extends CollectionType<Set<T>>
         for (Cell c : cells)
             bbs.add(c.name().collectionElement());
         return bbs;
+    }
+
+    @Override
+    public Set<T> cast(Object value)
+    {
+        return (Set<T>) (Set<?>) value;
     }
 }

@@ -178,8 +178,8 @@ public final class CFMetaData
     private volatile double readRepairChance = DEFAULT_READ_REPAIR_CHANCE;
     private volatile double dcLocalReadRepairChance = DEFAULT_DCLOCAL_READ_REPAIR_CHANCE;
     private volatile int gcGraceSeconds = DEFAULT_GC_GRACE_SECONDS;
-    private volatile AbstractType<?> defaultValidator = BytesType.instance;
-    private volatile AbstractType<?> keyValidator = BytesType.instance;
+    private volatile AbstractType defaultValidator = BytesType.instance;
+    private volatile AbstractType keyValidator = BytesType.instance;
     private volatile int minCompactionThreshold = DEFAULT_MIN_COMPACTION_THRESHOLD;
     private volatile int maxCompactionThreshold = DEFAULT_MAX_COMPACTION_THRESHOLD;
     private volatile Double bloomFilterFpChance = null;
@@ -225,8 +225,8 @@ public final class CFMetaData
     public CFMetaData readRepairChance(double prop) {readRepairChance = prop; return this;}
     public CFMetaData dcLocalReadRepairChance(double prop) {dcLocalReadRepairChance = prop; return this;}
     public CFMetaData gcGraceSeconds(int prop) {gcGraceSeconds = prop; return this;}
-    public CFMetaData defaultValidator(AbstractType<?> prop) {defaultValidator = prop; return this;}
-    public CFMetaData keyValidator(AbstractType<?> prop) {keyValidator = prop; return this;}
+    public CFMetaData defaultValidator(AbstractType prop) {defaultValidator = prop; return this;}
+    public CFMetaData keyValidator(AbstractType prop) {keyValidator = prop; return this;}
     public CFMetaData minCompactionThreshold(int prop) {minCompactionThreshold = prop; return this;}
     public CFMetaData maxCompactionThreshold(int prop) {maxCompactionThreshold = prop; return this;}
     public CFMetaData compactionStrategyClass(Class<? extends AbstractCompactionStrategy> prop) {compactionStrategyClass = prop; return this;}
@@ -265,24 +265,24 @@ public final class CFMetaData
         comparator = comp;
     }
 
-    public static CFMetaData denseCFMetaData(String keyspace, String name, AbstractType<?> comp, AbstractType<?> subcc)
+    public static CFMetaData denseCFMetaData(String keyspace, String name, AbstractType comp, AbstractType subcc)
     {
         CellNameType cellNameType = CellNames.fromAbstractType(makeRawAbstractType(comp, subcc), true);
         return new CFMetaData(keyspace, name, subcc == null ? ColumnFamilyType.Standard : ColumnFamilyType.Super, cellNameType);
     }
 
-    public static CFMetaData sparseCFMetaData(String keyspace, String name, AbstractType<?> comp)
+    public static CFMetaData sparseCFMetaData(String keyspace, String name, AbstractType comp)
     {
         CellNameType cellNameType = CellNames.fromAbstractType(comp, false);
         return new CFMetaData(keyspace, name, ColumnFamilyType.Standard, cellNameType);
     }
 
-    public static CFMetaData denseCFMetaData(String keyspace, String name, AbstractType<?> comp)
+    public static CFMetaData denseCFMetaData(String keyspace, String name, AbstractType comp)
     {
         return denseCFMetaData(keyspace, name, comp, null);
     }
 
-    public static AbstractType<?> makeRawAbstractType(AbstractType<?> comparator, AbstractType<?> subComparator)
+    public static AbstractType makeRawAbstractType(AbstractType comparator, AbstractType subComparator)
     {
         return subComparator == null ? comparator : CompositeType.getInstance(Arrays.asList(comparator, subComparator));
     }
@@ -485,12 +485,12 @@ public final class CFMetaData
         return gcGraceSeconds;
     }
 
-    public AbstractType<?> getDefaultValidator()
+    public AbstractType getDefaultValidator()
     {
         return defaultValidator;
     }
 
-    public AbstractType<?> getKeyValidator()
+    public AbstractType getKeyValidator()
     {
         return keyValidator;
     }
@@ -715,7 +715,7 @@ public final class CFMetaData
             .toHashCode();
     }
 
-    public AbstractType<?> getValueValidator(CellName cellName)
+    public AbstractType getValueValidator(CellName cellName)
     {
         ColumnDefinition def = getColumnDefinition(cellName);
         return def == null ? defaultValidator : def.type;
@@ -1277,11 +1277,11 @@ public final class CFMetaData
             String ksName = result.getString("keyspace_name");
             String cfName = result.getString("columnfamily_name");
 
-            AbstractType<?> rawComparator = TypeParser.parse(result.getString("comparator"));
-            AbstractType<?> subComparator = result.has("subcomparator") ? TypeParser.parse(result.getString("subcomparator")) : null;
+            AbstractType rawComparator = TypeParser.parse(result.getString("comparator"));
+            AbstractType subComparator = result.has("subcomparator") ? TypeParser.parse(result.getString("subcomparator")) : null;
             ColumnFamilyType cfType = ColumnFamilyType.valueOf(result.getString("type"));
 
-            AbstractType<?> fullRawComparator = makeRawAbstractType(rawComparator, subComparator);
+            AbstractType fullRawComparator = makeRawAbstractType(rawComparator, subComparator);
 
             List<ColumnDefinition> columnDefs = ColumnDefinition.fromSchema(serializedColumnDefinitions,
                                                                             ksName,
@@ -1348,7 +1348,7 @@ public final class CFMetaData
         }
     }
 
-    public void addColumnMetadataFromAliases(List<ByteBuffer> aliases, AbstractType<?> comparator, ColumnDefinition.Kind kind)
+    public void addColumnMetadataFromAliases(List<ByteBuffer> aliases, AbstractType comparator, ColumnDefinition.Kind kind)
     {
         if (comparator instanceof CompositeType)
         {
@@ -1420,12 +1420,12 @@ public final class CFMetaData
 
     // The comparator to validate the definition name.
 
-    public AbstractType<?> getColumnDefinitionComparator(ColumnDefinition def)
+    public AbstractType getColumnDefinitionComparator(ColumnDefinition def)
     {
         return getComponentComparator(def.isOnAllComponents() ? null : def.position(), def.kind);
     }
 
-    public AbstractType<?> getComponentComparator(Integer componentIndex, ColumnDefinition.Kind kind)
+    public AbstractType getComponentComparator(Integer componentIndex, ColumnDefinition.Kind kind)
     {
         switch (kind)
         {
@@ -1433,7 +1433,7 @@ public final class CFMetaData
                 if (componentIndex == null)
                     return comparator.asAbstractType();
 
-                AbstractType<?> t = comparator.subtype(componentIndex);
+                AbstractType t = comparator.subtype(componentIndex);
                 assert t != null : "Non-sensical component index";
                 return t;
             default:
@@ -1582,7 +1582,7 @@ public final class CFMetaData
             if (pkCols.get(i) == null)
             {
                 Integer idx = null;
-                AbstractType<?> type = keyValidator;
+                AbstractType type = keyValidator;
                 if (keyValidator instanceof CompositeType)
                 {
                     idx = i;
@@ -1606,7 +1606,7 @@ public final class CFMetaData
             if (ckCols.get(i) == null)
             {
                 Integer idx;
-                AbstractType<?> type;
+                AbstractType type;
                 if (comparator.isCompound())
                 {
                     idx = i;
@@ -1652,7 +1652,7 @@ public final class CFMetaData
      * information for table just created through thrift, nor for table prior to CASSANDRA-7744, so this
      * method does its best to infer whether the table is dense or not based on other elements.
      */
-    public static boolean calculateIsDense(AbstractType<?> comparator, Collection<ColumnDefinition> defs)
+    public static boolean calculateIsDense(AbstractType comparator, Collection<ColumnDefinition> defs)
     {
         /*
          * As said above, this method is only here because we need to deal with thrift upgrades.
@@ -1693,7 +1693,7 @@ public final class CFMetaData
              : !hasRegular && !isCQL3OnlyPKComparator(comparator);
     }
 
-    private static boolean isCQL3OnlyPKComparator(AbstractType<?> comparator)
+    private static boolean isCQL3OnlyPKComparator(AbstractType comparator)
     {
         if (!(comparator instanceof CompositeType))
             return false;

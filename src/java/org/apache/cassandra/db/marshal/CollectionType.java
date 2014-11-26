@@ -35,7 +35,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  *
  * Please note that this comparator shouldn't be used "manually" (through thrift for instance).
  */
-public abstract class CollectionType<T> extends AbstractType<T>
+public abstract class CollectionType<T> extends ConcreteType<T>
 {
     private static final Logger logger = LoggerFactory.getLogger(CollectionType.class);
 
@@ -53,8 +53,8 @@ public abstract class CollectionType<T> extends AbstractType<T>
         this.kind = kind;
     }
 
-    public abstract AbstractType<?> nameComparator();
-    public abstract AbstractType<?> valueComparator();
+    public abstract AbstractType nameComparator();
+    public abstract AbstractType valueComparator();
 
     @Override
     public abstract CollectionSerializer<T> getSerializer();
@@ -122,7 +122,7 @@ public abstract class CollectionType<T> extends AbstractType<T>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (this == previous)
             return true;
@@ -130,7 +130,7 @@ public abstract class CollectionType<T> extends AbstractType<T>
         if (!getClass().equals(previous.getClass()))
             return false;
 
-        CollectionType tprev = (CollectionType) previous;
+        CollectionType<?> tprev = (CollectionType<?>) previous;
         if (this.isMultiCell() != tprev.isMultiCell())
             return false;
 
@@ -146,7 +146,7 @@ public abstract class CollectionType<T> extends AbstractType<T>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> previous)
+    public boolean isValueCompatibleWithInternal(AbstractType previous)
     {
         // for multi-cell collections, compatibility and value-compatibility are the same
         if (this.isMultiCell())
@@ -158,7 +158,7 @@ public abstract class CollectionType<T> extends AbstractType<T>
         if (!getClass().equals(previous.getClass()))
             return false;
 
-        CollectionType tprev = (CollectionType) previous;
+        CollectionType<?> tprev = (CollectionType<?>) previous;
         if (this.isMultiCell() != tprev.isMultiCell())
             return false;
 

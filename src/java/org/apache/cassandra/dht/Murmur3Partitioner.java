@@ -256,7 +256,7 @@ public class Murmur3Partitioner implements IPartitioner
         }
     };
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return LongType.instance;
     }

@@ -236,7 +236,7 @@ public class OrderPreservingPartitioner implements IPartitioner
         return allTokens;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return UTF8Type.instance;
     }

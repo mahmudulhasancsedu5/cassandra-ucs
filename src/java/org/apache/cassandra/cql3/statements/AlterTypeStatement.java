@@ -129,7 +129,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
                         MigrationManager.announceTypeDrop(ut);
                     continue;
                 }
-                AbstractType<?> upd = updateWith(ut, toUpdate.keyspace, toUpdate.name, updated);
+                AbstractType upd = updateWith(ut, toUpdate.keyspace, toUpdate.name, updated);
                 if (upd != null)
                     MigrationManager.announceTypeUpdate((UserType)upd, isLocalOnly);
             }
@@ -147,7 +147,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
 
     private boolean updateDefinition(CFMetaData cfm, ColumnDefinition def, String keyspace, ByteBuffer toReplace, UserType updated)
     {
-        AbstractType<?> t = updateWith(def.type, keyspace, toReplace, updated);
+        AbstractType t = updateWith(def.type, keyspace, toReplace, updated);
         if (t == null)
             return false;
 
@@ -172,8 +172,8 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
     }
 
     // Update the provided type were all instance of a given userType is replaced by a new version
-    // Note that this methods reaches inside other UserType, CompositeType and CollectionType.
-    private static AbstractType<?> updateWith(AbstractType<?> type, String keyspace, ByteBuffer toReplace, UserType updated)
+    // Note that this methods reaches inside other UserType, CompositeType and CollectionType<?>.
+    private static AbstractType updateWith(AbstractType type, String keyspace, ByteBuffer toReplace, UserType updated)
     {
         if (type instanceof UserType)
         {
@@ -184,29 +184,29 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
                 return updated;
 
             // Otherwise, check for nesting
-            List<AbstractType<?>> updatedTypes = updateTypes(ut.fieldTypes(), keyspace, toReplace, updated);
+            List<AbstractType> updatedTypes = updateTypes(ut.fieldTypes(), keyspace, toReplace, updated);
             return updatedTypes == null ? null : new UserType(ut.keyspace, ut.name, new ArrayList<>(ut.fieldNames()), updatedTypes);
         }
         else if (type instanceof CompositeType)
         {
             CompositeType ct = (CompositeType)type;
-            List<AbstractType<?>> updatedTypes = updateTypes(ct.types, keyspace, toReplace, updated);
+            List<AbstractType> updatedTypes = updateTypes(ct.types, keyspace, toReplace, updated);
             return updatedTypes == null ? null : CompositeType.getInstance(updatedTypes);
         }
         else if (type instanceof ColumnToCollectionType)
         {
             ColumnToCollectionType ctct = (ColumnToCollectionType)type;
-            Map<ByteBuffer, CollectionType> updatedTypes = null;
-            for (Map.Entry<ByteBuffer, CollectionType> entry : ctct.defined.entrySet())
+            Map<ByteBuffer, CollectionType<?>> updatedTypes = null;
+            for (Map.Entry<ByteBuffer, CollectionType<?>> entry : ctct.defined.entrySet())
             {
-                AbstractType<?> t = updateWith(entry.getValue(), keyspace, toReplace, updated);
+                AbstractType t = updateWith(entry.getValue(), keyspace, toReplace, updated);
                 if (t == null)
                     continue;
 
                 if (updatedTypes == null)
                     updatedTypes = new HashMap<>(ctct.defined);
 
-                updatedTypes.put(entry.getKey(), (CollectionType)t);
+                updatedTypes.put(entry.getKey(), (CollectionType<?>)t);
             }
             return updatedTypes == null ? null : ColumnToCollectionType.getInstance(updatedTypes);
         }
@@ -214,14 +214,14 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
         {
             if (type instanceof ListType)
             {
-                AbstractType<?> t = updateWith(((ListType)type).getElementsType(), keyspace, toReplace, updated);
+                AbstractType t = updateWith(((ListType<?>)type).getElementsType(), keyspace, toReplace, updated);
                 if (t == null)
                     return null;
                 return ListType.getInstance(t, type.isMultiCell());
             }
             else if (type instanceof SetType)
             {
-                AbstractType<?> t = updateWith(((SetType)type).getElementsType(), keyspace, toReplace, updated);
+                AbstractType t = updateWith(((SetType<?>)type).getElementsType(), keyspace, toReplace, updated);
                 if (t == null)
                     return null;
                 return SetType.getInstance(t, type.isMultiCell());
@@ -229,9 +229,9 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
             else
             {
                 assert type instanceof MapType;
-                MapType mt = (MapType)type;
-                AbstractType<?> k = updateWith(mt.getKeysType(), keyspace, toReplace, updated);
-                AbstractType<?> v = updateWith(mt.getValuesType(), keyspace, toReplace, updated);
+                MapType<?, ?> mt = (MapType<?, ?>)type;
+                AbstractType k = updateWith(mt.getKeysType(), keyspace, toReplace, updated);
+                AbstractType v = updateWith(mt.getValuesType(), keyspace, toReplace, updated);
                 if (k == null && v == null)
                     return null;
                 return MapType.getInstance(k == null ? mt.getKeysType() : k, v == null ? mt.getValuesType() : v, type.isMultiCell());
@@ -243,13 +243,13 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
         }
     }
 
-    private static List<AbstractType<?>> updateTypes(List<AbstractType<?>> toUpdate, String keyspace, ByteBuffer toReplace, UserType updated)
+    private static List<AbstractType> updateTypes(List<AbstractType> toUpdate, String keyspace, ByteBuffer toReplace, UserType updated)
     {
         // But this can also be nested.
-        List<AbstractType<?>> updatedTypes = null;
+        List<AbstractType> updatedTypes = null;
         for (int i = 0; i < toUpdate.size(); i++)
         {
-            AbstractType<?> t = updateWith(toUpdate.get(i), keyspace, toReplace, updated);
+            AbstractType t = updateWith(toUpdate.get(i), keyspace, toReplace, updated);
             if (t == null)
                 continue;
 
@@ -284,7 +284,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
             newNames.addAll(toUpdate.fieldNames());
             newNames.add(fieldName.bytes);
 
-            List<AbstractType<?>> newTypes = new ArrayList<>(toUpdate.size() + 1);
+            List<AbstractType> newTypes = new ArrayList<>(toUpdate.size() + 1);
             newTypes.addAll(toUpdate.fieldTypes());
             newTypes.add(type.prepare(keyspace()).getType());
 
@@ -297,12 +297,12 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
             if (idx < 0)
                 throw new InvalidRequestException(String.format("Unknown field %s in type %s", fieldName, name));
 
-            AbstractType<?> previous = toUpdate.fieldType(idx);
+            AbstractType previous = toUpdate.fieldType(idx);
             if (!type.prepare(keyspace()).getType().isCompatibleWith(previous))
                 throw new InvalidRequestException(String.format("Type %s is incompatible with previous type %s of field %s in user type %s", type, previous.asCQL3Type(), fieldName, name));
 
             List<ByteBuffer> newNames = new ArrayList<>(toUpdate.fieldNames());
-            List<AbstractType<?>> newTypes = new ArrayList<>(toUpdate.fieldTypes());
+            List<AbstractType> newTypes = new ArrayList<>(toUpdate.fieldTypes());
             newTypes.set(idx, type.prepare(keyspace()).getType());
 
             return new UserType(toUpdate.keyspace, toUpdate.name, newNames, newTypes);
@@ -327,7 +327,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
         protected UserType makeUpdatedType(UserType toUpdate) throws InvalidRequestException
         {
             List<ByteBuffer> newNames = new ArrayList<>(toUpdate.fieldNames());
-            List<AbstractType<?>> newTypes = new ArrayList<>(toUpdate.fieldTypes());
+            List<AbstractType> newTypes = new ArrayList<>(toUpdate.fieldTypes());
 
             for (Map.Entry<ColumnIdentifier, ColumnIdentifier> entry : renames.entrySet())
             {

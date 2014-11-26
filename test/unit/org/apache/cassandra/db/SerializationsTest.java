@@ -366,7 +366,7 @@ public class SerializationsTest extends AbstractSerializationsTester
             add(CellNames.simpleDense(ByteBufferUtil.bytes("CCC")));
         }};
         private final ByteBuffer SC = ByteBufferUtil.bytes("SCName");
-        private final SortedSet<CellName> NamedSCCols = new TreeSet<CellName>(new CompoundDenseCellNameType(Arrays.<AbstractType<?>>asList(BytesType.instance, BytesType.instance)))
+        private final SortedSet<CellName> NamedSCCols = new TreeSet<CellName>(new CompoundDenseCellNameType(Arrays.<AbstractType>asList(BytesType.instance, BytesType.instance)))
         {{
             add(CellNames.compositeDense(SC, ByteBufferUtil.bytes("AAA")));
             add(CellNames.compositeDense(SC, ByteBufferUtil.bytes("BBB")));

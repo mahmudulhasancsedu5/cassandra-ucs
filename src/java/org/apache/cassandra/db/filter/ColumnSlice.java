@@ -76,7 +76,7 @@ public class ColumnSlice
         // (and repeat for all components).
         for (int i = 0; i < minCellNames.size() && i < maxCellNames.size(); i++)
         {
-            AbstractType<?> t = comparator.subtype(i);
+            AbstractType t = comparator.subtype(i);
             ByteBuffer s = i < sStart.size() ? sStart.get(i) : ByteBufferUtil.EMPTY_BYTE_BUFFER;
             ByteBuffer f = i < sEnd.size() ? sEnd.get(i) : ByteBufferUtil.EMPTY_BYTE_BUFFER;
 

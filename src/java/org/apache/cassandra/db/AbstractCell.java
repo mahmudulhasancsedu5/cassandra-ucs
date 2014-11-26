@@ -163,7 +163,7 @@ public abstract class AbstractCell implements Cell
     {
         validateName(metadata);
 
-        AbstractType<?> valueValidator = metadata.getValueValidator(name());
+        AbstractType valueValidator = metadata.getValueValidator(name());
         if (valueValidator != null)
             valueValidator.validateCellValue(value());
     }

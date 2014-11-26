@@ -308,7 +308,7 @@ public abstract class ExtendedFilter
             {
                 ColumnDefinition def = data.metadata().getColumnDefinition(expression.column);
                 ByteBuffer dataValue = null;
-                AbstractType<?> validator = null;
+                AbstractType validator = null;
                 if (def == null)
                 {
                     // This can't happen with CQL3 as this should be rejected upfront. For thrift however,
@@ -339,21 +339,21 @@ public abstract class ExtendedFilter
                 if (expression.operator == Operator.CONTAINS)
                 {
                     assert def != null && def.type.isCollection() && !def.type.isMultiCell();
-                    CollectionType type = (CollectionType)def.type;
+                    CollectionType<?> type = (CollectionType<?>)def.type;
                     switch (type.kind)
                     {
                         case LIST:
-                            ListType<?> listType = (ListType)def.type;
+                            ListType<?> listType = (ListType<?>)def.type;
                             if (!listType.getSerializer().deserialize(dataValue).contains(listType.getElementsType().getSerializer().deserialize(expression.value)))
                                 return false;
                             break;
                         case SET:
-                            SetType<?> setType = (SetType)def.type;
+                            SetType<?> setType = (SetType<?>)def.type;
                             if (!setType.getSerializer().deserialize(dataValue).contains(setType.getElementsType().getSerializer().deserialize(expression.value)))
                                 return false;
                             break;
                         case MAP:
-                            MapType<?,?> mapType = (MapType)def.type;
+                            MapType<?,?> mapType = (MapType<?, ?>)def.type;
                             if (!mapType.getSerializer().deserialize(dataValue).containsValue(mapType.getValuesType().getSerializer().deserialize(expression.value)))
                                 return false;
                             break;
@@ -362,7 +362,7 @@ public abstract class ExtendedFilter
                 else if (expression.operator == Operator.CONTAINS_KEY)
                 {
                     assert def != null && def.type.isCollection() && !def.type.isMultiCell() && def.type instanceof MapType;
-                    MapType<?,?> mapType = (MapType)def.type;
+                    MapType<?,?> mapType = (MapType<?, ?>)def.type;
                     if (mapType.getSerializer().getSerializedValue(dataValue, expression.value, mapType.getKeysType()) == null)
                         return false;
                 }
@@ -379,7 +379,7 @@ public abstract class ExtendedFilter
         private static boolean collectionSatisfies(ColumnDefinition def, ColumnFamily data, Composite prefix, IndexExpression expr, ByteBuffer collectionElement)
         {
             assert def.type.isCollection() && def.type.isMultiCell();
-            CollectionType type = (CollectionType)def.type;
+            CollectionType<?> type = (CollectionType<?>)def.type;
 
             if (expr.isContains())
             {

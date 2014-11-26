@@ -48,12 +48,12 @@ public abstract class Maps
 
     public static ColumnSpecification keySpecOf(ColumnSpecification column)
     {
-        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("key(" + column.name + ")", true), ((MapType)column.type).getKeysType());
+        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("key(" + column.name + ")", true), ((MapType<?, ?>)column.type).getKeysType());
     }
 
     public static ColumnSpecification valueSpecOf(ColumnSpecification column)
     {
-        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("value(" + column.name + ")", true), ((MapType)column.type).getValuesType());
+        return new ColumnSpecification(column.ksName, column.cfName, new ColumnIdentifier("value(" + column.name + ")", true), ((MapType<?, ?>)column.type).getValuesType());
     }
 
     public static class Literal implements Term.Raw
@@ -86,7 +86,7 @@ public abstract class Maps
 
                 values.put(k, v);
             }
-            DelayedValue value = new DelayedValue(((MapType)receiver.type).getKeysType(), values);
+            DelayedValue value = new DelayedValue(((MapType<?, ?>)receiver.type).getKeysType(), values);
             return allTerminal ? value.bind(QueryOptions.DEFAULT) : value;
         }
 
@@ -155,7 +155,7 @@ public abstract class Maps
             this.map = map;
         }
 
-        public static Value fromSerialized(ByteBuffer value, MapType type, int version) throws InvalidRequestException
+        public static Value fromSerialized(ByteBuffer value, MapType<?, ?> type, int version) throws InvalidRequestException
         {
             try
             {
@@ -189,7 +189,7 @@ public abstract class Maps
             return CollectionSerializer.pack(buffers, map.size(), protocolVersion);
         }
 
-        public boolean equals(MapType mt, Value v)
+        public boolean equals(MapType<?, ?> mt, Value v)
         {
             if (map.size() != v.map.size())
                 return false;
@@ -270,7 +270,7 @@ public abstract class Maps
         public Value bind(QueryOptions options) throws InvalidRequestException
         {
             ByteBuffer value = options.getValues().get(bindIndex);
-            return value == null ? null : Value.fromSerialized(value, (MapType)receiver.type, options.getProtocolVersion());
+            return value == null ? null : Value.fromSerialized(value, (MapType<?, ?>)receiver.type, options.getProtocolVersion());
         }
     }
 

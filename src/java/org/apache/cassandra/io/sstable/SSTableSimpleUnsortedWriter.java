@@ -77,8 +77,8 @@ public class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
                                        IPartitioner partitioner,
                                        String keyspace,
                                        String columnFamily,
-                                       AbstractType<?> comparator,
-                                       AbstractType<?> subComparator,
+                                       AbstractType comparator,
+                                       AbstractType subComparator,
                                        int bufferSizeInMB,
                                        CompressionParameters compressParameters)
     {
@@ -89,8 +89,8 @@ public class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
                                        IPartitioner partitioner,
                                        String keyspace,
                                        String columnFamily,
-                                       AbstractType<?> comparator,
-                                       AbstractType<?> subComparator,
+                                       AbstractType comparator,
+                                       AbstractType subComparator,
                                        int bufferSizeInMB)
     {
         this(directory, partitioner, keyspace, columnFamily, comparator, subComparator, bufferSizeInMB, new CompressionParameters(null));

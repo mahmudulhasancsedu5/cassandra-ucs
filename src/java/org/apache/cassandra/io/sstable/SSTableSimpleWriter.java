@@ -54,8 +54,8 @@ public class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
                                IPartitioner partitioner,
                                String keyspace,
                                String columnFamily,
-                               AbstractType<?> comparator,
-                               AbstractType<?> subComparator)
+                               AbstractType comparator,
+                               AbstractType subComparator)
     {
         this(directory, CFMetaData.denseCFMetaData(keyspace, columnFamily, comparator, subComparator), partitioner);
     }

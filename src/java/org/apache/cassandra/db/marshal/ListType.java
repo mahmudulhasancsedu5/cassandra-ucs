@@ -25,34 +25,36 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.ListSerializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ListType<T> extends CollectionType<List<T>>
 {
-    private static final Logger logger = LoggerFactory.getLogger(ListType.class);
-
     // interning instances
-    private static final Map<AbstractType<?>, ListType> instances = new HashMap<>();
-    private static final Map<AbstractType<?>, ListType> frozenInstances = new HashMap<>();
+    private static final Map<ConcreteType<?>, ListType<?>> instances = new HashMap<>();
+    private static final Map<ConcreteType<?>, ListType<?>> frozenInstances = new HashMap<>();
 
-    private final AbstractType<T> elements;
+    private final ConcreteType<T> elements;
     public final ListSerializer<T> serializer;
     private final boolean isMultiCell;
 
     public static ListType<?> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> l = parser.getTypeParameters();
+        List<AbstractType> l = parser.getTypeParameters();
         if (l.size() != 1)
-            throw new ConfigurationException("ListType takes exactly 1 type parameter");
+            throw new ConfigurationException("ListType<?> takes exactly 1 type parameter");
 
         return getInstance(l.get(0), true);
     }
 
-    public static synchronized <T> ListType<T> getInstance(AbstractType<T> elements, boolean isMultiCell)
+    public static ListType<?> getInstance(AbstractType elements, boolean isMultiCell)
     {
-        Map<AbstractType<?>, ListType> internMap = isMultiCell ? instances : frozenInstances;
-        ListType<T> t = internMap.get(elements);
+        return getInstance((ConcreteType<?>) elements, isMultiCell);
+    }
+
+    public static synchronized <T> ListType<T> getInstance(ConcreteType<T> elements, boolean isMultiCell)
+    {
+        Map<ConcreteType<?>, ListType<?>> internMap = isMultiCell ? instances : frozenInstances;
+        @SuppressWarnings("unchecked")
+        ListType<T> t = (ListType<T>) internMap.get(elements);
         if (t == null)
         {
             t = new ListType<T>(elements, isMultiCell);
@@ -61,7 +63,7 @@ public class ListType<T> extends CollectionType<List<T>>
         return t;
     }
 
-    private ListType(AbstractType<T> elements, boolean isMultiCell)
+    private ListType(ConcreteType<T> elements, boolean isMultiCell)
     {
         super(Kind.LIST);
         this.elements = elements;
@@ -69,17 +71,17 @@ public class ListType<T> extends CollectionType<List<T>>
         this.isMultiCell = isMultiCell;
     }
 
-    public AbstractType<T> getElementsType()
+    public AbstractType getElementsType()
     {
         return elements;
     }
 
-    public AbstractType<UUID> nameComparator()
+    public ConcreteType<UUID> nameComparator()
     {
         return TimeUUIDType.instance;
     }
 
-    public AbstractType<T> valueComparator()
+    public AbstractType valueComparator()
     {
         return elements;
     }
@@ -90,7 +92,7 @@ public class ListType<T> extends CollectionType<List<T>>
     }
 
     @Override
-    public AbstractType<?> freeze()
+    public AbstractType freeze()
     {
         if (isMultiCell)
             return getInstance(this.elements, false);
@@ -108,14 +110,14 @@ public class ListType<T> extends CollectionType<List<T>>
     public boolean isCompatibleWithFrozen(CollectionType<?> previous)
     {
         assert !isMultiCell;
-        return this.elements.isCompatibleWith(((ListType) previous).elements);
+        return this.elements.isCompatibleWith(((ListType<?>) previous).elements);
     }
 
     @Override
     public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
     {
         assert !isMultiCell;
-        return this.elements.isValueCompatibleWithInternal(((ListType) previous).elements);
+        return this.elements.isValueCompatibleWithInternal(((ListType<?>) previous).elements);
     }
 
     @Override
@@ -124,7 +126,7 @@ public class ListType<T> extends CollectionType<List<T>>
         return compareListOrSet(elements, o1, o2);
     }
 
-    static int compareListOrSet(AbstractType<?> elementsComparator, ByteBuffer o1, ByteBuffer o2)
+    static int compareListOrSet(AbstractType elementsComparator, ByteBuffer o1, ByteBuffer o2)
     {
         // Note that this is only used if the collection is frozen
         if (!o1.hasRemaining() || !o2.hasRemaining())
@@ -157,7 +159,7 @@ public class ListType<T> extends CollectionType<List<T>>
         if (includeFrozenType)
             sb.append(FrozenType.class.getName()).append("(");
         sb.append(getClass().getName());
-        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType<?>>singletonList(elements), ignoreFreezing || !isMultiCell));
+        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType>singletonList(elements), ignoreFreezing || !isMultiCell));
         if (includeFrozenType)
             sb.append(")");
         return sb.toString();
@@ -170,5 +172,11 @@ public class ListType<T> extends CollectionType<List<T>>
         for (Cell c : cells)
             bbs.add(c.value());
         return bbs;
+    }
+
+    @Override
+    public List<T> cast(Object value)
+    {
+        return (List<T>) (List<?>) value;
     }
 }

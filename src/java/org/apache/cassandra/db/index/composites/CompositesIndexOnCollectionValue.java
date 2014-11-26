@@ -49,18 +49,18 @@ public class CompositesIndexOnCollectionValue extends CompositesIndex
     public static CellNameType buildIndexComparator(CFMetaData baseMetadata, ColumnDefinition columnDef)
     {
         int prefixSize = columnDef.position();
-        List<AbstractType<?>> types = new ArrayList<>(prefixSize + 2);
+        List<AbstractType> types = new ArrayList<>(prefixSize + 2);
         types.add(SecondaryIndex.keyComparator);
         for (int i = 0; i < prefixSize; i++)
             types.add(baseMetadata.comparator.subtype(i));
-        types.add(((CollectionType)columnDef.type).nameComparator()); // collection key
+        types.add(((CollectionType<?>)columnDef.type).nameComparator()); // collection key
         return new CompoundDenseCellNameType(types);
     }
 
     @Override
-    protected AbstractType<?> getIndexKeyComparator()
+    protected AbstractType getIndexKeyComparator()
     {
-        return ((CollectionType)columnDef.type).valueComparator();
+        return ((CollectionType<?>)columnDef.type).valueComparator();
     }
 
     protected ByteBuffer getIndexedValue(ByteBuffer rowKey, Cell cell)
@@ -104,7 +104,7 @@ public class CompositesIndexOnCollectionValue extends CompositesIndex
     @Override
     public boolean indexes(CellName name)
     {
-        AbstractType<?> comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
+        AbstractType comp = baseCfs.metadata.getColumnDefinitionComparator(columnDef);
         return name.size() > columnDef.position()
             && comp.compare(name.get(columnDef.position()), columnDef.name.bytes) == 0;
     }
@@ -113,6 +113,6 @@ public class CompositesIndexOnCollectionValue extends CompositesIndex
     {
         CellName name = data.getComparator().create(entry.indexedEntryPrefix, columnDef, entry.indexedEntryCollectionKey);
         Cell cell = data.getColumn(name);
-        return cell == null || !cell.isLive(now) || ((CollectionType) columnDef.type).valueComparator().compare(entry.indexValue.getKey(), cell.value()) != 0;
+        return cell == null || !cell.isLive(now) || ((CollectionType<?>) columnDef.type).valueComparator().compare(entry.indexValue.getKey(), cell.value()) != 0;
     }
 }

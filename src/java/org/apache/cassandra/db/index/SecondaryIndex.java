@@ -75,7 +75,7 @@ public abstract class SecondaryIndex
      */
     public static final String INDEX_VALUES_OPTION_NAME = "index_values";
 
-    public static final AbstractType<?> keyComparator = StorageService.getPartitioner().preservesOrder()
+    public static final AbstractType keyComparator = StorageService.getPartitioner().preservesOrder()
                                                       ? BytesType.instance
                                                       : new LocalByPartionerType(StorageService.getPartitioner());
 

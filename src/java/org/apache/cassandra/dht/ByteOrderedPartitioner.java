@@ -282,7 +282,7 @@ public class ByteOrderedPartitioner implements IPartitioner
         return allTokens;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return BytesType.instance;
     }
