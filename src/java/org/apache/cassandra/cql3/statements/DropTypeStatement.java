@@ -110,7 +110,7 @@ public class DropTypeStatement extends SchemaAlteringStatement
         }
         else if (toCheck instanceof ColumnToCollectionType)
         {
-            for (CollectionType<?> collection : ((ColumnToCollectionType)toCheck).defined.values())
+            for (CollectionType collection : ((ColumnToCollectionType)toCheck).defined.values())
                 if (isUsedBy(collection))
                     return true;
         }

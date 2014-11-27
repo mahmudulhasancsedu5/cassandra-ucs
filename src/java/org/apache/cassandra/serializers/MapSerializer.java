@@ -22,26 +22,28 @@ import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.transport.Server;
-import org.apache.cassandra.utils.Pair;
 
 public class MapSerializer<K, V> extends CollectionSerializer<Map<K, V>>
 {
     // interning instances
-    private static final Map<Pair<TypeSerializer<?>, TypeSerializer<?>>, MapSerializer> instances = new HashMap<Pair<TypeSerializer<?>, TypeSerializer<?>>, MapSerializer>();
+    private static final Table<TypeSerializer<?>, TypeSerializer<?>, MapSerializer<?, ?>> instances = HashBasedTable.create();
 
     public final TypeSerializer<K> keys;
     public final TypeSerializer<V> values;
 
     public static synchronized <K, V> MapSerializer<K, V> getInstance(TypeSerializer<K> keys, TypeSerializer<V> values)
     {
-        Pair<TypeSerializer<?>, TypeSerializer<?>> p = Pair.<TypeSerializer<?>, TypeSerializer<?>>create(keys, values);
-        MapSerializer<K, V> t = instances.get(p);
+        @SuppressWarnings("unchecked")
+        MapSerializer<K, V> t = (MapSerializer<K, V>) instances.get(keys, values);
         if (t == null)
         {
             t = new MapSerializer<K, V>(keys, values);
-            instances.put(p, t);
+            instances.put(keys, values, t);
         }
         return t;
     }
@@ -166,8 +168,8 @@ public class MapSerializer<K, V> extends CollectionSerializer<Map<K, V>>
         return sb.toString();
     }
 
-    public Class<Map<K, V>> getType()
+    public Class<?> getType()
     {
-        return (Class)Map.class;
+        return Map.class;
     }
 }

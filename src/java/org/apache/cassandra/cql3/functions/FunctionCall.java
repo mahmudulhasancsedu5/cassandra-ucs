@@ -104,7 +104,7 @@ public class FunctionCall extends Term.NonTerminal
         if (!(fun.returnType() instanceof CollectionType))
             return new Constants.Value(result);
 
-        switch (((CollectionType<?>)fun.returnType()).kind)
+        switch (((CollectionType)fun.returnType()).kind())
         {
             case LIST: return Lists.Value.fromSerialized(result, (ListType<?>)fun.returnType(), version);
             case SET:  return Sets.Value.fromSerialized(result, (SetType<?>)fun.returnType(), version);

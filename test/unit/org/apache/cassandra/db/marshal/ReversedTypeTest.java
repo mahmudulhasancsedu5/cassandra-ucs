@@ -28,7 +28,7 @@ public class ReversedTypeTest
     @Test
     public void testReverseComparison()
     {
-        ReversedType t = ReversedType.getInstance(LongType.instance);
+        ReversedType<Long> t = ReversedType.getInstance(LongType.instance);
 
         assert t.compare(bytes(2L), bytes(4L)) > 0;
         assert t.compare(bytes(4L), bytes(2L)) < 0;

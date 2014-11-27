@@ -172,7 +172,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
     }
 
     // Update the provided type were all instance of a given userType is replaced by a new version
-    // Note that this methods reaches inside other UserType, CompositeType and CollectionType<?>.
+    // Note that this methods reaches inside other UserType, CompositeType and CollectionType.
     private static AbstractType updateWith(AbstractType type, String keyspace, ByteBuffer toReplace, UserType updated)
     {
         if (type instanceof UserType)
@@ -196,8 +196,8 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
         else if (type instanceof ColumnToCollectionType)
         {
             ColumnToCollectionType ctct = (ColumnToCollectionType)type;
-            Map<ByteBuffer, CollectionType<?>> updatedTypes = null;
-            for (Map.Entry<ByteBuffer, CollectionType<?>> entry : ctct.defined.entrySet())
+            Map<ByteBuffer, CollectionType> updatedTypes = null;
+            for (Map.Entry<ByteBuffer, CollectionType> entry : ctct.defined.entrySet())
             {
                 AbstractType t = updateWith(entry.getValue(), keyspace, toReplace, updated);
                 if (t == null)
@@ -206,7 +206,7 @@ public abstract class AlterTypeStatement extends SchemaAlteringStatement
                 if (updatedTypes == null)
                     updatedTypes = new HashMap<>(ctct.defined);
 
-                updatedTypes.put(entry.getKey(), (CollectionType<?>)t);
+                updatedTypes.put(entry.getKey(), (CollectionType)t);
             }
             return updatedTypes == null ? null : ColumnToCollectionType.getInstance(updatedTypes);
         }

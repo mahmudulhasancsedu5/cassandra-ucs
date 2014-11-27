@@ -26,7 +26,7 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.ListSerializer;
 
-public class ListType<T> extends CollectionType<List<T>>
+public class ListType<T> extends ConcreteCollectionType<List<T>>
 {
     // interning instances
     private static final Map<ConcreteType<?>, ListType<?>> instances = new HashMap<>();
@@ -107,14 +107,14 @@ public class ListType<T> extends CollectionType<List<T>>
     }
 
     @Override
-    public boolean isCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isCompatibleWithFrozen(CollectionType previous)
     {
         assert !isMultiCell;
         return this.elements.isCompatibleWith(((ListType<?>) previous).elements);
     }
 
     @Override
-    public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isValueCompatibleWithFrozen(CollectionType previous)
     {
         assert !isMultiCell;
         return this.elements.isValueCompatibleWithInternal(((ListType<?>) previous).elements);
@@ -178,5 +178,11 @@ public class ListType<T> extends CollectionType<List<T>>
     public List<T> cast(Object value)
     {
         return (List<T>) (List<?>) value;
+    }
+
+    @Override
+    public CollectionType.Kind kind()
+    {
+        return CollectionType.Kind.LIST;
     }
 }

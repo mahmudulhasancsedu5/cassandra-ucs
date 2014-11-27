@@ -129,7 +129,7 @@ public abstract class AbstractCompositeType extends ConcreteType<ByteBuffer>
 
             list.add( new CompositeComponent(comparator,value) );
 
-            byte b = bb.get(); // Ignore; not relevant here
+            bb.get(); // Ignore; not relevant here
             ++i;
         }
         return list;

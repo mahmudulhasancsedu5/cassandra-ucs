@@ -128,9 +128,9 @@ public interface CQL3Type
 
     public static class Collection implements CQL3Type
     {
-        private final CollectionType<?> type;
+        private final CollectionType type;
 
-        public Collection(CollectionType<?> type)
+        public Collection(CollectionType type)
         {
             this.type = type;
         }
@@ -166,7 +166,7 @@ public interface CQL3Type
         {
             boolean isFrozen = !this.type.isMultiCell();
             StringBuilder sb = new StringBuilder(isFrozen ? "frozen<" : "");
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST:
                     AbstractType listType = ((ListType<?>)type).getElementsType();

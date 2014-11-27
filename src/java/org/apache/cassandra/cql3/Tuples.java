@@ -20,9 +20,6 @@ package org.apache.cassandra.cql3;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.serializers.MarshalException;
@@ -32,8 +29,6 @@ import org.apache.cassandra.serializers.MarshalException;
  */
 public class Tuples
 {
-    private static final Logger logger = LoggerFactory.getLogger(Tuples.class);
-
     private Tuples() {}
 
     public static ColumnSpecification componentSpecOf(ColumnSpecification column, int component)
@@ -203,7 +198,7 @@ public class Tuples
                 // Inside tuples, we must force the serialization of collections to v3 whatever protocol
                 // version is in use since we're going to store directly that serialized value.
                 if (version < 3 && type.type(i).isCollection())
-                    buffers[i] = ((CollectionType<?>)type.type(i)).getSerializer().reserializeToV3(buffers[i]);
+                    buffers[i] = ((CollectionType)type.type(i)).getSerializer().reserializeToV3(buffers[i]);
             }
             return buffers;
         }

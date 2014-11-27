@@ -182,7 +182,7 @@ public abstract class UserTypes
                 // Inside UDT values, we must force the serialization of collections to v3 whatever protocol
                 // version is in use since we're going to store directly that serialized value.
                 if (version < Server.VERSION_3 && type.fieldType(i).isCollection() && buffers[i] != null)
-                    buffers[i] = ((CollectionType<?>)type.fieldType(i)).getSerializer().reserializeToV3(buffers[i]);
+                    buffers[i] = ((CollectionType)type.fieldType(i)).getSerializer().reserializeToV3(buffers[i]);
             }
             return buffers;
         }

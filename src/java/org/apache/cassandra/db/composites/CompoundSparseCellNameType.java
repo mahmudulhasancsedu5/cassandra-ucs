@@ -114,10 +114,10 @@ public class CompoundSparseCellNameType extends AbstractCompoundCellNameType
     }
 
     @Override
-    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType<?> newCollection)
+    public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType newCollection)
     {
         return new WithCollection(clusteringType,
-                                  ColumnToCollectionType.getInstance(Collections.<ByteBuffer, CollectionType<?>>singletonMap(columnName.bytes, newCollection)),
+                                  ColumnToCollectionType.getInstance(Collections.<ByteBuffer, CollectionType>singletonMap(columnName.bytes, newCollection)),
                                   internedIds);
     }
 
@@ -238,9 +238,9 @@ public class CompoundSparseCellNameType extends AbstractCompoundCellNameType
         }
 
         @Override
-        public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType<?> newCollection)
+        public CellNameType addOrUpdateCollection(ColumnIdentifier columnName, CollectionType newCollection)
         {
-            Map<ByteBuffer, CollectionType<?>> newMap = new HashMap<>(collectionType.defined);
+            Map<ByteBuffer, CollectionType> newMap = new HashMap<>(collectionType.defined);
             newMap.put(columnName.bytes, newCollection);
             return new WithCollection(clusteringType, ColumnToCollectionType.getInstance(newMap), internedIds);
         }

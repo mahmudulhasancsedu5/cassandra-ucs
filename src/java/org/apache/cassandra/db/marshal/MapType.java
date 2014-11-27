@@ -30,7 +30,7 @@ import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MapSerializer;
 import org.apache.cassandra.transport.Server;
 
-public class MapType<K, V> extends CollectionType<Map<K, V>>
+public class MapType<K, V> extends ConcreteCollectionType<Map<K, V>>
 {
     // interning instances
     private static final Table<ConcreteType<?>, ConcreteType<?>, MapType<?, ?>> instances = HashBasedTable.create();
@@ -113,7 +113,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     }
 
     @Override
-    public boolean isCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isCompatibleWithFrozen(CollectionType previous)
     {
         assert !isMultiCell;
         MapType<?, ?> tprev = (MapType<?, ?>) previous;
@@ -121,7 +121,7 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     }
 
     @Override
-    public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isValueCompatibleWithFrozen(CollectionType previous)
     {
         assert !isMultiCell;
         MapType<?, ?> tprev = (MapType<?, ?>) previous;
@@ -205,5 +205,11 @@ public class MapType<K, V> extends CollectionType<Map<K, V>>
     public Map<K, V> cast(Object value)
     {
         return (Map<K, V>) (Map<?, ?>) value;
+    }
+
+    @Override
+    public CollectionType.Kind kind()
+    {
+        return CollectionType.Kind.MAP;
     }
 }

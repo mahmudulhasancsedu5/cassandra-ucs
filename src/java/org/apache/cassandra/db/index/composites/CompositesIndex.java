@@ -60,7 +60,7 @@ public abstract class CompositesIndex extends AbstractSimplePerColumnSecondaryIn
     {
         if (cfDef.type.isCollection() && cfDef.type.isMultiCell())
         {
-            switch (((CollectionType<?>)cfDef.type).kind)
+            switch (((CollectionType)cfDef.type).kind())
             {
                 case LIST:
                     return new CompositesIndexOnCollectionValue();
@@ -92,7 +92,7 @@ public abstract class CompositesIndex extends AbstractSimplePerColumnSecondaryIn
     {
         if (cfDef.type.isCollection() && cfDef.type.isMultiCell())
         {
-            switch (((CollectionType<?>)cfDef.type).kind)
+            switch (((CollectionType)cfDef.type).kind())
             {
                 case LIST:
                     return CompositesIndexOnCollectionValue.buildIndexComparator(baseMetadata, cfDef);

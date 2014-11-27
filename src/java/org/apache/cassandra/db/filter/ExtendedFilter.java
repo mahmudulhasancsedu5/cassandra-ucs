@@ -339,8 +339,8 @@ public abstract class ExtendedFilter
                 if (expression.operator == Operator.CONTAINS)
                 {
                     assert def != null && def.type.isCollection() && !def.type.isMultiCell();
-                    CollectionType<?> type = (CollectionType<?>)def.type;
-                    switch (type.kind)
+                    CollectionType type = (CollectionType)def.type;
+                    switch (type.kind())
                     {
                         case LIST:
                             ListType<?> listType = (ListType<?>)def.type;
@@ -379,7 +379,7 @@ public abstract class ExtendedFilter
         private static boolean collectionSatisfies(ColumnDefinition def, ColumnFamily data, Composite prefix, IndexExpression expr, ByteBuffer collectionElement)
         {
             assert def.type.isCollection() && def.type.isMultiCell();
-            CollectionType<?> type = (CollectionType<?>)def.type;
+            CollectionType type = (CollectionType)def.type;
 
             if (expr.isContains())
             {
@@ -388,7 +388,7 @@ public abstract class ExtendedFilter
                 while (iter.hasNext())
                 {
                     Cell cell = iter.next();
-                    if (type.kind == CollectionType.Kind.SET)
+                    if (type.kind() == CollectionType.Kind.SET)
                     {
                         if (type.nameComparator().compare(cell.name().collectionElement(), expr.value) == 0)
                             return true;
@@ -403,7 +403,7 @@ public abstract class ExtendedFilter
                 return false;
             }
 
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST:
                     assert collectionElement != null;

@@ -789,7 +789,7 @@ public abstract class AbstractCassandraStorage extends LoadFunc implements Store
 
         if (validator instanceof CollectionType)
         {
-            // For CollectionType<?>, the compose() method assumes the v3 protocol format of collection, which
+            // For CollectionType, the compose() method assumes the v3 protocol format of collection, which
             // is not correct here since we query using the CQL-over-thrift interface which use the pre-v3 format
             return ((CollectionSerializer)validator.getSerializer()).deserializeForNativeProtocol(value, 1);
         }

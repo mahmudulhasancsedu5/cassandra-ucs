@@ -25,7 +25,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.SetSerializer;
 
-public class SetType<T> extends CollectionType<Set<T>>
+public class SetType<T> extends ConcreteCollectionType<Set<T>>
 {
     // interning instances
     private static final Map<ConcreteType<?>, SetType<?>> instances = new HashMap<>();
@@ -101,14 +101,14 @@ public class SetType<T> extends CollectionType<Set<T>>
     }
 
     @Override
-    public boolean isCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isCompatibleWithFrozen(CollectionType previous)
     {
         assert !isMultiCell;
         return this.elements.isCompatibleWith(((SetType<?>) previous).elements);
     }
 
     @Override
-    public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isValueCompatibleWithFrozen(CollectionType previous)
     {
         // because sets are ordered, any changes to the type must maintain the ordering
         return isCompatibleWithFrozen(previous);
@@ -157,5 +157,12 @@ public class SetType<T> extends CollectionType<Set<T>>
     public Set<T> cast(Object value)
     {
         return (Set<T>) (Set<?>) value;
+    }
+
+
+    @Override
+    public CollectionType.Kind kind()
+    {
+        return CollectionType.Kind.SET;
     }
 }

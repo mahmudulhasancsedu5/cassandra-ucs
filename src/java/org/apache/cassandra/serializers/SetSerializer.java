@@ -25,13 +25,14 @@ import java.util.*;
 public class SetSerializer<T> extends CollectionSerializer<Set<T>>
 {
     // interning instances
-    private static final Map<TypeSerializer<?>, SetSerializer> instances = new HashMap<TypeSerializer<?>, SetSerializer>();
+    private static final Map<TypeSerializer<?>, SetSerializer<?>> instances = new HashMap<TypeSerializer<?>, SetSerializer<?>>();
 
     public final TypeSerializer<T> elements;
 
     public static synchronized <T> SetSerializer<T> getInstance(TypeSerializer<T> elements)
     {
-        SetSerializer<T> t = instances.get(elements);
+        @SuppressWarnings("unchecked")
+        SetSerializer<T> t = (SetSerializer<T>) instances.get(elements);
         if (t == null)
         {
             t = new SetSerializer<T>(elements);
@@ -117,8 +118,8 @@ public class SetSerializer<T> extends CollectionSerializer<Set<T>>
         return sb.toString();
     }
 
-    public Class<Set<T>> getType()
+    public Class<?> getType()
     {
-        return (Class) Set.class;
+        return Set.class;
     }
 }

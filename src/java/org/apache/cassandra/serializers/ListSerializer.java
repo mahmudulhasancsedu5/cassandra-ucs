@@ -27,13 +27,14 @@ import java.util.*;
 public class ListSerializer<T> extends CollectionSerializer<List<T>>
 {
     // interning instances
-    private static final Map<TypeSerializer<?>, ListSerializer> instances = new HashMap<TypeSerializer<?>, ListSerializer>();
+    private static final Map<TypeSerializer<?>, ListSerializer<?>> instances = new HashMap<>();
 
     public final TypeSerializer<T> elements;
 
     public static synchronized <T> ListSerializer<T> getInstance(TypeSerializer<T> elements)
     {
-        ListSerializer<T> t = instances.get(elements);
+        @SuppressWarnings("unchecked")
+        ListSerializer<T> t = (ListSerializer<T>) instances.get(elements);
         if (t == null)
         {
             t = new ListSerializer<T>(elements);
@@ -154,8 +155,8 @@ public class ListSerializer<T> extends CollectionSerializer<List<T>>
         return sb.toString();
     }
 
-    public Class<List<T>> getType()
+    public Class<?> getType()
     {
-        return (Class) List.class;
+        return List.class;
     }
 }

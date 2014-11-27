@@ -62,7 +62,7 @@ public class CompositesIndexOnCollectionKey extends CompositesIndex
     @Override
     protected AbstractType getIndexKeyComparator()
     {
-        return ((CollectionType<?>)columnDef.type).nameComparator();
+        return ((CollectionType)columnDef.type).nameComparator();
     }
 
     protected ByteBuffer getIndexedValue(ByteBuffer rowKey, Cell cell)

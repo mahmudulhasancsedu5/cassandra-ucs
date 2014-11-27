@@ -474,7 +474,7 @@ public class ColumnCondition
 
         public boolean appliesTo(Composite rowPrefix, ColumnFamily current, final long now) throws InvalidRequestException
         {
-            CollectionType<?> type = (CollectionType<?>)column.type;
+            CollectionType type = (CollectionType)column.type;
 
             if (type.isMultiCell())
             {
@@ -506,9 +506,9 @@ public class ColumnCondition
 
             // make sure we use v3 serialization format for comparison
             ByteBuffer conditionValue;
-            if (type.kind == CollectionType.Kind.LIST)
+            if (type.kind() == CollectionType.Kind.LIST)
                 conditionValue = ((Lists.Value) value).getWithProtocolVersion(Server.VERSION_3);
-            else if (type.kind == CollectionType.Kind.SET)
+            else if (type.kind() == CollectionType.Kind.SET)
                 conditionValue = ((Sets.Value) value).getWithProtocolVersion(Server.VERSION_3);
             else
                 conditionValue = ((Maps.Value) value).getWithProtocolVersion(Server.VERSION_3);
@@ -516,12 +516,12 @@ public class ColumnCondition
             return compareWithOperator(operator, type, conditionValue, cell.value());
         }
 
-        static boolean valueAppliesTo(CollectionType<?> type, Iterator<Cell> iter, Term.Terminal value, Operator operator)
+        static boolean valueAppliesTo(CollectionType type, Iterator<Cell> iter, Term.Terminal value, Operator operator)
         {
             if (value == null)
                 return !iter.hasNext();
 
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST: return listAppliesTo((ListType<?>)type, iter, ((Lists.Value)value).elements, operator);
                 case SET: return setAppliesTo((SetType<?>)type, iter, ((Sets.Value)value).elements, operator);
@@ -627,7 +627,7 @@ public class ColumnCondition
             if (condition.inValues == null)
             {
                 // We have a list of serialized collections that need to be deserialized for later comparisons
-                CollectionType<?> collectionType = (CollectionType<?>) column.type;
+                CollectionType collectionType = (CollectionType) column.type;
                 Lists.Marker inValuesMarker = (Lists.Marker) condition.value;
                 if (column.type instanceof ListType)
                 {
@@ -672,7 +672,7 @@ public class ColumnCondition
 
         public boolean appliesTo(Composite rowPrefix, ColumnFamily current, final long now) throws InvalidRequestException
         {
-            CollectionType<?> type = (CollectionType<?>)column.type;
+            CollectionType type = (CollectionType)column.type;
             CellName name = current.metadata().comparator.create(rowPrefix, column);
             if (type.isMultiCell())
             {
@@ -787,7 +787,7 @@ public class ColumnCondition
                 throw new InvalidRequestException(String.format("Invalid element access syntax for non-collection column %s", receiver.name));
 
             ColumnSpecification elementSpec, valueSpec;
-            switch ((((CollectionType<?>)receiver.type).kind))
+            switch ((((CollectionType)receiver.type).kind()))
             {
                 case LIST:
                     elementSpec = Lists.indexSpecOf(receiver);

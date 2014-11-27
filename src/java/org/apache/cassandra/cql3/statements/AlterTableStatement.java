@@ -132,13 +132,13 @@ public class AlterTableStatement extends SchemaAlteringStatement
                     // reason mean that we can't allow adding a new collection with that name (see the ticket for details).
                     if (cfm.comparator.hasCollections())
                     {
-                        CollectionType<?> previous = cfm.comparator.collectionType() == null ? null : cfm.comparator.collectionType().defined.get(columnName.bytes);
+                        CollectionType previous = cfm.comparator.collectionType() == null ? null : cfm.comparator.collectionType().defined.get(columnName.bytes);
                         if (previous != null && !type.isCompatibleWith(previous))
                             throw new InvalidRequestException(String.format("Cannot add a collection with the name %s " +
                                         "because a collection with the same name and a different type has already been used in the past", columnName));
                     }
 
-                    cfm.comparator = cfm.comparator.addOrUpdateCollection(columnName, (CollectionType<?>)type);
+                    cfm.comparator = cfm.comparator.addOrUpdateCollection(columnName, (CollectionType)type);
                 }
 
                 Integer componentIndex = cfm.comparator.isCompound() ? cfm.comparator.clusteringPrefixSize() : null;
@@ -221,7 +221,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                         // change the underlying sorting order, but we still don't want to have a discrepancy between the type
                         // in the comparator and the one in the ColumnDefinition as that would be dodgy).
                         if (validatorType.isCollection() && validatorType.isMultiCell())
-                            cfm.comparator = cfm.comparator.addOrUpdateCollection(def.name, (CollectionType<?>)validatorType);
+                            cfm.comparator = cfm.comparator.addOrUpdateCollection(def.name, (CollectionType)validatorType);
 
                         break;
                 }

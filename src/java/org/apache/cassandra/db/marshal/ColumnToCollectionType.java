@@ -33,16 +33,16 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
 {
     // interning instances
-    private static final Map<Map<ByteBuffer, CollectionType<?>>, ColumnToCollectionType> instances = new HashMap<>();
+    private static final Map<Map<ByteBuffer, CollectionType>, ColumnToCollectionType> instances = new HashMap<>();
 
-    public final Map<ByteBuffer, CollectionType<?>> defined;
+    public final Map<ByteBuffer, CollectionType> defined;
 
     public static ColumnToCollectionType getInstance(TypeParser parser) throws SyntaxException, ConfigurationException
     {
         return getInstance(parser.getCollectionsParameters());
     }
 
-    public static synchronized ColumnToCollectionType getInstance(Map<ByteBuffer, CollectionType<?>> defined)
+    public static synchronized ColumnToCollectionType getInstance(Map<ByteBuffer, CollectionType> defined)
     {
         assert defined != null;
 
@@ -55,7 +55,7 @@ public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
         return t;
     }
 
-    private ColumnToCollectionType(Map<ByteBuffer, CollectionType<?>> defined)
+    private ColumnToCollectionType(Map<ByteBuffer, CollectionType> defined)
     {
         this.defined = ImmutableMap.copyOf(defined);
     }
@@ -67,7 +67,7 @@ public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
 
     public int compareCollectionMembers(ByteBuffer o1, ByteBuffer o2, ByteBuffer collectionName)
     {
-        CollectionType<?> t = defined.get(collectionName);
+        CollectionType t = defined.get(collectionName);
         if (t == null)
             throw new RuntimeException(ByteBufferUtil.bytesToHex(collectionName) + " is not defined as a collection");
 
@@ -104,7 +104,7 @@ public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
 
     public void validateCollectionMember(ByteBuffer bytes, ByteBuffer collectionName) throws MarshalException
     {
-        CollectionType<?> t = defined.get(collectionName);
+        CollectionType t = defined.get(collectionName);
         if (t == null)
             throw new MarshalException(ByteBufferUtil.bytesToHex(collectionName) + " is not defined as a collection");
 
@@ -119,9 +119,9 @@ public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
 
         ColumnToCollectionType prev = (ColumnToCollectionType)previous;
         // We are compatible if we have all the definitions previous have (but we can have more).
-        for (Map.Entry<ByteBuffer, CollectionType<?>> entry : prev.defined.entrySet())
+        for (Map.Entry<ByteBuffer, CollectionType> entry : prev.defined.entrySet())
         {
-            CollectionType<?> newType = defined.get(entry.getKey());
+            CollectionType newType = defined.get(entry.getKey());
             if (newType == null || !newType.isCompatibleWith(entry.getValue()))
                 return false;
         }

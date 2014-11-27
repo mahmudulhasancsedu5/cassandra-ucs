@@ -199,16 +199,16 @@ public class CreateTableStatement extends SchemaAlteringStatement
 
             CreateTableStatement stmt = new CreateTableStatement(cfName, properties, ifNotExists, staticColumns);
 
-            Map<ByteBuffer, CollectionType<?>> definedMultiCellCollections = null;
+            Map<ByteBuffer, CollectionType> definedMultiCellCollections = null;
             for (Map.Entry<ColumnIdentifier, CQL3Type.Raw> entry : definitions.entrySet())
             {
                 ColumnIdentifier id = entry.getKey();
                 CQL3Type pt = entry.getValue().prepare(keyspace());
-                if (pt.isCollection() && ((CollectionType<?>) pt.getType()).isMultiCell())
+                if (pt.isCollection() && ((CollectionType) pt.getType()).isMultiCell())
                 {
                     if (definedMultiCellCollections == null)
                         definedMultiCellCollections = new HashMap<>();
-                    definedMultiCellCollections.put(id.bytes, (CollectionType<?>) pt.getType());
+                    definedMultiCellCollections.put(id.bytes, (CollectionType) pt.getType());
                 }
                 stmt.columns.put(id, pt.getType()); // we'll remove what is not a column below
             }

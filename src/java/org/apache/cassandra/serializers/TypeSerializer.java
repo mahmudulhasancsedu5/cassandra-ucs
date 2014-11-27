@@ -33,5 +33,5 @@ public interface TypeSerializer<T>
 
     public String toString(T value);
 
-    public Class<T> getType();
+    public Class<?> getType();
 }

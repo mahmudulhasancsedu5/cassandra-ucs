@@ -200,8 +200,7 @@ public enum DataType implements OptionCodec.Codecable<DataType>
     {
         // For CQL3 clients, ReversedType is an implementation detail and they
         // shouldn't have to care about it.
-        if (type instanceof ReversedType)
-            type = ((ReversedType)type).baseType;
+        type = type.getNonReversedType();
 
         // For compatibility sake, we still return DateType as the timestamp type in resultSet metadata (#5723)
         if (type instanceof DateType)

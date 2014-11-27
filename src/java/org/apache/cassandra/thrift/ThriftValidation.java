@@ -285,7 +285,7 @@ public class ThriftValidation
             throw new org.apache.cassandra.exceptions.InvalidRequestException(e.getMessage());
         }
 
-        Comparator<ByteBuffer> orderedComparator = range.isReversed() ? comparator.reverseComparator : comparator;
+        Comparator<ByteBuffer> orderedComparator = range.isReversed() ? comparator.reverseComparator() : comparator;
         if (range.start.remaining() > 0
             && range.finish.remaining() > 0
             && orderedComparator.compare(range.start, range.finish) > 0)

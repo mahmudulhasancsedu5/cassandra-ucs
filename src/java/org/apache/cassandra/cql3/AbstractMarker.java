@@ -62,7 +62,7 @@ public abstract class AbstractMarker extends Term.NonTerminal
             if (!(receiver.type instanceof CollectionType))
                 return new Constants.Marker(bindIndex, receiver);
 
-            switch (((CollectionType<?>)receiver.type).kind)
+            switch (((CollectionType)receiver.type).kind())
             {
                 case LIST: return new Lists.Marker(bindIndex, receiver);
                 case SET:  return new Sets.Marker(bindIndex, receiver);

@@ -237,9 +237,9 @@ public class TypeParser
         throw new SyntaxException(String.format("Syntax error parsing '%s' at char %d: unexpected end of string", str, idx));
     }
 
-    public Map<ByteBuffer, CollectionType<?>> getCollectionsParameters() throws SyntaxException, ConfigurationException
+    public Map<ByteBuffer, CollectionType> getCollectionsParameters() throws SyntaxException, ConfigurationException
     {
-        Map<ByteBuffer, CollectionType<?>> map = new HashMap<>();
+        Map<ByteBuffer, CollectionType> map = new HashMap<>();
 
         if (isEOS())
             return map;
@@ -270,7 +270,7 @@ public class TypeParser
                 AbstractType type = parse();
                 if (!(type instanceof CollectionType))
                     throw new SyntaxException(type + " is not a collection type");
-                map.put(bb, (CollectionType<?>)type);
+                map.put(bb, (CollectionType)type);
             }
             catch (SyntaxException e)
             {
@@ -372,19 +372,33 @@ public class TypeParser
         {
             // Trying to see if we have an instance field and apply the default parameter to it
             AbstractType type = getRawAbstractType(typeClass);
-            return AbstractType.parseDefaultParameters(type, parser);
+            return parseDefaultParameters(type, parser);
         }
         catch (IllegalAccessException e)
         {
             // Trying to see if we have an instance field and apply the default parameter to it
             AbstractType type = getRawAbstractType(typeClass);
-            return AbstractType.parseDefaultParameters(type, parser);
+            return parseDefaultParameters(type, parser);
         }
         catch (InvocationTargetException e)
         {
             ConfigurationException ex = new ConfigurationException("Invalid definition for comparator " + typeClass.getName() + ".");
             ex.initCause(e.getTargetException());
             throw ex;
+        }
+    }
+
+    public static AbstractType parseDefaultParameters(AbstractType baseType, TypeParser parser) throws SyntaxException
+    {
+        Map<String, String> parameters = parser.getKeyValueParameters();
+        String reversed = parameters.get("reversed");
+        if (reversed != null && (reversed.isEmpty() || reversed.equals("true")))
+        {
+            return ReversedType.getInstance(baseType);
+        }
+        else
+        {
+            return baseType;
         }
     }
 
@@ -555,12 +569,12 @@ public class TypeParser
         return sb.append(')').toString();
     }
 
-    public static String stringifyCollectionsParameters(Map<ByteBuffer, ? extends CollectionType<?>> collections)
+    public static String stringifyCollectionsParameters(Map<ByteBuffer, ? extends CollectionType> collections)
     {
         StringBuilder sb = new StringBuilder();
         sb.append('(');
         boolean first = true;
-        for (Map.Entry<ByteBuffer, ? extends CollectionType<?>> entry : collections.entrySet())
+        for (Map.Entry<ByteBuffer, ? extends CollectionType> entry : collections.entrySet())
         {
             if (!first)
                 sb.append(',');
