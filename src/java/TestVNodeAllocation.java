@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 
 public class TestVNodeAllocation
@@ -95,6 +96,25 @@ public class TestVNodeAllocation
         List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens);
 
         double replicas();
+    }
+    
+    static class NoReplicationStrategy implements ReplicationStrategy
+    {
+        public List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens)
+        {
+            return Collections.singletonList(sortedTokens.floorEntry(token).getValue());
+        }
+
+        public String toString()
+        {
+            return "No replication";
+        }
+
+        @Override
+        public double replicas()
+        {
+            return 1;
+        }
     }
     
     static class SimpleReplicationStrategy implements ReplicationStrategy
@@ -289,14 +309,14 @@ public class TestVNodeAllocation
         }
     }
     
-    static class Weighted<T extends Comparable<T>> implements Comparable<Weighted<T>>{
+    static class Weighted<T extends Comparable<T>> implements Comparable<Weighted<T>> {
         final double weight;
-        final T node;
+        final T value;
 
         public Weighted(double weight, T node)
         {
             this.weight = weight;
-            this.node = node;
+            this.value = node;
         }
 
         @Override
@@ -304,7 +324,7 @@ public class TestVNodeAllocation
         {
             int cmp = Double.compare(o.weight, this.weight);
             if (cmp == 0) {
-                cmp = node.compareTo(o.node);
+                cmp = value.compareTo(o.value);
             }
             return cmp;
         }
@@ -312,42 +332,37 @@ public class TestVNodeAllocation
         @Override
         public String toString()
         {
-            return String.format("%s<%s>", node, weight);
+            return String.format("%s<%s>", value, weight);
         }
     }
     
-    static class ReplicationAgnosticTokenDistributor extends TokenDistributor {
-        SortedSet<Weighted<Node>> sortedNodes;
-        final Map<Node, SortedSet<Weighted<Token>>> tokensInNode;
+    static class NoReplicationTokenDistributor extends TokenDistributor {
+        PriorityQueue<Weighted<Node>> sortedNodes;
+        final Map<Node, PriorityQueue<Weighted<Token>>> tokensInNode;
         
-        
-        public ReplicationAgnosticTokenDistributor(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy, int perNodeCount)
+        public NoReplicationTokenDistributor(NavigableMap<Token, Node> sortedTokens, int perNodeCount)
         {
-            super(sortedTokens, strategy, perNodeCount);
+            super(sortedTokens, new NoReplicationStrategy(), perNodeCount);
             tokensInNode = Maps.newHashMap();
-            sortedNodes = Sets.newTreeSet();
             for (Map.Entry<Token, Node> en : sortedTokens.entrySet()) {
                 Token token = en.getKey();
                 Node node = en.getValue();
                 addWeightedToken(node, token);
             }
+            sortedNodes = Queues.newPriorityQueue();
             tokensInNode.forEach(this::addToSortedNodes);
-            
-            Map<Node, Double> ownership = evaluateReplicatedOwnership();
-            sortedNodes = new TreeSet<>();
-            ownership.forEach((n, w) -> sortedNodes.add(new Weighted<>(w, n)));
         }
 
-        private boolean addToSortedNodes(Node node, SortedSet<Weighted<Token>> set)
+        private boolean addToSortedNodes(Node node, Collection<Weighted<Token>> set)
         {
             return sortedNodes.add(new Weighted<Node>(set.stream().mapToDouble(wt -> wt.weight).sum(), node));
         }
 
         private void addWeightedToken(Node node, Token token)
         {
-            SortedSet<Weighted<Token>> nodeTokens = tokensInNode.get(node);
+            PriorityQueue<Weighted<Token>> nodeTokens = tokensInNode.get(node);
             if (nodeTokens == null) {
-                nodeTokens = Sets.newTreeSet();
+                nodeTokens = Queues.newPriorityQueue();
                 tokensInNode.put(node, nodeTokens);
             }
             Weighted<Token> wt = new Weighted<Token>(tokenSize(token), token);
@@ -356,42 +371,50 @@ public class TestVNodeAllocation
 
         void addNode(Node newNode)
         {
-            int applyTo = perNodeCount;
-            double targetAverage;
-            for (;;) {
-                // FIXME: There's a one-pass version of this.
-                final double target = sortedNodes.stream().limit(applyTo).mapToDouble(n -> n.weight).sum() / (applyTo + 1);
-                int countAbove = (int) sortedNodes.stream().limit(applyTo).filter(n -> (n.weight > target)).count();
-                targetAverage = target;
-                if (countAbove == applyTo)
+            assert !sortedNodes.isEmpty();
+            List<Weighted<Node>> nodes = Lists.newArrayListWithCapacity(perNodeCount);
+            double targetAverage = 0;
+            double sum = 0;
+            int count;
+            // Select the nodes we will work with, extract them from sortedNodes and calculate targetAverage.
+            for (count = 0; count < perNodeCount; ++count)
+            {
+                Weighted<Node> wn = sortedNodes.peek();
+                if (wn == null)
                     break;
-                applyTo = countAbove;
-            }
-            // Now we want to insert tokens so that the largest nodes (+ new node) become targetAverage size.
-            List<Weighted<Node>> nodes = Lists.newArrayListWithCapacity(applyTo);
-            for (int i=0; i<applyTo; ++i) {
-                Weighted<Node> wn = sortedNodes.first();
-                sortedNodes.remove(wn);
+                double average = (sum + wn.weight) / (count + 2); // wn.node and newNode must be counted.
+                if (wn.weight <= average)
+                    break;  // No point to include later nodes, target can only decrease from here.
+
+                // Node will be used.
+                sum += wn.weight;
+                targetAverage = average;
+                sortedNodes.remove();
                 nodes.add(wn);
             }
             
             int nr = 0;
             for (Weighted<Node> n: nodes) {
-                int tokensToChange = perNodeCount / applyTo + (nr < perNodeCount % applyTo ? 1 : 0);
+                // TODO: Any better ways to assign how many tokens to change in each node?
+                int tokensToChange = perNodeCount / count + (nr < perNodeCount % count ? 1 : 0);
                 
-                SortedSet<Weighted<Token>> nodeTokens = tokensInNode.get(n.node);
+                Queue<Weighted<Token>> nodeTokens = tokensInNode.get(n.value);
                 List<Weighted<Token>> tokens = Lists.newArrayListWithCapacity(tokensToChange);
                 double workWeight = 0;
+                // Extract biggest vnodes and calculate how much weight we can work with.
                 for (int i=0; i < tokensToChange; ++i) {
-                    Weighted<Token> wt = nodeTokens.first();
-                    nodeTokens.remove(wt);
+                    Weighted<Token> wt = nodeTokens.remove();
                     tokens.add(wt);
                     workWeight += wt.weight;
                 }
+
                 double toTakeOver = n.weight - targetAverage;
-                while (tokensToChange > 0) {
-                    Weighted<Token> wt = tokens.get(tokensToChange - 1);
+                // Split toTakeOver proportionally between the vnodes.
+                for (Weighted<Token> wt : tokens)
+                {
                     double slice;
+                    // TODO: Experiment with limiting the fraction we can take over. Having empty/singleton token ranges
+                    // doesn't help anyone.
                     if (toTakeOver < workWeight) {
                         // Spread decrease.
                         slice = wt.weight - (toTakeOver * wt.weight / workWeight);
@@ -399,21 +422,28 @@ public class TestVNodeAllocation
                         // Effectively take over spans, best we can do.
                         slice = 0;
                     }
-                    Token t = wt.node.slice(slice);
-                    // Token selected. Now change all data.
+                    Token t = wt.value.slice(slice);
 
+                    // Token selected. Now change all data.
                     sortedTokens.put(t, newNode);
                     // This changes nodeTokens.
-                    addWeightedToken(n.node, wt.node);
+                    addWeightedToken(n.value, wt.value);
                     addWeightedToken(newNode, t);
-                    --tokensToChange;
                 }
                 
-                addToSortedNodes(n.node, nodeTokens);
+                addToSortedNodes(n.value, nodeTokens);
                 ++nr;
             }
+            assert nr == perNodeCount;
+            assert nr == tokensInNode.get(newNode).size();
             addToSortedNodes(newNode, tokensInNode.get(newNode));
 //            System.out.println("Nodes after add: " + sortedNodes);
+        }
+
+        @Override
+        public int nodeCount()
+        {
+            return sortedNodes.size();
         }
     }
     
@@ -468,27 +498,26 @@ public class TestVNodeAllocation
     public static void main(String[] args)
     {
         final int targetClusterSize = 1000;
-        int perNodeCount = 32;
+        int perNodeCount = 256;
         NavigableMap<Token, Node> tokenMap = Maps.newTreeMap();
-        ReplicationStrategy rs = new SimpleReplicationStrategy(1);
         boolean locallyRandom = false;
         random(tokenMap, targetClusterSize, perNodeCount, locallyRandom);
-        TokenDistributor t = new ReplicationAgnosticTokenDistributor(tokenMap, rs, perNodeCount);
+        TokenDistributor t = new NoReplicationTokenDistributor(tokenMap, perNodeCount);
         test(t, targetClusterSize);
 
         tokenMap.clear();
         oneNodePerfectDistribution(tokenMap, perNodeCount);
-        t = new ReplicationAgnosticTokenDistributor(tokenMap, rs, perNodeCount);
+        t = new NoReplicationTokenDistributor(tokenMap, perNodeCount);
         test(t, targetClusterSize);
 
         tokenMap.clear();
         random(tokenMap, targetClusterSize/2, perNodeCount, locallyRandom);
-        t = new ReplicationAgnosticTokenDistributor(tokenMap, rs, perNodeCount);
+        t = new NoReplicationTokenDistributor(tokenMap, perNodeCount);
         test(t, targetClusterSize);
 
         tokenMap.clear();
         random(tokenMap, targetClusterSize*19/20, perNodeCount, locallyRandom);
-        t = new ReplicationAgnosticTokenDistributor(tokenMap, rs, perNodeCount);
+        t = new NoReplicationTokenDistributor(tokenMap, perNodeCount);
         test(t, targetClusterSize);
     }
 
