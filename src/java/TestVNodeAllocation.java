@@ -735,6 +735,7 @@ public class TestVNodeAllocation
         Map<Token, Token> replicationStart = Maps.newHashMap();
         Map<Node, Double> ownership = Maps.newHashMap();
         Map<Node, List<Token>> tokensInNode = Maps.newHashMap();
+        double optimalOwnership;
         
         public ReplicationAwareTokenDistributor(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy,
                 int perNodeCount)
@@ -756,6 +757,7 @@ public class TestVNodeAllocation
                 replicationStart.put(t, rs);
                 ownership.put(n, ownership.get(n) + rs.size(next(t)));
             }
+            optimalOwnership = totalTokenRange * strategy.replicas() / nodeCount();
         }
 
         @Override
@@ -763,7 +765,8 @@ public class TestVNodeAllocation
         {
             strategy.addNode(newNode);
             tokensInNode.put(newNode, Lists.newArrayListWithCapacity(perNodeCount));
-            ownership.put(newNode, 0.0);
+            optimalOwnership = totalTokenRange * strategy.replicas() / (nodeCount() + 1);
+            ownership.put(newNode, optimalOwnership);
             NavigableMap<Token, Node> sortedTokensCopy = Maps.newTreeMap(sortedTokens);
             
             for (int vn = 0; vn < perNodeCount; ++vn)
@@ -779,6 +782,7 @@ public class TestVNodeAllocation
                 adjustData(middle, newNode, sortedTokensCopy);
             }
 //            System.out.println(ownership);
+            assert verifyOwnership(ownership);
         }
 
         public void adjustData(Token middle, Node newNode, NavigableMap<Token, Node> sortedTokensCopy)
@@ -816,7 +820,7 @@ public class TestVNodeAllocation
             tokensInNode.get(newNode).add(middle);
             Token rs = strategy.replicationStart(middle, newNode, sortedTokensCopy);
             replicationStart.put(middle, rs);
-            ownership.put(newNode, ownership.get(newNode) + rs.size(next(middle)));
+            ownership.put(newNode, ownership.get(newNode) + rs.size(next(middle)) - optimalOwnership / perNodeCount);
             
             for (Map.Entry<Token, Node> ven: sortedTokens.entrySet()) {
                 n = ven.getValue();
@@ -828,7 +832,6 @@ public class TestVNodeAllocation
                                       t, rs, rss, middle, lastReplica, lr1, lr2, sortedTokens);
                 }
             }
-            assert verifyOwnership(ownership);
         }
         
         private Token max(Token t1, Token t2, Token m)
@@ -881,8 +884,8 @@ public class TestVNodeAllocation
             
             Token rs = strategy.replicationStart(middle, newNode, sortedTokensCopy);
             oldOwnership = newNodeOwnership;
-            newOwnership = newNodeOwnership + rs.size(next(middle));
-            improvement += sq(oldOwnership - optimalOwnership * allocatedVNodes / perNodeCount) - sq(newOwnership - optimalOwnership * (allocatedVNodes + 1) / perNodeCount);
+            newOwnership = newNodeOwnership + rs.size(next(middle)) - optimalOwnership / perNodeCount;
+            improvement += sq(oldOwnership - optimalOwnership) - sq(newOwnership - optimalOwnership);
             return improvement;
         }
 
