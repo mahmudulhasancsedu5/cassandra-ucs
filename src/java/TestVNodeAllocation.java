@@ -513,7 +513,7 @@ public class TestVNodeAllocation
             return ownership;
         }
 
-        private boolean verifyOwnership(Map<Node, Double> ownership)
+        protected boolean verifyOwnership(Map<Node, Double> ownership)
         {
             for (Map.Entry<Node, Double> en : ownership.entrySet())
             {
@@ -586,6 +586,11 @@ public class TestVNodeAllocation
         public void removeNode(Node n)
         {
             sortedTokens.entrySet().removeIf(en -> en.getValue() == n);
+        }
+        
+        public String toString()
+        {
+            return getClass().getSimpleName();
         }
     }
     
@@ -766,64 +771,90 @@ public class TestVNodeAllocation
                 NavigableMap<Double, Token> improvements = Maps.newTreeMap();
                 for (Token t : sortedTokens.keySet())
                 {
-                    // TODO: Can we do better than just picking middle?
-                    Token middle = t.slice(tokenSize(t) / 2);
-                    improvements.put(evaluateImprovement(middle, newNode, sortedTokensCopy), middle);
-                    // Try also 3/4 and 1/4.
-    //                middle = t.slice(tokenSize(t) / 4);
-    //                improvements.put(evaluateImprovement(middle, newNode), middle);
-    //                middle = t.slice(tokenSize(t) * 3 / 4);
-    //                improvements.put(evaluateImprovement(middle, newNode), middle);
+                    selectImprovements(t, newNode, ownership.get(newNode), vn, sortedTokensCopy, improvements);
                 }
 
                 // Greedy scheme. Pick best.
                 Token middle = improvements.lastEntry().getValue();
-                //adjustData(tt, newNode);
-                sortedTokensCopy.put(middle, newNode);
-                Token lastReplica = strategy.lastReplicaToken(middle, sortedTokens);
-                for (Map.Entry<Token, Node> en : Iterables.concat(sortedTokens.tailMap(middle, false).entrySet(),
-                                                                  sortedTokens.entrySet()))
-                {
-                    Token t = en.getKey();
-                    Node n = en.getValue();
-                    Token rs = strategy.replicationStart(t, n, sortedTokensCopy);
-                    Token rsOld = replicationStart.get(t);
-                    double oldOwnership = ownership.get(n);
-                    double newOwnership = oldOwnership + rs.size(t) - rsOld.size(t);
-                    ownership.put(n, newOwnership);
-                    replicationStart.put(t, rs);
-                    
-                    if (t == lastReplica)
-                        break;
-                }
+                adjustData(middle, newNode, sortedTokensCopy);
+            }
+//            System.out.println(ownership);
+        }
 
-                // Adjust sliced token.
-                Entry<Token, Node> en = mapEntryFor(middle);
+        public void adjustData(Token middle, Node newNode, NavigableMap<Token, Node> sortedTokensCopy)
+        {
+            sortedTokensCopy.put(middle, newNode);
+            Token lr1 = strategy.lastReplicaToken(middle, sortedTokens);
+            Token lr2 = strategy.lastReplicaToken(middle, sortedTokensCopy);
+            Token lastReplica = max(lr1, lr2, middle);
+            for (Map.Entry<Token, Node> en : Iterables.concat(sortedTokens.tailMap(middle, false).entrySet(),
+                                                              sortedTokens.entrySet()))
+            {
                 Token t = en.getKey();
                 Node n = en.getValue();
+                Token rs = strategy.replicationStart(t, n, sortedTokensCopy);
+                Token rsOld = replicationStart.get(t);
                 double oldOwnership = ownership.get(n);
-                double newOwnership = oldOwnership + t.size(middle) - t.size(next(middle));
+                double newOwnership = oldOwnership + rs.size(t) - rsOld.size(t);
                 ownership.put(n, newOwnership);
-
-                // TODO: Control ownership of newNode.
-                sortedTokens.put(middle, newNode);
-                tokensInNode.get(newNode).add(middle);
-                Token rs = strategy.replicationStart(middle, newNode, sortedTokensCopy);
-                replicationStart.put(middle, rs);
-                ownership.put(newNode, ownership.get(newNode) + rs.size(next(middle)));
+                replicationStart.put(t, rs);
+                
+                if (t == lastReplica)
+                    break;
             }
-            System.out.println(ownership);
+
+            // Adjust sliced token.
+            Entry<Token, Node> en = mapEntryFor(middle);
+            Token t = en.getKey();
+            Node n = en.getValue();
+            double oldOwnership = ownership.get(n);
+            double newOwnership = oldOwnership + t.size(middle) - t.size(next(middle));
+            ownership.put(n, newOwnership);
+
+            // TODO: Control ownership of newNode.
+            sortedTokens.put(middle, newNode);
+            tokensInNode.get(newNode).add(middle);
+            Token rs = strategy.replicationStart(middle, newNode, sortedTokensCopy);
+            replicationStart.put(middle, rs);
+            ownership.put(newNode, ownership.get(newNode) + rs.size(next(middle)));
+            
+            for (Map.Entry<Token, Node> ven: sortedTokens.entrySet()) {
+                n = ven.getValue();
+                t = ven.getKey();
+                rs = strategy.replicationStart(t, n, sortedTokens);
+                Token rss = replicationStart.get(t);
+                if (rs != rss) {
+                    System.out.format("Problem repl start of %s: %s vs. %s middle %s lastReplica %s(%s,%s)\n%s\n",
+                                      t, rs, rss, middle, lastReplica, lr1, lr2, sortedTokens);
+                }
+            }
+            assert verifyOwnership(ownership);
         }
         
+        private Token max(Token t1, Token t2, Token m)
+        {
+            return m.size(t1) >= m.size(t2) ? t1 : t2;
+        }
+
+        void selectImprovements(Token t, Node newNode, Double newNodeOwnership, int vn,
+                NavigableMap<Token, Node> sortedTokensCopy, NavigableMap<Double, Token> improvements)
+        {
+            // TODO: Can we do better than just picking middle?
+            Token middle = t.slice(tokenSize(t) / 2);
+            improvements.put(evaluateImprovement(middle, newNode, newNodeOwnership, vn, sortedTokensCopy), middle);
+        }
+
         // Returns a measure for the improvement that inserting this token will yield. Higher is better.
         // The exact measure used currently is decrease in std deviation.
-        double evaluateImprovement(Token middle, Node newNode, NavigableMap<Token, Node> sortedTokensCopy)
+        double evaluateImprovement(Token middle, Node newNode, double newNodeOwnership, int allocatedVNodes, NavigableMap<Token, Node> sortedTokensCopy)
         {
             // First, check who's affected by split.
-            Token lastReplica = strategy.lastReplicaToken(middle, sortedTokens);
+            sortedTokensCopy.put(middle, newNode);
+            Token lr1 = strategy.lastReplicaToken(middle, sortedTokens);
+            Token lr2 = strategy.lastReplicaToken(middle, sortedTokensCopy);
+            Token lastReplica = max(lr1, lr2, middle);
             
             double improvement = 0;
-            sortedTokensCopy.put(middle, newNode);
             double optimalOwnership = totalTokenRange * strategy.replicas() / (nodeCount() + 1);
             for (Map.Entry<Token, Node> en : Iterables.concat(sortedTokens.tailMap(middle, false).entrySet(),
                                                               sortedTokens.entrySet()))
@@ -847,6 +878,11 @@ public class TestVNodeAllocation
             double oldOwnership = ownership.get(en.getValue());
             double newOwnership = oldOwnership + t.size(middle) - t.size(next(middle));
             improvement += sq(oldOwnership - optimalOwnership) - sq(newOwnership - optimalOwnership);
+            
+            Token rs = strategy.replicationStart(middle, newNode, sortedTokensCopy);
+            oldOwnership = newNodeOwnership;
+            newOwnership = newNodeOwnership + rs.size(next(middle));
+            improvement += sq(oldOwnership - optimalOwnership * allocatedVNodes / perNodeCount) - sq(newOwnership - optimalOwnership * (allocatedVNodes + 1) / perNodeCount);
             return improvement;
         }
 
@@ -858,6 +894,34 @@ public class TestVNodeAllocation
             ownership.remove(n);
             // more
         }
+        
+    }
+    
+    static class RATokenDistributor2 extends ReplicationAwareTokenDistributor
+    {
+        int slices;
+        public RATokenDistributor2(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy, int slices,
+                int perNodeCount)
+        {
+            super(sortedTokens, strategy, perNodeCount);
+            this.slices = slices;
+        }
+
+        void selectImprovements(Token t, Node newNode, Double newNodeOwnership, int vn,
+                NavigableMap<Token, Node> sortedTokensCopy, NavigableMap<Double, Token> improvements)
+        {
+            double sz = tokenSize(t) / slices;
+            for (int i=1; i<slices; ++i) {
+                Token middle = t.slice(sz * i);
+                improvements.put(evaluateImprovement(middle, newNode, newNodeOwnership, vn, sortedTokensCopy), middle);
+            }
+        }
+
+        public String toString()
+        {
+            return super.toString() + ", " + slices + " slices";
+        }
+        
         
     }
     
@@ -916,14 +980,23 @@ public class TestVNodeAllocation
 
     public static void main(String[] args)
     {
-        final int targetClusterSize = 10;
-        int perNodeCount = 4;
+        final int targetClusterSize = 40;
+        int perNodeCount = 16;
         NavigableMap<Token, Node> tokenMap = Maps.newTreeMap();
 
         boolean locallyRandom = false;
-        random(tokenMap, targetClusterSize, perNodeCount, locallyRandom);
+        random(tokenMap, 3, perNodeCount, locallyRandom);
 
-        TokenDistributor t = new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(3), perNodeCount);
+        Set<Node> nodes = Sets.newTreeSet(tokenMap.values());
+        TokenDistributor[] t = {
+            new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(3), perNodeCount),
+            new ReplicationAwareTokenDistributor(tokenMap, new FixedRackCountReplicationStrategy(3, 3, nodes), perNodeCount),
+            new ReplicationAwareTokenDistributor(tokenMap, new FixedRackCountReplicationStrategy(3, 5, nodes), perNodeCount),
+            new NoReplicationTokenDistributor(tokenMap, perNodeCount)
+        };
+        if (nodes.size() < targetClusterSize)
+            test(t, nodes.size());
+
         test(t, targetClusterSize);
 
         test(t, targetClusterSize + 1);
@@ -936,6 +1009,7 @@ public class TestVNodeAllocation
 
         test(t, targetClusterSize + 5);
 
+        test(t, targetClusterSize * 5 / 4);
         
 //        TokenDistributor t = new NoReplicationTokenDistributor(tokenMap, perNodeCount);
 //        test(t, targetClusterSize);
@@ -958,6 +1032,12 @@ public class TestVNodeAllocation
 //        testLoseAndReplace(t, targetClusterSize / 4);
     }
 
+    private static void test(TokenDistributor[] ts, int targetClusterSize)
+    {
+        for (TokenDistributor t: ts)
+            test(t, targetClusterSize);
+    }
+
     private static void testLoseAndReplace(TokenDistributor t, int howMany)
     {
         int fullCount = t.nodeCount();
@@ -974,22 +1054,22 @@ public class TestVNodeAllocation
     {
         int size = t.nodeCount();
         if (size < targetClusterSize)
-            System.out.format("Adding %d node(s) using %s\n", targetClusterSize - size, t.getClass().getSimpleName());
+            System.out.format("Adding %d node(s) using %s\n", targetClusterSize - size, t.toString());
         while (size < targetClusterSize)
         {
             t.addNode(new Node());
             ++size;
         }
         printDistribution(t);
-        if (!(t.strategy instanceof NoReplicationStrategy))
-            printDistribution(t, new NoReplicationStrategy());
-        Set<Node> nodes = Sets.newHashSet(t.sortedTokens.values());
-        printDistribution(t, new SimpleReplicationStrategy(3));
+//        if (!(t.strategy instanceof NoReplicationStrategy))
+//            printDistribution(t, new NoReplicationStrategy());
+//        Set<Node> nodes = Sets.newTreeSet(t.sortedTokens.values());
+//        printDistribution(t, new SimpleReplicationStrategy(3));
 //        printDistribution(t, new SimpleReplicationStrategy(5));
 //        printDistribution(t, new SimpleReplicationStrategy(17));
 //        printDistribution(t, new BalancedRackReplicationStrategy(3, 4, nodes));
 //        printDistribution(t, new BalancedRackReplicationStrategy(3, 8, nodes));
-        printDistribution(t, new FixedRackCountReplicationStrategy(3, 3, nodes));
+//        printDistribution(t, new FixedRackCountReplicationStrategy(3, 3, nodes));
 //        printDistribution(t, new FixedRackCountReplicationStrategy(3, 5, nodes));
 //        printDistribution(t, new BalancedRackReplicationStrategy(3, 16, nodes));
 //        printDistribution(t, new BalancedRackReplicationStrategy(3, 64, nodes));
