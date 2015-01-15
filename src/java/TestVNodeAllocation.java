@@ -786,8 +786,18 @@ public class TestVNodeAllocation
         }
     }
     
+    static RackInfo getRack(Node node, Map<Object, RackInfo> rackMap, ReplicationStrategy strategy)
+    {
+        Object rackClass = strategy.getRack(node);
+        RackInfo ri = rackMap.get(rackClass);
+        if (ri == null)
+            rackMap.put(rackClass, ri = new RackInfo(rackClass));
+        return ri;
+    }
+    
     static class NodeInfo {
-        // use BOTTOM
+        static NodeInfo BOTTOM = new NodeInfo(null, null);
+
         final RackInfo rack;
         final Node node;
         double weight;
@@ -795,28 +805,30 @@ public class TestVNodeAllocation
         NodeInfo prevUsed;
         double adjustedWeight;
 
-        public NodeInfo(Node node, double weight, Map<Object, RackInfo> rackMap, ReplicationStrategy strategy)
+        public NodeInfo(Node node, RackInfo rack)
         {
             this.node = node;
+            this.rack = rack;
+        }
+        
+        public NodeInfo(Node node, double weight, Map<Object, RackInfo> rackMap, ReplicationStrategy strategy)
+        {
+            this(node, getRack(node, rackMap, strategy));
             this.weight = weight;
-            Object rackClass = strategy.getRack(node);
-            RackInfo ri = rackMap.get(rackClass);
-            if (ri == null)
-                rackMap.put(rackClass, ri = new RackInfo(rackClass));
-            this.rack = ri;
         }
         
         public String toString()
         {
-            return String.format("%s%s(%.2e)%s", node, rack.seen ? "*" : "", weight, prevUsed != null ? "prev " + (prevUsed == this ? "this" : prevUsed.toString()) : ""); 
+            return String.format("%s%s(%.2e)%s", node, rack.prevSeen != null ? "*" : "", weight, prevUsed != null ? "prev " + (prevUsed == this ? "this" : prevUsed.toString()) : ""); 
         }
     }
     
     static class RackInfo {
+        static RackInfo BOTTOM = new RackInfo(null);
+        
         final Object rack;  // rack representative
-        boolean seen = false;
-        boolean seenPopulate = false;
-        public RackInfo prevPopulate = null;
+        RackInfo prevSeen = null;
+        RackInfo prevPopulate = null;
 
         public RackInfo(Object rack)
         {
@@ -825,7 +837,7 @@ public class TestVNodeAllocation
 
         public String toString()
         {
-            return rack.toString() + (seen ? "*" : ""); 
+            return rack.toString() + (prevSeen != null ? "*" : ""); 
         }
     }
 
@@ -1118,7 +1130,7 @@ public class TestVNodeAllocation
             RackInfo hostRack = hostNode.rack;
             populateTokenInfoAndAdjustNode(candidate, newRack);
 
-            NodeInfo nodesChain = null;
+            RackInfo rackChain = RackInfo.BOTTOM;
 
             int seenOld = 0;
             int seenNew = 0;
@@ -1130,28 +1142,23 @@ public class TestVNodeAllocation
                 next = curr.next;
                 NodeInfo currNode = curr.owningNode;
                 RackInfo rack = currNode.rack;
-                if (rack.seen)
+                if (rack.prevSeen != null)
                     continue evLoop;    // If both have already seen this rack, nothing can change within it.
                 if (rack != newRack)
                     seenNew += 1;
                 if (rack != hostRack)
                     seenOld += 1;
-                rack.seen = true;
+                rack.prevSeen = rackChain;
+                rackChain = rack;
                 
-                if (currNode.prevUsed == null)
-                {
-                    currNode.prevUsed = nodesChain;
-                    nodesChain = currNode;
-                }
                 populateTokenInfoAndAdjustNode(curr, newRack);
                 populateCandidate(currCandidate);
             }
             
-            while (nodesChain != null) {
-                NodeInfo prev = nodesChain.prevUsed;
-                nodesChain.prevUsed = null;
-                nodesChain.rack.seen = false;
-                nodesChain = prev;
+            while (rackChain != RackInfo.BOTTOM) {
+                RackInfo prev = rackChain.prevSeen;
+                rackChain.prevSeen = null;
+                rackChain = prev;
             }
         }
         
@@ -1160,7 +1167,7 @@ public class TestVNodeAllocation
             // find replicationStart and rfm1Token
             // find unaffectable == newNodeRack or candidate rack reached before replicationStart
             
-            RackInfo rackChain = null;
+            RackInfo rackChain = RackInfo.BOTTOM;
             RackInfo candidateRack = candidate.owningNode.rack;
             int seenRacks = 0;
             boolean unaffectable = false;
@@ -1172,9 +1179,8 @@ public class TestVNodeAllocation
                 rs = curr.token; // previous
                 curr = curr.prev;
                 RackInfo ri = curr.owningNode.rack;
-                if (ri.seenPopulate)
+                if (ri.prevPopulate != null)
                     continue;
-                ri.seenPopulate = true;
                 ri.prevPopulate = rackChain;
                 rackChain = ri;
                 if (++seenRacks == rf)
@@ -1192,15 +1198,14 @@ public class TestVNodeAllocation
             candidate.rfm1Token = rfm1;
             candidate.replicationStart = rs;
             candidate.expandable = unaffectable;
-            // Clean rack used flag.
-            while (rackChain != null)
+
+            // Clean rack seen markers.
+            while (rackChain != RackInfo.BOTTOM)
             {
                 RackInfo prev = rackChain.prevPopulate;
                 rackChain.prevPopulate  = null;
-                rackChain.seenPopulate = false;
                 rackChain = prev;
             }
-            
             return rs;
         }
         
@@ -1250,13 +1255,13 @@ public class TestVNodeAllocation
                 next = curr.next;
                 NodeInfo currNode = curr.owningNode;
                 RackInfo rack = currNode.rack;
-                if (rack.seen)
+                if (rack.prevSeen != null)
                     continue evLoop;    // If both have already seen this rack, nothing can change within it.
                 if (rack != newRack)
                     seenNew += 1;
                 if (rack != hostRack)
                     seenOld += 1;
-                rack.seen = true;
+                rack.prevSeen = rack;   // Just mark it as seen, we are not forming a chain there.
                 
                 if (currNode.prevUsed == null)
                 {
@@ -1274,8 +1279,6 @@ public class TestVNodeAllocation
                     if (rack == newRack)
                         rs = cend;
                     else 
-    //                if (!preceeds(curr.replicationStart, rs, next.token))
-    //                    continue evLoop;    // new token doesn't replace anything. No changes.
                         if (preceeds(curr.rfm1Token, cend, next.token))
                             rs = curr.rfm1Token;    // new token is closer than one-before last. That one is the boundary.
                         else if (preceeds(cend, curr.rfm1Token, next.token))
@@ -1296,7 +1299,7 @@ public class TestVNodeAllocation
                 double diff = sq(newOwnership - optimalOwnership) - sq(oldOwnership - optimalOwnership);
                 NodeInfo prev = nodesChain.prevUsed;
                 nodesChain.prevUsed = null;
-                nodesChain.rack.seen = false;
+                nodesChain.rack.prevSeen = null;
                 if (nodesChain != newNode)
                     improvement += diff; // * nodeMult;
                 else 
@@ -1412,12 +1415,12 @@ public class TestVNodeAllocation
                           t.strategy);
     }
 
-    public static void main(String[] args)
+    public static void main2(String[] args)
     {
         int perNodeCount = 8;
-        for (perNodeCount = 4; perNodeCount <= 256; perNodeCount *= 4)
+        for (perNodeCount = 1; perNodeCount <= 1024; perNodeCount *= 2)
         {
-            final int targetClusterSize = 500;
+            final int targetClusterSize = 1000;
             int rf = 3;
             NavigableMap<Token, Node> tokenMap = Maps.newTreeMap();
     
@@ -1442,18 +1445,18 @@ public class TestVNodeAllocation
     
             test(t, targetClusterSize * 26 / 25);
     
-            test(t, targetClusterSize * 5 / 4);
+//            test(t, targetClusterSize * 5 / 4);
     
-            test(t, targetClusterSize * 2);
+//            test(t, targetClusterSize * 2);
     
-            testLoseAndReplace(t, 1);
-            testLoseAndReplace(t, targetClusterSize / 100);
-            testLoseAndReplace(t, targetClusterSize / 25);
-            testLoseAndReplace(t, targetClusterSize / 4);
+//            testLoseAndReplace(t, 1);
+//            testLoseAndReplace(t, targetClusterSize / 100);
+//            testLoseAndReplace(t, targetClusterSize / 25);
+//            testLoseAndReplace(t, targetClusterSize / 4);
         }
     }
 
-//    public static void main(String[] args)
+    public static void main(String[] args)
     {
         int perNodeCount = 2;
         for (perNodeCount = 1; perNodeCount <= 256; perNodeCount *= 4)
@@ -1487,7 +1490,7 @@ public class TestVNodeAllocation
 
     private static void test(TokenDistributor[] ts, int targetClusterSize)
     {
-//        System.out.println(targetClusterSize);
+        System.out.println(targetClusterSize);
         for (TokenDistributor t: ts)
             test(t, targetClusterSize);
     }
