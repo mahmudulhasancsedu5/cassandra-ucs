@@ -841,18 +841,39 @@ public class TestVNodeAllocation
         }
     }
 
-    static class TokenInfo {
+    static class CircularList<T extends CircularList<T>> {
+        T prev;
+        T next;
+        
+        T insertAfter(T head, T node) {
+            if (head == null) {
+                return prev = next = (T) this;
+            }
+            assert node != null;
+            assert node.next != null;
+            prev = node;
+            next = node.next;
+            prev.next = (T) this;
+            next.prev = (T) this;
+            return head;
+        }
+        
+        T removeFrom(T head) {
+            next.prev = prev;
+            prev.next = next;
+            return this == head ? (this == next ? null : next) : head;
+        }
+    }
+    
+    static class BaseTokenInfo<T extends BaseTokenInfo<T>> extends CircularList<T> {
         final Token token;
         final NodeInfo owningNode;
         Token replicationStart;
         Token rfm1Token;
         boolean expandable;
         double replicatedOwnership = 0;
-
-        TokenInfo prev;
-        TokenInfo next;
-
-        public TokenInfo(Token token, NodeInfo owningNode)
+        
+        public BaseTokenInfo(Token token, NodeInfo owningNode)
         {
             this.token = token;
             this.owningNode = owningNode;
@@ -862,11 +883,43 @@ public class TestVNodeAllocation
         {
             return String.format("%s(%s)%s", token, owningNode, expandable ? "=" : ""); 
         }
+        
+        TokenInfo prevInRing()
+        {
+            return null;
+        }
     }
     
-    static void dumpTokens(String lead, TokenInfo tokens)
+    static class TokenInfo extends BaseTokenInfo<TokenInfo> {
+        public TokenInfo(Token token, NodeInfo owningNode)
+        {
+            super(token, owningNode);
+        }
+        
+        TokenInfo prevInRing()
+        {
+            return prev;
+        }
+    }
+    
+    static class CandidateInfo extends BaseTokenInfo<CandidateInfo> {
+        final TokenInfo host;
+
+        public CandidateInfo(Token token, TokenInfo host, NodeInfo owningNode)
+        {
+            super(token, owningNode);
+            this.host = host;
+        }
+        
+        TokenInfo prevInRing()
+        {
+            return host;
+        }
+    }
+    
+    static void dumpTokens(String lead, BaseTokenInfo<?> tokens)
     {
-        TokenInfo token = tokens;
+        BaseTokenInfo<?> token = tokens;
         do {
             System.out.format("%s%s: rs %s rfm1 %s size %.2e\n", lead, token, token.replicationStart, token.rfm1Token, token.replicatedOwnership);
             token = token.next;
@@ -892,7 +945,7 @@ public class TestVNodeAllocation
             NodeInfo newNodeInfo = new NodeInfo(newNode, optimalOwnership, racks, strategy);
             TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
 
-            TokenInfo candidates = createCandidates(tokens, newNodeInfo, assignedTokenShare);
+            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, assignedTokenShare);
             if (debug >= 3)
             {
                 dumpTokens("E", tokens);
@@ -900,15 +953,16 @@ public class TestVNodeAllocation
             }
             assert verifyTokenInfo(tokens);
             
-            PriorityQueue<Weighted<TokenInfo>> improvements = new PriorityQueue<>(sortedTokens.size());
-            TokenInfo candidate = candidates;
+            PriorityQueue<Weighted<CandidateInfo>> improvements = new PriorityQueue<>(sortedTokens.size());
+            CandidateInfo candidate = candidates;
             do
             {
                 double impr = evaluateImprovement(candidate, optimalOwnership, assignedTokenShare, 0);
                 improvements.add(new Weighted<>(impr, candidate));
                 candidate = candidate.next;
             } while (candidate != candidates);
-            TokenInfo bestToken = improvements.remove().value;
+            CandidateInfo bestToken = improvements.remove().value;
+            candidates = bestToken.removeFrom(candidates);
             
             for (int vn = 0; vn < perNodeCount; ++vn)
             {
@@ -927,6 +981,7 @@ public class TestVNodeAllocation
                 for (;;)
                 {
                     bestToken = improvements.remove().value;
+                    candidates = bestToken.removeFrom(candidates);
                     double impr = evaluateImprovement(bestToken, optimalOwnership, assignedTokenShare, vn);
                     double nextImpr = improvements.peek().weight;
                     
@@ -962,7 +1017,7 @@ public class TestVNodeAllocation
             NodeInfo newNodeInfo = new NodeInfo(newNode, optimalOwnership, racks, strategy);
             TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
 
-            TokenInfo candidates = createCandidates(tokens, newNodeInfo, assignedTokenShare);
+            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, assignedTokenShare);
             if (debug >= 3)
             {
                 dumpTokens("E", tokens);
@@ -973,11 +1028,9 @@ public class TestVNodeAllocation
             // For each vnode to add, try all choices and pick the one that gives best improvement.
             for (int vn = 0; vn < perNodeCount; ++vn)
             {
-                TokenInfo bestToken = null;
-                TokenInfo bestPrev = null;
+                CandidateInfo bestToken = null;
                 double bestImprovement = Double.NEGATIVE_INFINITY;
-                TokenInfo prevCandidate = null;
-                TokenInfo candidate = candidates;
+                CandidateInfo candidate = candidates;
                 do
                 {
                     if (debug >= 5)
@@ -986,17 +1039,17 @@ public class TestVNodeAllocation
                         double impr = evaluateImprovement(candidate, optimalOwnership, assignedTokenShare, vn);
                         if (Math.abs((impr / expImpr) - 1) > 0.000001)
                         {
-                            System.err.format("Evaluation wrong: %.6f vs %.6f\n", impr/sq(optimalOwnership), expImpr/sq(optimalOwnership));
+                            System.out.flush();
+                            System.out.format("Evaluation wrong: %.6f vs %.6f\n", impr/sq(optimalOwnership), expImpr/sq(optimalOwnership));
+                            System.err.flush();
                         }
                     }
                     double impr = evaluateImprovement(candidate, optimalOwnership, assignedTokenShare, vn);
                     if (impr > bestImprovement)
                     {
                         bestToken = candidate;
-                        bestPrev = prevCandidate;
                         bestImprovement = impr;
                     }
-                    prevCandidate = candidate;
                     candidate = candidate.next;
                 } while (candidate != candidates);
 
@@ -1004,16 +1057,9 @@ public class TestVNodeAllocation
                     System.out.print("Selected ");printChangeStat(bestToken, optimalOwnership, vn);
                 }
 
-                TokenInfo nextCandidate = bestToken.next;
                 adjustData(bestToken);
+                candidates = bestToken.removeFrom(candidates);
                 sortedTokens.put(bestToken.token, newNode);
-                // Remove candidate from list.
-                if (bestPrev != null)
-                    bestPrev.next = nextCandidate;
-                else {
-                    candidates = nextCandidate;
-                    prevCandidate.next = nextCandidate;
-                }
                 if (debug >= 5)
                 {
                     dumpTokens("E", tokens);
@@ -1039,7 +1085,7 @@ public class TestVNodeAllocation
             return verifyReplicationStartMap(replicationStart) && verifyOwnership(ownership);
         }
 
-        double printChangeStat(TokenInfo candidate, double optimalOwnership, int vn)
+        double printChangeStat(CandidateInfo candidate, double optimalOwnership, int vn)
         {
             return printChangeStat(candidate.token, candidate.owningNode.node, new TreeMap<>(sortedTokens), optimalOwnership, vn);
         }
@@ -1062,18 +1108,10 @@ public class TestVNodeAllocation
                 Token t = en.getKey();
                 NodeInfo ni = nodes.get(en.getValue());
                 TokenInfo ti = new TokenInfo(t, ni);
-                ti.prev = prev;
-                if (first == null)
-                    first = ti;
-                else {
-                    prev.next = ti;
-                }
+                first = ti.insertAfter(first, prev);
                 prev = ti;
             }
-            // Make it a ring.
-            prev.next = first;
-            first.prev = prev;
-            
+
             TokenInfo curr = first;
             do {
                 populateTokenInfoAndAdjustNode(curr, newNodeRack);
@@ -1083,20 +1121,16 @@ public class TestVNodeAllocation
             return first;
         }
 
-        TokenInfo createCandidates(TokenInfo tokens, NodeInfo newNodeInfo, double assignedTokenShare)
+        CandidateInfo createCandidates(TokenInfo tokens, NodeInfo newNodeInfo, double assignedTokenShare)
         {
             TokenInfo curr = tokens;
-            TokenInfo first = null;
-            TokenInfo prev = null;
+            CandidateInfo first = null;
+            CandidateInfo prev = null;
             do {
-                TokenInfo candidate = new TokenInfo(curr.token.slice(curr.token.size(curr.next.token) / 2), newNodeInfo);
-                if (first == null)
-                    first = candidate;
-                else
-                    prev.next = candidate;
+                CandidateInfo candidate = new CandidateInfo(curr.token.slice(curr.token.size(curr.next.token) / 2), curr, newNodeInfo);
+                first = candidate.insertAfter(first, prev);
                 
                 candidate.replicatedOwnership = assignedTokenShare;
-                candidate.prev = curr;
                 populateCandidate(candidate);
                 
                 prev = candidate;
@@ -1106,29 +1140,27 @@ public class TestVNodeAllocation
             return first;
         }
 
-        private void populateCandidate(TokenInfo candidate)
+        private void populateCandidate(CandidateInfo candidate)
         {
             // Only finding replication start would do.
             populateTokenInfo(candidate, candidate.owningNode.rack);
         }
 
-        public void adjustData(TokenInfo candidate)
+        public void adjustData(CandidateInfo candidate)
         {
-            TokenInfo host = candidate.prev;
+            TokenInfo host = candidate.host;
             TokenInfo next = host.next;
-            TokenInfo currCandidate = candidate.next;
-            host.next = candidate;
-            candidate.next = next;
-            assert next.prev == host;
-            next.prev = candidate;
-            
-            NodeInfo newNode = candidate.owningNode;
+            TokenInfo candidateToken = new TokenInfo(candidate.token, candidate.owningNode);
+            candidateToken.replicatedOwnership = candidate.replicatedOwnership;
+            candidateToken.insertAfter(host, host);   // List is not empty so this won't need to change head of list.
+
+            NodeInfo newNode = candidateToken.owningNode;
             RackInfo newRack = newNode.rack;
-            populateTokenInfoAndAdjustNode(host, newRack);
+            populateTokenInfoAndAdjustNode(candidateToken, newRack);
 
             NodeInfo hostNode = host.owningNode;
             RackInfo hostRack = hostNode.rack;
-            populateTokenInfoAndAdjustNode(candidate, newRack);
+            populateTokenInfoAndAdjustNode(host, newRack);
 
             RackInfo rackChain = RackInfo.BOTTOM;
 
@@ -1137,8 +1169,11 @@ public class TestVNodeAllocation
             int rf = strategy.replicas() - 1;
 
           evLoop:
-            for (TokenInfo curr = next; seenOld < rf || seenNew < rf; curr = next, currCandidate = currCandidate.next)
+            for (TokenInfo curr = next; seenOld < rf || seenNew < rf; curr = next)
             {
+                candidate = candidate.next;
+                populateCandidate(candidate);
+
                 next = curr.next;
                 NodeInfo currNode = curr.owningNode;
                 RackInfo rack = currNode.rack;
@@ -1152,7 +1187,6 @@ public class TestVNodeAllocation
                 rackChain = rack;
                 
                 populateTokenInfoAndAdjustNode(curr, newRack);
-                populateCandidate(currCandidate);
             }
             
             while (rackChain != RackInfo.BOTTOM) {
@@ -1162,7 +1196,7 @@ public class TestVNodeAllocation
             }
         }
         
-        private Token populateTokenInfo(TokenInfo candidate, RackInfo newNodeRack)
+        private Token populateTokenInfo(BaseTokenInfo<?> candidate, RackInfo newNodeRack)
         {
             // find replicationStart and rfm1Token
             // find unaffectable == newNodeRack or candidate rack reached before replicationStart
@@ -1170,14 +1204,11 @@ public class TestVNodeAllocation
             RackInfo rackChain = RackInfo.BOTTOM;
             RackInfo candidateRack = candidate.owningNode.rack;
             int seenRacks = 0;
-            boolean unaffectable = false;
+            boolean expandable = false;
             int rf = strategy.replicas();
-            Token rs;
-            TokenInfo curr = candidate;
-            Token rfm1 = curr.token;
-            for (;;) {
-                rs = curr.token; // previous
-                curr = curr.prev;
+            Token rs = candidate.token;
+            Token rfm1 = rs;
+            for (TokenInfo curr = candidate.prevInRing();;rs = curr.token, curr = curr.prev) {
                 RackInfo ri = curr.owningNode.rack;
                 if (ri.prevPopulate != null)
                     continue;
@@ -1189,15 +1220,15 @@ public class TestVNodeAllocation
                 rfm1 = rs;
                 if (ri == candidateRack)
                 {
-                    unaffectable = true;
+                    expandable = candidateRack != newNodeRack;
                     break;
                 }
                 if (ri == newNodeRack)
-                    unaffectable = true;
+                    expandable = true;
             }
             candidate.rfm1Token = rfm1;
             candidate.replicationStart = rs;
-            candidate.expandable = unaffectable;
+            candidate.expandable = expandable;
 
             // Clean rack seen markers.
             while (rackChain != RackInfo.BOTTOM)
@@ -1218,10 +1249,10 @@ public class TestVNodeAllocation
             candidate.owningNode.weight += newOwnership - oldOwnership;
         }
 
-        double evaluateImprovement(TokenInfo candidate, double optimalOwnership, double assignedTokenShare, int vn)
+        double evaluateImprovement(CandidateInfo candidate, double optimalOwnership, double assignedTokenShare, int vn)
         {
             double improvement = 0;
-            TokenInfo host = candidate.prev;
+            TokenInfo host = candidate.host;
             TokenInfo next = host.next;
             Token cend = next.token;
 
@@ -1270,19 +1301,31 @@ public class TestVNodeAllocation
                     nodesChain = currNode;
                 }
 
-                Token rs = candidate.token;
-                if (curr.expandable)// Sees same or new rack before rf-1.
+                Token rs;
+                if (curr.expandable) // Sees same or new rack before rf-1.
                 {
                     if (cend != curr.replicationStart)
-                        continue evLoop;    
+                        continue evLoop;
+                    // Replication expands to start of candidate.
+                    rs = candidate.token;
                 } else {
                     if (rack == newRack)
+                    {
+                        if (!preceeds(curr.replicationStart, cend, next.token))
+                            continue evLoop; // no changes, another newRack is closer
+                        // Replication shrinks to end of candidate.
                         rs = cend;
-                    else 
+                    } else {
                         if (preceeds(curr.rfm1Token, cend, next.token))
-                            rs = curr.rfm1Token;    // new token is closer than one-before last. That one is the boundary.
+                            // Candidate is closer than one-before last.
+                            rs = curr.rfm1Token;
                         else if (preceeds(cend, curr.rfm1Token, next.token))
-                            rs = cend;    // candidate is the rf boundary. Otherwise candidate is the last replicated token.
+                            // Candidate is the replication boundary.
+                            rs = cend;
+                        else
+                            // Candidate replaces one-before last. The latter becomes the replication boundary.
+                            rs = candidate.token;
+                    }
                 }
 
                 // Calculate ownership adjustments.
@@ -1458,7 +1501,7 @@ public class TestVNodeAllocation
 
     public static void main(String[] args)
     {
-        int perNodeCount = 2;
+        int perNodeCount = 4;
         for (perNodeCount = 1; perNodeCount <= 256; perNodeCount *= 4)
         {
             final int targetClusterSize = 500;
@@ -1474,7 +1517,7 @@ public class TestVNodeAllocation
                     new FasterTokenDistributor(tokenMap, new SimpleReplicationStrategy(rf), perNodeCount),
                     new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(rf), perNodeCount),
             };
-//            t[0].debug = 5;
+//            t[1].debug = 5;
             for (int i=initialSize; i<=targetClusterSize; i+=1)
                 test(t, i);
             
