@@ -974,6 +974,144 @@ public class TestVNodeAllocation
         } while (token != null && token != tokens);
     }
     
+    static class ReplicationAwareTokenDistributor2 extends ReplicationAwareTokenDistributor
+    {
+        public ReplicationAwareTokenDistributor2(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy,
+                int perNodeCount)
+        {
+            super(sortedTokens, strategy, perNodeCount);
+        }
+
+        double evaluateToken(double ownership, double optOwnership)
+        {
+//            double lo = optOwnership * 0.9;
+//            if (ownership < optOwnership * 1.1)
+//                return sq(lo - ownership);
+//            double hi = optOwnership * 1.6;
+//            //if (ownership > opt)
+//                return sq(ownership - hi);
+            
+            return sq(ownership - optOwnership);
+        }
+        
+        double evaluateImprovement(CandidateInfo candidate, double optNodeOwnership, double optTokenOwnership, int vn)
+        {
+            double change = 0;
+            TokenInfo host = candidate.host;
+            TokenInfo next = host.next;
+            Token cend = next.token;
+
+            // Reflect change in ownership of the splitting token (candidate).
+            double oldOwnership = candidate.replicatedOwnership;
+            double newOwnership = candidate.replicationStart.size(next.token);
+            change += evaluateToken(newOwnership, optTokenOwnership) - evaluateToken(oldOwnership, optTokenOwnership);
+            NodeInfo newNode = candidate.owningNode;
+            newNode.adjustedOwnership = newNode.ownership + newOwnership - oldOwnership;
+            
+            // Reflect change of ownership in the token being split (host).
+            oldOwnership = host.replicatedOwnership;
+            newOwnership = host.replicationStart.size(candidate.token);
+            change += evaluateToken(newOwnership, optTokenOwnership) - evaluateToken(oldOwnership, optTokenOwnership);
+            NodeInfo hostNode = host.owningNode;
+            hostNode.adjustedOwnership = hostNode.ownership + newOwnership - oldOwnership;
+
+            // Form a chain of nodes affected by the insertion to be able to qualify change of node ownership.
+            // A node may be affected more than once.
+            assert newNode.prevUsed == null;
+            newNode.prevUsed = newNode;   // end marker
+            RackInfo newRack = newNode.rack;
+            assert hostNode.prevUsed == null;
+            hostNode.prevUsed = newNode;
+            RackInfo hostRack = hostNode.rack;
+            NodeInfo nodesChain = hostNode;
+
+            // Loop through all vnodes that replicate candidate or host and update their ownership.
+            int seenOld = 0;
+            int seenNew = 0;
+            int rf = strategy.replicas() - 1;
+          evLoop:
+            for (TokenInfo curr = next; seenOld < rf || seenNew < rf; curr = next)
+            {
+                next = curr.next;
+                NodeInfo currNode = curr.owningNode;
+                RackInfo rack = currNode.rack;
+                if (rack.prevSeen != null)
+                    continue evLoop;    // If both have already seen this rack, nothing can change within it.
+                if (rack != newRack)
+                    seenNew += 1;
+                if (rack != hostRack)
+                    seenOld += 1;
+                rack.prevSeen = rack;   // Just mark it as seen, we are not forming a chain of racks.
+                
+                if (currNode.prevUsed == null)
+                {
+                    currNode.adjustedOwnership = currNode.ownership;
+                    currNode.prevUsed = nodesChain;
+                    nodesChain = currNode;
+                }
+
+                Token rs;
+                if (curr.expandable) // Sees same or new rack before rf-1.
+                {
+                    if (cend != curr.replicationStart)
+                        continue evLoop;
+                    // Replication expands to start of candidate.
+                    rs = candidate.token;
+                } else {
+                    if (rack == newRack)
+                    {
+                        if (!preceeds(curr.replicationStart, cend, next.token))
+                            continue evLoop; // no changes, another newRack is closer
+                        // Replication shrinks to end of candidate.
+                        rs = cend;
+                    } else {
+                        if (preceeds(curr.rfm1Token, cend, next.token))
+                            // Candidate is closer than one-before last.
+                            rs = curr.rfm1Token;
+                        else if (preceeds(cend, curr.rfm1Token, next.token))
+                            // Candidate is the replication boundary.
+                            rs = cend;
+                        else
+                            // Candidate replaces one-before last. The latter becomes the replication boundary.
+                            rs = candidate.token;
+                    }
+                }
+
+                // Calculate ownership adjustments.
+                oldOwnership = curr.replicatedOwnership;
+                newOwnership = rs.size(next.token);
+                change += evaluateToken(newOwnership, optTokenOwnership) - evaluateToken(oldOwnership, optTokenOwnership);
+                currNode.adjustedOwnership += newOwnership - oldOwnership;
+            }
+
+            // Now loop through the nodes chain and add the node-level changes. Also clear the racks' seen marks.
+            for (;;) {
+                newOwnership = nodesChain.adjustedOwnership;
+                oldOwnership = nodesChain.ownership;
+                double diff = sq(newOwnership - optNodeOwnership) - sq(oldOwnership - optNodeOwnership);
+                NodeInfo prev = nodesChain.prevUsed;
+                nodesChain.prevUsed = null;
+                nodesChain.rack.prevSeen = null;
+                if (nodesChain != newNode)
+                    change += diff;
+                else 
+                {
+                    change += (diff * (vn + 1)) / perNodeCount;
+                    break;
+                }
+                nodesChain = prev;
+            }
+
+            return -change;
+        }
+        
+        public double calcOptimalOwnership()
+        {
+            return totalTokenRange * strategy.replicas() / (nodeCount + nodeCount / perNodeCount);
+        }
+
+    }
+
     static class ReplicationAwareTokenDistributor extends TokenDistributor
     {
         int nodeCount;
@@ -995,7 +1133,7 @@ public class TestVNodeAllocation
             NodeInfo newNodeInfo = new NodeInfo(newNode, optNodeOwnership, racks, strategy);
             TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
 
-            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, optTokenOwnership);
+            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, totalTokenRange * strategy.replicas() / (nodeCount * perNodeCount));
             assert verifyTokenInfo(tokens);
             
             // Evaluate the expected improvements from all candidates and form a priority queue.
@@ -1519,10 +1657,10 @@ public class TestVNodeAllocation
                           t.strategy);
     }
 
-    public static void main(String[] args)
+    public static void main1(String[] args)
     {
-        int perNodeCount = 8;
-        for (perNodeCount = 1; perNodeCount <= 1024; perNodeCount *= 2)
+        int perNodeCount = 256;
+//        for (perNodeCount = 1; perNodeCount <= 1024; perNodeCount *= 2)
         {
             final int targetClusterSize = 1000;
             int rf = 3;
@@ -1560,7 +1698,7 @@ public class TestVNodeAllocation
         }
     }
 
-    public static void main2(String[] args)
+    public static void main(String[] args)
     {
         int perNodeCount = 16;
 //        for (perNodeCount = 1; perNodeCount <= 256; perNodeCount *= 4)
@@ -1577,12 +1715,13 @@ public class TestVNodeAllocation
             TokenDistributor[] t = {
 //                    new ReplicationAwareTokenDistributorTryAll(tokenMap, new SimpleReplicationStrategy(rf), perNodeCount),
                     new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(rf), perNodeCount),
+                    new ReplicationAwareTokenDistributor2(tokenMap, new SimpleReplicationStrategy(rf), perNodeCount),
             };
             t[1].debug = 5;
             for (int i=initialSize; i<=targetClusterSize; i+=1)
                 test(t, i);
             
-            testLoseAndReplace(t, targetClusterSize / 4);
+//            testLoseAndReplace(t, targetClusterSize / 4);
         }
     }
 
