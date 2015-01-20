@@ -17,10 +17,15 @@
  */
 package org.apache.cassandra.db.commitlog;
 
+import org.apache.cassandra.concurrent.NamedThreadFactory;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
+
 import org.slf4j.*;
 
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,11 +36,10 @@ public abstract class AbstractCommitLogService
     // how often should we log syngs that lag behind our desired period
     private static final long LAG_REPORT_INTERVAL = TimeUnit.MINUTES.toMillis(5);
 
-    private final Thread thread;
-    private volatile boolean shutdown = false;
-
-    // all Allocations written before this time will be synced
-    protected volatile long lastSyncedAt = System.currentTimeMillis();
+    // all Allocations written before this time are synced.
+    // Note: this number might jump back once in a while, but will eventually increase past any point in time.
+    // If a jump does occur, mutations started before both the higher and lower number are synced at that time.
+    protected volatile long approximateSyncedAt = System.currentTimeMillis();
 
     // counts of total written, and pending, log messages
     private final AtomicLong written = new AtomicLong(0);
@@ -43,9 +47,18 @@ public abstract class AbstractCommitLogService
 
     // signal that writers can wait on to be notified of a completed sync
     protected final WaitQueue syncComplete = new WaitQueue();
-    private final Semaphore haveWork = new Semaphore(1);
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractCommitLogService.class);
+    private final ScheduledExecutorService executor;
+    private final Runnable runnable;
+
+    long firstLagAt = 0;
+    long totalSyncDuration = 0; // total time spent syncing since firstLagAt
+    long syncExceededIntervalBy = 0; // time that syncs exceeded pollInterval since firstLagAt
+    int lagCount = 0;
+    int syncCount = 0;
+    
+    volatile boolean shutdown = false;
 
     /**
      * CommitLogService provides a fsync service for Allocations, fulfilling either the
@@ -58,89 +71,61 @@ public abstract class AbstractCommitLogService
         if (pollIntervalMillis < 1)
             throw new IllegalArgumentException(String.format("Commit log flush interval must be positive: %dms", pollIntervalMillis));
 
-        Runnable runnable = new Runnable()
+        runnable = new Runnable()
         {
             public void run()
             {
-                long firstLagAt = 0;
-                long totalSyncDuration = 0; // total time spent syncing since firstLagAt
-                long syncExceededIntervalBy = 0; // time that syncs exceeded pollInterval since firstLagAt
-                int lagCount = 0;
-                int syncCount = 0;
-
-                boolean run = true;
-                while (run)
+                try
                 {
-                    try
+                    // always run once after shutdown signalled
+                    if (shutdown)
+                        executor.shutdown();
+
+                    // sync and signal
+                    long syncStarted = System.currentTimeMillis();
+                    commitLog.sync(shutdown);
+                    // This might overwrite a higher number put by another thread. This is not a problem
+                    // as to reach this point the other thread must have waited for our writes to complete.
+                    approximateSyncedAt = syncStarted;
+                    syncComplete.signalAll();
+
+
+                    // sleep any time we have left before the next one is due
+                    long now = System.currentTimeMillis();
+                    long sleep = syncStarted + pollIntervalMillis - now;
+                    if (sleep < 0)
                     {
-                        // always run once after shutdown signalled
-                        run = !shutdown;
-
-                        // sync and signal
-                        long syncStarted = System.currentTimeMillis();
-                        commitLog.sync(shutdown);
-                        lastSyncedAt = syncStarted;
-                        syncComplete.signalAll();
-
-
-                        // sleep any time we have left before the next one is due
-                        long now = System.currentTimeMillis();
-                        long sleep = syncStarted + pollIntervalMillis - now;
-                        if (sleep < 0)
+                        // if we have lagged noticeably, update our lag counter
+                        if (firstLagAt == 0)
                         {
-                            // if we have lagged noticeably, update our lag counter
-                            if (firstLagAt == 0)
-                            {
-                                firstLagAt = now;
-                                totalSyncDuration = syncExceededIntervalBy = syncCount = lagCount = 0;
-                            }
-                            syncExceededIntervalBy -= sleep;
-                            lagCount++;
+                            firstLagAt = now;
+                            totalSyncDuration = syncExceededIntervalBy = syncCount = lagCount = 0;
                         }
-                        syncCount++;
-                        totalSyncDuration += now - syncStarted;
-
-                        if (firstLagAt > 0 && now - firstLagAt >= LAG_REPORT_INTERVAL)
-                        {
-                            logger.warn(String.format("Out of %d commit log syncs over the past %ds with average duration of %.2fms, %d have exceeded the configured commit interval by an average of %.2fms",
-                                                      syncCount, (now - firstLagAt) / 1000, (double) totalSyncDuration / syncCount, lagCount, (double) syncExceededIntervalBy / lagCount));
-                            firstLagAt = 0;
-                        }
-
-                        // if we have lagged this round, we probably have work to do already so we don't sleep
-                        if (sleep < 0 || !run)
-                            continue;
-
-                        try
-                        {
-                            haveWork.tryAcquire(sleep, TimeUnit.MILLISECONDS);
-                        }
-                        catch (InterruptedException e)
-                        {
-                            throw new AssertionError();
-                        }
+                        syncExceededIntervalBy -= sleep;
+                        lagCount++;
                     }
-                    catch (Throwable t)
+                    syncCount++;
+                    totalSyncDuration += now - syncStarted;
+
+                    if (firstLagAt > 0 && now - firstLagAt >= LAG_REPORT_INTERVAL)
                     {
-                        if (!CommitLog.handleCommitError("Failed to persist commits to disk", t))
-                            break;
-
-                        // sleep for full poll-interval after an error, so we don't spam the log file
-                        try
-                        {
-                            haveWork.tryAcquire(pollIntervalMillis, TimeUnit.MILLISECONDS);
-                        }
-                        catch (InterruptedException e)
-                        {
-                            throw new AssertionError();
-                        }
+                        logger.warn(String.format("Out of %d commit log syncs over the past %ds with average duration of %.2fms, %d have exceeded the configured commit interval by an average of %.2fms",
+                                                  syncCount, (now - firstLagAt) / 1000, (double) totalSyncDuration / syncCount, lagCount, (double) syncExceededIntervalBy / lagCount));
+                        firstLagAt = 0;
                     }
+                }
+                catch (Throwable t)
+                {
+                    if (!CommitLog.handleCommitError("Failed to persist commits to disk", t))
+                        executor.shutdown();
                 }
             }
         };
 
-        thread = new Thread(runnable, name);
-        thread.start();
+        int threadCount = DatabaseDescriptor.getCommitLogSyncThreadCount();
+        executor = Executors.newScheduledThreadPool(threadCount, new NamedThreadFactory("commit-log-service"));
+        for (int i=0; i<threadCount; ++i)
+            executor.scheduleAtFixedRate(runnable, pollIntervalMillis * i, pollIntervalMillis * threadCount, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -157,22 +142,20 @@ public abstract class AbstractCommitLogService
     /**
      * Sync immediately, but don't block for the sync to cmplete
      */
-    public WaitQueue.Signal requestExtraSync()
+    public Future<?> requestExtraSync()
     {
-        WaitQueue.Signal signal = syncComplete.register();
-        haveWork.release(1);
-        return signal;
+        return executor.submit(runnable);
     }
 
     public void shutdown()
     {
         shutdown = true;
-        haveWork.release(1);
+        requestExtraSync();
     }
 
     public void awaitTermination() throws InterruptedException
     {
-        thread.join();
+        executor.awaitTermination(3600, TimeUnit.SECONDS);
     }
 
     public long getCompletedTasks()

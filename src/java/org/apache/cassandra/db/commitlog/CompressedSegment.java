@@ -21,11 +21,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.ICompressor.WrappedArray;
 import org.apache.cassandra.io.util.FileUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +42,21 @@ public class CompressedSegment extends CommitLogSegment
     private static final Logger logger = LoggerFactory.getLogger(CompressedSegment.class);
 
     private final FileChannel channel;
-    WrappedArray compressedArray = new WrappedArray(new byte[1024]);
-    ByteBuffer compressedBuffer = ByteBuffer.wrap(compressedArray.buffer);
+
+    static private final ThreadLocal<WrappedArray> compressedArrayHolder = new ThreadLocal<WrappedArray>() {
+        protected WrappedArray initialValue()
+        {
+            return new WrappedArray(new byte[1024]);
+        }
+    };
+    static private final ThreadLocal<ByteBuffer> compressedBufferHolder = new ThreadLocal<ByteBuffer>() {
+        protected ByteBuffer initialValue()
+        {
+            return ByteBuffer.wrap(compressedArrayHolder.get().buffer);
+        }
+    };
+    
+    static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
     
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
 
@@ -76,35 +92,51 @@ public class CompressedSegment extends CommitLogSegment
 
     ByteBuffer createBuffer()
     {
-        return ByteBuffer.allocate(DatabaseDescriptor.getCommitLogSegmentSize());
+        ByteBuffer buf = bufferPool.poll();
+        if (buf == null)
+            buf = ByteBuffer.allocate(DatabaseDescriptor.getCommitLogSegmentSize());
+        else
+            buf.clear();
+        return buf;
     }
 
+    static long startMillis = System.currentTimeMillis();
+
     @Override
-    synchronized int write(int lastSyncedOffset, int nextMarker, boolean close)
+    void write(int startMarker, int nextMarker)
     {
         try {
-            int contentStart = lastSyncedOffset + SYNC_MARKER_SIZE;
+            int contentStart = startMarker + SYNC_MARKER_SIZE;
             int length = nextMarker - contentStart;
             if (length == 0)
                 // No content to write, but we can still advance in the input buffer.
-                return nextMarker;
+                return;
 
             int compressedLength = CommitLog.compressor.initialCompressedBufferLength(length);
-            if (compressedArray.buffer.length < compressedLength + COMPRESSED_MARKER_SIZE) {
+            WrappedArray compressedArray = compressedArrayHolder.get();
+            if (compressedArray.buffer.length < compressedLength + COMPRESSED_MARKER_SIZE)
+            {
                 compressedArray.buffer = new byte[compressedLength + COMPRESSED_MARKER_SIZE];
-                compressedBuffer = ByteBuffer.wrap(compressedArray.buffer);
+                compressedArrayHolder.set(compressedArray);
             }
             
             compressedLength = CommitLog.compressor.compress(buffer.array(), buffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
+
+            ByteBuffer compressedBuffer = compressedBufferHolder.get();
+            if (compressedBuffer.array() != compressedArray.buffer)
+            {
+                compressedBuffer = ByteBuffer.wrap(compressedArray.buffer);
+                compressedBufferHolder.set(compressedBuffer);
+            }
             compressedBuffer.position(0);
             compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
             writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
+
+            // Only write after the previous write has completed.
+            waitForSync(startMarker);
             channel.write(compressedBuffer);
             channel.force(true);
-            if (close)
-                close();
-            return nextMarker;
         }
         catch (Exception e)
         {
@@ -130,9 +162,12 @@ public class CompressedSegment extends CommitLogSegment
     void close()
     {
         super.close();
-        buffer = null;
-        compressedArray = null;
-        compressedBuffer = null;
+        synchronized (this)
+        {
+            if (buffer != null)
+                bufferPool.add(buffer);
+            buffer = null;
+        }
     }
 
 }

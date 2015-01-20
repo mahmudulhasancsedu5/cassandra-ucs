@@ -26,6 +26,8 @@ import java.nio.channels.FileChannel;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.utils.CLibrary;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +84,7 @@ public class MemoryMappedSegment extends CommitLogSegment
     }
 
     @Override
-    synchronized int write(int lastSyncedOffset, int nextMarker, boolean close)
+    void write(int startMarker, int nextMarker)
     {
         try {
             // actually perform the sync and signal those waiting for it
@@ -92,11 +94,7 @@ public class MemoryMappedSegment extends CommitLogSegment
         {
             throw new FSWriteError(e, getPath());
         }
-        if (close) {
-            nextMarker = mappedBuffer.capacity();
-            close();
-        }
-        return nextMarker;
+        CLibrary.trySkipCache(fd, startMarker, nextMarker);
     }
 
     /**

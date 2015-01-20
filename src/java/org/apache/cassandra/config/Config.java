@@ -20,7 +20,6 @@ package org.apache.cassandra.config;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.Sets;
@@ -151,6 +150,7 @@ public class Config
     public CommitLogSync commitlog_sync;
     public Double commitlog_sync_batch_window_in_ms;
     public Integer commitlog_sync_period_in_ms;
+    public int commitlog_sync_threads = 1;
     public int commitlog_segment_size_in_mb = 32;
     public int commitlog_periodic_queue_size = 1024 * FBUtilities.getAvailableProcessors();
     public ParametrizedClass commitlog_compression;

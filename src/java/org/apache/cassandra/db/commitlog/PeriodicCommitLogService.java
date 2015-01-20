@@ -54,6 +54,6 @@ class PeriodicCommitLogService extends AbstractCommitLogService
      */
     private boolean waitForSyncToCatchUp(long started)
     {
-        return started > lastSyncedAt + blockWhenSyncLagsMillis;
+        return started > approximateSyncedAt + blockWhenSyncLagsMillis;
     }
 }

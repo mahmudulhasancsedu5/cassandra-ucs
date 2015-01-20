@@ -84,6 +84,8 @@ public abstract class CommitLogSegment
     // each sync are reserved, and point forwards to the next such offset.  The final
     // sync marker in a segment will be zeroed out, or point to EOF.
     private volatile int lastSyncedOffset;
+    // The position where sync was initiated last.
+    private volatile int lastSyncStartedOffset;
 
     // a signal for writers to wait on to confirm the log message they provided has been written to disk
     private final WaitQueue syncComplete = new WaitQueue();
@@ -97,7 +99,7 @@ public abstract class CommitLogSegment
     public final long id;
 
     protected RandomAccessFile logFileAccessor;
-    private int fd;
+    int fd;
     protected ByteBuffer buffer;
     protected int bufferSize;
     protected final File logFile;
@@ -151,7 +153,7 @@ public abstract class CommitLogSegment
         bufferSize = buffer.capacity();
         // write the header
         CommitLogDescriptor.writeHeader(buffer, descriptor);
-        lastSyncedOffset = buffer.position();
+        lastSyncedOffset = lastSyncStartedOffset = buffer.position();
         // mark the initial sync marker as uninitialised
         buffer.putInt(lastSyncedOffset + 0, 0);
         buffer.putInt(lastSyncedOffset + 4, 0);
@@ -233,57 +235,67 @@ public abstract class CommitLogSegment
     /**
      * Forces a disk flush for this segment file.
      */
-    synchronized void sync()
+    void sync()
     {
-        // check we have more work to do
-        if (allocatePosition.get() <= lastSyncedOffset + SYNC_MARKER_SIZE)
-            return;
-
-        // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
-        // the point at which we can safely consider records to have been completely written to
+        int startMarker;
         int nextMarker;
-        nextMarker = allocate(SYNC_MARKER_SIZE);
         boolean close = false;
-        if (nextMarker < 0)
+        synchronized (this) 
         {
-            // ensure no more of this CLS is writeable, and mark ourselves for closing
-            discardUnusedTail();
-            close = true;
-
-            // wait for modifications guards both discardedTailFrom, and any outstanding appends
-            waitForModifications();
-
-            if (bufferSize < buffer.capacity() - SYNC_MARKER_SIZE)
+            // check we have more work to do
+            if (allocatePosition.get() <= lastSyncStartedOffset + SYNC_MARKER_SIZE)
+                return;
+    
+            // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
+            // the point at which we can safely consider records to have been completely written to
+            nextMarker = allocate(SYNC_MARKER_SIZE);
+            if (nextMarker < 0)
             {
-                // if there's room in the discard section to write an empty header, use that as the nextMarker
-                nextMarker = bufferSize;
+                // ensure no more of this CLS is writeable, and mark ourselves for closing
+                discardUnusedTail();
+                close = true;
+    
+                // wait for modifications guards both discardedTailFrom, and any outstanding appends
+                waitForModifications();
+    
+                if (bufferSize < buffer.capacity() - SYNC_MARKER_SIZE)
+                {
+                    // if there's room in the discard section to write an empty header, use that as the nextMarker
+                    nextMarker = bufferSize;
+                }
+                else
+                {
+                    // not enough space left in the buffer, so mark the next sync marker as the EOF position
+                    nextMarker = buffer.capacity();
+                }
             }
             else
             {
-                // not enough space left in the buffer, so mark the next sync marker as the EOF position
-                nextMarker = buffer.capacity();
+                waitForModifications();
             }
+    
+            assert nextMarker > lastSyncStartedOffset;
+    
+            // write previous sync marker to point to next sync marker
+            // we don't chain the crcs here to ensure this method is idempotent if it fails
+            writeSyncMarker(buffer, lastSyncStartedOffset, lastSyncStartedOffset, nextMarker);
+    
+            // zero out the next sync marker so replayer can cleanly exit
+            if (nextMarker < buffer.capacity())
+            {
+                buffer.putInt(nextMarker, 0);
+                buffer.putInt(nextMarker + 4, 0);
+            }
+            startMarker = lastSyncStartedOffset;
+            lastSyncStartedOffset = nextMarker;
         }
-        else
-        {
-            waitForModifications();
+        write(startMarker, nextMarker);
+
+        if (close) {
+            close();
         }
-
-        assert nextMarker > lastSyncedOffset;
-
-        // write previous sync marker to point to next sync marker
-        // we don't chain the crcs here to ensure this method is idempotent if it fails
-        writeSyncMarker(buffer, lastSyncedOffset, lastSyncedOffset, nextMarker);
-
-        // zero out the next sync marker so replayer can cleanly exit
-        if (nextMarker < buffer.capacity())
-        {
-            buffer.putInt(nextMarker, 0);
-            buffer.putInt(nextMarker + 4, 0);
-        }
-        lastSyncedOffset = write(lastSyncedOffset, nextMarker, close);
+        lastSyncedOffset = nextMarker;
         syncComplete.signalAll();
-        CLibrary.trySkipCache(fd, lastSyncedOffset, nextMarker);
     }
 
     protected void writeSyncMarker(ByteBuffer buffer, int offset, int filePos, int nextMarker)
@@ -296,7 +308,7 @@ public abstract class CommitLogSegment
         buffer.putInt(offset + 4, crc.getCrc());
     }
 
-    abstract int write(int lastSyncedOffset, int nextMarker, boolean close);
+    abstract void write(int lastSyncedOffset, int nextMarker);
 
     public boolean isStillAllocating()
     {
@@ -356,6 +368,18 @@ public abstract class CommitLogSegment
                 signal.cancel();
                 break;
             }
+        }
+    }
+
+    void waitForSync(int position)
+    {
+        while (lastSyncedOffset < position)
+        {
+            WaitQueue.Signal signal = syncComplete.register();
+            if (lastSyncedOffset < position)
+                signal.awaitUninterruptibly();
+            else
+                signal.cancel();
         }
     }
 
