@@ -84,7 +84,7 @@ public class MemoryMappedSegment extends CommitLogSegment
     }
 
     @Override
-    void write(int startMarker, int nextMarker)
+    void write(int startMarker, int nextMarker, long syncTimestamp, boolean close)
     {
         try {
             // actually perform the sync and signal those waiting for it
@@ -95,6 +95,14 @@ public class MemoryMappedSegment extends CommitLogSegment
             throw new FSWriteError(e, getPath());
         }
         CLibrary.trySkipCache(fd, startMarker, nextMarker);
+        retireWrite(nextMarker, close);
+    }
+
+    @Override
+    long retireInFlightWrites(long syncTimestamp)
+    {
+        // Sync process is synchronous, just return what we're given.
+        return syncTimestamp;
     }
 
     /**
@@ -106,7 +114,7 @@ public class MemoryMappedSegment extends CommitLogSegment
     {
         try
         {
-            sync();
+            sync(System.currentTimeMillis());
         }
         catch (FSWriteError e)
         {

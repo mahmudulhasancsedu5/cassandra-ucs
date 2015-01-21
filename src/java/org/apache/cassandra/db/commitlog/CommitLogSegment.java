@@ -234,63 +234,67 @@ public abstract class CommitLogSegment
 
     /**
      * Forces a disk flush for this segment file.
+     * @param syncStarted Timestamp for this sync request (needs to be monotonically increasing). This value or bigger
+     *     will be returned when the sync started at that point has retired.
      */
-    void sync()
+    synchronized long sync(long syncStarted)
     {
         int startMarker;
         int nextMarker;
         boolean close = false;
-        synchronized (this) 
+        // check we have more work to do
+        if (allocatePosition.get() <= lastSyncStartedOffset + SYNC_MARKER_SIZE)
+            return retireInFlightWrites(syncStarted);
+
+        // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
+        // the point at which we can safely consider records to have been completely written to
+        nextMarker = allocate(SYNC_MARKER_SIZE);
+        if (nextMarker < 0)
         {
-            // check we have more work to do
-            if (allocatePosition.get() <= lastSyncStartedOffset + SYNC_MARKER_SIZE)
-                return;
-    
-            // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
-            // the point at which we can safely consider records to have been completely written to
-            nextMarker = allocate(SYNC_MARKER_SIZE);
-            if (nextMarker < 0)
+            // ensure no more of this CLS is writeable, and mark ourselves for closing
+            discardUnusedTail();
+            close = true;
+
+            // wait for modifications guards both discardedTailFrom, and any outstanding appends
+            waitForModifications();
+
+            if (bufferSize < buffer.capacity() - SYNC_MARKER_SIZE)
             {
-                // ensure no more of this CLS is writeable, and mark ourselves for closing
-                discardUnusedTail();
-                close = true;
-    
-                // wait for modifications guards both discardedTailFrom, and any outstanding appends
-                waitForModifications();
-    
-                if (bufferSize < buffer.capacity() - SYNC_MARKER_SIZE)
-                {
-                    // if there's room in the discard section to write an empty header, use that as the nextMarker
-                    nextMarker = bufferSize;
-                }
-                else
-                {
-                    // not enough space left in the buffer, so mark the next sync marker as the EOF position
-                    nextMarker = buffer.capacity();
-                }
+                // if there's room in the discard section to write an empty header, use that as the nextMarker
+                nextMarker = bufferSize;
             }
             else
             {
-                waitForModifications();
+                // not enough space left in the buffer, so mark the next sync marker as the EOF position
+                nextMarker = buffer.capacity();
             }
-    
-            assert nextMarker > lastSyncStartedOffset;
-    
-            // write previous sync marker to point to next sync marker
-            // we don't chain the crcs here to ensure this method is idempotent if it fails
-            writeSyncMarker(buffer, lastSyncStartedOffset, lastSyncStartedOffset, nextMarker);
-    
-            // zero out the next sync marker so replayer can cleanly exit
-            if (nextMarker < buffer.capacity())
-            {
-                buffer.putInt(nextMarker, 0);
-                buffer.putInt(nextMarker + 4, 0);
-            }
-            startMarker = lastSyncStartedOffset;
-            lastSyncStartedOffset = nextMarker;
         }
-        write(startMarker, nextMarker);
+        else
+        {
+            waitForModifications();
+        }
+    
+        assert nextMarker > lastSyncStartedOffset;
 
+        // write previous sync marker to point to next sync marker
+        // we don't chain the crcs here to ensure this method is idempotent if it fails
+        writeSyncMarker(buffer, lastSyncStartedOffset, lastSyncStartedOffset, nextMarker);
+
+        // zero out the next sync marker so replayer can cleanly exit
+        if (nextMarker < buffer.capacity())
+        {
+            buffer.putInt(nextMarker, 0);
+            buffer.putInt(nextMarker + 4, 0);
+        }
+        startMarker = lastSyncStartedOffset;
+        lastSyncStartedOffset = nextMarker;
+
+        write(startMarker, nextMarker, syncStarted, close);
+        return retireInFlightWrites(syncStarted);
+    }
+        
+    void retireWrite(int nextMarker, boolean close)
+    {
         if (close) {
             close();
         }
@@ -308,7 +312,8 @@ public abstract class CommitLogSegment
         buffer.putInt(offset + 4, crc.getCrc());
     }
 
-    abstract void write(int lastSyncedOffset, int nextMarker);
+    abstract void write(int lastSyncedOffset, int nextMarker, long syncTimestamp, boolean close);
+    abstract long retireInFlightWrites(long syncTimestamp);
 
     public boolean isStillAllocating()
     {

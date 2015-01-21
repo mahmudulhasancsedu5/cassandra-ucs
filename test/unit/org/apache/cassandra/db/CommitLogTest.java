@@ -184,7 +184,7 @@ public class CommitLogTest
 
         // "Flush": this won't delete anything
         UUID cfid1 = rm.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.sync(true);
+        CommitLog.instance.blockingSync();
         CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getContext());
 
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();

@@ -18,13 +18,11 @@
 package org.apache.cassandra.db.commitlog;
 
 import org.apache.cassandra.concurrent.NamedThreadFactory;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 import org.slf4j.*;
 
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -37,9 +35,7 @@ public abstract class AbstractCommitLogService
     private static final long LAG_REPORT_INTERVAL = TimeUnit.MINUTES.toMillis(5);
 
     // all Allocations written before this time are synced.
-    // Note: this number might jump back once in a while, but will eventually increase past any point in time.
-    // If a jump does occur, mutations started before both the higher and lower number are synced at that time.
-    protected volatile long approximateSyncedAt = System.currentTimeMillis();
+    protected volatile long lastSyncedAt = System.currentTimeMillis();
 
     // counts of total written, and pending, log messages
     private final AtomicLong written = new AtomicLong(0);
@@ -83,12 +79,14 @@ public abstract class AbstractCommitLogService
 
                     // sync and signal
                     long syncStarted = System.currentTimeMillis();
-                    commitLog.sync(shutdown);
-                    // This might overwrite a higher number put by another thread. This is not a problem
-                    // as to reach this point the other thread must have waited for our writes to complete.
-                    approximateSyncedAt = syncStarted;
-                    syncComplete.signalAll();
+                    long syncedAt = commitLog.sync(shutdown, syncStarted);
+                    if (syncedAt > lastSyncedAt)
+                    {
+                        lastSyncedAt = syncedAt;
+                        syncComplete.signalAll();
+                    }
 
+                    // FIXME: The calculations below should be based on syncedAt.
 
                     // sleep any time we have left before the next one is due
                     long now = System.currentTimeMillis();
@@ -122,10 +120,10 @@ public abstract class AbstractCommitLogService
             }
         };
 
-        int threadCount = DatabaseDescriptor.getCommitLogSyncThreadCount();
+        int threadCount = 1; // DatabaseDescriptor.getCommitLogSyncThreadCount();
         executor = Executors.newScheduledThreadPool(threadCount, new NamedThreadFactory("commit-log-service"));
         for (int i=0; i<threadCount; ++i)
-            executor.scheduleAtFixedRate(runnable, pollIntervalMillis * i, pollIntervalMillis * threadCount, TimeUnit.MILLISECONDS);
+            executor.scheduleAtFixedRate(runnable, pollIntervalMillis * (i + 1), pollIntervalMillis * threadCount, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -142,9 +140,26 @@ public abstract class AbstractCommitLogService
     /**
      * Sync immediately, but don't block for the sync to cmplete
      */
-    public Future<?> requestExtraSync()
+    public void requestExtraSync()
     {
-        return executor.submit(runnable);
+        executor.submit(runnable);
+    }
+
+    /**
+     * Sync immediately and block until the sync is complete.
+     */
+    public void blockingSync()
+    {
+        long started = System.currentTimeMillis();
+        executor.submit(runnable);
+        while (started > lastSyncedAt)
+        {
+            WaitQueue.Signal signal = syncComplete.register(CommitLog.instance.metrics.waitingOnCommit.time());
+            if (started > lastSyncedAt)
+                signal.awaitUninterruptibly();
+            else
+                signal.cancel();
+        }
     }
 
     public void shutdown()
@@ -155,6 +170,8 @@ public abstract class AbstractCommitLogService
 
     public void awaitTermination() throws InterruptedException
     {
+        blockingSync();
+        executor.shutdown();
         executor.awaitTermination(3600, TimeUnit.SECONDS);
     }
 

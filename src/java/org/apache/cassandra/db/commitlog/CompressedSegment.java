@@ -22,8 +22,14 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Queue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
+import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.ICompressor.WrappedArray;
@@ -43,22 +49,43 @@ public class CompressedSegment extends CommitLogSegment
 
     private final FileChannel channel;
 
-    static private final ThreadLocal<WrappedArray> compressedArrayHolder = new ThreadLocal<WrappedArray>() {
-        protected WrappedArray initialValue()
-        {
-            return new WrappedArray(new byte[1024]);
-        }
-    };
-    static private final ThreadLocal<ByteBuffer> compressedBufferHolder = new ThreadLocal<ByteBuffer>() {
-        protected ByteBuffer initialValue()
-        {
-            return ByteBuffer.wrap(compressedArrayHolder.get().buffer);
-        }
-    };
-    
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
     
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
+
+    static class CompressionTask implements Callable<CompressionTask>
+    {
+        ByteBuffer compressedBuffer;
+        WrappedArray compressedArray;
+        ByteBuffer sourceBuffer;
+        int startMarker;
+        int nextMarker;
+        long syncTimestamp;
+        boolean close;
+
+        @Override
+        public CompressionTask call() throws Exception
+        {
+            int contentStart = startMarker + SYNC_MARKER_SIZE;
+            int length = nextMarker - contentStart;
+
+            int compressedLength = CommitLog.compressor.initialCompressedBufferLength(length) + COMPRESSED_MARKER_SIZE;
+            if (compressedArray == null || compressedArray.buffer.length < compressedLength)
+                compressedArray = new WrappedArray(new byte[compressedLength]);
+            
+            compressedLength = CommitLog.compressor.compress(sourceBuffer.array(), sourceBuffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
+
+            if (compressedBuffer == null || compressedBuffer.array() != compressedArray.buffer)
+                compressedBuffer = ByteBuffer.wrap(compressedArray.buffer);
+            compressedBuffer.position(0);
+            compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
+            return this;
+        }
+    }
+
+    private LinkedBlockingQueue<Future<CompressionTask>> compressions = new LinkedBlockingQueue<>();
+    static private ExecutorService executor = Executors.newCachedThreadPool(new NamedThreadFactory("commit-log-compression"));
+    long lastSyncedTimestamp = Long.MIN_VALUE;
 
     /**
      * Constructs a new segment file.
@@ -102,57 +129,95 @@ public class CompressedSegment extends CommitLogSegment
 
     static long startMillis = System.currentTimeMillis();
 
-    @Override
-    void write(int startMarker, int nextMarker)
+    static Queue<CompressionTask> tasksPool = new ConcurrentLinkedQueue<>();
+    
+    public CompressionTask newCompressionTask(int startMarker, int nextMarker, long syncTimestamp, boolean close)
     {
-        try {
-            int contentStart = startMarker + SYNC_MARKER_SIZE;
-            int length = nextMarker - contentStart;
-            if (length == 0)
-                // No content to write, but we can still advance in the input buffer.
-                return;
+        CompressionTask ct = tasksPool.poll();
+        if (ct == null)
+            ct = new CompressionTask();
+        ct.sourceBuffer = buffer;
+        ct.startMarker = startMarker;
+        ct.nextMarker = nextMarker;
+        ct.syncTimestamp = syncTimestamp;
+        ct.close = close;
+        return ct;
+    }
 
-            int compressedLength = CommitLog.compressor.initialCompressedBufferLength(length);
-            WrappedArray compressedArray = compressedArrayHolder.get();
-            if (compressedArray.buffer.length < compressedLength + COMPRESSED_MARKER_SIZE)
+    public void releaseCompressionTask(CompressionTask task)
+    {
+        tasksPool.add(task);
+    }
+
+    @Override
+    void write(int startMarker, int nextMarker, long syncTimestamp, boolean close)
+    {
+        int contentStart = startMarker + SYNC_MARKER_SIZE;
+        int length = nextMarker - contentStart;
+        if (length == 0)
+            // No content to write, but we can still advance in the input buffer.
+            return;
+
+        compressions.add(executor.submit(newCompressionTask(startMarker, nextMarker, syncTimestamp, close)));
+    }
+
+    @Override
+    long retireInFlightWrites(long syncTimestamp)
+    {
+        // Guarded by sync lock.
+        if (compressions.isEmpty())
+            return lastSyncedTimestamp = syncTimestamp;
+        try
+        {
+            int lastPosition = -1;
+            boolean close = false;
+            for (Future<CompressionTask> task = compressions.peek(); task != null; task = compressions.peek())
             {
-                compressedArray.buffer = new byte[compressedLength + COMPRESSED_MARKER_SIZE];
-                compressedArrayHolder.set(compressedArray);
-            }
-            
-            compressedLength = CommitLog.compressor.compress(buffer.array(), buffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
+                if (!task.isDone())
+                    break;
+                compressions.remove();
+                CompressionTask t = task.get();
 
-            ByteBuffer compressedBuffer = compressedBufferHolder.get();
-            if (compressedBuffer.array() != compressedArray.buffer)
+                ByteBuffer compressedBuffer = t.compressedBuffer;
+                writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
+                compressedBuffer.putInt(SYNC_MARKER_SIZE, t.nextMarker - (t.startMarker + SYNC_MARKER_SIZE));
+                channel.write(compressedBuffer);
+
+                lastSyncedTimestamp = t.syncTimestamp;
+                lastPosition = t.nextMarker;
+                close |= t.close;
+                releaseCompressionTask(t);
+            }
+
+            if (lastPosition >= 0)
             {
-                compressedBuffer = ByteBuffer.wrap(compressedArray.buffer);
-                compressedBufferHolder.set(compressedBuffer);
+                channel.force(true);
+                retireWrite(lastPosition, close);
             }
-            compressedBuffer.position(0);
-            compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
-            writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
-            compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
-
-            // Only write after the previous write has completed.
-            waitForSync(startMarker);
-            channel.write(compressedBuffer);
-            channel.force(true);
         }
         catch (Exception e)
         {
             throw new FSWriteError(e, getPath());
         }
+        return lastSyncedTimestamp;
     }
 
     /**
      * Recycle processes an unneeded segment file for reuse.
-     * Synchronized to avoid breaking any in-progress sync.
+     * Synchronized to stop new syncs being initiated.
      *
      * @return a new CommitLogSegment representing the newly reusable segment.
      */
     synchronized CompressedSegment recycle()
     {
         // The file will be immediately deleted, don't try to write any data.
+
+        // Cancel outstanding writes.
+        for (Future<CompressionTask> task : compressions)
+        {
+            task.cancel(true);
+        }
+        compressions.clear();
         close();
         return new CompressedSegment(getPath());
     }
