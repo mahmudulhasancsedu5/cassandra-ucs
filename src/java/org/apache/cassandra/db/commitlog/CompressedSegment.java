@@ -105,19 +105,17 @@ public class CompressedSegment extends CommitLogSegment
     @Override
     void write(int startMarker, int nextMarker)
     {
+        int contentStart = startMarker + SYNC_MARKER_SIZE;
+        int length = nextMarker - contentStart;
+        assert length > 0;
+
         try {
-            int contentStart = startMarker + SYNC_MARKER_SIZE;
-            int length = nextMarker - contentStart;
-            if (length == 0)
-                // No content to write, but we can still advance in the input buffer.
-                return;
 
             int compressedLength = CommitLog.compressor.initialCompressedBufferLength(length);
             WrappedArray compressedArray = compressedArrayHolder.get();
             if (compressedArray.buffer.length < compressedLength + COMPRESSED_MARKER_SIZE)
             {
                 compressedArray.buffer = new byte[compressedLength + COMPRESSED_MARKER_SIZE];
-                compressedArrayHolder.set(compressedArray);
             }
             
             compressedLength = CommitLog.compressor.compress(buffer.array(), buffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
@@ -130,11 +128,13 @@ public class CompressedSegment extends CommitLogSegment
             }
             compressedBuffer.position(0);
             compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
-            writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
 
             // Only write after the previous write has completed.
             waitForSync(startMarker);
+
+            // Only one thread can be here at a given time.
+            writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             channel.write(compressedBuffer);
             channel.force(true);
         }
@@ -146,13 +146,14 @@ public class CompressedSegment extends CommitLogSegment
 
     /**
      * Recycle processes an unneeded segment file for reuse.
-     * Synchronized to avoid breaking any in-progress sync.
      *
      * @return a new CommitLogSegment representing the newly reusable segment.
      */
-    synchronized CompressedSegment recycle()
+    CompressedSegment recycle()
     {
-        // The file will be immediately deleted, don't try to write any data.
+        // Run a sync to complete any outstanding writes.
+        sync();
+
         close();
         return new CompressedSegment(getPath());
     }
