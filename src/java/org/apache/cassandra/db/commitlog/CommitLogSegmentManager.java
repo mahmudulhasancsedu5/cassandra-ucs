@@ -394,7 +394,7 @@ public class CommitLogSegmentManager
         {
             public CommitLogSegment call()
             {
-                return new CommitLogSegment(file.getPath());
+                return CommitLogSegment.createSegment(file.getPath());
             }
         });
     }

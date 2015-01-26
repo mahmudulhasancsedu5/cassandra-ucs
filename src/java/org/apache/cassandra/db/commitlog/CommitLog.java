@@ -33,8 +33,12 @@ import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.ParametrizedClass;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.compress.CompressionParameters;
+import org.apache.cassandra.io.compress.ICompressor;
 import org.apache.cassandra.io.util.DataOutputByteBuffer;
 import org.apache.cassandra.metrics.CommitLogMetrics;
 import org.apache.cassandra.net.MessagingService;
@@ -62,6 +66,20 @@ public class CommitLog implements CommitLogMBean
     public final CommitLogArchiver archiver = new CommitLogArchiver();
     final CommitLogMetrics metrics;
     final AbstractCommitLogService executor;
+
+    static final ICompressor compressor;
+    static {
+        try
+        {
+            ParametrizedClass compressionClass = DatabaseDescriptor.getCommitLogCompression();
+            compressor = compressionClass != null ? CompressionParameters.createCompressor(compressionClass) : null;
+        }
+        catch (ConfigurationException e)
+        {
+            logger.error("Fatal configuration error", e);
+            throw new ExceptionInInitializerError(e);
+        }
+    }
 
     private CommitLog()
     {

@@ -20,18 +20,26 @@
  */
 package org.apache.cassandra.db.commitlog;
 
+import java.io.DataInput;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.ParametrizedClass;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.PureJavaCrc32;
+import org.json.simple.JSONValue;
 
 public class CommitLogDescriptor
 {
@@ -52,32 +60,49 @@ public class CommitLogDescriptor
     @VisibleForTesting
     public static final int current_version = VERSION_30;
 
-    // [version, id, checksum]
-    static final int HEADER_SIZE = 4 + 8 + 4;
-
     final int version;
     public final long id;
+    public final ParametrizedClass compression;
 
-    public CommitLogDescriptor(int version, long id)
+    public CommitLogDescriptor(int version, long id, ParametrizedClass compression)
     {
         this.version = version;
         this.id = id;
+        this.compression = compression;
     }
 
     public CommitLogDescriptor(long id)
     {
-        this(current_version, id);
+        this(current_version, id, DatabaseDescriptor.getCommitLogCompression());
     }
 
-    static void writeHeader(ByteBuffer out, CommitLogDescriptor descriptor)
+    public static void writeHeader(ByteBuffer out, CommitLogDescriptor descriptor)
     {
-        out.putInt(0, descriptor.version);
-        out.putLong(4, descriptor.id);
         PureJavaCrc32 crc = new PureJavaCrc32();
+        out.putInt(descriptor.version);
         crc.updateInt(descriptor.version);
+        out.putLong(descriptor.id);
         crc.updateInt((int) (descriptor.id & 0xFFFFFFFFL));
         crc.updateInt((int) (descriptor.id >>> 32));
-        out.putInt(12, crc.getCrc());
+        String compressionString = constructCompressionString(descriptor.compression);
+        if (descriptor.version >= VERSION_30) {
+            byte[] compressionBytes = compressionString.getBytes(StandardCharsets.UTF_8);
+            out.putShort((short) compressionBytes.length);
+            crc.updateInt(compressionBytes.length);
+            out.put(compressionBytes);
+            crc.update(compressionBytes, 0, compressionBytes.length);
+        }
+        out.putInt(crc.getCrc());
+    }
+
+    private static String constructCompressionString(ParametrizedClass compression)
+    {
+        if (compression == null)
+            return "";
+        String params = "";
+        if (compression.parameters != null)
+            params = JSONValue.toJSONString(compression.parameters);
+        return compression.class_name + params;
     }
 
     public static CommitLogDescriptor fromHeader(File file)
@@ -85,16 +110,7 @@ public class CommitLogDescriptor
         try (RandomAccessFile raf = new RandomAccessFile(file, "r"))
         {
             assert raf.getFilePointer() == 0;
-            int version = raf.readInt();
-            long id = raf.readLong();
-            int crc = raf.readInt();
-            PureJavaCrc32 checkcrc = new PureJavaCrc32();
-            checkcrc.updateInt(version);
-            checkcrc.updateInt((int) (id & 0xFFFFFFFFL));
-            checkcrc.updateInt((int) (id >>> 32));
-            if (crc == checkcrc.getCrc())
-                return new CommitLogDescriptor(version, id);
-            return null;
+            return readHeader(raf);
         }
         catch (EOFException e)
         {
@@ -104,6 +120,45 @@ public class CommitLogDescriptor
         {
             throw new FSReadError(e, file);
         }
+    }
+
+    public static CommitLogDescriptor readHeader(DataInput input) throws IOException
+    {
+        PureJavaCrc32 checkcrc = new PureJavaCrc32();
+        int version = input.readInt();
+        checkcrc.updateInt(version);
+        long id = input.readLong();
+        checkcrc.updateInt((int) (id & 0xFFFFFFFFL));
+        checkcrc.updateInt((int) (id >>> 32));
+        int compressionLength = 0;
+        if (version >= VERSION_30) {
+            compressionLength = input.readShort() & 0xFFFF;
+            checkcrc.updateInt(compressionLength);
+        }
+        // This should always succeed as compressionLength cannot be too long even for a
+        // corrupt segment file.
+        byte[] compressionBytes = new byte[compressionLength];
+        input.readFully(compressionBytes);
+        checkcrc.update(compressionBytes, 0, compressionBytes.length);
+        int crc = input.readInt();
+        if (crc == checkcrc.getCrc())
+            return new CommitLogDescriptor(version, id,
+                    parseCompressionString(new String(compressionBytes, StandardCharsets.UTF_8)));
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ParametrizedClass parseCompressionString(String string)
+    {
+        if (string.isEmpty())
+            return null;
+        int split = string.indexOf('{');
+        if (split < 0) {
+            return new ParametrizedClass(string, null);
+        }
+        String className = string.substring(0, split);
+        String optionsString = string.substring(split);
+        return new ParametrizedClass(className, (Map<String, String>) JSONValue.parse(optionsString));
     }
 
     public static CommitLogDescriptor fromFileName(String name)
@@ -116,7 +171,7 @@ public class CommitLogDescriptor
             throw new UnsupportedOperationException("Commitlog segment is too old to open; upgrade to 1.2.5+ first");
 
         long id = Long.parseLong(matcher.group(3).split(SEPARATOR)[1]);
-        return new CommitLogDescriptor(Integer.parseInt(matcher.group(2)), id);
+        return new CommitLogDescriptor(Integer.parseInt(matcher.group(2)), id, null);
     }
 
     public int getMessagingVersion()
@@ -152,7 +207,7 @@ public class CommitLogDescriptor
 
     public String toString()
     {
-        return "(" + version + "," + id + ")";
+        return "(" + version + "," + id + (compression != null ? "," + compression : "") + ")";
     }
 
     public boolean equals(Object that)
@@ -160,9 +215,14 @@ public class CommitLogDescriptor
         return that instanceof CommitLogDescriptor && equals((CommitLogDescriptor) that);
     }
 
-    public boolean equals(CommitLogDescriptor that)
+    public boolean equalsIgnoringCompression(CommitLogDescriptor that)
     {
         return this.version == that.version && this.id == that.id;
+    }
+
+    public boolean equals(CommitLogDescriptor that)
+    {
+        return equalsIgnoringCompression(that) && Objects.equal(this.compression, that.compression);
     }
 
 }
