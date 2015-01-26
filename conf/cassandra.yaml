@@ -292,9 +292,8 @@ commitlog_segment_size_in_mb: 32
 #     parameters:
 #         -
 
-# Specifies the number of sync threads to use for the commit log.
-# Only usable with compression.
-#commitlog_sync_threads: 1
+# Specifies the number of compression threads to use for the commit log.
+#commitlog_compression_threads: 1
 
 # any class that implements the SeedProvider interface and has a
 # constructor that takes a Map<String, String> of parameters will do.

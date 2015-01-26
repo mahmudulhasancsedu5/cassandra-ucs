@@ -90,10 +90,9 @@ public abstract class AbstractCommitLogService
                     syncComplete.signalAll();
 
 
-                    // sleep any time we have left before the next one is due
                     long now = System.currentTimeMillis();
-                    long sleep = syncStarted + pollIntervalMillis - now;
-                    if (sleep < 0)
+                    long remaining = syncStarted + pollIntervalMillis - now;
+                    if (remaining < 0)
                     {
                         // if we have lagged noticeably, update our lag counter
                         if (firstLagAt == 0)
@@ -101,7 +100,7 @@ public abstract class AbstractCommitLogService
                             firstLagAt = now;
                             totalSyncDuration = syncExceededIntervalBy = syncCount = lagCount = 0;
                         }
-                        syncExceededIntervalBy -= sleep;
+                        syncExceededIntervalBy -= remaining;
                         lagCount++;
                     }
                     syncCount++;

@@ -133,7 +133,7 @@ public class CommitLogReplayer
     {
         if (offset > reader.length() - CommitLogSegment.SYNC_MARKER_SIZE)
         {
-            if (offset != reader.length() && offset != Integer.MAX_VALUE)
+            if (offset != reader.length())
                 logger.warn("Encountered bad header at position {} of Commit log {}; not enough room for a header", offset, reader.getPath());
             // cannot possibly be a header here. if we're == length(), assume it's a correctly written final segment
             return -1;
@@ -144,11 +144,7 @@ public class CommitLogReplayer
         crc.updateInt((int) (descriptor.id >>> 32));
         crc.updateInt((int) reader.getPosition());
         int end = reader.readInt();
-        long filecrc;
-        if (descriptor.version < CommitLogDescriptor.VERSION_21)
-            filecrc = reader.readLong();
-        else
-            filecrc = reader.readInt() & 0xffffffffL;
+        long filecrc = reader.readInt() & 0xffffffffL;
         if (crc.getValue() != filecrc)
         {
             if (end != 0 || filecrc != 0)
@@ -164,27 +160,7 @@ public class CommitLogReplayer
         }
         return end;
     }
-
-    private int getStartOffset(long segmentId, int version, int headerSize)
-    {
-        if (globalPosition.segment < segmentId)
-        {
-            if (version >= CommitLogDescriptor.VERSION_21)
-                return headerSize + CommitLogSegment.SYNC_MARKER_SIZE;
-            else
-                return 0;
-        }
-        else if (globalPosition.segment == segmentId)
-        {
-            if (version >= CommitLogDescriptor.VERSION_30)
-                return headerSize + CommitLogSegment.SYNC_MARKER_SIZE;
-            else
-                return globalPosition.position;
-        }
-        else
-            return -1;
-    }
-
+    
     private abstract static class ReplayFilter
     {
         public abstract Iterable<ColumnFamily> filter(Mutation mutation);
@@ -250,35 +226,37 @@ public class CommitLogReplayer
     public void recover(File file) throws IOException
     {
         final ReplayFilter replayFilter = ReplayFilter.create();
-        logger.info("Replaying {}", file.getPath());
         CommitLogDescriptor desc = CommitLogDescriptor.fromFileName(file.getName());
-        final long segmentId = desc.id;
         RandomAccessReader reader = RandomAccessReader.open(new File(file.getAbsolutePath()));
         try
         {
-            int headerSize = 0;
-            if (desc.version >= CommitLogDescriptor.VERSION_21)
+            if (desc.version < CommitLogDescriptor.VERSION_21)
             {
-                try
-                {
-                    desc = CommitLogDescriptor.readHeader(reader);
-                    headerSize = (int) reader.getFilePointer();
-                }
-                catch (IOException e)
-                {
-                    desc = null;
-                }
-                if (desc == null) {
-                    logger.warn("Could not read commit log descriptor in file {}", file);
+                if (logAndCheckIfShouldSkip(file, desc))
                     return;
-                }
+                if (globalPosition.segment == desc.id)
+                    reader.seek(globalPosition.position);
+                replaySyncSection(reader, -1, desc, replayFilter);
+                return;
             }
-            logger.info("Replaying {} (CL version {}, messaging version {}, compression {})",
-                    file.getPath(),
-                    desc.version,
-                    desc.getMessagingVersion(),
-                    desc.compression);
+
+            final long segmentId = desc.id;
+            try
+            {
+                desc = CommitLogDescriptor.readHeader(reader);
+            }
+            catch (IOException e)
+            {
+                desc = null;
+            }
+            if (desc == null) {
+                logger.warn("Could not read commit log descriptor in file {}", file);
+                return;
+            }
             assert segmentId == desc.id;
+            if (logAndCheckIfShouldSkip(file, desc))
+                return;
+
             ICompressor compressor = null;
             if (desc.compression != null)
             {
@@ -294,58 +272,55 @@ public class CommitLogReplayer
             }
 
             assert reader.length() <= Integer.MAX_VALUE;
-            int offset = getStartOffset(segmentId, desc.version, headerSize);
-            if (offset < 0)
-            {
-                logger.debug("skipping replay of fully-flushed {}", file);
-                return;
-            }
+            int end = (int) reader.getFilePointer();
+            int replayEnd = end;
 
-            int uncompressedPos = headerSize + CommitLogSegment.SYNC_MARKER_SIZE;
-            int end = headerSize;
-            for (; true; offset = end + CommitLogSegment.SYNC_MARKER_SIZE)
+            while ((end = readSyncMarker(desc, end, reader)) >= 0)
             {
-                int prevEnd = end;
-                if (desc.version < CommitLogDescriptor.VERSION_21)
-                    end = Integer.MAX_VALUE;
-                else
-                {
-                    do { end = readSyncMarker(desc, end, reader); }
-                    while (end < offset && end > prevEnd);
-                }
-
-                if (end < prevEnd)
-                    break;
+                int replayPos = replayEnd + CommitLogSegment.SYNC_MARKER_SIZE;
 
                 if (logger.isDebugEnabled())
-                    logger.debug("Replaying {} between {} and {}", file, offset, end);
-
-                reader.seek(offset);
-
-                FileDataInput sectionReader = reader;
-                int sectionEnd = end;
+                    logger.debug("Replaying {} between {} and {}", file, reader.getFilePointer(), end);
                 if (compressor != null)
                 {
-                    if (logger.isDebugEnabled())
-                        logger.debug("Decompressing {} between {} and {}", file, offset, end);
                     int uncompressedLength = reader.readInt();
-                    int compressedLength = end - offset - 4;
-                    int sectionStart = uncompressedPos;
-                    uncompressedPos += uncompressedLength + CommitLogSegment.SYNC_MARKER_SIZE;
-                    if (segmentId == globalPosition.segment && uncompressedPos < globalPosition.position)
-                        // Skip over flushed section.
-                        continue;
-                    if (compressedLength > buffer.length)
-                        buffer = new byte[(int) (1.2 * compressedLength)];
-                    reader.readFully(buffer, 0, compressedLength);
-                    if (uncompressedLength > uncompressedBuffer.length)
-                        uncompressedBuffer = new byte[(int) (1.2 * uncompressedLength)];
-                    compressedLength = compressor.uncompress(buffer, 0, compressedLength, uncompressedBuffer, 0);
-                    sectionReader = new ByteBufferDataInput(ByteBuffer.wrap(uncompressedBuffer), reader.getPath(), sectionStart, 0);
-                    sectionEnd = sectionStart + uncompressedLength;
+                    replayEnd = replayPos + uncompressedLength;
+                } else
+                {
+                    replayEnd = end;
                 }
 
-                if (!replaySyncSection(sectionReader, sectionEnd, desc, replayFilter))
+                if (segmentId == globalPosition.segment && replayEnd < globalPosition.position)
+                    // Skip over flushed section.
+                    continue;
+
+                FileDataInput sectionReader = reader;
+                if (compressor != null)
+                    try
+                    {
+                        int start = (int) reader.getFilePointer();
+                        int compressedLength = end - start;
+                        if (logger.isDebugEnabled())
+                            logger.debug("Decompressing {} between replay positions {} and {}",
+                                         file,
+                                         replayPos,
+                                         replayEnd);
+                        if (compressedLength > buffer.length)
+                            buffer = new byte[(int) (1.2 * compressedLength)];
+                        reader.readFully(buffer, 0, compressedLength);
+                        int uncompressedLength = replayEnd - replayPos;
+                        if (uncompressedLength > uncompressedBuffer.length)
+                            uncompressedBuffer = new byte[(int) (1.2 * uncompressedLength)];
+                        compressedLength = compressor.uncompress(buffer, 0, compressedLength, uncompressedBuffer, 0);
+                        sectionReader = new ByteBufferDataInput(ByteBuffer.wrap(uncompressedBuffer), reader.getPath(), replayPos, 0);
+                    }
+                    catch (IOException e)
+                    {
+                        logger.error("Unexpected exception decompressing section {}", e);
+                        continue;
+                    }
+
+                if (!replaySyncSection(sectionReader, replayEnd, desc, replayFilter))
                     break;
             }
         }
@@ -354,6 +329,22 @@ public class CommitLogReplayer
             FileUtils.closeQuietly(reader);
             logger.info("Finished reading {}", file);
         }
+    }
+
+    public boolean logAndCheckIfShouldSkip(File file, CommitLogDescriptor desc)
+    {
+        logger.info("Replaying {} (CL version {}, messaging version {}, compression {})",
+                    file.getPath(),
+                    desc.version,
+                    desc.getMessagingVersion(),
+                    desc.compression);
+
+        if (globalPosition.segment > desc.id)
+        {
+            logger.debug("skipping replay of fully-flushed {}", file);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -426,7 +417,7 @@ public class CommitLogReplayer
             }
             replayMutation(buffer, serializedSize, reader.getFilePointer(), desc, replayFilter);
         }
-        return desc.version >= CommitLogDescriptor.VERSION_21;
+        return true;
     }
 
     /**

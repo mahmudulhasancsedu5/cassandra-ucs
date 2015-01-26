@@ -152,11 +152,8 @@ public class DatabaseDescriptor
             logger.debug("Syncing log with a period of {}", conf.commitlog_sync_period_in_ms);
         }
 
-        if (conf.commitlog_sync_threads < 1)
-            throw new ConfigurationException("commitlog_sync_threads must be a positive integer.");
-
-        if (conf.commitlog_compression == null && conf.commitlog_sync_threads > 1)
-            throw new ConfigurationException("commitlog_sync_threads can only be used when compression is enabled.");
+        if (conf.commitlog_compression_threads < 1)
+            throw new ConfigurationException("commitlog_compression_threads must be a positive integer.");
 
         if (conf.commitlog_total_space_in_mb == null)
             conf.commitlog_total_space_in_mb = hasLargeAddressSpace() ? 8192 : 32;
@@ -1040,7 +1037,7 @@ public class DatabaseDescriptor
 
     public static int getCommitLogSyncThreadCount()
     {
-        return conf.commitlog_sync_threads;
+        return conf.commitlog_compression != null ? conf.commitlog_compression_threads : 1;
     }
 
     public static int getTombstoneWarnThreshold()

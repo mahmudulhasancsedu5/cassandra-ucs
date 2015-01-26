@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +48,6 @@ import org.apache.cassandra.utils.CLibrary;
 import org.apache.cassandra.utils.PureJavaCrc32;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
-import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
 /*
  * A single commit log file on disk. Manages creation of the file and writing mutations to disk,
@@ -142,7 +142,7 @@ public abstract class CommitLogSegment
 
         try
         {
-            channel = FileChannel.open(logFile.toPath(), StandardOpenOption.WRITE, StandardOpenOption.READ);
+            channel = FileChannel.open(logFile.toPath(), StandardOpenOption.WRITE, StandardOpenOption.READ, StandardOpenOption.CREATE);
             fd = CLibrary.getfd(channel);
         }
         catch (IOException e)
@@ -216,6 +216,8 @@ public abstract class CommitLogSegment
             while (true)
             {
                 bufferSize = allocatePosition.get();
+                // Advance allocatePosition beyond that to ensure no other thread allocated meanwhile, and that any
+                // thread trying to allocate will not proceed with invalid position.
                 if (allocatePosition.compareAndSet(bufferSize, bufferSize + 1))
                 {
                     return;
@@ -271,19 +273,19 @@ public abstract class CommitLogSegment
                         // not enough space left in the buffer, so mark the next sync marker as the EOF position
                         nextMarker = buffer.capacity();
                     }
-
-                    // zero out the next sync marker so replayer can cleanly exit
-                    if (nextMarker < buffer.capacity())
-                    {
-                        buffer.putInt(nextMarker, 0);
-                        buffer.putInt(nextMarker + 4, 0);
-                    }
                 }
                 else
                 {
                     waitForModifications();
                 }
-    
+
+                // zero out the next sync marker so replayer can cleanly exit
+                if (nextMarker < buffer.capacity())
+                {
+                    buffer.putInt(nextMarker, 0);
+                    buffer.putInt(nextMarker + 4, 0);
+                }
+
                 lastSyncStartedOffset = nextMarker;
             } else
                 // Nothing needs to be done, but we must still wait for outstanding writes to complete.

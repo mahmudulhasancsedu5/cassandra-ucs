@@ -36,6 +36,7 @@ import com.google.common.base.Objects;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParametrizedClass;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.PureJavaCrc32;
@@ -84,14 +85,18 @@ public class CommitLogDescriptor
         out.putLong(descriptor.id);
         crc.updateInt((int) (descriptor.id & 0xFFFFFFFFL));
         crc.updateInt((int) (descriptor.id >>> 32));
-        String compressionString = constructCompressionString(descriptor.compression);
         if (descriptor.version >= VERSION_30) {
+            String compressionString = constructCompressionString(descriptor.compression);
             byte[] compressionBytes = compressionString.getBytes(StandardCharsets.UTF_8);
+            if (compressionBytes.length != (((short) compressionBytes.length) & 0xFFFF))
+                throw new ConfigurationException(String.format("Compression parameters too long, length %d cannot be above 65535.",
+                                                               compressionBytes.length));
             out.putShort((short) compressionBytes.length);
             crc.updateInt(compressionBytes.length);
             out.put(compressionBytes);
             crc.update(compressionBytes, 0, compressionBytes.length);
-        }
+        } else
+            assert descriptor.compression == null;
         out.putInt(crc.getCrc());
     }
 

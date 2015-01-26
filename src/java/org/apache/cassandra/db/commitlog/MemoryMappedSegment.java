@@ -33,9 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /*
- * A single commit log file on disk. Manages creation of the file and writing mutations to disk,
- * as well as tracking the last mutation position of any "dirty" CFs covered by the segment file. Segment
- * files are initially allocated to a fixed size and can grow to accomidate a larger value if necessary.
+ * Memory-mapped segment. Maps the destination channel into an appropriately-sized memory-mapped buffer in which the
+ * mutation threads write. On sync forces the buffer to disk.
+ * If possible, recycles used segment files to avoid reallocating large chunks of disk.
  */
 public class MemoryMappedSegment extends CommitLogSegment
 {

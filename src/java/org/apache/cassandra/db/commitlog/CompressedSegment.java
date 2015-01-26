@@ -20,7 +20,6 @@ package org.apache.cassandra.db.commitlog;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -33,9 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /*
- * A single commit log file on disk. Manages creation of the file and writing mutations to disk,
- * as well as tracking the last mutation position of any "dirty" CFs covered by the segment file. Segment
- * files are initially allocated to a fixed size and can grow to accomidate a larger value if necessary.
+ * Compressed commit log segment. Provides an in-memory buffer for the mutation threads. On sync compresses the written
+ * section of the buffer and writes it to the destination channel.
  */
 public class CompressedSegment extends CommitLogSegment
 {
@@ -53,9 +51,9 @@ public class CompressedSegment extends CommitLogSegment
             return ByteBuffer.wrap(compressedArrayHolder.get().buffer);
         }
     };
-    
+
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
-    
+
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
 
     /**
