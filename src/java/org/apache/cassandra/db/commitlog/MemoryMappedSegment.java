@@ -47,10 +47,11 @@ public class MemoryMappedSegment extends CommitLogSegment
      * Constructs a new segment file.
      *
      * @param filePath  if not null, recycles the existing file by renaming it and truncating it to CommitLog.SEGMENT_SIZE.
+     * @param commitLog the commit log it will be used with.
      */
-    MemoryMappedSegment(String filePath)
+    MemoryMappedSegment(String filePath, CommitLog commitLog)
     {
-        super(filePath);
+        super(filePath, commitLog);
     }
 
     void recycleFile(String filePath)
@@ -120,7 +121,7 @@ public class MemoryMappedSegment extends CommitLogSegment
      *
      * @return a new CommitLogSegment representing the newly reusable segment.
      */
-    MemoryMappedSegment recycle()
+    MemoryMappedSegment recycle(CommitLog commitLog)
     {
         try
         {
@@ -134,7 +135,7 @@ public class MemoryMappedSegment extends CommitLogSegment
 
         close();
 
-        return new MemoryMappedSegment(getPath());
+        return new MemoryMappedSegment(getPath(), commitLog);
     }
 
     @Override

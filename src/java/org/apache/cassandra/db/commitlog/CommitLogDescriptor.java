@@ -72,9 +72,9 @@ public class CommitLogDescriptor
         this.compression = compression;
     }
 
-    public CommitLogDescriptor(long id)
+    public CommitLogDescriptor(long id, ParametrizedClass compression)
     {
-        this(current_version, id, DatabaseDescriptor.getCommitLogCompression());
+        this(current_version, id, compression);
     }
 
     public static void writeHeader(ByteBuffer out, CommitLogDescriptor descriptor)

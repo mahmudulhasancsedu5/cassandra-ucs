@@ -23,11 +23,17 @@ import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 import org.slf4j.*;
 
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Timer;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.google.common.util.concurrent.Futures;
 
 import static org.apache.cassandra.db.commitlog.CommitLogSegment.Allocation;
 
@@ -52,12 +58,14 @@ public abstract class AbstractCommitLogService
     private final ScheduledExecutorService executor;
     private final Runnable runnable;
 
+    final long pollInterval;
     long firstLagAt = 0;
     long totalSyncDuration = 0; // total time spent syncing since firstLagAt
     long syncExceededIntervalBy = 0; // time that syncs exceeded pollInterval since firstLagAt
     int lagCount = 0;
     int syncCount = 0;
-    
+    final CommitLog commitLog;
+
     volatile boolean shutdown = false;
 
     /**
@@ -66,10 +74,13 @@ public abstract class AbstractCommitLogService
      *
      * Subclasses may be notified when a sync finishes by using the syncComplete WaitQueue.
      */
-    AbstractCommitLogService(final CommitLog commitLog, final String name, final long pollIntervalMillis)
+    AbstractCommitLogService(final CommitLog cLog, final String name, final long pollIntervalMillis)
     {
         if (pollIntervalMillis < 1)
             throw new IllegalArgumentException(String.format("Commit log flush interval must be positive: %dms", pollIntervalMillis));
+
+        this.pollInterval = pollIntervalMillis;
+        this.commitLog = cLog;
 
         runnable = new Runnable()
         {
@@ -91,7 +102,7 @@ public abstract class AbstractCommitLogService
 
 
                     long now = System.currentTimeMillis();
-                    long remaining = syncStarted + pollIntervalMillis - now;
+                    long remaining = syncStarted + pollInterval - now;
                     if (remaining < 0)
                     {
                         // if we have lagged noticeably, update our lag counter
@@ -122,9 +133,14 @@ public abstract class AbstractCommitLogService
         };
 
         int threadCount = DatabaseDescriptor.getCommitLogSyncThreadCount();
-        executor = Executors.newScheduledThreadPool(threadCount, new NamedThreadFactory("commit-log-service"));
+        executor = Executors.newScheduledThreadPool(threadCount, new NamedThreadFactory(name));
+    }
+
+    void start()
+    {
+        int threadCount = DatabaseDescriptor.getCommitLogSyncThreadCount();
         for (int i=0; i<threadCount; ++i)
-            executor.scheduleAtFixedRate(runnable, pollIntervalMillis * i, pollIntervalMillis * threadCount, TimeUnit.MILLISECONDS);
+            executor.scheduleAtFixedRate(runnable, pollInterval * i, pollInterval * threadCount, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -143,7 +159,16 @@ public abstract class AbstractCommitLogService
      */
     public Future<?> requestExtraSync()
     {
-        return executor.submit(runnable);
+        try
+        {
+            return executor.submit(runnable);
+        }
+        catch (RejectedExecutionException e)
+        {
+            // Requested after we have started shutdown. Rejection is fine.
+            assert shutdown;
+            return Futures.immediateFuture(null);
+        }
     }
 
     public void shutdown()

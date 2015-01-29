@@ -34,8 +34,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.yammer.metrics.core.Timer;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -89,6 +92,10 @@ public abstract class CommitLogSegment
     // The position where sync was initiated last.
     private volatile int lastSyncStartedOffset;
 
+    // the amount of the tail of the file we have allocated but not used - this is used when we discard a log segment
+    // to ensure nobody writes to it after we've decided we're done with it
+    private int discardedTailFrom;
+
     // a signal for writers to wait on to confirm the log message they provided has been written to disk
     private final WaitQueue syncComplete = new WaitQueue();
 
@@ -105,21 +112,20 @@ public abstract class CommitLogSegment
     final int fd;
 
     protected ByteBuffer buffer;
-    protected int bufferSize;
 
     public final CommitLogDescriptor descriptor;
 
     /**
      * @return a newly minted segment file
      */
-    static CommitLogSegment freshSegment()
+    static CommitLogSegment freshSegment(CommitLog commitLog)
     {
-        return createSegment(null);
+        return createSegment(commitLog, null);
     }
 
-    static CommitLogSegment createSegment(String reusePath)
+    static CommitLogSegment createSegment(CommitLog commitLog, String reusePath)
     {
-        return CommitLog.compressor != null ? new CompressedSegment(reusePath) : new MemoryMappedSegment(reusePath);
+        return commitLog.compressor != null ? new CompressedSegment(reusePath, commitLog) : new MemoryMappedSegment(reusePath, commitLog);
     }
 
     static long getNextId()
@@ -132,11 +138,11 @@ public abstract class CommitLogSegment
      *
      * @param filePath  if not null, recycles the existing file by renaming it and truncating it to CommitLog.SEGMENT_SIZE.
      */
-    CommitLogSegment(String filePath)
+    CommitLogSegment(String filePath, CommitLog commitLog)
     {
         id = getNextId();
-        descriptor = new CommitLogDescriptor(id);
-        logFile = new File(DatabaseDescriptor.getCommitLogLocation(), descriptor.fileName());
+        descriptor = new CommitLogDescriptor(id, commitLog.compressorClass);
+        logFile = new File(commitLog.location, descriptor.fileName());
         if (filePath != null)
             recycleFile(filePath);
 
@@ -151,7 +157,6 @@ public abstract class CommitLogSegment
         }
         
         buffer = createBuffer();
-        bufferSize = buffer.capacity();
         // write the header
         CommitLogDescriptor.writeHeader(buffer, descriptor);
         lastSyncedOffset = lastSyncStartedOffset = buffer.position();
@@ -159,6 +164,7 @@ public abstract class CommitLogSegment
         buffer.putInt(lastSyncedOffset + 0, 0);
         buffer.putInt(lastSyncedOffset + 4, 0);
         allocatePosition.set(lastSyncedOffset + SYNC_MARKER_SIZE);
+        discardedTailFrom = buffer.capacity();
     }
 
     abstract void recycleFile(String filePath);
@@ -197,7 +203,7 @@ public abstract class CommitLogSegment
         {
             int prev = allocatePosition.get();
             int next = prev + size;
-            if (next >= bufferSize)
+            if (next >= buffer.capacity())
                 return -1;
             if (allocatePosition.compareAndSet(prev, next))
                 return prev;
@@ -215,11 +221,14 @@ public abstract class CommitLogSegment
         {
             while (true)
             {
-                bufferSize = allocatePosition.get();
-                // Advance allocatePosition beyond that to ensure no other thread allocated meanwhile, and that any
-                // thread trying to allocate will not proceed with invalid position.
-                if (allocatePosition.compareAndSet(bufferSize, bufferSize + 1))
+                int prev = allocatePosition.get();
+                // we set allocatePosition past buffer.capacity() to make sure we always set discardedTailFrom
+                int next = buffer.capacity() + 1;
+                if (prev == next)
+                    return;
+                if (allocatePosition.compareAndSet(prev, next))
                 {
+                    discardedTailFrom = prev;
                     return;
                 }
             }
@@ -249,6 +258,10 @@ public abstract class CommitLogSegment
             startMarker = lastSyncStartedOffset;
 
             // check we have more work to do
+            // Note: Even if the very first allocation of this sync section failed, we still want to enter this
+            // to ensure the segment is closed. As allocatePosition is set to 1 beyond the capacity of the buffer,
+            // this will always be true when a mutation allocation was attempted after the marker allocation succeeded
+            // in the previous sync. 
             if (allocatePosition.get() > startMarker + SYNC_MARKER_SIZE)
             {
                 // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
@@ -259,34 +272,18 @@ public abstract class CommitLogSegment
                     // ensure no more of this CLS is writeable, and mark ourselves for closing
                     discardUnusedTail();
                     close = true;
-        
-                    // wait for modifications guards both discardedTailFrom, and any outstanding appends
-                    waitForModifications();
-        
-                    if (bufferSize < buffer.capacity() - SYNC_MARKER_SIZE)
-                    {
-                        // if there's room in the discard section to write an empty header, use that as the nextMarker
-                        nextMarker = bufferSize;
-                    }
-                    else
-                    {
-                        // not enough space left in the buffer, so mark the next sync marker as the EOF position
-                        nextMarker = buffer.capacity();
-                    }
-                }
-                else
-                {
-                    waitForModifications();
+                    nextMarker = discardedTailFrom;
                 }
 
+                // if there's room in the discard section to write an empty header,
                 // zero out the next sync marker so replayer can cleanly exit
-                if (nextMarker < buffer.capacity())
+                if (nextMarker <= buffer.capacity() - SYNC_MARKER_SIZE)
                 {
                     buffer.putInt(nextMarker, 0);
                     buffer.putInt(nextMarker + 4, 0);
                 }
 
-                lastSyncStartedOffset = nextMarker;
+                lastSyncStartedOffset = close ? buffer.capacity() : nextMarker;
             } else
                 // Nothing needs to be done, but we must still wait for outstanding writes to complete.
                 nextMarker = startMarker;
@@ -295,18 +292,20 @@ public abstract class CommitLogSegment
         
         if (nextMarker > startMarker)
         {
+            waitForModifications();
+
             // Perform compression, writing to file and flush. Some or all of this may execute in parallel.
             write(startMarker, nextMarker);
     
             // Signal the sync as complete. This section needs to be executed only after any previous syncs have finished.
-            waitForSync(startMarker);
+            waitForSync(startMarker, null);
             assert lastSyncedOffset == startMarker;
+            lastSyncedOffset = close ? buffer.capacity() : nextMarker;
             if (close)
                 close();
-            lastSyncedOffset = nextMarker;
             syncComplete.signalAll();
         } else
-            waitForSync(startMarker);
+            waitForSync(startMarker, null);
     }
 
     protected void writeSyncMarker(ByteBuffer buffer, int offset, int filePos, int nextMarker)
@@ -323,7 +322,7 @@ public abstract class CommitLogSegment
 
     public boolean isStillAllocating()
     {
-        return allocatePosition.get() < bufferSize;
+        return allocatePosition.get() < discardedTailFrom;
     }
 
     /**
@@ -339,7 +338,7 @@ public abstract class CommitLogSegment
      *
      * @return a new CommitLogSegment representing the newly reusable segment.
      */
-    abstract CommitLogSegment recycle();
+    abstract CommitLogSegment recycle(CommitLog commitLog);
 
     /**
      * @return the current ReplayPosition for this log segment
@@ -370,7 +369,7 @@ public abstract class CommitLogSegment
         while (true)
         {
             WaitQueue.Signal signal = syncComplete.register();
-            if (lastSyncedOffset < bufferSize)
+            if (lastSyncedOffset < discardedTailFrom)
             {
                 signal.awaitUninterruptibly();
             }
@@ -382,11 +381,13 @@ public abstract class CommitLogSegment
         }
     }
 
-    void waitForSync(int position)
+    void waitForSync(int position, Timer waitingOnCommit)
     {
         while (lastSyncedOffset < position)
         {
-            WaitQueue.Signal signal = syncComplete.register();
+            WaitQueue.Signal signal = waitingOnCommit != null ?
+                                      syncComplete.register(waitingOnCommit.time()) :
+                                      syncComplete.register();
             if (lastSyncedOffset < position)
                 signal.awaitUninterruptibly();
             else
@@ -597,16 +598,9 @@ public abstract class CommitLogSegment
             appendOp.close();
         }
 
-        void awaitDiskSync()
+        void awaitDiskSync(Timer waitingOnCommit)
         {
-            while (segment.lastSyncedOffset < position)
-            {
-                WaitQueue.Signal signal = segment.syncComplete.register(CommitLog.instance.metrics.waitingOnCommit.time());
-                if (segment.lastSyncedOffset < position)
-                    signal.awaitUninterruptibly();
-                else
-                    signal.cancel();
-            }
+            segment.waitForSync(position, waitingOnCommit);
         }
 
         public ReplayPosition getReplayPosition()

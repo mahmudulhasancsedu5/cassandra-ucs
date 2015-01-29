@@ -74,7 +74,7 @@ public class CommitLogReplayer
     private byte[] buffer;
     private byte[] uncompressedBuffer;
 
-    public CommitLogReplayer()
+    CommitLogReplayer(ReplayPosition globalPosition, Map<UUID, ReplayPosition> cfPositions)
     {
         this.keyspacesRecovered = new NonBlockingHashSet<Keyspace>();
         this.futures = new ArrayList<Future<?>>();
@@ -84,9 +84,14 @@ public class CommitLogReplayer
         // count the number of replayed mutation. We don't really care about atomicity, but we need it to be a reference.
         this.replayedCount = new AtomicInteger();
         this.checksum = new PureJavaCrc32();
+        this.cfPositions = cfPositions;
+        this.globalPosition = globalPosition;
+    }
 
+    public static CommitLogReplayer create()
+    {
         // compute per-CF and global replay positions
-        cfPositions = new HashMap<UUID, ReplayPosition>();
+        Map<UUID, ReplayPosition> cfPositions = new HashMap<UUID, ReplayPosition>();
         Ordering<ReplayPosition> replayPositionOrdering = Ordering.from(ReplayPosition.comparator);
         for (ColumnFamilyStore cfs : ColumnFamilyStore.all())
         {
@@ -102,8 +107,9 @@ public class CommitLogReplayer
 
             cfPositions.put(cfs.metadata.cfId, rp);
         }
-        globalPosition = replayPositionOrdering.min(cfPositions.values());
+        ReplayPosition globalPosition = replayPositionOrdering.min(cfPositions.values());
         logger.debug("Global replay position is {} from columnfamilies {}", globalPosition, FBUtilities.toString(cfPositions));
+        return new CommitLogReplayer(globalPosition, cfPositions);
     }
 
     public void recover(File[] clogs) throws IOException
@@ -133,9 +139,7 @@ public class CommitLogReplayer
     {
         if (offset > reader.length() - CommitLogSegment.SYNC_MARKER_SIZE)
         {
-            if (offset != reader.length())
-                logger.warn("Encountered bad header at position {} of Commit log {}; not enough room for a header", offset, reader.getPath());
-            // cannot possibly be a header here. if we're == length(), assume it's a correctly written final segment
+            // There was no room in the segment to write a final header. No data could be present here.
             return -1;
         }
         reader.seek(offset);
@@ -161,7 +165,7 @@ public class CommitLogReplayer
         return end;
     }
     
-    private abstract static class ReplayFilter
+    abstract static class ReplayFilter
     {
         public abstract Iterable<ColumnFamily> filter(Mutation mutation);
 
@@ -280,7 +284,7 @@ public class CommitLogReplayer
                 int replayPos = replayEnd + CommitLogSegment.SYNC_MARKER_SIZE;
 
                 if (logger.isDebugEnabled())
-                    logger.debug("Replaying {} between {} and {}", file, reader.getFilePointer(), end);
+                    logger.trace("Replaying {} between {} and {}", file, reader.getFilePointer(), end);
                 if (compressor != null)
                 {
                     int uncompressedLength = reader.readInt();
@@ -301,7 +305,7 @@ public class CommitLogReplayer
                         int start = (int) reader.getFilePointer();
                         int compressedLength = end - start;
                         if (logger.isDebugEnabled())
-                            logger.debug("Decompressing {} between replay positions {} and {}",
+                            logger.trace("Decompressing {} between replay positions {} and {}",
                                          file,
                                          replayPos,
                                          replayEnd);
@@ -359,7 +363,7 @@ public class CommitLogReplayer
         while (reader.getFilePointer() < end && !reader.isEOF())
         {
             if (logger.isDebugEnabled())
-                logger.debug("Reading mutation at {}", reader.getFilePointer());
+                logger.trace("Reading mutation at {}", reader.getFilePointer());
 
             long claimedCRC32;
             int serializedSize;
@@ -423,7 +427,7 @@ public class CommitLogReplayer
     /**
      * Deserializes and replays a commit log entry.
      */
-    private void replayMutation(byte[] inputBuffer, int size,
+    void replayMutation(byte[] inputBuffer, int size,
             final long entryLocation, final CommitLogDescriptor desc, final ReplayFilter replayFilter) throws IOException,
             FileNotFoundException
     {

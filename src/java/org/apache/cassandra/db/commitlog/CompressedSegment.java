@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.compress.ICompressor;
 import org.apache.cassandra.io.compress.ICompressor.WrappedArray;
 import org.apache.cassandra.io.util.FileUtils;
 
@@ -55,15 +56,17 @@ public class CompressedSegment extends CommitLogSegment
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
 
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
+    final ICompressor compressor;
 
     /**
      * Constructs a new segment file.
      *
      * @param filePath  if not null, recycles the existing file by renaming it and truncating it to CommitLog.SEGMENT_SIZE.
      */
-    CompressedSegment(String filePath)
+    CompressedSegment(String filePath, CommitLog commitLog)
     {
-        super(filePath);
+        super(filePath, commitLog);
+        this.compressor = commitLog.compressor;
         try
         {
             channel.write((ByteBuffer) buffer.duplicate().flip());
@@ -102,18 +105,19 @@ public class CompressedSegment extends CommitLogSegment
     {
         int contentStart = startMarker + SYNC_MARKER_SIZE;
         int length = nextMarker - contentStart;
-        assert length > 0;
+        // The length may be 0 when the segment is being closed.
+        assert length > 0 || length == 0 && !isStillAllocating();
 
         try {
 
-            int compressedLength = CommitLog.compressor.initialCompressedBufferLength(length);
+            int compressedLength = compressor.initialCompressedBufferLength(length);
             WrappedArray compressedArray = compressedArrayHolder.get();
             if (compressedArray.buffer.length < compressedLength + COMPRESSED_MARKER_SIZE)
             {
                 compressedArray.buffer = new byte[compressedLength + COMPRESSED_MARKER_SIZE];
             }
             
-            compressedLength = CommitLog.compressor.compress(buffer.array(), buffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
+            compressedLength = compressor.compress(buffer.array(), buffer.arrayOffset() + contentStart, length, compressedArray, COMPRESSED_MARKER_SIZE);
 
             ByteBuffer compressedBuffer = compressedBufferHolder.get();
             if (compressedBuffer.array() != compressedArray.buffer)
@@ -126,7 +130,7 @@ public class CompressedSegment extends CommitLogSegment
             compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
 
             // Only write after the previous write has completed.
-            waitForSync(startMarker);
+            waitForSync(startMarker, null);
 
             // Only one thread can be here at a given time.
             writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
@@ -144,15 +148,14 @@ public class CompressedSegment extends CommitLogSegment
      *
      * @return a new CommitLogSegment representing the newly reusable segment.
      */
-    CompressedSegment recycle()
+    CompressedSegment recycle(CommitLog commitLog)
     {
         // Run a sync to complete any outstanding writes.
         sync();
 
         close();
-        return new CompressedSegment(getPath());
+        return new CompressedSegment(getPath(), commitLog);
     }
-
 
     @Override
     void close()
@@ -164,6 +167,11 @@ public class CompressedSegment extends CommitLogSegment
                 bufferPool.add(buffer);
             buffer = null;
         }
+    }
+
+    static void shutdown()
+    {
+        bufferPool.clear();
     }
 
 }

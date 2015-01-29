@@ -95,9 +95,11 @@ public class CommitLogSegmentManager
 
     private final Thread managerThread;
     private volatile boolean run = true;
+    private final CommitLog commitLog;
 
-    public CommitLogSegmentManager()
+    public CommitLogSegmentManager(final CommitLog commitLog)
     {
+        this.commitLog = commitLog;
         // The run loop for the manager thread
         Runnable runnable = new WrappedRunnable()
         {
@@ -116,7 +118,7 @@ public class CommitLogSegmentManager
                                 logger.debug("No segments in reserve; creating a fresh one");
                                 size.addAndGet(DatabaseDescriptor.getCommitLogSegmentSize());
                                 // TODO : some error handling in case we fail to create a new segment
-                                availableSegments.add(CommitLogSegment.freshSegment());
+                                availableSegments.add(CommitLogSegment.freshSegment(commitLog));
                                 hasAvailableSegments.signalAll();
                             }
 
@@ -234,19 +236,19 @@ public class CommitLogSegmentManager
                 {
                     // Now we can run the user defined command just after switching to the new commit log.
                     // (Do this here instead of in the recycle call so we can get a head start on the archive.)
-                    CommitLog.instance.archiver.maybeArchive(old);
+                    commitLog.archiver.maybeArchive(old);
 
                     // ensure we don't continue to use the old file; not strictly necessary, but cleaner to enforce it
                     old.discardUnusedTail();
                 }
 
                 // request that the CL be synced out-of-band, as we've finished a segment
-                CommitLog.instance.requestExtraSync();
+                commitLog.requestExtraSync();
                 return;
             }
 
             // no more segments, so register to receive a signal when not empty
-            WaitQueue.Signal signal = hasAvailableSegments.register(CommitLog.instance.metrics.waitingOnSegmentAllocation.time());
+            WaitQueue.Signal signal = hasAvailableSegments.register(commitLog.metrics.waitingOnSegmentAllocation.time());
 
             // trigger the management thread; this must occur after registering
             // the signal to ensure we are woken by any new segment creation
@@ -346,7 +348,7 @@ public class CommitLogSegmentManager
      */
     void recycleSegment(final CommitLogSegment segment)
     {
-        boolean archiveSuccess = CommitLog.instance.archiver.maybeWaitForArchiving(segment.getName());
+        boolean archiveSuccess = commitLog.archiver.maybeWaitForArchiving(segment.getName());
         activeSegments.remove(segment);
         if (!archiveSuccess)
         {
@@ -365,7 +367,7 @@ public class CommitLogSegmentManager
         {
             public CommitLogSegment call()
             {
-                return segment.recycle();
+                return segment.recycle(commitLog);
             }
         });
     }
@@ -394,7 +396,7 @@ public class CommitLogSegmentManager
         {
             public CommitLogSegment call()
             {
-                return CommitLogSegment.createSegment(file.getPath());
+                return CommitLogSegment.createSegment(commitLog, file.getPath());
             }
         });
     }
@@ -544,6 +546,14 @@ public class CommitLogSegmentManager
     public void awaitTermination() throws InterruptedException
     {
         managerThread.join();
+
+        for (CommitLogSegment segment : activeSegments)
+            segment.close();
+
+        for (CommitLogSegment segment : availableSegments)
+            segment.close();
+
+        CompressedSegment.shutdown();
     }
 
     /**

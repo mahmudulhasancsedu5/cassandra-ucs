@@ -25,10 +25,12 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Longs;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.auth.*;
+import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.Config.RequestSchedulerId;
 import org.apache.cassandra.config.EncryptionOptions.ClientEncryptionOptions;
 import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
@@ -1035,9 +1037,19 @@ public class DatabaseDescriptor
         return conf.commitlog_compression;
     }
 
+    public static void setCommitLogCompression(ParametrizedClass compressor)
+    {
+        conf.commitlog_compression = compressor;
+    }
+
     public static int getCommitLogSyncThreadCount()
     {
         return conf.commitlog_compression != null ? conf.commitlog_compression_threads : 1;
+    }
+
+    public static void setCommitLogCompressionThreads(int threads)
+    {
+        conf.commitlog_compression_threads = threads;
     }
 
     public static int getTombstoneWarnThreshold()
@@ -1066,6 +1078,11 @@ public class DatabaseDescriptor
     public static int getCommitLogSegmentSize()
     {
         return conf.commitlog_segment_size_in_mb * 1024 * 1024;
+    }
+    
+    public static void setCommitLogSegmentSize(int sizeMegabytes)
+    {
+        conf.commitlog_segment_size_in_mb = sizeMegabytes;
     }
 
     public static String getSavedCachesLocation()
@@ -1183,9 +1200,19 @@ public class DatabaseDescriptor
         return conf.commitlog_sync_batch_window_in_ms;
     }
 
+    public static void setCommitLogSyncBatchWindow(double windowMillis)
+    {
+        conf.commitlog_sync_batch_window_in_ms = windowMillis;
+    }
+
     public static int getCommitLogSyncPeriod()
     {
         return conf.commitlog_sync_period_in_ms;
+    }
+    
+    public static void setCommitLogSyncPeriod(int periodMillis)
+    {
+        conf.commitlog_sync_period_in_ms = periodMillis;
     }
 
     public static int getCommitLogPeriodicQueueSize()
@@ -1196,6 +1223,11 @@ public class DatabaseDescriptor
     public static Config.CommitLogSync getCommitLogSync()
     {
         return conf.commitlog_sync;
+    }
+
+    public static void setCommitLogSync(CommitLogSync sync)
+    {
+        conf.commitlog_sync = sync;
     }
 
     public static Config.DiskAccessMode getDiskAccessMode()
