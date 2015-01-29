@@ -56,7 +56,7 @@ public class StreamRequest
             out.writeInt(request.ranges.size());
             for (Range<Token> range : request.ranges)
             {
-                assert MessagingService.verifyPartitioner(range);
+                MessagingService.validatePartitioner(range);
                 Token.serializer.serialize(range.left, out, version);
                 Token.serializer.serialize(range.right, out, version);
             }
@@ -73,8 +73,8 @@ public class StreamRequest
             List<Range<Token>> ranges = new ArrayList<>(rangeCount);
             for (int i = 0; i < rangeCount; i++)
             {
-                Token left = Token.serializer.deserialize(in, MessagingService.serializationPartitioner(), version);
-                Token right = Token.serializer.deserialize(in, MessagingService.serializationPartitioner(), version);
+                Token left = Token.serializer.deserialize(in, MessagingService.globalPartitioner(), version);
+                Token right = Token.serializer.deserialize(in, MessagingService.globalPartitioner(), version);
                 ranges.add(new Range<>(left, right));
             }
             int cfCount = in.readInt();

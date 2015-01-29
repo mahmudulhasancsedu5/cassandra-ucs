@@ -68,7 +68,7 @@ public class SyncRequest extends RepairMessage
             out.writeInt(message.ranges.size());
             for (Range<Token> range : message.ranges)
             {
-                assert MessagingService.verifyPartitioner(range);
+                MessagingService.validatePartitioner(range);
                 AbstractBounds.serializer.serialize(range, out, version);
             }
         }
@@ -82,7 +82,7 @@ public class SyncRequest extends RepairMessage
             int rangesCount = in.readInt();
             List<Range<Token>> ranges = new ArrayList<>(rangesCount);
             for (int i = 0; i < rangesCount; ++i)
-                ranges.add((Range<Token>) AbstractBounds.serializer.deserialize(in, MessagingService.serializationPartitioner(), version).toTokenBounds());
+                ranges.add((Range<Token>) AbstractBounds.serializer.deserialize(in, MessagingService.globalPartitioner(), version).toTokenBounds());
             return new SyncRequest(desc, owner, src, dst, ranges);
         }
 

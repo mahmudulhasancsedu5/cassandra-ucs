@@ -1067,13 +1067,13 @@ public final class MessagingService implements MessagingServiceMBean
         return result;
     }
 
-    public static IPartitioner serializationPartitioner()
+    public static IPartitioner globalPartitioner()
     {
         return DatabaseDescriptor.getPartitioner();
     }
-    
-    public static boolean verifyPartitioner(AbstractBounds<?> bounds)
+
+    public static void validatePartitioner(AbstractBounds<?> bounds)
     {
-        return serializationPartitioner() == bounds.left.getPartitioner();
+        assert globalPartitioner() == bounds.left.getPartitioner();
     }
 }

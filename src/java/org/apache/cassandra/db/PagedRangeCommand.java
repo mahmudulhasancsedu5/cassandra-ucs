@@ -129,7 +129,7 @@ public class PagedRangeCommand extends AbstractRangeCommand
             out.writeUTF(cmd.columnFamily);
             out.writeLong(cmd.timestamp);
 
-            assert MessagingService.verifyPartitioner(cmd.keyRange);
+            MessagingService.validatePartitioner(cmd.keyRange);
             AbstractBounds.serializer.serialize(cmd.keyRange, out, version);
 
             CFMetaData metadata = Schema.instance.getCFMetaData(cmd.keyspace, cmd.columnFamily);
@@ -159,7 +159,7 @@ public class PagedRangeCommand extends AbstractRangeCommand
             String columnFamily = in.readUTF();
             long timestamp = in.readLong();
 
-            AbstractBounds<RowPosition> keyRange = AbstractBounds.serializer.deserialize(in, MessagingService.serializationPartitioner(), version).toRowBounds();
+            AbstractBounds<RowPosition> keyRange = AbstractBounds.serializer.deserialize(in, MessagingService.globalPartitioner(), version).toRowBounds();
 
             CFMetaData metadata = Schema.instance.getCFMetaData(keyspace, columnFamily);
 

@@ -54,7 +54,7 @@ public class AnticompactionRequest extends RepairMessage
             out.writeInt(message.successfulRanges.size());
             for (Range<Token> r : message.successfulRanges)
             {
-                assert MessagingService.verifyPartitioner(r);
+                MessagingService.validatePartitioner(r);
                 Range.serializer.serialize(r, out, version);
             }
         }
@@ -65,7 +65,7 @@ public class AnticompactionRequest extends RepairMessage
             int rangeCount = in.readInt();
             List<Range<Token>> ranges = new ArrayList<>(rangeCount);
             for (int i = 0; i < rangeCount; i++)
-                ranges.add((Range<Token>) Range.serializer.deserialize(in, MessagingService.serializationPartitioner(), version).toTokenBounds());
+                ranges.add((Range<Token>) Range.serializer.deserialize(in, MessagingService.globalPartitioner(), version).toTokenBounds());
             return new AnticompactionRequest(parentRepairSession, ranges);
         }
 
