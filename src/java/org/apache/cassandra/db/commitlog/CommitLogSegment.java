@@ -92,9 +92,10 @@ public abstract class CommitLogSegment
     // The position where sync was initiated last.
     private volatile int lastSyncStartedOffset;
 
-    // the amount of the tail of the file we have allocated but not used - this is used when we discard a log segment
-    // to ensure nobody writes to it after we've decided we're done with it
-    private int discardedTailFrom;
+    // The end position of the buffer. Initially set to its capacity and updated to point to the last written position
+    // as the segment is being closed.
+    // No need to be volatile as writes are protected by appendOrder barrier.
+    private int endOfBuffer;
 
     // a signal for writers to wait on to confirm the log message they provided has been written to disk
     private final WaitQueue syncComplete = new WaitQueue();
@@ -111,7 +112,7 @@ public abstract class CommitLogSegment
     final FileChannel channel;
     final int fd;
 
-    protected ByteBuffer buffer;
+    ByteBuffer buffer;
 
     public final CommitLogDescriptor descriptor;
 
@@ -159,12 +160,9 @@ public abstract class CommitLogSegment
         buffer = createBuffer();
         // write the header
         CommitLogDescriptor.writeHeader(buffer, descriptor);
+        endOfBuffer = buffer.capacity();
         lastSyncedOffset = lastSyncStartedOffset = buffer.position();
-        // mark the initial sync marker as uninitialised
-        buffer.putInt(lastSyncedOffset + 0, 0);
-        buffer.putInt(lastSyncedOffset + 4, 0);
         allocatePosition.set(lastSyncedOffset + SYNC_MARKER_SIZE);
-        discardedTailFrom = buffer.capacity();
     }
 
     abstract void recycleFile(String filePath);
@@ -203,32 +201,42 @@ public abstract class CommitLogSegment
         {
             int prev = allocatePosition.get();
             int next = prev + size;
-            if (next >= buffer.capacity())
+            if (next >= endOfBuffer)
                 return -1;
             if (allocatePosition.compareAndSet(prev, next))
+            {
+                assert buffer != null;
                 return prev;
+            }
         }
     }
 
     // ensures no more of this segment is writeable, by allocating any unused section at the end and marking it discarded
     void discardUnusedTail()
     {
-        // we guard this with the OpOrdering instead of synchronised due to potential dead-lock with CLSM.advanceAllocatingFrom()
-        // this actually isn't strictly necessary, as currently all calls to discardUnusedTail occur within a block
-        // already protected by this OpOrdering, but to prevent future potential mistakes, we duplicate the protection here
-        // so that the contract between discardUnusedTail() and sync() is more explicit.
+        // We guard this with the OpOrdering instead of synchronised due to potential dead-lock with CLSM.advanceAllocatingFrom()
+        // Ensures endOfBuffer update is reflected in the buffer end position picked up by sync().
+        // This actually isn't strictly necessary, as currently all calls to discardUnusedTail are executed either by the thread
+        // running sync or within a mutation already protected by this OpOrdering, but to prevent future potential mistakes,
+        // we duplicate the protection here so that the contract between discardUnusedTail() and sync() is more explicit.
         try (OpOrder.Group group = appendOrder.start())
         {
             while (true)
             {
                 int prev = allocatePosition.get();
-                // we set allocatePosition past buffer.capacity() to make sure we always set discardedTailFrom
-                int next = buffer.capacity() + 1;
-                if (prev == next)
+
+                int next = endOfBuffer + 1;
+                if (prev >= next)
+                {
+                    // Already stopped allocating, might also be closed.
+                    assert buffer == null || prev == buffer.capacity() + 1;
                     return;
+                }
                 if (allocatePosition.compareAndSet(prev, next))
                 {
-                    discardedTailFrom = prev;
+                    // Stopped allocating now. Can only succeed once, no further allocation or discardUnusedTail can succeed.
+                    endOfBuffer = prev;
+                    assert buffer != null && next == buffer.capacity() + 1;
                     return;
                 }
             }
@@ -257,33 +265,29 @@ public abstract class CommitLogSegment
         {
             startMarker = lastSyncStartedOffset;
 
-            // check we have more work to do
+            // Check we have more work to do.
             // Note: Even if the very first allocation of this sync section failed, we still want to enter this
             // to ensure the segment is closed. As allocatePosition is set to 1 beyond the capacity of the buffer,
             // this will always be true when a mutation allocation was attempted after the marker allocation succeeded
             // in the previous sync. 
             if (allocatePosition.get() > startMarker + SYNC_MARKER_SIZE)
             {
-                // allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
-                // the point at which we can safely consider records to have been completely written to
+                assert buffer != null;  // Only close once.
+                // Allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
+                // the point at which we can safely consider records to have been completely written to.
                 nextMarker = allocate(SYNC_MARKER_SIZE);
                 if (nextMarker < 0)
                 {
-                    // ensure no more of this CLS is writeable, and mark ourselves for closing
+                    // Ensure no more of this CLS is writeable, and mark ourselves for closing.
                     discardUnusedTail();
                     close = true;
-                    nextMarker = discardedTailFrom;
+
+                    // The endOfBuffer position may be incorrect at this point (to be written by another stalled thread).
+                    // We will wait for the precise end position outside of the synchronized block.
+                    nextMarker = buffer.capacity();
                 }
 
-                // if there's room in the discard section to write an empty header,
-                // zero out the next sync marker so replayer can cleanly exit
-                if (nextMarker <= buffer.capacity() - SYNC_MARKER_SIZE)
-                {
-                    buffer.putInt(nextMarker, 0);
-                    buffer.putInt(nextMarker + 4, 0);
-                }
-
-                lastSyncStartedOffset = close ? buffer.capacity() : nextMarker;
+                lastSyncStartedOffset = nextMarker;
             } else
                 // Nothing needs to be done, but we must still wait for outstanding writes to complete.
                 nextMarker = startMarker;
@@ -292,15 +296,17 @@ public abstract class CommitLogSegment
         
         if (nextMarker > startMarker)
         {
+            // Wait for mutations to complete as well as endOfBuffer to have been written.
             waitForModifications();
+            int sectionEnd = close ? endOfBuffer : nextMarker;
 
             // Perform compression, writing to file and flush. Some or all of this may execute in parallel.
-            write(startMarker, nextMarker);
-    
+            write(startMarker, sectionEnd);
+
             // Signal the sync as complete. This section needs to be executed only after any previous syncs have finished.
             waitForSync(startMarker, null);
             assert lastSyncedOffset == startMarker;
-            lastSyncedOffset = close ? buffer.capacity() : nextMarker;
+            lastSyncedOffset = nextMarker;
             if (close)
                 close();
             syncComplete.signalAll();
@@ -322,7 +328,7 @@ public abstract class CommitLogSegment
 
     public boolean isStillAllocating()
     {
-        return allocatePosition.get() < discardedTailFrom;
+        return allocatePosition.get() < endOfBuffer;
     }
 
     /**
@@ -369,7 +375,7 @@ public abstract class CommitLogSegment
         while (true)
         {
             WaitQueue.Signal signal = syncComplete.register();
-            if (lastSyncedOffset < discardedTailFrom)
+            if (lastSyncedOffset < endOfBuffer)
             {
                 signal.awaitUninterruptibly();
             }
@@ -396,9 +402,9 @@ public abstract class CommitLogSegment
     }
 
     /**
-     * Close the segment file.
+     * Close the segment file. Do not call from outside this class, use syncAndClose() instead.
      */
-    void close()
+    protected void close()
     {
         try
         {
@@ -408,6 +414,15 @@ public abstract class CommitLogSegment
         {
             throw new FSWriteError(e, getPath());
         }
+    }
+
+    /**
+     * Stop writing to this file, sync and close it. Does nothing if the file is already closed.
+     */
+    public void syncAndClose()
+    {
+        discardUnusedTail();
+        sync();
     }
 
     void markDirty(Mutation mutation, int allocatedPosition)
@@ -609,5 +624,4 @@ public abstract class CommitLogSegment
         }
 
     }
-
 }

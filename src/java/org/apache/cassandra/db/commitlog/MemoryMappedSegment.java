@@ -52,6 +52,10 @@ public class MemoryMappedSegment extends CommitLogSegment
     MemoryMappedSegment(String filePath, CommitLog commitLog)
     {
         super(filePath, commitLog);
+        // mark the initial sync marker as uninitialised
+        int firstSync = buffer.position();
+        buffer.putInt(firstSync + 0, 0);
+        buffer.putInt(firstSync + 4, 0);
     }
 
     void recycleFile(String filePath)
@@ -101,12 +105,19 @@ public class MemoryMappedSegment extends CommitLogSegment
     @Override
     void write(int startMarker, int nextMarker)
     {
+        // if there's room in the discard section to write an empty header,
+        // zero out the next sync marker so replayer can cleanly exit
+        if (nextMarker <= buffer.capacity() - SYNC_MARKER_SIZE)
+        {
+            buffer.putInt(nextMarker, 0);
+            buffer.putInt(nextMarker + 4, 0);
+        }
+
         // write previous sync marker to point to next sync marker
         // we don't chain the crcs here to ensure this method is idempotent if it fails
         writeSyncMarker(buffer, startMarker, startMarker, nextMarker);
 
         try {
-            // actually perform the sync and signal those waiting for it
             mappedBuffer.force();
         }
         catch (Exception e) // MappedByteBuffer.force() does not declare IOException but can actually throw it
@@ -125,7 +136,7 @@ public class MemoryMappedSegment extends CommitLogSegment
     {
         try
         {
-            sync();
+            syncAndClose();
         }
         catch (FSWriteError e)
         {
@@ -133,13 +144,11 @@ public class MemoryMappedSegment extends CommitLogSegment
             throw e;
         }
 
-        close();
-
         return new MemoryMappedSegment(getPath(), commitLog);
     }
 
     @Override
-    void close()
+    protected void close()
     {
         if (FileUtils.isCleanerAvailable())
             FileUtils.clean(mappedBuffer);

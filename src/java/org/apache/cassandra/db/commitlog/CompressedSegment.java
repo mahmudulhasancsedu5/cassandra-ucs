@@ -151,22 +151,15 @@ public class CompressedSegment extends CommitLogSegment
     CompressedSegment recycle(CommitLog commitLog)
     {
         // Run a sync to complete any outstanding writes.
-        sync();
-
-        close();
+        syncAndClose();
         return new CompressedSegment(getPath(), commitLog);
     }
 
     @Override
-    void close()
+    protected void close()
     {
         super.close();
-        synchronized (this)
-        {
-            if (buffer != null)
-                bufferPool.add(buffer);
-            buffer = null;
-        }
+        bufferPool.add(buffer);
     }
 
     static void shutdown()

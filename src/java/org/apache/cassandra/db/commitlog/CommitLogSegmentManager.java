@@ -415,7 +415,7 @@ public class CommitLogSegmentManager
         {
             public CommitLogSegment call()
             {
-                segment.close();
+                segment.syncAndClose();
                 if (deleteFile)
                     segment.delete();
                 return null;
@@ -521,11 +521,11 @@ public class CommitLogSegmentManager
             Thread.yield();
 
         for (CommitLogSegment segment : activeSegments)
-            segment.close();
+            segment.syncAndClose();
         activeSegments.clear();
 
         for (CommitLogSegment segment : availableSegments)
-            segment.close();
+            segment.syncAndClose();
         availableSegments.clear();
 
         allocatingFrom = null;
@@ -548,10 +548,10 @@ public class CommitLogSegmentManager
         managerThread.join();
 
         for (CommitLogSegment segment : activeSegments)
-            segment.close();
+            segment.syncAndClose();
 
         for (CommitLogSegment segment : availableSegments)
-            segment.close();
+            segment.syncAndClose();
 
         CompressedSegment.shutdown();
     }

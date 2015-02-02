@@ -23,9 +23,6 @@ import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 import org.slf4j.*;
 
-import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Timer;
-
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
