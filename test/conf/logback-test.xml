@@ -36,7 +36,7 @@
   
     <appender name="STDERR" target="System.err" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%-5level %date{HH:mm:ss,SSS} %msg%n</pattern>
+      <pattern>%-5level %date{HH:mm:ss,SSS} %logger{36} %msg%n</pattern>
     </encoder>
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
       <level>WARN</level>
@@ -45,16 +45,19 @@
   
   <appender name="STDOUT" target="System.out" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%-5level %date{HH:mm:ss,SSS} %msg%n</pattern>
+      <pattern>%-5level %date{HH:mm:ss,SSS} %logger{36} %msg%n</pattern>
     </encoder>
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
       <level>WARN</level>
     </filter>
   </appender>
         
+  <logger name="org.caffinitas" level="ERROR" />
+  <logger name="org.apache.cassandra.utils.CLibrary" level="ERROR" />
+  <logger name="org.apache.cassandra.db.compaction.LeveledCompactionStrategy" level="ERROR" />
+  <logger name="org.apache.cassandra.db.commitlog.CommitLogReplayer" level="DEBUG" />
   <root level="DEBUG">
     <appender-ref ref="FILE" />
-    <appender-ref ref="STDERR" />
     <appender-ref ref="STDOUT" />
   </root>
 </configuration>

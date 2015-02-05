@@ -126,7 +126,7 @@ public abstract class CommitLogSegment
 
     static CommitLogSegment createSegment(CommitLog commitLog, String reusePath)
     {
-        return commitLog.compressor != null ? new CompressedSegment(reusePath, commitLog) : new MemoryMappedSegment(reusePath, commitLog);
+        return commitLog.compressor != null ? new CompressedSegment(reusePath, commitLog) : new NonCompressedSegment(reusePath, commitLog);
     }
 
     static long getNextId()

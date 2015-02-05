@@ -64,12 +64,17 @@ public class MemoryMappedSegment extends CommitLogSegment
 
         if (oldFile.exists())
         {
-            logger.debug("Re-using discarded CommitLog segment for {} from {}", id, filePath);
-            if (!oldFile.renameTo(logFile))
-                throw new FSWriteError(new IOException("Rename from " + filePath + " to " + id + " failed"), filePath);
-        } else {
-            logger.debug("Creating new commit log segment {}", logFile.getPath());
+            logger.debug("Deleting old CommitLog segment {}", filePath);
+            FileUtils.deleteWithConfirm(oldFile);
         }
+//        if (oldFile.exists())
+//        {
+//            logger.debug("Re-using discarded CommitLog segment for {} from {}", id, filePath);
+//            if (!oldFile.renameTo(logFile))
+//                throw new FSWriteError(new IOException("Rename from " + filePath + " to " + id + " failed"), filePath);
+//        } else {
+//            logger.debug("Creating new commit log segment {}", logFile.getPath());
+//        }
     }
 
     ByteBuffer createBuffer()
