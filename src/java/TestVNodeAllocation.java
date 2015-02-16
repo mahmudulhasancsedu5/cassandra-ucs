@@ -33,20 +33,20 @@ public class TestVNodeAllocation
 
     private static final double totalTokenRange = 1.0 + Long.MAX_VALUE - (double) Long.MIN_VALUE;
     
-    static int nextNodeId = 0;
+    static int nextUnitId = 0;
 
-    static final class Node implements Comparable<Node>
+    static final class Unit implements Comparable<Unit>
     {
-        int nodeId = nextNodeId++;
+        int unitId = nextUnitId++;
         
         public String toString() {
-            return Integer.toString(nodeId);
+            return Integer.toString(unitId);
         }
 
         @Override
-        public int compareTo(Node o)
+        public int compareTo(Unit o)
         {
-            return Integer.compare(nodeId, o.nodeId);
+            return Integer.compare(unitId, o.unitId);
         }
     }
     
@@ -100,10 +100,10 @@ public class TestVNodeAllocation
         final double weight;
         final T value;
 
-        public Weighted(double weight, T node)
+        public Weighted(double weight, T unit)
         {
             this.weight = weight;
-            this.value = node;
+            this.value = unit;
         }
 
         @Override
@@ -122,50 +122,50 @@ public class TestVNodeAllocation
     
     interface ReplicationStrategy {
         /**
-         * Returns a list of all replica nodes for given token.
+         * Returns a list of all replica units for given token.
          */
-        List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens);
+        List<Unit> getReplicas(Token token, NavigableMap<Token, Unit> sortedTokens);
 
         /**
          * Returns the token that holds the last replica for the given token.
          */
-        Token lastReplicaToken(Token middle, NavigableMap<Token, Node> sortedTokens);
+        Token lastReplicaToken(Token middle, NavigableMap<Token, Unit> sortedTokens);
 
         /**
          * Returns the start of the token span that is replicated in this token.
          * Note: Though this is not trivial to see, the replicated span is always contiguous. A token in the same
-         * rack acts as a barrier; if one is not found the token replicates everything up to the replica'th distinct
-         * rack seen in front of it.
+         * group acts as a barrier; if one is not found the token replicates everything up to the replica'th distinct
+         * group seen in front of it.
          */
-        Token replicationStart(Token token, Node node, NavigableMap<Token, Node> sortedTokens);
+        Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens);
 
-        void addNode(Node n);
-        void removeNode(Node n);
+        void addUnit(Unit n);
+        void removeUnit(Unit n);
 
         int replicas();
         
-        boolean sameRack(Node n1, Node n2);
+        boolean sameGroup(Unit n1, Unit n2);
 
         /**
-         * Returns a rack identifier. getRack(a) == getRack(b) iff a and b are on the same rack.
+         * Returns a group identifier. getGroup(a) == getGroup(b) iff a and b are on the same group.
          * @return Some hashable object.
          */
-        Object getRack(Node node);
+        Object getGroup(Unit unit);
     }
     
     static class NoReplicationStrategy implements ReplicationStrategy
     {
-        public List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens)
+        public List<Unit> getReplicas(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
             return Collections.singletonList(sortedTokens.floorEntry(token).getValue());
         }
 
-        public Token lastReplicaToken(Token token, NavigableMap<Token, Node> sortedTokens)
+        public Token lastReplicaToken(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
             return sortedTokens.floorEntry(token).getKey();
         }
 
-        public Token replicationStart(Token token, Node node, NavigableMap<Token, Node> sortedTokens)
+        public Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens)
         {
             return token;
         }
@@ -175,22 +175,22 @@ public class TestVNodeAllocation
             return "No replication";
         }
         
-        public void addNode(Node n) {}
-        public void removeNode(Node n) {}
+        public void addUnit(Unit n) {}
+        public void removeUnit(Unit n) {}
 
         public int replicas()
         {
             return 1;
         }
 
-        public boolean sameRack(Node n1, Node n2)
+        public boolean sameGroup(Unit n1, Unit n2)
         {
             return false;
         }
 
-        public Object getRack(Node node)
+        public Object getGroup(Unit unit)
         {
-            return node;
+            return unit;
         }
     }
     
@@ -204,36 +204,36 @@ public class TestVNodeAllocation
             this.replicas = replicas;
         }
 
-        public List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens)
+        public List<Unit> getReplicas(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
-            List<Node> endpoints = new ArrayList<Node>(replicas);
+            List<Unit> endpoints = new ArrayList<Unit>(replicas);
 
             token = sortedTokens.floorKey(token);
             if (token == null)
                 token = sortedTokens.lastKey();
-            Iterator<Node> iter = Iterables.concat(sortedTokens.tailMap(token, true).values(), sortedTokens.values()).iterator();
+            Iterator<Unit> iter = Iterables.concat(sortedTokens.tailMap(token, true).values(), sortedTokens.values()).iterator();
             while (endpoints.size() < replicas)
             {
                 // presumably list can't be exhausted before finding all replicas.
-                Node ep = iter.next();
+                Unit ep = iter.next();
                 if (!endpoints.contains(ep))
                     endpoints.add(ep);
             }
             return endpoints;
         }
 
-        public Token lastReplicaToken(Token token, NavigableMap<Token, Node> sortedTokens)
+        public Token lastReplicaToken(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
-            Set<Node> endpoints = new HashSet<Node>(replicas);
+            Set<Unit> endpoints = new HashSet<Unit>(replicas);
 
             token = sortedTokens.floorKey(token);
             if (token == null)
                 token = sortedTokens.lastKey();
-            for (Map.Entry<Token, Node> en :
+            for (Map.Entry<Token, Unit> en :
                 Iterables.concat(sortedTokens.tailMap(token, true).entrySet(),
                                  sortedTokens.entrySet()))
             {
-                Node ep = en.getValue();
+                Unit ep = en.getValue();
                 if (!endpoints.contains(ep)){
                     endpoints.add(ep);
                     if (endpoints.size() >= replicas)
@@ -243,22 +243,22 @@ public class TestVNodeAllocation
             return token;
         }
 
-        public Token replicationStart(Token token, Node node, NavigableMap<Token, Node> sortedTokens)
+        public Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens)
         {
-            Set<Node> seenNodes = Sets.newHashSet();
-            int nodesFound = 0;
+            Set<Unit> seenUnits = Sets.newHashSet();
+            int unitsFound = 0;
 
-            for (Map.Entry<Token, Node> en : Iterables.concat(
+            for (Map.Entry<Token, Unit> en : Iterables.concat(
                      sortedTokens.headMap(token, false).descendingMap().entrySet(),
                      sortedTokens.descendingMap().entrySet())) {
-                Node n = en.getValue();
-                // Same rack as investigated node is a break; anything that could replicate in it replicates there.
-                if (n == node)
+                Unit n = en.getValue();
+                // Same group as investigated unit is a break; anything that could replicate in it replicates there.
+                if (n == unit)
                     break;
 
-                if (seenNodes.add(n))
+                if (seenUnits.add(n))
                 {
-                    if (++nodesFound == replicas)
+                    if (++unitsFound == replicas)
                         break;
                 }
                 token = en.getKey();
@@ -266,8 +266,8 @@ public class TestVNodeAllocation
             return token;
         }
 
-        public void addNode(Node n) {}
-        public void removeNode(Node n) {}
+        public void addUnit(Unit n) {}
+        public void removeUnit(Unit n) {}
 
         public String toString()
         {
@@ -279,33 +279,33 @@ public class TestVNodeAllocation
             return replicas;
         }
 
-        public boolean sameRack(Node n1, Node n2)
+        public boolean sameGroup(Unit n1, Unit n2)
         {
             return false;
         }
 
-        public Node getRack(Node node)
+        public Unit getGroup(Unit unit)
         {
-            // The node is the rack.
-            return node;
+            // The unit is the group.
+            return unit;
         }
     }
     
-    static abstract class RackReplicationStrategy implements ReplicationStrategy
+    static abstract class GroupReplicationStrategy implements ReplicationStrategy
     {
         final int replicas;
-        final Map<Node, Integer> rackMap;
+        final Map<Unit, Integer> groupMap;
 
-        public RackReplicationStrategy(int replicas)
+        public GroupReplicationStrategy(int replicas)
         {
             this.replicas = replicas;
-            this.rackMap = Maps.newHashMap();
+            this.groupMap = Maps.newHashMap();
         }
 
-        public List<Node> getReplicas(Token token, NavigableMap<Token, Node> sortedTokens)
+        public List<Unit> getReplicas(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
-            List<Node> endpoints = new ArrayList<Node>(replicas);
-            BitSet usedRacks = new BitSet();
+            List<Unit> endpoints = new ArrayList<Unit>(replicas);
+            BitSet usedGroups = new BitSet();
 
             if (sortedTokens.isEmpty())
                 return endpoints;
@@ -313,65 +313,65 @@ public class TestVNodeAllocation
             token = sortedTokens.floorKey(token);
             if (token == null)
                 token = sortedTokens.lastKey();
-            Iterator<Node> iter = Iterables.concat(sortedTokens.tailMap(token, true).values(), sortedTokens.values()).iterator();
+            Iterator<Unit> iter = Iterables.concat(sortedTokens.tailMap(token, true).values(), sortedTokens.values()).iterator();
             while (endpoints.size() < replicas)
             {
                 // For simlicity assuming list can't be exhausted before finding all replicas.
-                Node ep = iter.next();
-                int rack = rackMap.get(ep);
-                if (!usedRacks.get(rack))
+                Unit ep = iter.next();
+                int group = groupMap.get(ep);
+                if (!usedGroups.get(group))
                 {
                     endpoints.add(ep);
-                    usedRacks.set(rack);
+                    usedGroups.set(group);
                 }
             }
             return endpoints;
         }
 
-        public Token lastReplicaToken(Token token, NavigableMap<Token, Node> sortedTokens)
+        public Token lastReplicaToken(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
-            BitSet usedRacks = new BitSet();
-            int racksFound = 0;
+            BitSet usedGroups = new BitSet();
+            int groupsFound = 0;
 
             token = sortedTokens.floorKey(token);
             if (token == null)
                 token = sortedTokens.lastKey();
-            for (Map.Entry<Token, Node> en :
+            for (Map.Entry<Token, Unit> en :
                 Iterables.concat(sortedTokens.tailMap(token, true).entrySet(),
                                  sortedTokens.entrySet()))
             {
-                Node ep = en.getValue();
-                int rack = rackMap.get(ep);
-                if (!usedRacks.get(rack)){
-                    usedRacks.set(rack);
-                    if (++racksFound >= replicas)
+                Unit ep = en.getValue();
+                int group = groupMap.get(ep);
+                if (!usedGroups.get(group)){
+                    usedGroups.set(group);
+                    if (++groupsFound >= replicas)
                         return en.getKey();
                 }
             }
             return token;
         }
 
-        public Token replicationStart(Token token, Node node, NavigableMap<Token, Node> sortedTokens)
+        public Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens)
         {
             // replicated ownership
-            int nodeRack = rackMap.get(node);   // node must be already added
-            BitSet seenRacks = new BitSet();
-            int racksFound = 0;
+            int unitGroup = groupMap.get(unit);   // unit must be already added
+            BitSet seenGroups = new BitSet();
+            int groupsFound = 0;
 
-            for (Map.Entry<Token, Node> en : Iterables.concat(
+            for (Map.Entry<Token, Unit> en : Iterables.concat(
                      sortedTokens.headMap(token, false).descendingMap().entrySet(),
                      sortedTokens.descendingMap().entrySet())) {
-                Node n = en.getValue();
-                int nrack = rackMap.get(n);
-                // Same rack as investigated node is a break; anything that could replicate in it replicates there.
-                if (nrack == nodeRack)
+                Unit n = en.getValue();
+                int ngroup = groupMap.get(n);
+                // Same group as investigated unit is a break; anything that could replicate in it replicates there.
+                if (ngroup == unitGroup)
                     break;
 
-                if (!seenRacks.get(nrack))
+                if (!seenGroups.get(ngroup))
                 {
-                    if (++racksFound == replicas)
+                    if (++groupsFound == replicas)
                         break;
-                    seenRacks.set(nrack);
+                    seenGroups.set(ngroup);
                 }
                 token = en.getKey();
             }
@@ -380,10 +380,10 @@ public class TestVNodeAllocation
 
         public String toString()
         {
-            Map<Integer, Integer> idToSize = instanceToCount(rackMap);
+            Map<Integer, Integer> idToSize = instanceToCount(groupMap);
             Map<Integer, Integer> sizeToCount = Maps.newTreeMap();
             sizeToCount.putAll(instanceToCount(idToSize));
-            return String.format("Rack strategy, %d replicas, rack size to count %s", replicas, sizeToCount);
+            return String.format("Group strategy, %d replicas, group size to count %s", replicas, sizeToCount);
         }
 
         @Override
@@ -393,18 +393,18 @@ public class TestVNodeAllocation
         }
 
         @Override
-        public boolean sameRack(Node n1, Node n2)
+        public boolean sameGroup(Unit n1, Unit n2)
         {
-            return rackMap.get(n1).equals(rackMap.get(n2));
+            return groupMap.get(n1).equals(groupMap.get(n2));
         }
 
-        public void removeNode(Node n) {
-            rackMap.remove(n);
+        public void removeUnit(Unit n) {
+            groupMap.remove(n);
         }
 
-        public Integer getRack(Node node)
+        public Integer getGroup(Unit unit)
         {
-            return rackMap.get(node);
+            return groupMap.get(unit);
         }
     }
     
@@ -419,112 +419,112 @@ public class TestVNodeAllocation
     }
 
     /**
-     * Rack strategy spreading nodes into a fixed number of racks.
+     * Group strategy spreading units into a fixed number of groups.
      */
-    static class FixedRackCountReplicationStrategy extends RackReplicationStrategy
+    static class FixedGroupCountReplicationStrategy extends GroupReplicationStrategy
     {
-        int rackId;
-        int rackCount;
+        int groupId;
+        int groupCount;
 
-        public FixedRackCountReplicationStrategy(int replicas, int rackCount, Collection<Node> nodes)
+        public FixedGroupCountReplicationStrategy(int replicas, int groupCount, Collection<Unit> units)
         {
             super(replicas);
-            assert rackCount >= replicas;
-            rackId = 0;
-            this.rackCount = rackCount;
-            for (Node n : nodes)
-                addNode(n);
+            assert groupCount >= replicas;
+            groupId = 0;
+            this.groupCount = groupCount;
+            for (Unit n : units)
+                addUnit(n);
         }
 
-        public void addNode(Node n)
+        public void addUnit(Unit n)
         {
-            rackMap.put(n, rackId++ % rackCount);
+            groupMap.put(n, groupId++ % groupCount);
         }
     }
 
     /**
-     * Rack strategy with a fixed number of nodes per rack.
+     * Group strategy with a fixed number of units per group.
      */
-    static class BalancedRackReplicationStrategy extends RackReplicationStrategy
+    static class BalancedGroupReplicationStrategy extends GroupReplicationStrategy
     {
-        int rackId;
-        int rackSize;
+        int groupId;
+        int groupSize;
 
-        public BalancedRackReplicationStrategy(int replicas, int rackSize, Collection<Node> nodes)
+        public BalancedGroupReplicationStrategy(int replicas, int groupSize, Collection<Unit> units)
         {
             super(replicas);
-            assert nodes.size() >= rackSize * replicas;
-            rackId = 0;
-            this.rackSize = rackSize;
-            for (Node n : nodes)
-                addNode(n);
+            assert units.size() >= groupSize * replicas;
+            groupId = 0;
+            this.groupSize = groupSize;
+            for (Unit n : units)
+                addUnit(n);
         }
 
-        public void addNode(Node n)
+        public void addUnit(Unit n)
         {
-            rackMap.put(n, rackId++ / rackSize);
+            groupMap.put(n, groupId++ / groupSize);
         }
     }
     
-    static class UnbalancedRackReplicationStrategy extends RackReplicationStrategy
+    static class UnbalancedGroupReplicationStrategy extends GroupReplicationStrategy
     {
-        int rackId;
+        int groupId;
         int nextSize;
         int num;
-        int minRackSize;
-        int maxRackSize;
+        int minGroupSize;
+        int maxGroupSize;
         
-        public UnbalancedRackReplicationStrategy(int replicas, int minRackSize, int maxRackSize, Collection<Node> nodes)
+        public UnbalancedGroupReplicationStrategy(int replicas, int minGroupSize, int maxGroupSize, Collection<Unit> units)
         {
             super(replicas);
-            assert nodes.size() >= maxRackSize * replicas;
-            rackId = -1;
+            assert units.size() >= maxGroupSize * replicas;
+            groupId = -1;
             nextSize = 0;
             num = 0;
-            this.maxRackSize = maxRackSize;
-            this.minRackSize = minRackSize;
+            this.maxGroupSize = maxGroupSize;
+            this.minGroupSize = minGroupSize;
             
-            for (Node n : nodes)
-                addNode(n);
+            for (Unit n : units)
+                addUnit(n);
         }
 
-        public void addNode(Node n)
+        public void addUnit(Unit n)
         {
             if (++num > nextSize) {
-                nextSize = minRackSize + ThreadLocalRandom.current().nextInt(maxRackSize - minRackSize + 1);
-                ++rackId;
+                nextSize = minGroupSize + ThreadLocalRandom.current().nextInt(maxGroupSize - minGroupSize + 1);
+                ++groupId;
                 num = 0;
             }
-            rackMap.put(n, rackId);
+            groupMap.put(n, groupId);
         }
     }
     
     
     static class TokenDistributor {
         
-        NavigableMap<Token, Node> sortedTokens;
-        Multimap<Node, Token> nodeToTokens;
+        NavigableMap<Token, Unit> sortedTokens;
+        Multimap<Unit, Token> unitToTokens;
         ReplicationStrategy strategy;
         int debug;
         
-        public TokenDistributor(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy)
+        public TokenDistributor(NavigableMap<Token, Unit> sortedTokens, ReplicationStrategy strategy)
         {
             this.sortedTokens = new TreeMap<>(sortedTokens);
-            nodeToTokens = HashMultimap.create();
-            for (Map.Entry<Token, Node> en: sortedTokens.entrySet())
-                nodeToTokens.put(en.getValue(), en.getKey());
+            unitToTokens = HashMultimap.create();
+            for (Map.Entry<Token, Unit> en: sortedTokens.entrySet())
+                unitToTokens.put(en.getValue(), en.getKey());
             this.strategy = strategy;
         }
         
-        public void addNode(Node newNode, int vnodes)
+        public void addUnit(Unit newUnit, int vunits)
         {
             throw new AssertionError("Don't call");
         }
         
-        void addSelectedToken(Token token, Node node)
+        void addSelectedToken(Token token, Unit unit)
         {
-            sortedTokens.put(token, node);
-            nodeToTokens.put(node, token);
+            sortedTokens.put(token, unit);
+            unitToTokens.put(unit, token);
         }
         
         double tokenSize(Token token)
@@ -545,7 +545,7 @@ public class TestVNodeAllocation
             return strategy.replicationStart(token, sortedTokens.get(token), sortedTokens).size(next(token));
         }
 
-        double replicatedTokenOwnership(Token token, NavigableMap<Token, Node> sortedTokens)
+        double replicatedTokenOwnership(Token token, NavigableMap<Token, Unit> sortedTokens)
         {
             Token next = sortedTokens.higherKey(token);
             if (next == null)
@@ -553,34 +553,34 @@ public class TestVNodeAllocation
             return strategy.replicationStart(token, sortedTokens.get(token), sortedTokens).size(next);
         }
 
-        public int nodeCount()
+        public int unitCount()
         {
-            return nodeToTokens.asMap().size();
+            return unitToTokens.asMap().size();
         }
         
-        public Map.Entry<Token, Node> mapEntryFor(Token t)
+        public Map.Entry<Token, Unit> mapEntryFor(Token t)
         {
-            Map.Entry<Token, Node> en = sortedTokens.floorEntry(t);
+            Map.Entry<Token, Unit> en = sortedTokens.floorEntry(t);
             if (en == null)
                 en = sortedTokens.lastEntry();
             return en;
         }
         
-        private Node nodeFor(Token t)
+        private Unit unitFor(Token t)
         {
             return mapEntryFor(t).getValue();
         }
 
-        public void removeNode(Token t)
+        public void removeUnit(Token t)
         {
-            removeNode(nodeFor(t));
+            removeUnit(unitFor(t));
         }
 
-        public void removeNode(Node n)
+        public void removeUnit(Unit n)
         {
-            Collection<Token> tokens = nodeToTokens.removeAll(n);
+            Collection<Token> tokens = unitToTokens.removeAll(n);
             sortedTokens.keySet().removeAll(tokens);
-            strategy.removeNode(n);
+            strategy.removeUnit(n);
         }
         
         public String toString()
@@ -589,9 +589,9 @@ public class TestVNodeAllocation
         }
         
 
-        Map<Node, Double> evaluateReplicatedOwnership()
+        Map<Unit, Double> evaluateReplicatedOwnership()
         {
-            Map<Node, Double> ownership = Maps.newHashMap();
+            Map<Unit, Double> ownership = Maps.newHashMap();
             Iterator<Token> it = sortedTokens.keySet().iterator();
             Token current = it.next();
             while (it.hasNext()) {
@@ -607,25 +607,25 @@ public class TestVNodeAllocation
             return ownership;
         }
 
-        private void addOwnership(Token current, Token next, Map<Node, Double> ownership)
+        private void addOwnership(Token current, Token next, Map<Unit, Double> ownership)
         {
             double size = current.size(next);
-            for (Node n : strategy.getReplicas(current, sortedTokens)) {
+            for (Unit n : strategy.getReplicas(current, sortedTokens)) {
                 Double v = ownership.get(n);
                 ownership.put(n, v != null ? v + size : size);
             }
         }
 
-        protected boolean verifyOwnership(Map<Node, Double> ownership)
+        protected boolean verifyOwnership(Map<Unit, Double> ownership)
         {
-            for (Map.Entry<Node, Double> en : ownership.entrySet())
+            for (Map.Entry<Unit, Double> en : ownership.entrySet())
             {
-                Node n = en.getKey();
-                double owns = nodeToTokens.get(n).stream().
+                Unit n = en.getKey();
+                double owns = unitToTokens.get(n).stream().
                         mapToDouble(this::replicatedTokenOwnership).sum();
                 if (Math.abs(owns - en.getValue()) > totalTokenRange * 1e-14)
                 {
-                    System.out.format("Node %s expected %f got %f\n%s\n%s\n",
+                    System.out.format("Unit %s expected %f got %f\n%s\n%s\n",
                                        n, owns, en.getValue(),
                                        ImmutableList.copyOf(sortedTokens.entrySet().stream().filter(tn -> tn.getValue() == n).map(Map.Entry::getKey).iterator()),
                                        ImmutableList.copyOf(sortedTokens.entrySet().stream().filter(tn -> tn.getValue() == n).map(Map.Entry::getKey).mapToDouble(this::replicatedTokenOwnership).iterator())
@@ -636,12 +636,12 @@ public class TestVNodeAllocation
             return true;
         }
 
-        public Map<Token, Token> createReplicationStartMap(NavigableMap<Token, Node> sortedTokens)
+        public Map<Token, Token> createReplicationStartMap(NavigableMap<Token, Unit> sortedTokens)
         {
             Map<Token, Token> replicationStart = Maps.newHashMap();
-            for (Map.Entry<Token, Node> en : sortedTokens.entrySet())
+            for (Map.Entry<Token, Unit> en : sortedTokens.entrySet())
             {
-                Node n = en.getValue();
+                Unit n = en.getValue();
                 Token t = en.getKey();
                 Token rs = strategy.replicationStart(t, n, sortedTokens);
                 replicationStart.put(t, rs);
@@ -652,10 +652,10 @@ public class TestVNodeAllocation
         public boolean verifyReplicationStartMap(Map<Token, Token> replicationStart)
         {
             Token t;
-            Node n;
+            Unit n;
             Token rs;
             boolean success = true;
-            for (Map.Entry<Token, Node> ven: sortedTokens.entrySet()) {
+            for (Map.Entry<Token, Unit> ven: sortedTokens.entrySet()) {
                 n = ven.getValue();
                 t = ven.getKey();
                 rs = strategy.replicationStart(t, n, sortedTokens);
@@ -674,33 +674,33 @@ public class TestVNodeAllocation
             return totalTokenRange * strategy.replicas() / (sortedTokens.size() + tokensToAdd);
         }
 
-        protected double evaluateCombinedImprovement(Token middle, Node newNode,
-                NavigableMap<Token, Node> sortedTokensWithNew, Map<Node, Double> ownership, Map<Token, Token> replicationStart,
-                double tokenOptimal, double nodeMult, double newNodeMult, double tokenMult)
+        protected double evaluateCombinedImprovement(Token middle, Unit newUnit,
+                NavigableMap<Token, Unit> sortedTokensWithNew, Map<Unit, Double> ownership, Map<Token, Token> replicationStart,
+                double tokenOptimal, double unitMult, double newUnitMult, double tokenMult)
         {
-            sortedTokensWithNew.put(middle, newNode);
+            sortedTokensWithNew.put(middle, newUnit);
             // First, check which tokens are affected by the split.
             Token lr1 = strategy.lastReplicaToken(middle, sortedTokens);
             // The split can cause some tokens to be replicated further than they used to.
             Token lr2 = strategy.lastReplicaToken(middle, sortedTokensWithNew);
             Token lastReplica = max(lr1, lr2, middle);
 
-            // We can't directly calculate node improvement as a node may have multiple affected tokens. Store new size in a map.
-            Map<Node, Double> nodeToWeight = Maps.newHashMap();
+            // We can't directly calculate unit improvement as a unit may have multiple affected tokens. Store new size in a map.
+            Map<Unit, Double> unitToWeight = Maps.newHashMap();
 
             double tokenImprovement = 0;
-            for (Map.Entry<Token, Node> en : Iterables.concat(sortedTokens.tailMap(middle, false).entrySet(),
+            for (Map.Entry<Token, Unit> en : Iterables.concat(sortedTokens.tailMap(middle, false).entrySet(),
                                                               sortedTokens.entrySet()))
             {
                 Token token = en.getKey();
-                Node node = en.getValue();
+                Unit unit = en.getValue();
                 Token nextToken = next(token);
-                Token rsNew = strategy.replicationStart(token, node, sortedTokensWithNew);
+                Token rsNew = strategy.replicationStart(token, unit, sortedTokensWithNew);
                 Token rsOld = replicationStart.get(token);
                 double osz = rsOld.size(nextToken);
                 double nsz = rsNew.size(nextToken);
                 tokenImprovement += sq(osz - tokenOptimal) - sq(nsz - tokenOptimal);
-                addToWeight(nodeToWeight, ownership, node, nsz - osz);
+                addToWeight(unitToWeight, ownership, unit, nsz - osz);
         
                 if (token == lastReplica)
                     break;
@@ -708,62 +708,62 @@ public class TestVNodeAllocation
             sortedTokensWithNew.remove(middle);
             
             // Also calculate change to currently owning token.
-            Entry<Token, Node> en = mapEntryFor(middle);
+            Entry<Token, Unit> en = mapEntryFor(middle);
             Token token = en.getKey();
-            Node node = en.getValue();
+            Unit unit = en.getValue();
             Token nextToken = next(token);
             Token rsOld = replicationStart.get(token);
             double osz = rsOld.size(nextToken);
             double nsz = rsOld.size(middle);
             tokenImprovement += sq(osz - tokenOptimal) - sq(nsz - tokenOptimal);
-            addToWeight(nodeToWeight, ownership, node, nsz - osz);
+            addToWeight(unitToWeight, ownership, unit, nsz - osz);
             
             // Calculate the size of the newly added token.
-            Token rsNew = strategy.replicationStart(middle, newNode, sortedTokensWithNew);
+            Token rsNew = strategy.replicationStart(middle, newUnit, sortedTokensWithNew);
             osz = tokenOptimal;
             nsz = rsNew.size(nextToken);
             tokenImprovement += sq(osz - tokenOptimal) - sq(nsz - tokenOptimal);
-            addToWeight(nodeToWeight, ownership, newNode, nsz - osz);
+            addToWeight(unitToWeight, ownership, newUnit, nsz - osz);
             tokenImprovement *= tokenMult;
 
-            // Evaluate the node-level improvement from the nodeToWeight map.
-            double nodeImprovement = 0;
-            for (Map.Entry<Node, Double> nw: nodeToWeight.entrySet())
+            // Evaluate the unit-level improvement from the unitToWeight map.
+            double unitImprovement = 0;
+            for (Map.Entry<Unit, Double> nw: unitToWeight.entrySet())
             {
-                node = nw.getKey();
+                unit = nw.getKey();
                 nsz = nw.getValue();
-                osz = ownership.get(node);
-                double nodeOptimal = nodeToTokens.get(node).size() * tokenOptimal;
-                if (node != newNode)
-                    nodeImprovement += (sq(osz - nodeOptimal) - sq(nsz - nodeOptimal)) * nodeMult;
+                osz = ownership.get(unit);
+                double unitOptimal = unitToTokens.get(unit).size() * tokenOptimal;
+                if (unit != newUnit)
+                    unitImprovement += (sq(osz - unitOptimal) - sq(nsz - unitOptimal)) * unitMult;
                 else
-                    nodeImprovement += (sq(osz - nodeOptimal) - sq(nsz - (nodeOptimal + tokenOptimal))) * newNodeMult;
+                    unitImprovement += (sq(osz - unitOptimal) - sq(nsz - (unitOptimal + tokenOptimal))) * newUnitMult;
             }
 
-            return nodeImprovement + tokenImprovement;
+            return unitImprovement + tokenImprovement;
         }
 
-        public static void addToWeight(Map<Node, Double> nodeToWeight, Map<Node, Double> fallback, Node n, double weightChange)
+        public static void addToWeight(Map<Unit, Double> unitToWeight, Map<Unit, Double> fallback, Unit n, double weightChange)
         {
-            Double v = nodeToWeight.get(n);
+            Double v = unitToWeight.get(n);
             if (v == null)
                 v = fallback.get(n);
-            nodeToWeight.put(n, v + weightChange);
+            unitToWeight.put(n, v + weightChange);
         }
 
         // Debug function tracing the results of the above process.
-        public double printChangeStat(Token middle, Node newNode, NavigableMap<Token, Node> sortedTokensWithNew, final double topt, double newNodeMult)
+        public double printChangeStat(Token middle, Unit newUnit, NavigableMap<Token, Unit> sortedTokensWithNew, final double topt, double newUnitMult)
         {
-            sortedTokensWithNew.put(middle, newNode);
+            sortedTokensWithNew.put(middle, newUnit);
             StringBuilder afft = new StringBuilder();
             Token lr1 = strategy.lastReplicaToken(middle, sortedTokens);
             Token lr2 = strategy.lastReplicaToken(middle, sortedTokensWithNew);
             Token lastReplica = max(lr1, lr2, middle);
-            Map<Node, Double> nodeToWeight = Maps.newHashMap();
-            Map<Node, Double> ownership = evaluateReplicatedOwnership();
-            Double v = ownership.get(newNode);
+            Map<Unit, Double> unitToWeight = Maps.newHashMap();
+            Map<Unit, Double> ownership = evaluateReplicatedOwnership();
+            Double v = ownership.get(newUnit);
             if (v == null)
-                ownership.put(newNode, v = 0.0);
+                ownership.put(newUnit, v = 0.0);
 
             double tokenImprovement = 0;
             for (Token t = mapEntryFor(middle).getKey(); ; t = next(t)) {
@@ -775,7 +775,7 @@ public class TestVNodeAllocation
                                           nsz / topt,
                                           sq(osz / topt - 1) - sq(nsz / topt - 1)));
                 tokenImprovement += sq(osz - topt) - sq(nsz - topt);
-                addToWeight(nodeToWeight, ownership, nodeFor(t), nsz - osz);
+                addToWeight(unitToWeight, ownership, unitFor(t), nsz - osz);
                 if (t == lastReplica)
                     break;
             }
@@ -784,7 +784,7 @@ public class TestVNodeAllocation
                               middle, nsz / topt, -sq(nsz / topt - 1),
                               afft);
             tokenImprovement -= sq(nsz - topt);
-            addToWeight(nodeToWeight, ownership, newNode, nsz - topt);
+            addToWeight(unitToWeight, ownership, newUnit, nsz - topt);
             sortedTokensWithNew.remove(middle);
 
             List<Double> tokenOwnership = Lists.newArrayList(sortedTokens.keySet().stream().mapToDouble(this::replicatedTokenOwnership).iterator());
@@ -793,18 +793,18 @@ public class TestVNodeAllocation
             System.out.format(" expected token impr %.5f on %.5f max %.2f min %.2f\n", tokenImprovement / sq(topt), dev, stat.getMax(), stat.getMin());
             
             System.out.print(" affects ");
-            double nodeImprovement = 0;
-            for (Map.Entry<Node, Double> en: nodeToWeight.entrySet())
+            double unitImprovement = 0;
+            for (Map.Entry<Unit, Double> en: unitToWeight.entrySet())
             {
-                Node n = en.getKey();
+                Unit n = en.getKey();
                 nsz = en.getValue();
                 double osz = ownership.get(n);
-                double oldopt = nodeToTokens.get(n).size() * topt;
-                double newopt = n == newNode ? oldopt + topt : oldopt;
-                double cm = n == newNode ? newNodeMult : 1.0;
-                nodeImprovement += (sq(osz - oldopt) - sq(nsz - newopt)) * cm;
+                double oldopt = unitToTokens.get(n).size() * topt;
+                double newopt = n == newUnit ? oldopt + topt : oldopt;
+                double cm = n == newUnit ? newUnitMult : 1.0;
+                unitImprovement += (sq(osz - oldopt) - sq(nsz - newopt)) * cm;
                         
-                System.out.format("node %s:%.3f->%.3f(%.5f),",
+                System.out.format("unit %s:%.3f->%.3f(%.5f),",
                                   n,
                                   osz / oldopt,
                                   nsz / newopt,
@@ -812,89 +812,89 @@ public class TestVNodeAllocation
             }
 
             // old ones
-            dev = ownership.entrySet().stream().mapToDouble(en -> en.getValue() / optimalNodeOwnership(en.getKey(), topt)).
+            dev = ownership.entrySet().stream().mapToDouble(en -> en.getValue() / optimalUnitOwnership(en.getKey(), topt)).
                     map(x -> sq(x - 1)).sum();
-            stat = ownership.entrySet().stream().mapToDouble(en -> en.getValue() / optimalNodeOwnership(en.getKey(), topt)).summaryStatistics();
-            System.out.format("\n expected node impr %.5f on %.5f max %.2f min %.2f\n", nodeImprovement / sq(optimalNodeOwnership(newNode, topt) + topt), dev, stat.getMax(), stat.getMin());
-            return tokenImprovement + nodeImprovement;
+            stat = ownership.entrySet().stream().mapToDouble(en -> en.getValue() / optimalUnitOwnership(en.getKey(), topt)).summaryStatistics();
+            System.out.format("\n expected unit impr %.5f on %.5f max %.2f min %.2f\n", unitImprovement / sq(optimalUnitOwnership(newUnit, topt) + topt), dev, stat.getMax(), stat.getMin());
+            return tokenImprovement + unitImprovement;
         }
         
-        double optimalNodeOwnership(Node node, double tokenOptimal)
+        double optimalUnitOwnership(Unit unit, double tokenOptimal)
         {
-            return tokenOptimal * nodeToTokens.get(node).size();
+            return tokenOptimal * unitToTokens.get(unit).size();
         }
         
     }
     
-    static RackInfo getRack(Node node, Map<Object, RackInfo> rackMap, ReplicationStrategy strategy)
+    static GroupInfo getGroup(Unit unit, Map<Object, GroupInfo> groupMap, ReplicationStrategy strategy)
     {
-        Object rackClass = strategy.getRack(node);
-        RackInfo ri = rackMap.get(rackClass);
+        Object groupClass = strategy.getGroup(unit);
+        GroupInfo ri = groupMap.get(groupClass);
         if (ri == null)
-            rackMap.put(rackClass, ri = new RackInfo(rackClass));
+            groupMap.put(groupClass, ri = new GroupInfo(groupClass));
         return ri;
     }
     
     /**
-     * Unique rack object that one or more NodeInfo objects link to.
+     * Unique group object that one or more UnitInfo objects link to.
      */
-    static class RackInfo {
-        /** Rack identifier given by ReplicationStrategy.getRack(Node). */
-        final Object rack;
+    static class GroupInfo {
+        /** Group identifier given by ReplicationStrategy.getGroup(Unit). */
+        final Object group;
 
         /**
-         * Seen marker. When non-null, the rack is already seen in replication walks.
-         * Also points to previous seen rack to enable walking the seen racks and clearing the seen markers.
+         * Seen marker. When non-null, the group is already seen in replication walks.
+         * Also points to previous seen group to enable walking the seen groups and clearing the seen markers.
          */
-        RackInfo prevSeen = null;
+        GroupInfo prevSeen = null;
         /** Same marker/chain used by populateTokenInfo. */
-        RackInfo prevPopulate = null;
+        GroupInfo prevPopulate = null;
 
         /** Value used as terminator for seen chains. */
-        static RackInfo TERMINATOR = new RackInfo(null);
+        static GroupInfo TERMINATOR = new GroupInfo(null);
 
-        public RackInfo(Object rack)
+        public GroupInfo(Object group)
         {
-            this.rack = rack;
+            this.group = group;
         }
 
         public String toString()
         {
-            return rack.toString() + (prevSeen != null ? "*" : ""); 
+            return group.toString() + (prevSeen != null ? "*" : ""); 
         }
     }
 
     /**
-     * Node information created and used by ReplicationAwareTokenDistributor. Contained vnodes all point to the same
+     * Unit information created and used by ReplicationAwareTokenDistributor. Contained vunits all point to the same
      * instance.
      */
-    static class NodeInfo {
-        final Node node;
-        final RackInfo rack;
+    static class UnitInfo {
+        final Unit unit;
+        final GroupInfo group;
         double ownership;
         int tokenCount;
 
-        /** During evaluateImprovement this is used to form a chain of nodes affected by the candidate insertion. */
-        NodeInfo prevUsed;
+        /** During evaluateImprovement this is used to form a chain of units affected by the candidate insertion. */
+        UnitInfo prevUsed;
         /** During evaluateImprovement this holds the ownership after the candidate insertion. */
         double adjustedOwnership;
 
-        private NodeInfo(Node node, RackInfo rack)
+        private UnitInfo(Unit unit, GroupInfo group)
         {
-            this.node = node;
-            this.rack = rack;
+            this.unit = unit;
+            this.group = group;
             this.tokenCount = 0;
         }
         
-        public NodeInfo(Node node, double ownership, Map<Object, RackInfo> rackMap, ReplicationStrategy strategy)
+        public UnitInfo(Unit unit, double ownership, Map<Object, GroupInfo> groupMap, ReplicationStrategy strategy)
         {
-            this(node, getRack(node, rackMap, strategy));
+            this(unit, getGroup(unit, groupMap, strategy));
             this.ownership = ownership;
         }
         
         public String toString()
         {
-            return String.format("%s%s(%.2e)%s", node, rack.prevSeen != null ? "*" : "", ownership, prevUsed != null ? "prev " + (prevUsed == this ? "this" : prevUsed.toString()) : ""); 
+            return String.format("%s%s(%.2e)%s", unit, group.prevSeen != null ? "*" : "", ownership, prevUsed != null ? "prev " + (prevUsed == this ? "this" : prevUsed.toString()) : ""); 
         }
     }
 
@@ -903,18 +903,18 @@ public class TestVNodeAllocation
         T next;
         
         /**
-         * Inserts this after node in the circular list which starts at head. Returns the new head of the list, which
+         * Inserts this after unit in the circular list which starts at head. Returns the new head of the list, which
          * only changes if head was null.
          */
         @SuppressWarnings("unchecked")
-        T insertAfter(T head, T node) {
+        T insertAfter(T head, T unit) {
             if (head == null) {
                 return prev = next = (T) this;
             }
-            assert node != null;
-            assert node.next != null;
-            prev = node;
-            next = node.next;
+            assert unit != null;
+            assert unit.next != null;
+            prev = unit;
+            next = unit.next;
             prev.next = (T) this;
             next.prev = (T) this;
             return head;
@@ -933,40 +933,40 @@ public class TestVNodeAllocation
     
     static class BaseTokenInfo<T extends BaseTokenInfo<T>> extends CircularList<T> {
         final Token token;
-        final NodeInfo owningNode;
+        final UnitInfo owningUnit;
 
         /**
-         * Start of the replication span for the vnode, i.e. the end of the first token of the RF'th rack seen before
-         * the token. The replicated ownership of the node is the range between replicationStart and next.token.
+         * Start of the replication span for the vnode, i.e. the end of the first token of the RF'th group seen before
+         * the token. The replicated ownership of the unit is the range between replicationStart and next.token.
          */
         Token replicationStart;
         /**
-         * RF minus one boundary, i.e. the end of the first token of the RF-1'th rack seen before the token.
+         * RF minus one boundary, i.e. the end of the first token of the RF-1'th group seen before the token.
          * Used to determine replicationStart after insertion of new token.
          */
         Token rfm1Token;
         /**
-         * Whether token can be expanded (and only expanded) by adding new node that ends at replicationStart.
+         * Whether token can be expanded (and only expanded) by adding new unit that ends at replicationStart.
          */
         boolean expandable;
         /**
-         * Current replicated ownership. This number is reflected in the owning node's ownership.
+         * Current replicated ownership. This number is reflected in the owning unit's ownership.
          */
         double replicatedOwnership = 0;
         
-        public BaseTokenInfo(Token token, NodeInfo owningNode)
+        public BaseTokenInfo(Token token, UnitInfo owningUnit)
         {
             this.token = token;
-            this.owningNode = owningNode;
+            this.owningUnit = owningUnit;
         }
 
         public String toString()
         {
-            return String.format("%s(%s)%s", token, owningNode, expandable ? "=" : ""); 
+            return String.format("%s(%s)%s", token, owningUnit, expandable ? "=" : ""); 
         }
         
         /**
-         * Previous node in the token ring. For existing tokens this is prev, for candidates it's the host.
+         * Previous unit in the token ring. For existing tokens this is prev, for candidates it's the host.
          */
         TokenInfo prevInRing()
         {
@@ -975,12 +975,12 @@ public class TestVNodeAllocation
     }
     
     /**
-     * TokenInfo about existing tokens/vnodes.
+     * TokenInfo about existing tokens/vunits.
      */
     static class TokenInfo extends BaseTokenInfo<TokenInfo> {
-        public TokenInfo(Token token, NodeInfo owningNode)
+        public TokenInfo(Token token, UnitInfo owningUnit)
         {
-            super(token, owningNode);
+            super(token, owningUnit);
         }
         
         TokenInfo prevInRing()
@@ -990,14 +990,14 @@ public class TestVNodeAllocation
     }
     
     /**
-     * TokenInfo about candidate new tokens/vnodes.
+     * TokenInfo about candidate new tokens/vunits.
      */
     static class CandidateInfo extends BaseTokenInfo<CandidateInfo> {
         final TokenInfo host;
 
-        public CandidateInfo(Token token, TokenInfo host, NodeInfo owningNode)
+        public CandidateInfo(Token token, TokenInfo host, UnitInfo owningUnit)
         {
-            super(token, owningNode);
+            super(token, owningUnit);
             this.host = host;
         }
         
@@ -1018,23 +1018,22 @@ public class TestVNodeAllocation
     
     static class ReplicationAwareTokenDistributor extends TokenDistributor
     {
-        public ReplicationAwareTokenDistributor(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy)
+        public ReplicationAwareTokenDistributor(NavigableMap<Token, Unit> sortedTokens, ReplicationStrategy strategy)
         {
             super(sortedTokens, strategy);
         }
 
         @Override
-        public void addNode(Node newNode, int numTokens)
+        public void addUnit(Unit newUnit, int numTokens)
         {
-            strategy.addNode(newNode);
+            strategy.addUnit(newUnit);
             double optTokenOwnership = optimalTokenOwnership(numTokens);
-            Map<Object, RackInfo> racks = Maps.newHashMap();
-            NodeInfo newNodeInfo = new NodeInfo(newNode, 0.0, racks, strategy);
-            TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
-            // start at 1 more
-            newNodeInfo.tokenCount = 1;
+            Map<Object, GroupInfo> groups = Maps.newHashMap();
+            UnitInfo newUnitInfo = new UnitInfo(newUnit, numTokens * optTokenOwnership, groups, strategy);
+            TokenInfo tokens = createTokenInfos(createUnitInfos(groups), newUnitInfo.group);
+            newUnitInfo.tokenCount = numTokens;
 
-            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, 0.0);
+            CandidateInfo candidates = createCandidates(tokens, newUnitInfo, optTokenOwnership);
             assert verifyTokenInfo(tokens);
             
             // Evaluate the expected improvements from all candidates and form a priority queue.
@@ -1053,10 +1052,7 @@ public class TestVNodeAllocation
             {
                 // Use the token with the best improvement.
                 adjustData(bestToken);
-                addSelectedToken(bestToken.token, newNode);
-                ++newNodeInfo.tokenCount;
-                // Verify adjustData didn't do something wrong.
-                assert verifyTokenInfo(tokens);
+                addSelectedToken(bestToken.token, newUnit);
 
                 if (vn == numTokens - 1)
                     break;
@@ -1072,35 +1068,36 @@ public class TestVNodeAllocation
                     double nextImpr = improvements.peek().weight;
                     
                     // If it is better than the next in the queue, it is good enough. This is a heuristic that doesn't
-                    // get the best results, but works well enough and on average cuts search time by a factor of O(vnodes).
+                    // get the best results, but works well enough and on average cuts search time by a factor of O(vunits).
                     if (impr >= nextImpr)
                         break;
                     improvements.add(new Weighted<>(impr, bestToken));
                 }
             }
-            --newNodeInfo.tokenCount;
+            // Verify adjustData didn't do something wrong.
+            assert verifyTokenInfo(tokens);
         }
 
-        Map<Node, NodeInfo> createNodeInfos(Map<Object, RackInfo> racks)
+        Map<Unit, UnitInfo> createUnitInfos(Map<Object, GroupInfo> groups)
         {
-            Map<Node, NodeInfo> map = Maps.newHashMap();
-            for (Node n: sortedTokens.values()) {
-                NodeInfo ni = map.get(n);
+            Map<Unit, UnitInfo> map = Maps.newHashMap();
+            for (Unit n: sortedTokens.values()) {
+                UnitInfo ni = map.get(n);
                 if (ni == null)
-                    map.put(n, ni = new NodeInfo(n, 0, racks, strategy));
+                    map.put(n, ni = new UnitInfo(n, 0, groups, strategy));
                 ni.tokenCount++;
             }
             return map;
         }
 
-        TokenInfo createTokenInfos(Map<Node, NodeInfo> nodes, RackInfo newNodeRack)
+        TokenInfo createTokenInfos(Map<Unit, UnitInfo> units, GroupInfo newUnitGroup)
         {
             TokenInfo prev = null;
             TokenInfo first = null;
-            for (Map.Entry<Token, Node> en: sortedTokens.entrySet())
+            for (Map.Entry<Token, Unit> en: sortedTokens.entrySet())
             {
                 Token t = en.getKey();
-                NodeInfo ni = nodes.get(en.getValue());
+                UnitInfo ni = units.get(en.getValue());
                 TokenInfo ti = new TokenInfo(t, ni);
                 first = ti.insertAfter(first, prev);
                 prev = ti;
@@ -1108,20 +1105,20 @@ public class TestVNodeAllocation
 
             TokenInfo curr = first;
             do {
-                populateTokenInfoAndAdjustNode(curr, newNodeRack);
+                populateTokenInfoAndAdjustUnit(curr, newUnitGroup);
                 curr = curr.next;
             } while (curr != first);
 
             return first;
         }
 
-        CandidateInfo createCandidates(TokenInfo tokens, NodeInfo newNodeInfo, double initialTokenOwnership)
+        CandidateInfo createCandidates(TokenInfo tokens, UnitInfo newUnitInfo, double initialTokenOwnership)
         {
             TokenInfo curr = tokens;
             CandidateInfo first = null;
             CandidateInfo prev = null;
             do {
-                CandidateInfo candidate = new CandidateInfo(curr.token.slice(curr.token.size(curr.next.token) / 2), curr, newNodeInfo);
+                CandidateInfo candidate = new CandidateInfo(curr.token.slice(curr.token.size(curr.next.token) / 2), curr, newUnitInfo);
                 first = candidate.insertAfter(first, prev);
                 
                 candidate.replicatedOwnership = initialTokenOwnership;
@@ -1137,31 +1134,31 @@ public class TestVNodeAllocation
         private void populateCandidate(CandidateInfo candidate)
         {
             // Only finding replication start would do.
-            populateTokenInfo(candidate, candidate.owningNode.rack);
+            populateTokenInfo(candidate, candidate.owningUnit.group);
         }
 
         boolean verifyTokenInfo(TokenInfo tokens)
         {
             Map<Token, Token> replicationStart = Maps.newHashMap();
-            Map<Node, Double> ownership = Maps.newHashMap();
+            Map<Unit, Double> ownership = Maps.newHashMap();
             TokenInfo token = tokens;
             do {
                 replicationStart.put(token.token, token.replicationStart);
-                NodeInfo ni = token.owningNode;
-                ownership.put(ni.node, ni.ownership);
+                UnitInfo ni = token.owningUnit;
+                ownership.put(ni.unit, ni.ownership);
                 token = token.next;
             } while (token != tokens);
             return verifyReplicationStartMap(replicationStart) && verifyOwnership(ownership);
         }
 
-        double printChangeStat(CandidateInfo candidate, double optTokenOwnership, double newNodeMult)
+        double printChangeStat(CandidateInfo candidate, double optTokenOwnership, double newUnitMult)
         {
-            return printChangeStat(candidate.token, candidate.owningNode.node, new TreeMap<>(sortedTokens), optTokenOwnership, newNodeMult);
+            return printChangeStat(candidate.token, candidate.owningUnit.unit, new TreeMap<>(sortedTokens), optTokenOwnership, newUnitMult);
         }
 
         public void adjustData(CandidateInfo candidate)
         {
-            // This process is less efficient than it could be (loops through each vnodes's replication span instead
+            // This process is less efficient than it could be (loops through each vunits's replication span instead
             // of recalculating replicationStart, rfm1 and expandable from existing data + new token data in an O(1)
             // case analysis similar to evaluateImprovement). This is fine as the method does not dominate processing
             // time.
@@ -1169,23 +1166,22 @@ public class TestVNodeAllocation
             // Put the accepted candidate in the token list.
             TokenInfo host = candidate.host;
             TokenInfo next = host.next;
-            TokenInfo candidateToken = new TokenInfo(candidate.token, candidate.owningNode);
+            TokenInfo candidateToken = new TokenInfo(candidate.token, candidate.owningUnit);
             candidateToken.replicatedOwnership = candidate.replicatedOwnership;
             candidateToken.insertAfter(host, host);   // List is not empty so this won't need to change head of list.
 
             // Update data for both candidate and host.
-            NodeInfo newNode = candidateToken.owningNode;
-            RackInfo newRack = newNode.rack;
-            //newNode.tokenCount++;
-            populateTokenInfoAndAdjustNode(candidateToken, newRack);
-            NodeInfo hostNode = host.owningNode;
-            RackInfo hostRack = hostNode.rack;
-            populateTokenInfoAndAdjustNode(host, newRack);
+            UnitInfo newUnit = candidateToken.owningUnit;
+            GroupInfo newGroup = newUnit.group;
+            populateTokenInfoAndAdjustUnit(candidateToken, newGroup);
+            UnitInfo hostUnit = host.owningUnit;
+            GroupInfo hostGroup = hostUnit.group;
+            populateTokenInfoAndAdjustUnit(host, newGroup);
 
-            RackInfo rackChain = RackInfo.TERMINATOR;
+            GroupInfo groupChain = GroupInfo.TERMINATOR;
 
-            // Loop through all vnodes that replicate new token or host and update their data.
-            // Also update candidate data for nodes in the replication span.
+            // Loop through all vunits that replicate new token or host and update their data.
+            // Also update candidate data for units in the replication span.
             int seenOld = 0;
             int seenNew = 0;
             int rf = strategy.replicas() - 1;
@@ -1196,89 +1192,89 @@ public class TestVNodeAllocation
                 populateCandidate(candidate);
 
                 next = curr.next;
-                NodeInfo currNode = curr.owningNode;
-                RackInfo rack = currNode.rack;
-                if (rack.prevSeen != null)
-                    continue evLoop;    // If both have already seen this rack, nothing can change within it.
-                if (rack != newRack)
+                UnitInfo currUnit = curr.owningUnit;
+                GroupInfo group = currUnit.group;
+                if (group.prevSeen != null)
+                    continue evLoop;    // If both have already seen this group, nothing can change within it.
+                if (group != newGroup)
                     seenNew += 1;
-                if (rack != hostRack)
+                if (group != hostGroup)
                     seenOld += 1;
-                rack.prevSeen = rackChain;
-                rackChain = rack;
+                group.prevSeen = groupChain;
+                groupChain = group;
                 
-                populateTokenInfoAndAdjustNode(curr, newRack);
+                populateTokenInfoAndAdjustUnit(curr, newGroup);
             }
             
-            // Clean rack seen markers.
-            while (rackChain != RackInfo.TERMINATOR) {
-                RackInfo prev = rackChain.prevSeen;
-                rackChain.prevSeen = null;
-                rackChain = prev;
+            // Clean group seen markers.
+            while (groupChain != GroupInfo.TERMINATOR) {
+                GroupInfo prev = groupChain.prevSeen;
+                groupChain.prevSeen = null;
+                groupChain = prev;
             }
         }
         
-        private Token populateTokenInfo(BaseTokenInfo<?> token, RackInfo newNodeRack)
+        private Token populateTokenInfo(BaseTokenInfo<?> token, GroupInfo newUnitGroup)
         {
-            RackInfo rackChain = RackInfo.TERMINATOR;
-            RackInfo tokenRack = token.owningNode.rack;
-            int seenRacks = 0;
+            GroupInfo groupChain = GroupInfo.TERMINATOR;
+            GroupInfo tokenGroup = token.owningUnit.group;
+            int seenGroups = 0;
             boolean expandable = false;
             int rf = strategy.replicas();
-            // Replication start = the end of a token from the RF'th different rack seen before the token.
+            // Replication start = the end of a token from the RF'th different group seen before the token.
             Token rs = token.token;
-            // The end of a token from the RF-1'th different rack seen before the token.
+            // The end of a token from the RF-1'th different group seen before the token.
             Token rfm1 = rs;
             for (TokenInfo curr = token.prevInRing();;rs = curr.token, curr = curr.prev) {
-                RackInfo ri = curr.owningNode.rack;
+                GroupInfo ri = curr.owningUnit.group;
                 if (ri.prevPopulate != null)
-                    continue; // Rack is already seen.
-                // Mark the rack as seen. Also forms a chain that can be used to clear the marks when we are done.
+                    continue; // Group is already seen.
+                // Mark the group as seen. Also forms a chain that can be used to clear the marks when we are done.
                 // We use prevPopulate instead of prevSeen as this may be called within adjustData which also needs
-                // rack seen markers.
-                ri.prevPopulate = rackChain;
-                rackChain = ri;
-                if (++seenRacks == rf)
+                // group seen markers.
+                ri.prevPopulate = groupChain;
+                groupChain = ri;
+                if (++seenGroups == rf)
                     break;
 
                 rfm1 = rs;
-                // Another instance of the same rack is a replication boundary.
-                if (ri == tokenRack)
+                // Another instance of the same group is a replication boundary.
+                if (ri == tokenGroup)
                 {
                     // Inserting a token that ends at this boundary will increase replication coverage,
-                    // but only if the inserted node is not in the same rack.
-                    expandable = tokenRack != newNodeRack;
+                    // but only if the inserted unit is not in the same group.
+                    expandable = tokenGroup != newUnitGroup;
                     break;
                 }
-                // An instance of the new rack in the replication span also means that we can expand coverage
+                // An instance of the new group in the replication span also means that we can expand coverage
                 // by inserting a token ending at replicationStart.
-                if (ri == newNodeRack)
+                if (ri == newUnitGroup)
                     expandable = true;
             }
             token.rfm1Token = rfm1;
             token.replicationStart = rs;
             token.expandable = expandable;
 
-            // Clean rack seen markers.
-            while (rackChain != RackInfo.TERMINATOR)
+            // Clean group seen markers.
+            while (groupChain != GroupInfo.TERMINATOR)
             {
-                RackInfo prev = rackChain.prevPopulate;
-                rackChain.prevPopulate  = null;
-                rackChain = prev;
+                GroupInfo prev = groupChain.prevPopulate;
+                groupChain.prevPopulate  = null;
+                groupChain = prev;
             }
             return rs;
         }
         
-        private void populateTokenInfoAndAdjustNode(TokenInfo candidate, RackInfo newNodeRack)
+        private void populateTokenInfoAndAdjustUnit(TokenInfo candidate, GroupInfo newUnitGroup)
         {
-            Token rs = populateTokenInfo(candidate, newNodeRack);
+            Token rs = populateTokenInfo(candidate, newUnitGroup);
             double newOwnership = rs.size(candidate.next.token);
             double oldOwnership = candidate.replicatedOwnership;
             candidate.replicatedOwnership = newOwnership;
-            candidate.owningNode.ownership += newOwnership - oldOwnership;
+            candidate.owningUnit.ownership += newOwnership - oldOwnership;
         }
 
-        double evaluateImprovement(CandidateInfo candidate, double optTokenOwnership, double newNodeMult)
+        double evaluateImprovement(CandidateInfo candidate, double optTokenOwnership, double newUnitMult)
         {
             double change = 0;
             TokenInfo host = candidate.host;
@@ -1288,28 +1284,32 @@ public class TestVNodeAllocation
             // Reflect change in ownership of the splitting token (candidate).
             double oldOwnership = candidate.replicatedOwnership;
             double newOwnership = candidate.replicationStart.size(next.token);
-            change += sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership);
-            NodeInfo newNode = candidate.owningNode;
-            newNode.adjustedOwnership = newNode.ownership + newOwnership - oldOwnership;
+            UnitInfo newUnit = candidate.owningUnit;
+            double tokenCount = newUnit.tokenCount;
+            change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
+            assert tokenCount > 0;
+            newUnit.adjustedOwnership = newUnit.ownership + newOwnership - oldOwnership;
             
             // Reflect change of ownership in the token being split (host).
             oldOwnership = host.replicatedOwnership;
             newOwnership = host.replicationStart.size(candidate.token);
-            change += sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership);
-            NodeInfo hostNode = host.owningNode;
-            hostNode.adjustedOwnership = hostNode.ownership + newOwnership - oldOwnership;
+            UnitInfo hostUnit = host.owningUnit;
+            tokenCount = hostUnit.tokenCount;
+            assert tokenCount > 0;
+            change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
+            hostUnit.adjustedOwnership = hostUnit.ownership + newOwnership - oldOwnership;
 
-            // Form a chain of nodes affected by the insertion to be able to qualify change of node ownership.
-            // A node may be affected more than once.
-            assert newNode.prevUsed == null;
-            newNode.prevUsed = newNode;   // end marker
-            RackInfo newRack = newNode.rack;
-            assert hostNode.prevUsed == null;
-            hostNode.prevUsed = newNode;
-            RackInfo hostRack = hostNode.rack;
-            NodeInfo nodesChain = hostNode;
+            // Form a chain of units affected by the insertion to be able to qualify change of unit ownership.
+            // A unit may be affected more than once.
+            assert newUnit.prevUsed == null;
+            newUnit.prevUsed = newUnit;   // end marker
+            GroupInfo newGroup = newUnit.group;
+            assert hostUnit.prevUsed == null;
+            hostUnit.prevUsed = newUnit;
+            GroupInfo hostGroup = hostUnit.group;
+            UnitInfo unitsChain = hostUnit;
 
-            // Loop through all vnodes that replicate candidate or host and update their ownership.
+            // Loop through all vunits that replicate candidate or host and update their ownership.
             int seenOld = 0;
             int seenNew = 0;
             int rf = strategy.replicas() - 1;
@@ -1317,35 +1317,35 @@ public class TestVNodeAllocation
             for (TokenInfo curr = next; seenOld < rf || seenNew < rf; curr = next)
             {
                 next = curr.next;
-                NodeInfo currNode = curr.owningNode;
-                RackInfo rack = currNode.rack;
-                if (rack.prevSeen != null)
-                    continue evLoop;    // If both have already seen this rack, nothing can change within it.
-                if (rack != newRack)
+                UnitInfo currUnit = curr.owningUnit;
+                GroupInfo group = currUnit.group;
+                if (group.prevSeen != null)
+                    continue evLoop;    // If both have already seen this group, nothing can change within it.
+                if (group != newGroup)
                     seenNew += 1;
-                if (rack != hostRack)
+                if (group != hostGroup)
                     seenOld += 1;
-                rack.prevSeen = rack;   // Just mark it as seen, we are not forming a chain of racks.
+                group.prevSeen = group;   // Just mark it as seen, we are not forming a chain of groups.
                 
-                if (currNode.prevUsed == null)
+                if (currUnit.prevUsed == null)
                 {
-                    currNode.adjustedOwnership = currNode.ownership;
-                    currNode.prevUsed = nodesChain;
-                    nodesChain = currNode;
+                    currUnit.adjustedOwnership = currUnit.ownership;
+                    currUnit.prevUsed = unitsChain;
+                    unitsChain = currUnit;
                 }
 
                 Token rs;
-                if (curr.expandable) // Sees same or new rack before rf-1.
+                if (curr.expandable) // Sees same or new group before rf-1.
                 {
                     if (cend != curr.replicationStart)
                         continue evLoop;
                     // Replication expands to start of candidate.
                     rs = candidate.token;
                 } else {
-                    if (rack == newRack)
+                    if (group == newGroup)
                     {
                         if (!preceeds(curr.replicationStart, cend, next.token))
-                            continue evLoop; // no changes, another newRack is closer
+                            continue evLoop; // no changes, another newGroup is closer
                         // Replication shrinks to end of candidate.
                         rs = cend;
                     } else {
@@ -1364,236 +1364,54 @@ public class TestVNodeAllocation
                 // Calculate ownership adjustments.
                 oldOwnership = curr.replicatedOwnership;
                 newOwnership = rs.size(next.token);
-                change += sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership);
-                currNode.adjustedOwnership += newOwnership - oldOwnership;
+                tokenCount = currUnit.tokenCount;
+                assert tokenCount > 0;
+                change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
+                currUnit.adjustedOwnership += newOwnership - oldOwnership;
             }
 
-            // Now loop through the nodes chain and add the node-level changes. Also clear the racks' seen marks.
+            // Now loop through the units chain and add the unit-level changes. Also clear the groups' seen marks.
             for (;;) {
-                newOwnership = nodesChain.adjustedOwnership;
-                oldOwnership = nodesChain.ownership;
-                double newOpt = nodesChain.tokenCount * optTokenOwnership;
-                double diff = sq(newOwnership - newOpt) - sq(oldOwnership - newOpt);
-                NodeInfo prev = nodesChain.prevUsed;
-                nodesChain.prevUsed = null;
-                nodesChain.rack.prevSeen = null;
-                if (nodesChain != newNode)
+                newOwnership = unitsChain.adjustedOwnership;
+                oldOwnership = unitsChain.ownership;
+                tokenCount = unitsChain.tokenCount;
+                double diff = (sq(newOwnership/tokenCount - optTokenOwnership) - sq(oldOwnership/tokenCount - optTokenOwnership));
+                UnitInfo prev = unitsChain.prevUsed;
+                unitsChain.prevUsed = null;
+                unitsChain.group.prevSeen = null;
+                if (unitsChain != newUnit)
                     change += diff;
                 else 
                 {
-                    change += diff * newNodeMult;
+                    change += diff * newUnitMult;
                     break;
                 }
-                nodesChain = prev;
+                unitsChain = prev;
             }
 
             return -change;
         }
     }
     
-    
-    static class ReplicationAwareTokenDistributor2 extends ReplicationAwareTokenDistributor
-    {
-
-        public ReplicationAwareTokenDistributor2(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy)
-        {
-            super(sortedTokens, strategy);
-        }
-
-
-        @Override
-        public void addNode(Node newNode, int numTokens)
-        {
-            strategy.addNode(newNode);
-            double optTokenOwnership = optimalTokenOwnership(numTokens);
-            Map<Object, RackInfo> racks = Maps.newHashMap();
-            NodeInfo newNodeInfo = new NodeInfo(newNode, numTokens * optTokenOwnership, racks, strategy);
-            TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
-            newNodeInfo.tokenCount = numTokens;
-
-            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, optTokenOwnership);
-            assert verifyTokenInfo(tokens);
-            
-            // Evaluate the expected improvements from all candidates and form a priority queue.
-            PriorityQueue<Weighted<CandidateInfo>> improvements = new PriorityQueue<>(sortedTokens.size());
-            CandidateInfo candidate = candidates;
-            do
-            {
-                double impr = evaluateImprovement(candidate, optTokenOwnership, 1.0 / numTokens);
-                improvements.add(new Weighted<>(impr, candidate));
-                candidate = candidate.next;
-            } while (candidate != candidates);
-            CandidateInfo bestToken = improvements.remove().value;
-            candidates = bestToken.removeFrom(candidates);
-            
-            for (int vn = 0; ; ++vn)
-            {
-                // Use the token with the best improvement.
-                adjustData(bestToken);
-                addSelectedToken(bestToken.token, newNode);
-
-                if (vn == numTokens - 1)
-                    break;
-                
-                for (;;)
-                {
-                    // Get the next candidate in the queue. Its improvement may have changed (esp. if multiple tokens
-                    // were good suggestions because they could improve the same problem)-- evaluate it again to check
-                    // if it is still a good candidate.
-                    bestToken = improvements.remove().value;
-                    candidates = bestToken.removeFrom(candidates);
-                    double impr = evaluateImprovement(bestToken, optTokenOwnership, (vn + 1.0) / numTokens);
-                    double nextImpr = improvements.peek().weight;
-                    
-                    // If it is better than the next in the queue, it is good enough. This is a heuristic that doesn't
-                    // get the best results, but works well enough and on average cuts search time by a factor of O(vnodes).
-                    if (impr >= nextImpr)
-                        break;
-                    improvements.add(new Weighted<>(impr, bestToken));
-                }
-            }
-            // Verify adjustData didn't do something wrong.
-            assert verifyTokenInfo(tokens);
-        }
-
-        double evaluateImprovement(CandidateInfo candidate, double optTokenOwnership, double newNodeMult)
-        {
-            double change = 0;
-            TokenInfo host = candidate.host;
-            TokenInfo next = host.next;
-            Token cend = next.token;
-
-            // Reflect change in ownership of the splitting token (candidate).
-            double oldOwnership = candidate.replicatedOwnership;
-            double newOwnership = candidate.replicationStart.size(next.token);
-            NodeInfo newNode = candidate.owningNode;
-            double tokenCount = newNode.tokenCount;
-            change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-            newNode.adjustedOwnership = newNode.ownership + newOwnership - oldOwnership;
-            
-            // Reflect change of ownership in the token being split (host).
-            oldOwnership = host.replicatedOwnership;
-            newOwnership = host.replicationStart.size(candidate.token);
-            NodeInfo hostNode = host.owningNode;
-            tokenCount = hostNode.tokenCount;
-            assert tokenCount > 0;
-            change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-            hostNode.adjustedOwnership = hostNode.ownership + newOwnership - oldOwnership;
-
-            // Form a chain of nodes affected by the insertion to be able to qualify change of node ownership.
-            // A node may be affected more than once.
-            assert newNode.prevUsed == null;
-            newNode.prevUsed = newNode;   // end marker
-            RackInfo newRack = newNode.rack;
-            assert hostNode.prevUsed == null;
-            hostNode.prevUsed = newNode;
-            RackInfo hostRack = hostNode.rack;
-            NodeInfo nodesChain = hostNode;
-
-            // Loop through all vnodes that replicate candidate or host and update their ownership.
-            int seenOld = 0;
-            int seenNew = 0;
-            int rf = strategy.replicas() - 1;
-          evLoop:
-            for (TokenInfo curr = next; seenOld < rf || seenNew < rf; curr = next)
-            {
-                next = curr.next;
-                NodeInfo currNode = curr.owningNode;
-                RackInfo rack = currNode.rack;
-                if (rack.prevSeen != null)
-                    continue evLoop;    // If both have already seen this rack, nothing can change within it.
-                if (rack != newRack)
-                    seenNew += 1;
-                if (rack != hostRack)
-                    seenOld += 1;
-                rack.prevSeen = rack;   // Just mark it as seen, we are not forming a chain of racks.
-                
-                if (currNode.prevUsed == null)
-                {
-                    currNode.adjustedOwnership = currNode.ownership;
-                    currNode.prevUsed = nodesChain;
-                    nodesChain = currNode;
-                }
-
-                Token rs;
-                if (curr.expandable) // Sees same or new rack before rf-1.
-                {
-                    if (cend != curr.replicationStart)
-                        continue evLoop;
-                    // Replication expands to start of candidate.
-                    rs = candidate.token;
-                } else {
-                    if (rack == newRack)
-                    {
-                        if (!preceeds(curr.replicationStart, cend, next.token))
-                            continue evLoop; // no changes, another newRack is closer
-                        // Replication shrinks to end of candidate.
-                        rs = cend;
-                    } else {
-                        if (preceeds(curr.rfm1Token, cend, next.token))
-                            // Candidate is closer than one-before last.
-                            rs = curr.rfm1Token;
-                        else if (preceeds(cend, curr.rfm1Token, next.token))
-                            // Candidate is the replication boundary.
-                            rs = cend;
-                        else
-                            // Candidate replaces one-before last. The latter becomes the replication boundary.
-                            rs = candidate.token;
-                    }
-                }
-
-                // Calculate ownership adjustments.
-                oldOwnership = curr.replicatedOwnership;
-                newOwnership = rs.size(next.token);
-                tokenCount = currNode.tokenCount;
-                assert tokenCount > 0;
-                change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-                currNode.adjustedOwnership += newOwnership - oldOwnership;
-            }
-
-            double nchange = 0;
-            // Now loop through the nodes chain and add the node-level changes. Also clear the racks' seen marks.
-            for (;;) {
-                newOwnership = nodesChain.adjustedOwnership;
-                oldOwnership = nodesChain.ownership;
-                tokenCount = nodesChain.tokenCount;
-                double diff = (sq(newOwnership/tokenCount - optTokenOwnership) - sq(oldOwnership/tokenCount - optTokenOwnership));// * (tokenCount);
-                NodeInfo prev = nodesChain.prevUsed;
-                nodesChain.prevUsed = null;
-                nodesChain.rack.prevSeen = null;
-                if (nodesChain != newNode)
-                    nchange += diff;
-                else 
-                {
-                    nchange += diff * newNodeMult;
-                    break;
-                }
-                nodesChain = prev;
-            }
-
-            return -(change + nchange);
-        }
-    }
-    
     static class ReplicationAwareTokenDistributorTryAll extends ReplicationAwareTokenDistributor
     {
 
-        public ReplicationAwareTokenDistributorTryAll(NavigableMap<Token, Node> sortedTokens, ReplicationStrategy strategy)
+        public ReplicationAwareTokenDistributorTryAll(NavigableMap<Token, Unit> sortedTokens, ReplicationStrategy strategy)
         {
             super(sortedTokens, strategy);
         }
         
         @Override
-        public void addNode(Node newNode, int numTokens)
+        public void addUnit(Unit newUnit, int numTokens)
         {
-            strategy.addNode(newNode);
+            strategy.addUnit(newUnit);
             double optTokenOwnership = optimalTokenOwnership(numTokens);
-            Map<Object, RackInfo> racks = Maps.newHashMap();
-            NodeInfo newNodeInfo = new NodeInfo(newNode, 0.0, racks, strategy);
-            newNodeInfo.tokenCount = 1;
-            TokenInfo tokens = createTokenInfos(createNodeInfos(racks), newNodeInfo.rack);
+            Map<Object, GroupInfo> groups = Maps.newHashMap();
+            UnitInfo newUnitInfo = new UnitInfo(newUnit, numTokens * optTokenOwnership, groups, strategy);
+            newUnitInfo.tokenCount = numTokens;
+            TokenInfo tokens = createTokenInfos(createUnitInfos(groups), newUnitInfo.group);
 
-            CandidateInfo candidates = createCandidates(tokens, newNodeInfo, optTokenOwnership);
+            CandidateInfo candidates = createCandidates(tokens, newUnitInfo, optTokenOwnership);
             if (debug >= 3)
             {
                 dumpTokens("E", tokens);
@@ -1633,14 +1451,13 @@ public class TestVNodeAllocation
 
                 adjustData(bestToken);
                 candidates = bestToken.removeFrom(candidates);
-                addSelectedToken(bestToken.token, newNode);
+                addSelectedToken(bestToken.token, newUnit);
                 if (debug >= 5)
                 {
                     dumpTokens("E", tokens);
                     dumpTokens("C", candidates);
                 }
             }
-            --newNodeInfo.tokenCount;
             
             // Verify adjustData didn't do something wrong.
             assert verifyTokenInfo(tokens);
@@ -1663,37 +1480,37 @@ public class TestVNodeAllocation
         return d*d;
     }
 
-    private static void perfectDistribution(Map<Token, Node> map, int nodeCount, int perNodeCount)
+    private static void perfectDistribution(Map<Token, Unit> map, int unitCount, int perUnitCount)
     {
-        System.out.format("\nPerfect init for %d nodes with %d tokens each.\n", nodeCount, perNodeCount);
-        for (int i=0; i<nodeCount; ++i)
+        System.out.format("\nPerfect init for %d units with %d tokens each.\n", unitCount, perUnitCount);
+        for (int i=0; i<unitCount; ++i)
         {
-            Node node = new Node();
-            double inc = totalTokenRange / perNodeCount;
-            double start = Long.MIN_VALUE + inc / nodeCount * i;
-            for (int j = 0 ; j < perNodeCount ; j++)
+            Unit unit = new Unit();
+            double inc = totalTokenRange / perUnitCount;
+            double start = Long.MIN_VALUE + inc / unitCount * i;
+            for (int j = 0 ; j < perUnitCount ; j++)
             {
-                map.put(new Token((long) start), node);
+                map.put(new Token((long) start), unit);
                 start += inc;
             }
         }
     }
 
-    private static void random(Map<Token, Node> map, int nodeCount, int perNodeCount, boolean localRandom)
+    private static void random(Map<Token, Unit> map, int unitCount, int perUnitCount, boolean localRandom)
     {
-        System.out.format("\nRandom generation of %d nodes with %d tokens each%s\n", nodeCount, perNodeCount, (localRandom ? ", locally random" : ""));
+        System.out.format("\nRandom generation of %d units with %d tokens each%s\n", unitCount, perUnitCount, (localRandom ? ", locally random" : ""));
         ThreadLocalRandom rand = ThreadLocalRandom.current();
-        for (int i = 0 ; i < nodeCount ; i++)
+        for (int i = 0 ; i < unitCount ; i++)
         {
-            Node node = new Node();
-            int tokens = tokenCount(perNodeCount, rand);
+            Unit unit = new Unit();
+            int tokens = tokenCount(perUnitCount, rand);
             long inc = -(Long.MIN_VALUE / tokens) * 2;
             for (int j = 0 ; j < tokens ; j++)
             {
                 long nextToken;
                 if (localRandom && tokens > 1) nextToken = Long.MIN_VALUE + j * inc + rand.nextLong(inc);
                 else nextToken = rand.nextLong();
-                map.put(new Token(nextToken), node);
+                map.put(new Token(nextToken), unit);
             }
         }
     }
@@ -1720,13 +1537,13 @@ public class TestVNodeAllocation
 
     private static void printDistribution(TokenDistributor t)
     {
-        Map<Node, Double> ownership = t.evaluateReplicatedOwnership();
-        ownership.replaceAll((n, w) -> w / t.nodeToTokens.get(n).size());
+        Map<Unit, Double> ownership = t.evaluateReplicatedOwnership();
+        ownership.replaceAll((n, w) -> w / t.unitToTokens.get(n).size());
         int size = t.sortedTokens.size();
         double inverseAverage = size / (totalTokenRange * t.strategy.replicas());
         List<Double> tokenOwnership = Lists.newArrayList(t.sortedTokens.keySet().stream().mapToDouble(t::replicatedTokenOwnership).iterator());
-        System.out.format("Size %d(%d)   node %s  token %s   %s\n",
-                          t.nodeCount(), size,
+        System.out.format("Size %d(%d)   unit %s  token %s   %s\n",
+                          t.unitCount(), size,
                           stats(ownership.values(), inverseAverage, 1),
                           stats(tokenOwnership, inverseAverage, 1),
                           t.strategy);
@@ -1734,117 +1551,115 @@ public class TestVNodeAllocation
     
     public static void main(String[] args)
     {
-        int perNodeCount = 16;
-        for (perNodeCount = 1; perNodeCount <= 1024; perNodeCount *= 2)
+        int perUnitCount = 16;
+        for (perUnitCount = 1; perUnitCount <= 1024; perUnitCount *= 4)
         {
-            final int targetClusterSize = 1000;
+            final int targetClusterSize = 500;
             int rf = 3;
-            NavigableMap<Token, Node> tokenMap = Maps.newTreeMap();
+            NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
     
-    //        perfectDistribution(tokenMap, targetClusterSize, perNodeCount);
+    //        perfectDistribution(tokenMap, targetClusterSize, perUnitCount);
             boolean locallyRandom = false;
-            random(tokenMap, targetClusterSize, perNodeCount, locallyRandom);
+            random(tokenMap, targetClusterSize, perUnitCount, locallyRandom);
     
-            Set<Node> nodes = Sets.newTreeSet(tokenMap.values());
+            Set<Unit> units = Sets.newTreeSet(tokenMap.values());
             TokenDistributor[] t = {
-//                new ReplicationAwareTokenDistributorTryAll(tokenMap, new SimpleReplicationStrategy(rf)),
+                new ReplicationAwareTokenDistributorTryAll(tokenMap, new SimpleReplicationStrategy(rf)),
                 new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(rf)),
-                new ReplicationAwareTokenDistributor2(tokenMap, new SimpleReplicationStrategy(rf)),
             };
 //            t[0].debug = 5;
-            if (nodes.size() < targetClusterSize)
-                test(t, nodes.size(), perNodeCount);
+            if (units.size() < targetClusterSize)
+                test(t, units.size(), perUnitCount);
     
-            test(t, targetClusterSize, perNodeCount);
+            test(t, targetClusterSize, perUnitCount);
     
-            test(t, targetClusterSize + 1, perNodeCount);
+            test(t, targetClusterSize + 1, perUnitCount);
     
-            test(t, targetClusterSize * 101 / 100, perNodeCount);
+            test(t, targetClusterSize * 101 / 100, perUnitCount);
     
-            test(t, targetClusterSize * 26 / 25, perNodeCount);
+            test(t, targetClusterSize * 26 / 25, perUnitCount);
     
-            test(t, targetClusterSize * 5 / 4, perNodeCount);
+            test(t, targetClusterSize * 5 / 4, perUnitCount);
     
-            test(t, targetClusterSize * 2, perNodeCount);
+            test(t, targetClusterSize * 2, perUnitCount);
     
-            testLoseAndReplace(t, 1, perNodeCount);
-            testLoseAndReplace(t, targetClusterSize / 100, perNodeCount);
-            testLoseAndReplace(t, targetClusterSize / 25, perNodeCount);
-            testLoseAndReplace(t, targetClusterSize / 4, perNodeCount);
+            testLoseAndReplace(t, 1, perUnitCount);
+            testLoseAndReplace(t, targetClusterSize / 100, perUnitCount);
+            testLoseAndReplace(t, targetClusterSize / 25, perUnitCount);
+            testLoseAndReplace(t, targetClusterSize / 4, perUnitCount);
         }
     }
 
     public static void main2(String[] args)
     {
-        int perNodeCount = 16;
-        for (perNodeCount = 4; perNodeCount <= 256; perNodeCount *= 4)
+        int perUnitCount = 16;
+        for (perUnitCount = 4; perUnitCount <= 256; perUnitCount *= 4)
         {
             final int targetClusterSize = 500;
             int rf = 3;
             int initialSize = rf;
-            NavigableMap<Token, Node> tokenMap = Maps.newTreeMap();
+            NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
     
-    //        perfectDistribution(tokenMap, targetClusterSize, perNodeCount);
+    //        perfectDistribution(tokenMap, targetClusterSize, perUnitCount);
             boolean locallyRandom = false;
-            random(tokenMap, initialSize, perNodeCount, locallyRandom);
+            random(tokenMap, initialSize, perUnitCount, locallyRandom);
     
             TokenDistributor[] t = {
                     new ReplicationAwareTokenDistributor(tokenMap, new SimpleReplicationStrategy(rf)),
-                    new ReplicationAwareTokenDistributor2(tokenMap, new SimpleReplicationStrategy(rf)),
             };
 //            t[1].debug = 5;
             for (int i=initialSize; i<=targetClusterSize; i+=1)
-                test(t, i, perNodeCount);
+                test(t, i, perUnitCount);
             
 //            testLoseAndReplace(t, targetClusterSize / 4);
         }
     }
     
-    static int tokenCount(int perNodeCount, Random rand)
+    static int tokenCount(int perUnitCount, Random rand)
     {
-        if (perNodeCount == 1) return 1;
-//        return perNodeCount;
-//        return rand.nextInt(perNodeCount * 2) + 1;
-//        return rand.nextInt(perNodeCount) + (perNodeCount+1)/2;
-        return rand.nextInt(perNodeCount * 3 / 2) + (perNodeCount+3)/4;
+        if (perUnitCount == 1) return 1;
+//        return perUnitCount;
+//        return rand.nextInt(perUnitCount * 2) + 1;
+//        return rand.nextInt(perUnitCount) + (perUnitCount+1)/2;
+        return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount+3)/4;
     }
 
-    private static void testLoseAndReplace(TokenDistributor[] ts, int howMany, int perNodeCount)
+    private static void testLoseAndReplace(TokenDistributor[] ts, int howMany, int perUnitCount)
     {
         for (TokenDistributor t: ts)
-            testLoseAndReplace(t, howMany, perNodeCount);
+            testLoseAndReplace(t, howMany, perUnitCount);
     }
 
-    private static void test(TokenDistributor[] ts, int targetClusterSize, int perNodeCount)
+    private static void test(TokenDistributor[] ts, int targetClusterSize, int perUnitCount)
     {
         System.out.println(targetClusterSize);
         for (TokenDistributor t: ts)
-            test(t, targetClusterSize, perNodeCount);
+            test(t, targetClusterSize, perUnitCount);
     }
 
-    private static void testLoseAndReplace(TokenDistributor t, int howMany, int perNodeCount)
+    private static void testLoseAndReplace(TokenDistributor t, int howMany, int perUnitCount)
     {
-        int fullCount = t.nodeCount();
-        System.out.format("Losing %d nodes\n", howMany);
+        int fullCount = t.unitCount();
+        System.out.format("Losing %d units\n", howMany);
         Random rand = new Random(howMany);
         for (int i=0; i<howMany; ++i)
-            t.removeNode(new Token(rand.nextLong()));
-        test(t, t.nodeCount(), perNodeCount);
+            t.removeUnit(new Token(rand.nextLong()));
+        test(t, t.unitCount(), perUnitCount);
         
-        test(t, fullCount, perNodeCount);
+        test(t, fullCount, perUnitCount);
     }
 
-    public static void test(TokenDistributor t, int targetClusterSize, int perNodeCount)
+    public static void test(TokenDistributor t, int targetClusterSize, int perUnitCount)
     {
-        int size = t.nodeCount();
-        Random rand = new Random(targetClusterSize + perNodeCount);
+        int size = t.unitCount();
+        Random rand = new Random(targetClusterSize + perUnitCount);
         if (size < targetClusterSize) {
-            System.out.format("Adding %d node(s) using %s...", targetClusterSize - size, t.toString());
+            System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
             long time = System.currentTimeMillis();
             while (size < targetClusterSize)
             {
-                int tokens = tokenCount(perNodeCount, rand);
-                t.addNode(new Node(), tokens);
+                int tokens = tokenCount(perUnitCount, rand);
+                t.addUnit(new Unit(), tokens);
                 ++size;
             }
             System.out.format(" Done in %.3fs\n", (System.currentTimeMillis() - time) / 1000.0);
