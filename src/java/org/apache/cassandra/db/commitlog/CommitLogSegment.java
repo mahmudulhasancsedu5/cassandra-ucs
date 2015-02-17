@@ -87,10 +87,8 @@ public abstract class CommitLogSegment
 
     // Everything before this offset has been synced and written.  The SYNC_MARKER_SIZE bytes after
     // each sync are reserved, and point forwards to the next such offset.  The final
-    // sync marker in a segment will be zeroed out, or point to EOF.
+    // sync marker in a segment will be zeroed out, or point to a position too close to the EOF to fit a marker.
     private volatile int lastSyncedOffset;
-    // The position where sync was initiated last.
-    private volatile int lastSyncStartedOffset;
 
     // The end position of the buffer. Initially set to its capacity and updated to point to the last written position
     // as the segment is being closed.
@@ -161,7 +159,7 @@ public abstract class CommitLogSegment
         // write the header
         CommitLogDescriptor.writeHeader(buffer, descriptor);
         endOfBuffer = buffer.capacity();
-        lastSyncedOffset = lastSyncStartedOffset = buffer.position();
+        lastSyncedOffset = buffer.position();
         allocatePosition.set(lastSyncedOffset + SYNC_MARKER_SIZE);
     }
 
@@ -255,63 +253,46 @@ public abstract class CommitLogSegment
     /**
      * Forces a disk flush for this segment file.
      */
-    void sync()
+    synchronized void sync()
     {
-        int startMarker;
-        int nextMarker;
         boolean close = false;
+        // check we have more work to do
+        if (allocatePosition.get() <= lastSyncedOffset + SYNC_MARKER_SIZE)
+            return;
+        // Note: Even if the very first allocation of this sync section failed, we still want to enter this
+        // to ensure the segment is closed. As allocatePosition is set to 1 beyond the capacity of the buffer,
+        // this will always be entered when a mutation allocation has been attempted after the marker allocation
+        // succeeded in the previous sync. 
+        assert buffer != null;  // Only close once.
 
-        synchronized (this) 
+        int startMarker = lastSyncedOffset;
+        // Allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
+        // the point at which we can safely consider records to have been completely written to.
+        int nextMarker = allocate(SYNC_MARKER_SIZE);
+        if (nextMarker < 0)
         {
-            startMarker = lastSyncStartedOffset;
+            // Ensure no more of this CLS is writeable, and mark ourselves for closing.
+            discardUnusedTail();
+            close = true;
 
-            // Check we have more work to do.
-            // Note: Even if the very first allocation of this sync section failed, we still want to enter this
-            // to ensure the segment is closed. As allocatePosition is set to 1 beyond the capacity of the buffer,
-            // this will always be true when a mutation allocation was attempted after the marker allocation succeeded
-            // in the previous sync. 
-            if (allocatePosition.get() > startMarker + SYNC_MARKER_SIZE)
-            {
-                assert buffer != null;  // Only close once.
-                // Allocate a new sync marker; this is both necessary in itself, but also serves to demarcate
-                // the point at which we can safely consider records to have been completely written to.
-                nextMarker = allocate(SYNC_MARKER_SIZE);
-                if (nextMarker < 0)
-                {
-                    // Ensure no more of this CLS is writeable, and mark ourselves for closing.
-                    discardUnusedTail();
-                    close = true;
-
-                    // The endOfBuffer position may be incorrect at this point (to be written by another stalled thread).
-                    // We will wait for the precise end position outside of the synchronized block.
-                    nextMarker = buffer.capacity();
-                }
-
-                lastSyncStartedOffset = nextMarker;
-            } else
-                // Nothing needs to be done, but we must still wait for outstanding writes to complete.
-                nextMarker = startMarker;
+            // We use the buffer size as the synced position after a close instead of the end of the actual data
+            // to make sure we only close the buffer once.
+            // The endOfBuffer position may be incorrect at this point (to be written by another stalled thread).
+            nextMarker = buffer.capacity();
         }
-        
-        
-        if (nextMarker > startMarker)
-        {
-            // Wait for mutations to complete as well as endOfBuffer to have been written.
-            waitForModifications();
-            int sectionEnd = close ? endOfBuffer : nextMarker;
 
-            // Perform compression, writing to file and flush. Some or all of this may execute in parallel.
-            write(startMarker, sectionEnd);
+        // Wait for mutations to complete as well as endOfBuffer to have been written.
+        waitForModifications();
+        int sectionEnd = close ? endOfBuffer : nextMarker;
 
-            // Signal the sync as complete. This section needs to be executed only after any previous syncs have finished.
-            waitForSync(startMarker, null);
-            assert lastSyncedOffset == startMarker;
-            lastSyncedOffset = nextMarker;
-            if (close)
-                close();
-            syncComplete.signalAll();
-        } else
-            waitForSync(startMarker, null);
+        // Perform compression, writing to file and flush.
+        write(startMarker, sectionEnd);
+
+        // Signal the sync as complete.
+        lastSyncedOffset = nextMarker;
+        if (close)
+            close();
+        syncComplete.signalAll();
     }
 
     protected void writeSyncMarker(ByteBuffer buffer, int offset, int filePos, int nextMarker)
@@ -409,6 +390,7 @@ public abstract class CommitLogSegment
         try
         {
             channel.close();
+            buffer = null;
         }
         catch (IOException e)
         {

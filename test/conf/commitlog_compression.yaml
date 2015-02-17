@@ -1,3 +1,2 @@
 commitlog_compression:
     - class_name: LZ4Compressor
-commitlog_compression_threads: 4

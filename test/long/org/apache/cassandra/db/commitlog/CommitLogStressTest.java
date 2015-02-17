@@ -185,7 +185,6 @@ public class CommitLogStressTest
         DatabaseDescriptor.setCommitLogSyncBatchWindow(1);
         DatabaseDescriptor.setCommitLogSyncPeriod(30);
         DatabaseDescriptor.setCommitLogSegmentSize(32);
-        DatabaseDescriptor.setCommitLogCompressionThreads(NUM_THREADS);
         for (ParametrizedClass compressor : new ParametrizedClass[] {
                 null,
                 new ParametrizedClass("LZ4Compressor", null),
@@ -203,12 +202,10 @@ public class CommitLogStressTest
     }
 
     public void testLog(CommitLog commitLog) throws IOException, InterruptedException {
-        System.out.format("\nTesting commit log size %dmb, compressor %s threads %d, sync %s, period %dms%s%s\n",
+        System.out.format("\nTesting commit log size %dmb, compressor %s, sync %s%s%s\n",
                            mb(DatabaseDescriptor.getCommitLogSegmentSize()),
                            commitLog.compressor != null ? commitLog.compressor.getClass().getSimpleName() : "none",
-                           DatabaseDescriptor.getCommitLogSyncThreadCount(),
                            commitLog.executor.getClass().getSimpleName(),
-                           commitLog.executor.pollInterval,
                            randomSize ? " random size" : "",
                            discardedRun ? " with discarded run" : "");
         commitLog.allocator.enableReserveSegmentCreation();

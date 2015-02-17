@@ -28,6 +28,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,6 +50,8 @@ public class CommitLogDescriptor
     private static final String FILENAME_EXTENSION = ".log";
     // match both legacy and new version of commitlogs Ex: CommitLog-12345.log and CommitLog-4-12345.log.
     private static final Pattern COMMIT_LOG_FILE_PATTERN = Pattern.compile(FILENAME_PREFIX + "((\\d+)(" + SEPARATOR + "\\d+)?)" + FILENAME_EXTENSION);
+    private static final String COMPRESSION_PARAMETERS_KEY = "compressionParameters";
+    private static final String COMPRESSION_CLASS_KEY = "compressionClass";
 
     public static final int VERSION_12 = 2;
     public static final int VERSION_20 = 3;
@@ -86,28 +89,30 @@ public class CommitLogDescriptor
         crc.updateInt((int) (descriptor.id & 0xFFFFFFFFL));
         crc.updateInt((int) (descriptor.id >>> 32));
         if (descriptor.version >= VERSION_30) {
-            String compressionString = constructCompressionString(descriptor.compression);
-            byte[] compressionBytes = compressionString.getBytes(StandardCharsets.UTF_8);
-            if (compressionBytes.length != (((short) compressionBytes.length) & 0xFFFF))
+            String parametersString = constructParametersString(descriptor);
+            byte[] parametersBytes = parametersString.getBytes(StandardCharsets.UTF_8);
+            if (parametersBytes.length != (((short) parametersBytes.length) & 0xFFFF))
                 throw new ConfigurationException(String.format("Compression parameters too long, length %d cannot be above 65535.",
-                                                               compressionBytes.length));
-            out.putShort((short) compressionBytes.length);
-            crc.updateInt(compressionBytes.length);
-            out.put(compressionBytes);
-            crc.update(compressionBytes, 0, compressionBytes.length);
+                                                               parametersBytes.length));
+            out.putShort((short) parametersBytes.length);
+            crc.updateInt(parametersBytes.length);
+            out.put(parametersBytes);
+            crc.update(parametersBytes, 0, parametersBytes.length);
         } else
             assert descriptor.compression == null;
         out.putInt(crc.getCrc());
     }
 
-    private static String constructCompressionString(ParametrizedClass compression)
+    private static String constructParametersString(CommitLogDescriptor descriptor)
     {
-        if (compression == null)
-            return "";
-        String params = "";
-        if (compression.parameters != null)
-            params = JSONValue.toJSONString(compression.parameters);
-        return compression.class_name + params;
+        Map<String, Object> params = new TreeMap<String, Object>();
+        ParametrizedClass compression = descriptor.compression;
+        if (compression != null)
+        {
+            params.put(COMPRESSION_PARAMETERS_KEY, compression.parameters);
+            params.put(COMPRESSION_CLASS_KEY, compression.class_name);
+        }
+        return JSONValue.toJSONString(params);
     }
 
     public static CommitLogDescriptor fromHeader(File file)
@@ -135,35 +140,34 @@ public class CommitLogDescriptor
         long id = input.readLong();
         checkcrc.updateInt((int) (id & 0xFFFFFFFFL));
         checkcrc.updateInt((int) (id >>> 32));
-        int compressionLength = 0;
+        int parametersLength = 0;
         if (version >= VERSION_30) {
-            compressionLength = input.readShort() & 0xFFFF;
-            checkcrc.updateInt(compressionLength);
+            parametersLength = input.readShort() & 0xFFFF;
+            checkcrc.updateInt(parametersLength);
         }
-        // This should always succeed as compressionLength cannot be too long even for a
+        // This should always succeed as parametersLength cannot be too long even for a
         // corrupt segment file.
-        byte[] compressionBytes = new byte[compressionLength];
-        input.readFully(compressionBytes);
-        checkcrc.update(compressionBytes, 0, compressionBytes.length);
+        byte[] parametersBytes = new byte[parametersLength];
+        input.readFully(parametersBytes);
+        checkcrc.update(parametersBytes, 0, parametersBytes.length);
         int crc = input.readInt();
         if (crc == checkcrc.getCrc())
             return new CommitLogDescriptor(version, id,
-                    parseCompressionString(new String(compressionBytes, StandardCharsets.UTF_8)));
+                    parseCompression((Map<?, ?>) JSONValue.parse(new String(parametersBytes, StandardCharsets.UTF_8))));
         return null;
     }
 
     @SuppressWarnings("unchecked")
-    private static ParametrizedClass parseCompressionString(String string)
+    private static ParametrizedClass parseCompression(Map<?, ?> params)
     {
-        if (string.isEmpty())
+        if (params == null)
             return null;
-        int split = string.indexOf('{');
-        if (split < 0) {
-            return new ParametrizedClass(string, null);
-        }
-        String className = string.substring(0, split);
-        String optionsString = string.substring(split);
-        return new ParametrizedClass(className, (Map<String, String>) JSONValue.parse(optionsString));
+        String className = (String) params.get(COMPRESSION_CLASS_KEY);
+        if (className == null)
+            return null;
+
+        Map<String, String> cparams = (Map<String, String>) params.get(COMPRESSION_PARAMETERS_KEY);
+        return new ParametrizedClass(className, cparams);
     }
 
     public static CommitLogDescriptor fromFileName(String name)

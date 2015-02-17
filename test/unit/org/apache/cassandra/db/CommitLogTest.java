@@ -446,7 +446,7 @@ public class CommitLogTest
             CommitLogDescriptor desc = new CommitLogDescriptor(CommitLogDescriptor.VERSION_30,
                                                                21,
                                                                new ParametrizedClass("LZ4Compressor", params));
-            ByteBuffer buf = ByteBuffer.allocate(1024);
+            ByteBuffer buf = ByteBuffer.allocate(1024000);
             CommitLogDescriptor.writeHeader(buf, desc);
             Assert.fail("Parameter object too long should fail on writing descriptor.");
         } catch (ConfigurationException e)

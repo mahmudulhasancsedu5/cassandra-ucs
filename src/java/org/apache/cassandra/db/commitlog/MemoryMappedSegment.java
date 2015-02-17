@@ -41,8 +41,6 @@ public class MemoryMappedSegment extends CommitLogSegment
 {
     private static final Logger logger = LoggerFactory.getLogger(MemoryMappedSegment.class);
 
-    private MappedByteBuffer mappedBuffer;
-
     /**
      * Constructs a new segment file.
      *
@@ -93,8 +91,7 @@ public class MemoryMappedSegment extends CommitLogSegment
                 }
             }
 
-            mappedBuffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, DatabaseDescriptor.getCommitLogSegmentSize());
-            return mappedBuffer;
+            return channel.map(FileChannel.MapMode.READ_WRITE, 0, DatabaseDescriptor.getCommitLogSegmentSize());
         }
         catch (IOException e)
         {
@@ -118,7 +115,7 @@ public class MemoryMappedSegment extends CommitLogSegment
         writeSyncMarker(buffer, startMarker, startMarker, nextMarker);
 
         try {
-            mappedBuffer.force();
+            ((MappedByteBuffer) buffer).force();
         }
         catch (Exception e) // MappedByteBuffer.force() does not declare IOException but can actually throw it
         {
@@ -151,7 +148,7 @@ public class MemoryMappedSegment extends CommitLogSegment
     protected void close()
     {
         if (FileUtils.isCleanerAvailable())
-            FileUtils.clean(mappedBuffer);
+            FileUtils.clean(buffer);
         super.close();
     }
 }

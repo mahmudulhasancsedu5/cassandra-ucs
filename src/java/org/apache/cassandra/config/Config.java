@@ -159,7 +159,6 @@ public class Config
     public int commitlog_segment_size_in_mb = 32;
     public int commitlog_periodic_queue_size = 1024 * FBUtilities.getAvailableProcessors();
     public ParametrizedClass commitlog_compression;
-    public int commitlog_compression_threads = 1;
 
     public String endpoint_snitch;
     public Boolean dynamic_snitch = true;

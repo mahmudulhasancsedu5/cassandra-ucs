@@ -292,9 +292,6 @@ commitlog_segment_size_in_mb: 32
 #     parameters:
 #         -
 
-# Specifies the number of compression threads to use for the commit log.
-#commitlog_compression_threads: 1
-
 # any class that implements the SeedProvider interface and has a
 # constructor that takes a Map<String, String> of parameters will do.
 seed_provider:
@@ -350,14 +347,23 @@ concurrent_counter_writes: 32
 #   offheap_objects: native memory, eliminating nio buffer heap overhead
 memtable_allocation_type: heap_buffers
 
-# Total space to use for commitlogs.  Since commitlog segments are
-# mmapped, and hence use up address space, the default size is 32
-# on 32-bit JVMs, and 8192 on 64-bit JVMs.
+# Total address space to use for commitlogs. Uncompressed commitlog segments
+# are mmapped, and hence use up address space while they are ready to be
+# written to; compressed segments will actually use up to this amount of
+# memory to accept writes.
 #
-# If space gets above this value (it will round up to the next nearest
-# segment multiple), Cassandra will flush every dirty CF in the oldest
-# segment and remove it.  So a small total commitlog space will tend
-# to cause more flush activity on less-active columnfamilies.
+# Segments that have been written to and closed are not counted towards
+# this limit.
+# The default value is 4*commitlog_segment_size_in_mb.
+# commitlog_address_space_in_mb: 256
+#
+# Total commit log space on disk.
+#
+# If space gets above this value, Cassandra will flush every dirty CF
+# in the oldest segment and remove it.  So a small total commitlog space
+# will tend to cause more flush activity on less-active columnfamilies.
+#
+# The default value is 8192.
 # commitlog_total_space_in_mb: 8192
 
 # This sets the amount of memtable flush writer threads.  These will

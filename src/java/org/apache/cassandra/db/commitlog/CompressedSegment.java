@@ -54,6 +54,8 @@ public class CompressedSegment extends CommitLogSegment
     };
 
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
+    static final int MAX_BUFFERPOOL_SIZE = 3;   // One segment in compression, one written to, one in reserve. Anything
+    // more than that should be cleaned by the garbage collector.
 
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
     final ICompressor compressor;
@@ -129,10 +131,8 @@ public class CompressedSegment extends CommitLogSegment
             compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
             compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
 
-            // Only write after the previous write has completed.
-            waitForSync(startMarker, null);
-
             // Only one thread can be here at a given time.
+            // Protected by synchronization on CommitLogSegment.sync().
             writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             channel.write(compressedBuffer);
             channel.force(true);
@@ -158,8 +158,9 @@ public class CompressedSegment extends CommitLogSegment
     @Override
     protected void close()
     {
+        if (bufferPool.size() < MAX_BUFFERPOOL_SIZE)
+            bufferPool.add(buffer);
         super.close();
-        bufferPool.add(buffer);
     }
 
     static void shutdown()
