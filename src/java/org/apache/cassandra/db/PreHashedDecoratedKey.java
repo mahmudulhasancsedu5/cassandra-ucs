@@ -23,8 +23,8 @@ import org.apache.cassandra.dht.Token;
 
 public class PreHashedDecoratedKey extends BufferDecoratedKey
 {
-    long hash0;
-    long hash1;
+    final long hash0;
+    final long hash1;
 
     public PreHashedDecoratedKey(Token token, ByteBuffer key, long hash0, long hash1)
     {
