@@ -62,12 +62,10 @@ public class CompressedSegment extends CommitLogSegment
 
     /**
      * Constructs a new segment file.
-     *
-     * @param filePath  if not null, recycles the existing file by renaming it and truncating it to CommitLog.SEGMENT_SIZE.
      */
-    CompressedSegment(String filePath, CommitLog commitLog)
+    CompressedSegment(CommitLog commitLog)
     {
-        super(filePath, commitLog);
+        super(commitLog);
         this.compressor = commitLog.compressor;
         try
         {
@@ -76,17 +74,6 @@ public class CompressedSegment extends CommitLogSegment
         catch (IOException e)
         {
             throw new FSWriteError(e, getPath());
-        }
-    }
-
-    void recycleFile(String filePath)
-    {
-        File oldFile = new File(filePath);
-
-        if (oldFile.exists())
-        {
-            logger.debug("Deleting old CommitLog segment {}", filePath);
-            FileUtils.deleteWithConfirm(oldFile);
         }
     }
 
@@ -141,18 +128,6 @@ public class CompressedSegment extends CommitLogSegment
         {
             throw new FSWriteError(e, getPath());
         }
-    }
-
-    /**
-     * Recycle processes an unneeded segment file for reuse.
-     *
-     * @return a new CommitLogSegment representing the newly reusable segment.
-     */
-    CompressedSegment recycle(CommitLog commitLog)
-    {
-        // Run a sync to complete any outstanding writes.
-        syncAndClose();
-        return new CompressedSegment(getPath(), commitLog);
     }
 
     @Override

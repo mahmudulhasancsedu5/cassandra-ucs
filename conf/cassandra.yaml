@@ -347,16 +347,6 @@ concurrent_counter_writes: 32
 #   offheap_objects: native memory, eliminating nio buffer heap overhead
 memtable_allocation_type: heap_buffers
 
-# Total address space to use for commitlogs. Uncompressed commitlog segments
-# are mmapped, and hence use up address space while they are ready to be
-# written to; compressed segments will actually use up to this amount of
-# memory to accept writes.
-#
-# Segments that have been written to and closed are not counted towards
-# this limit.
-# The default value is 4*commitlog_segment_size_in_mb.
-# commitlog_address_space_in_mb: 256
-#
 # Total commit log space on disk.
 #
 # If space gets above this value, Cassandra will flush every dirty CF

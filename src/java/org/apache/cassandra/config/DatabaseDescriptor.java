@@ -155,7 +155,7 @@ public class DatabaseDescriptor
         }
 
         if (conf.commitlog_total_space_in_mb == null)
-            conf.commitlog_total_space_in_mb = hasLargeAddressSpace() ? 8192 : 32;
+            conf.commitlog_total_space_in_mb = 8192;
 
         // Always force standard mode access on Windows - CASSANDRA-6993. Windows won't allow deletion of hard-links to files that
         // are memory-mapped which causes trouble with snapshots.

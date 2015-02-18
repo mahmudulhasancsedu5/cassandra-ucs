@@ -114,17 +114,9 @@ public abstract class CommitLogSegment
 
     public final CommitLogDescriptor descriptor;
 
-    /**
-     * @return a newly minted segment file
-     */
-    static CommitLogSegment freshSegment(CommitLog commitLog)
+    static CommitLogSegment createSegment(CommitLog commitLog)
     {
-        return createSegment(commitLog, null);
-    }
-
-    static CommitLogSegment createSegment(CommitLog commitLog, String reusePath)
-    {
-        return commitLog.compressor != null ? new CompressedSegment(reusePath, commitLog) : new MemoryMappedSegment(reusePath, commitLog);
+        return commitLog.compressor != null ? new CompressedSegment(commitLog) : new MemoryMappedSegment(commitLog);
     }
 
     static long getNextId()
@@ -137,13 +129,11 @@ public abstract class CommitLogSegment
      *
      * @param filePath  if not null, recycles the existing file by renaming it and truncating it to CommitLog.SEGMENT_SIZE.
      */
-    CommitLogSegment(String filePath, CommitLog commitLog)
+    CommitLogSegment(CommitLog commitLog)
     {
         id = getNextId();
         descriptor = new CommitLogDescriptor(id, commitLog.compressorClass);
         logFile = new File(commitLog.location, descriptor.fileName());
-        if (filePath != null)
-            recycleFile(filePath);
 
         try
         {
@@ -162,8 +152,6 @@ public abstract class CommitLogSegment
         lastSyncedOffset = buffer.position();
         allocatePosition.set(lastSyncedOffset + SYNC_MARKER_SIZE);
     }
-
-    abstract void recycleFile(String filePath);
 
     abstract ByteBuffer createBuffer();
 
@@ -319,13 +307,6 @@ public abstract class CommitLogSegment
     {
        FileUtils.deleteWithConfirm(logFile);
     }
-
-    /**
-     * Recycle processes an unneeded segment file for reuse.
-     *
-     * @return a new CommitLogSegment representing the newly reusable segment.
-     */
-    abstract CommitLogSegment recycle(CommitLog commitLog);
 
     /**
      * @return the current ReplayPosition for this log segment
