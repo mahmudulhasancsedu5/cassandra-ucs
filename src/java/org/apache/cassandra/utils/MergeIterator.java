@@ -45,7 +45,7 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                  ? new TrivialOneToOne<>(sources, reducer)
                  : new OneToOne<>(sources, reducer);
         }
-        return new ManyToOne<>(sources, comparator, reducer);
+        return new ManyToOneNoCand<>(sources, comparator, reducer);
     }
 
     public Iterable<? extends Iterator<In>> iterators()
@@ -71,7 +71,7 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
     }
 
     /** A MergeIterator that consumes multiple input values per output value. */
-    private static final class ManyToOne<In,Out> extends MergeIterator<In,Out>
+    static final class ManyToOne<In,Out> extends MergeIterator<In,Out>
     {
         protected final Candidate<In>[] heap;
         int size;
@@ -90,7 +90,14 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                 if (candidate != null)
                     heap[size++] = candidate;
             }
-            Arrays.sort(heap, 0, size);
+            
+            for (int i = size - 1; i >= 0; --i)
+            {
+                replaceAndSink(heap[i], i);
+            }
+            // Sort to prepare the heap for processing. The heap could be prepared more efficiently, but this is a
+            // negligible part of the overall iteration time and not worth the extra code.
+//            Arrays.sort(heap, 0, size);
         }
 
         protected final Out computeNext()
@@ -140,41 +147,40 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         {
             if (candidate == null)
             {
+                // Drop iterator by replacing it with the last one in the heap.
                 candidate = heap[--size];
                 heap[size] = null; // not necessary but helpful for debugging
             }
+            replaceAndSink(candidate, 0);
+        }
 
+        private void replaceAndSink(Candidate<In> candidate, int currIdx)
+        {
             final int size = this.size;
-            int currIdx = 0;
             final int sortedSectionSize = Math.min(size, SORTED_SECTION + 1);
             int nextIdx = currIdx + 1;
 
             loop:
             {
+                // Advance within the sorted section, pulling up items lighter than candidate.
                 while (nextIdx < sortedSectionSize)
                 {
                     if (candidate.compareTo(heap[nextIdx]) <= 0)
-                    {
                         break loop;
-                    }
 
                     heap[currIdx] = heap[nextIdx];
                     currIdx = nextIdx;
                     nextIdx = currIdx + 1;
                 }
 
+                // Advance in the binary heap, pulling up the lighter element from the two at each level.
                 while (nextIdx < size)
                 {
-                    if ((nextIdx + 1 < size)
-                            && heap[nextIdx + 1].compareTo(heap[nextIdx]) < 0)
-                    {
+                    if (nextIdx + 1 < size && heap[nextIdx + 1].compareTo(heap[nextIdx]) < 0)
                         ++nextIdx;
-                    }
 
                     if (candidate.compareTo(heap[nextIdx]) <= 0)
-                    {
                         break loop;
-                    }
 
                     heap[currIdx] = heap[nextIdx];
                     currIdx = nextIdx;
@@ -182,6 +188,129 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                 }
             }
             heap[currIdx] = candidate;
+        }
+    }
+
+
+    /** A MergeIterator that consumes multiple input values per output value. */
+    static final class ManyToOneNoCand<In,Out> extends MergeIterator<In,Out>
+    {
+        protected final In[] items;
+        protected final Iterator<In>[] iters;
+        final Comparator<In> comparator;
+        int size;
+
+        public ManyToOneNoCand(List<? extends Iterator<In>> iterators, Comparator<In> comp, Reducer<In, Out> reducer)
+        {
+            super(iterators, reducer);
+            this.comparator = comp;
+
+            @SuppressWarnings("unchecked")
+            In[] items = (In[]) new Object[iterators.size()];
+            @SuppressWarnings("unchecked")
+            Iterator<In>[] iters = new Iterator[iterators.size()];
+            size = 0;
+            for (Iterator<In> iter : iterators)
+                if (iter.hasNext())
+                {
+                    items[size] = iter.next();
+                    iters[size] = iter;
+                    ++size;
+                }
+            this.iters = iters;
+            this.items = items;
+            
+            for (int i = size - 1; i >= 0; --i)
+            {
+                replaceAndSink(items[i], iters[i], i);
+            }
+        }
+
+        protected final Out computeNext()
+        {
+            reducer.onKeyChange();
+            if (size == 0)
+                return endOfData();
+
+            In item = items[0];
+            do
+            {
+                reducer.reduce(items[0]);
+                Iterator<In> it = iters[0];
+                if (it.hasNext())
+                {
+                    replaceAndSink(it.next(), it, 0);
+                } else {
+                    --size;
+                    replaceAndSink(items[size], iters[size], 0);
+                    items[size] = null;
+                    iters[size] = null;
+                }
+            }
+            while (size > 0 && comparator.compare(items[0], item) == 0);
+            return reducer.getReduced();
+        }
+
+        /**
+         * The number of elements to keep in order before the binary heap starts, exclusive of the top heap element.
+         * This section helps the performance in cases where iterators are largely non-overlapping.
+         * 
+         * The heap is laid out as (example for SORTED_SECTION == 2):
+         *                 0
+         *                 |
+         *                 1
+         *                 |
+         *                 2
+         *               /   \
+         *              3     4
+         *             / \   / \
+         *             5 6   7 8
+         *            .. .. .. ..
+         * Where each line is a <= relationship. In the sorted section we can advance with a single comparison per level,
+         * while advancing a level within the heap requires two (so that we can find the lighter element to pop up).
+         * The sorted section adds a constant overhead when data is uniformly distributed among the iterators, but may up
+         * to halve the iteration time when one iterator is dominant over sections of the merged data (as is the case with
+         * non-overlapping iterators).
+         */
+        static final int SORTED_SECTION = 2;
+
+        private void replaceAndSink(In item, Iterator<In> iter, int currIdx)
+        {
+            final int size = this.size;
+            final int sortedSectionSize = Math.min(size, SORTED_SECTION + 1);
+            int nextIdx = currIdx + 1;
+
+            loop:
+            {
+                // Advance within the sorted section, pulling up items lighter than candidate.
+                while (nextIdx < sortedSectionSize)
+                {
+                    if (comparator.compare(item, items[nextIdx]) <= 0)
+                        break loop;
+
+                    items[currIdx] = items[nextIdx];
+                    iters[currIdx] = iters[nextIdx];
+                    currIdx = nextIdx;
+                    nextIdx = currIdx + 1;
+                }
+
+                // Advance in the binary heap, pulling up the lighter element from the two at each level.
+                while (nextIdx < size)
+                {
+                    if (nextIdx + 1 < size && comparator.compare(items[nextIdx + 1], items[nextIdx]) < 0)
+                        ++nextIdx;
+
+                    if (comparator.compare(item, items[nextIdx]) <= 0)
+                        break loop;
+
+                    items[currIdx] = items[nextIdx];
+                    iters[currIdx] = iters[nextIdx];
+                    currIdx = nextIdx;
+                    nextIdx = (nextIdx << 1) - (SORTED_SECTION - 1);
+                }
+            }
+            items[currIdx] = item;
+            iters[currIdx] = iter;
         }
     }
 
@@ -214,7 +343,7 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
 
         public boolean equalItem(In thatItem)
         {
-            return this.item.equals(thatItem);
+            return comp.compare(this.item, thatItem) == 0;
         }
     }
 

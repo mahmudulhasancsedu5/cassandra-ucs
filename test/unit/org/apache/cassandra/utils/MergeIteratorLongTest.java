@@ -41,7 +41,7 @@ public class MergeIteratorLongTest
 {
     static int ITERATOR_COUNT = 15;
     static int LIST_LENGTH = 200000;
-    static boolean BENCHMARK = true;//false;
+    static boolean BENCHMARK = true;
     
     @Test
     public void testRandomInts() throws Exception
@@ -182,7 +182,7 @@ public class MergeIteratorLongTest
     @Test
     public void testTimeUuidType() throws Exception
     {
-        AbstractType<UUID> comparator = TimeUUIDType.instance;
+        final AbstractType<UUID> comparator = TimeUUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
         List<List<ByteBuffer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<ByteBuffer>() {
@@ -198,7 +198,7 @@ public class MergeIteratorLongTest
     @Test
     public void testUuidType() throws Exception
     {
-        AbstractType<UUID> comparator = UUIDType.instance;
+        final AbstractType<UUID> comparator = UUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
         List<List<ByteBuffer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<ByteBuffer>() {
@@ -220,7 +220,7 @@ public class MergeIteratorLongTest
             for (int j=0; j<length; ++j) {
                 l.add(generator.call());
             }
-            l.sort(comparator);
+            Collections.sort(l, comparator);
             lists.add(l);
         }
         return lists;
@@ -239,6 +239,7 @@ public class MergeIteratorLongTest
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
+            benchmarkIterator(new MergeIterator.ManyToOne<>(closeableIterators(lists), comparator, reducer));
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
         }
     }
