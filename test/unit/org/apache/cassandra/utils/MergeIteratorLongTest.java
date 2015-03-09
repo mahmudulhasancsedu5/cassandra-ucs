@@ -25,9 +25,11 @@ import java.util.concurrent.Callable;
 import com.google.common.base.Function;
 import com.google.common.base.Objects;
 import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
+import com.google.common.collect.Sets;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -39,9 +41,9 @@ import org.apache.cassandra.utils.MergeIterator.Reducer;
 
 public class MergeIteratorLongTest
 {
-    static int ITERATOR_COUNT = 15;
-    static int LIST_LENGTH = 200000;
-    static boolean BENCHMARK = true;
+    static int ITERATOR_COUNT = 25;
+    static int LIST_LENGTH = 40000;
+    static boolean BENCHMARK = false;
     
     @Test
     public void testRandomInts() throws Exception
@@ -211,6 +213,25 @@ public class MergeIteratorLongTest
         testMergeIterator(comparator, reducer, lists);
     }
 
+    
+    @Test
+    public void testSets() throws Exception
+    {
+        final Random r = new Random();
+        final Comparator<KeyedSet<Integer, UUID>> comparator = Ordering.natural();
+        
+        Reducer<KeyedSet<Integer, UUID>, KeyedSet<Integer, UUID>> reducer = new Union<Integer, UUID>();
+
+        List<List<KeyedSet<Integer, UUID>>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<KeyedSet<Integer, UUID>>() {
+            @Override
+            public KeyedSet<Integer, UUID> call() throws Exception
+            {
+                return new KeyedSet<>(r.nextInt(5 * LIST_LENGTH), UUIDGen.getTimeUUID());
+            }
+        }, comparator);
+        testMergeIterator(comparator, reducer, lists);
+    }
+
     public <T> List<List<T>> generateLists(int itcount, int length, Callable<T> generator,
             Comparator<T> comparator) throws Exception
     {
@@ -226,33 +247,38 @@ public class MergeIteratorLongTest
         return lists;
     }
 
-    public <T> void testMergeIterator(Comparator<T> comparator, Reducer<T, Counted<T>> reducer, List<List<T>> lists)
+    public <T> void testMergeIterator(Comparator<T> comparator, Reducer<T, ?> reducer, List<List<T>> lists)
     {
-        IMergeIterator<T,Counted<T>> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
-        IMergeIterator<T,Counted<T>> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
+        IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
+        IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
         // If test fails, try the version below for improved reporting:
-        //   Assert.assertArrayEquals(Iterators.toArray(tested, Counted.class), Iterators.toArray(base, Counted.class));
-        Assert.assertTrue(Iterators.elementsEqual(tested, base));
+           Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
+//        Assert.assertTrue(Iterators.elementsEqual(base, tested));
         if (!BENCHMARK)
             return;
 
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
-            benchmarkIterator(new MergeIterator.ManyToOne<>(closeableIterators(lists), comparator, reducer));
+            benchmarkIterator(new MergeIterator.ManyToOneSorted<>(closeableIterators(lists), comparator, reducer));
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
         }
     }
     
-    public <T> void benchmarkIterator(IMergeIterator<T, Counted<T>> it)
+    public <T> void benchmarkIterator(IMergeIterator<T, ?> it)
     {
         System.out.print("Testing " + it.getClass().getSimpleName() + "... ");
         long time = System.currentTimeMillis();
-        Counted<T> value = null;
+        Object value = null;
         while (it.hasNext())
             value = it.next();
         time = System.currentTimeMillis() - time;
-        System.out.println("type " + value.item.getClass().getSimpleName() + " time " + time + "ms");
+        String type = "";
+        if (value instanceof Counted<?>)
+        {
+            type = "type " + ((Counted<?>)value).item.getClass().getSimpleName();
+        }
+        System.out.println(type + " time " + time + "ms");
     }
 
     public <T> List<CloseableIterator<T>> closeableIterators(List<List<T>> iterators)
@@ -262,8 +288,9 @@ public class MergeIteratorLongTest
             @Override
             public CloseableIterator<T> apply(List<T> arg)
             {
+                return new CLI<T>(arg.iterator());
                 // Go through LinkedHashSet to remove duplicates.
-                return new CLI<T>(new LinkedHashSet<T>(arg).iterator());
+//                return new CLI<T>(new LinkedHashSet<T>(arg).iterator());
             }
             
         });
@@ -312,6 +339,52 @@ public class MergeIteratorLongTest
 
         @Override
         protected Counted<T> getReduced()
+        {
+            return current;
+        }
+    }
+    
+    static class KeyedSet<K extends Comparable<? super K>, V> extends Pair<K, Set<V>> implements Comparable<KeyedSet<K, V>>
+    {
+        protected KeyedSet(K left, V right)
+        {
+            super(left, ImmutableSet.of(right));
+        }
+        
+        protected KeyedSet(K left, Collection<V> right)
+        {
+            super(left, Sets.newHashSet(right));
+        }
+
+        @Override
+        public int compareTo(KeyedSet<K, V> o)
+        {
+            return left.compareTo(o.left);
+        }
+    }
+    
+    static class Union<K extends Comparable<K>, V> extends Reducer<KeyedSet<K, V>, KeyedSet<K, V>> {
+        KeyedSet<K, V> current = null;
+
+        @Override
+        public void reduce(KeyedSet<K, V> next)
+        {
+            if (current == null)
+                current = new KeyedSet<>(next.left, next.right);
+            else {
+                assert current.left.equals(next.left);
+                current.right.addAll(next.right);
+            }
+        }
+
+        @Override
+        protected void onKeyChange()
+        {
+            current = null;
+        }
+
+        @Override
+        protected KeyedSet<K, V> getReduced()
         {
             return current;
         }
