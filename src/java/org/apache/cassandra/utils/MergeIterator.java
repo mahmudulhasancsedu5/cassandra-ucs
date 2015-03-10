@@ -136,11 +136,15 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
 
             for (Iterator<In> iter : iters)
             {
-                Candidate<In> candidate = new Candidate<>(iter, comp);
-                heap[size++] = candidate;
+                Candidate<In> candidate = new Candidate<>(iter, comp).advance();
+                if (candidate != null)
+                    heap[size++] = candidate;
             }
-            // All iterators need advancing. The structure will be converted to a heap the first time advance is called.
-            needingAdvance = size;
+
+            // Turn the set of candidates into a heap.
+            for (int i = size - 1; i >= 0; --i)
+                replaceAndSink(heap[i], i);
+            needingAdvance = 0;
         }
 
         protected final Out computeNext()
@@ -154,12 +158,14 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
          *
          * By walking the iterators backwards we know that everything after the point being processed already forms
          * correctly ordered subheaps, thus we can build a subheap rooted at the current position by only sinking down
-         * the newly advanced iterator. The procedure is the same as the one used for the initial building of a heap
-         * in the heapsort algorithm and has a maximum number of comparisons
-         * {@code (2 * log(size) + SORTED_SECTION_SIZE / 2)} multiplied by the number of iterators whose items were
-         * consumed at the previous step, but is also at most linear in the size of the heap if the number of consumed
-         * elements is high (as it is in the initial heap construction). With non- or lightly-overlapping iterators the
-         * procedure finishes after just one (resp. a couple of) comparisons.
+         * the newly advanced iterator. Because all parents of a consumed iterator are also consumed there is no way
+         * that we can process one consumed iterator but skip over its parent.
+         *
+         * The procedure is the same as the one used for the initial building of a heap in the heapsort algorithm and
+         * has a maximum number of comparisons {@code (2 * log(size) + SORTED_SECTION_SIZE / 2)} multiplied by the
+         * number of iterators whose items were consumed at the previous step, but is also at most linear in the size of
+         * the heap if the number of consumed elements is high (as it is in the initial heap construction). With non- or
+         * lightly-overlapping iterators the procedure finishes after just one (resp. a couple of) comparisons.
          */
         private void advance()
         {
@@ -167,12 +173,8 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             for (int i = needingAdvance - 1; i >= 0; --i)
             {
                 Candidate<In> candidate = heap[i];
-                if (candidate.needsAdvance)
-                {
-                    candidate.needsAdvance = false;
-                    candidate = candidate.advance();
-                    replaceAndSink(candidate, i);
-                }
+                if (candidate.needsAdvance())
+                    replaceAndSink(candidate.advance(), i);
             }
         }
 
@@ -188,9 +190,7 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             if (size == 0)
                 return endOfData();
 
-            In equalItem = heap[0].item;
-            assert !heap[0].needsAdvance;
-            heap[0].needsAdvance = true;
+            In equalItem = heap[0].consume();
             reducer.reduce(equalItem);
             final int size = this.size;
             final int sortedSectionSize = Math.min(size, SORTED_SECTION_SIZE);
@@ -198,11 +198,9 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             consume: {
                 for (i = 1; i < sortedSectionSize; ++i)
                 {
-                    assert !heap[i].needsAdvance;
                     if (!heap[i].equalItem(equalItem))
                         break consume;
-                    heap[i].needsAdvance = true;
-                    reducer.reduce(heap[i].item);
+                    reducer.reduce(heap[i].consume());
                 }
                 i = consumeHeap(equalItem, i, i);
             }
@@ -218,11 +216,9 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
          */
         private int consumeHeap(In equalItem, int idx, int maxIndex)
         {
-            assert idx >= size || !heap[idx].needsAdvance;
             if (idx < size && heap[idx].equalItem(equalItem)) 
             {
-                heap[idx].needsAdvance = true;
-                reducer.reduce(heap[idx].item);
+                reducer.reduce(heap[idx].consume());
                 int nextIdx = (idx << 1) - (SORTED_SECTION_SIZE - 1);
                 maxIndex = consumeHeap(equalItem, nextIdx, Math.max(maxIndex, idx + 1));
                 maxIndex = consumeHeap(equalItem, nextIdx + 1, maxIndex);
@@ -252,7 +248,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                 // Advance within the sorted section, pulling up items lighter than candidate.
                 while ((nextIdx = currIdx + 1) < sortedSectionSize)
                 {
-                    assert !heap[nextIdx].needsAdvance;
                     if (candidate.compareTo(heap[nextIdx]) <= 0)
                         break sink;
 
@@ -265,8 +260,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                 // Advance in the binary heap, pulling up the lighter element from the two at each level.
                 while ((nextIdx = (currIdx << 1) - (SORTED_SECTION_SIZE - 1)) < size)
                 {
-                    assert !heap[nextIdx].needsAdvance;
-                    assert nextIdx + 1 >= size || !heap[nextIdx+1].needsAdvance;
                     if (nextIdx + 1 < size && heap[nextIdx + 1].compareTo(heap[nextIdx]) < 0)
                         ++nextIdx;
 
@@ -287,14 +280,13 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
     {
         private final Iterator<In> iter;
         private final Comparator<In> comp;
-        In item;
-        public boolean needsAdvance;
+        private In item;
 
         public Candidate(Iterator<In> iter, Comparator<In> comp)
         {
             this.iter = iter;
             this.comp = comp;
-            needsAdvance = true;
+            item = null;
         }
 
         /** @return this if our iterator had an item, and it is now available, otherwise null */
@@ -308,12 +300,27 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
 
         public int compareTo(Candidate<In> that)
         {
+            assert item != null && that.item != null;
             return comp.compare(this.item, that.item);
         }
 
         public boolean equalItem(In thatItem)
         {
+            assert item != null && thatItem != null;
             return comp.compare(this.item, thatItem) == 0;
+        }
+
+        public In consume()
+        {
+            In temp = item;
+            item = null;
+            assert temp != null;
+            return temp;
+        }
+
+        public boolean needsAdvance()
+        {
+            return item == null;
         }
     }
 

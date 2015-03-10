@@ -43,7 +43,7 @@ public class MergeIteratorLongTest
 {
     static int ITERATOR_COUNT = 25;
     static int LIST_LENGTH = 40000;
-    static boolean BENCHMARK = false;
+    static boolean BENCHMARK = true;
     
     @Test
     public void testRandomInts() throws Exception
@@ -413,19 +413,19 @@ public class MergeIteratorLongTest
     public class MergeIteratorPQ<In,Out> extends MergeIterator<In,Out> implements IMergeIterator<In, Out>
     {
         // a queue for return: all candidates must be open and have at least one item
-        protected final PriorityQueue<Candidate<In>> queue;
+        protected final PriorityQueue<CandidatePQ<In>> queue;
         // a stack of the last consumed candidates, so that we can lazily call 'advance()'
         // TODO: if we had our own PriorityQueue implementation we could stash items
         // at the end of its array, so we wouldn't need this storage
-        protected final ArrayDeque<Candidate<In>> candidates;
+        protected final ArrayDeque<CandidatePQ<In>> candidates;
         public MergeIteratorPQ(List<? extends Iterator<In>> iters, Comparator<In> comp, Reducer<In, Out> reducer)
         {
             super(iters, reducer);
             this.queue = new PriorityQueue<>(Math.max(1, iters.size()));
             for (Iterator<In> iter : iters)
             {
-                Candidate<In> candidate = new Candidate<>(iter, comp);
-                if (candidate.advance() == null)
+                CandidatePQ<In> candidate = new CandidatePQ<>(iter, comp);
+                if (!candidate.advance())
                     // was empty
                     continue;
                 this.queue.add(candidate);
@@ -443,7 +443,7 @@ public class MergeIteratorLongTest
         protected final Out consume()
         {
             reducer.onKeyChange();
-            Candidate<In> candidate = queue.peek();
+            CandidatePQ<In> candidate = queue.peek();
             if (candidate == null)
                 return endOfData();
             do
@@ -459,11 +459,38 @@ public class MergeIteratorLongTest
         /** Advance and re-enqueue all items we consumed in the last iteration. */
         protected final void advance()
         {
-            Candidate<In> candidate;
+            CandidatePQ<In> candidate;
             while ((candidate = candidates.pollFirst()) != null)
-                if (candidate.advance() != null)
+                if (candidate.advance())
                     queue.add(candidate);
         }
     }
 
+    // Holds and is comparable by the head item of an iterator it owns
+    protected static final class CandidatePQ<In> implements Comparable<CandidatePQ<In>>
+    {
+        private final Iterator<In> iter;
+        private final Comparator<In> comp;
+        In item;
+
+        public CandidatePQ(Iterator<In> iter, Comparator<In> comp)
+        {
+            this.iter = iter;
+            this.comp = comp;
+        }
+
+        /** @return true if our iterator had an item, and it is now available */
+        protected boolean advance()
+        {
+            if (!iter.hasNext())
+                return false;
+            item = iter.next();
+            return true;
+        }
+
+        public int compareTo(CandidatePQ<In> that)
+        {
+            return comp.compare(this.item, that.item);
+        }
+    }
 }
