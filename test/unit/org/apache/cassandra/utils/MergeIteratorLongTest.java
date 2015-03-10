@@ -252,15 +252,14 @@ public class MergeIteratorLongTest
         IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
         IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
         // If test fails, try the version below for improved reporting:
-           Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
-//        Assert.assertTrue(Iterators.elementsEqual(base, tested));
+        //   Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
+        Assert.assertTrue(Iterators.elementsEqual(base, tested));
         if (!BENCHMARK)
             return;
 
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
-            benchmarkIterator(new MergeIterator.ManyToOneSorted<>(closeableIterators(lists), comparator, reducer));
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
         }
     }
@@ -289,10 +288,7 @@ public class MergeIteratorLongTest
             public CloseableIterator<T> apply(List<T> arg)
             {
                 return new CLI<T>(arg.iterator());
-                // Go through LinkedHashSet to remove duplicates.
-//                return new CLI<T>(new LinkedHashSet<T>(arg).iterator());
             }
-            
         });
     }
 
