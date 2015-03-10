@@ -75,8 +75,8 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
      *
      * The most straightforward way to implement this is to use a {@code PriorityQueue} of iterators, {@code poll} it to
      * find the next item to consume, then {@code add} the iterator back after advancing. This is not very efficient as
-     * {@code poll} and {@code add} in almost all cases require at least log N comparisons per consume item, even if the
-     * input is suitable for fast iteration.
+     * {@code poll} and {@code add} in almost all cases require at least log N comparisons per consumed item, even if
+     * the input is suitable for fast iteration.
      *
      * The implementation below makes use of the fact that replacing the top element in a binary heap can be done much
      * more efficiently than separately removing it and placing it back, especially in the cases where the top iterator
@@ -282,83 +282,19 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         }
     }
 
-    static final class ManyToOneSorted<In,Out> extends MergeIterator<In,Out>
-    {
-        protected final Candidate<In>[] list;
-        int size;
-        int nonAdvanced;
-
-        public ManyToOneSorted(List<? extends Iterator<In>> iters, Comparator<In> comp, Reducer<In, Out> reducer)
-        {
-            super(iters, reducer);
-
-            @SuppressWarnings("unchecked")
-            Candidate<In>[] heap = new Candidate[iters.size()];
-            this.list = heap;
-            size = 0;
-            nonAdvanced = 0;
-
-            for (Iterator<In> iter : iters)
-            {
-                Candidate<In> candidate = new Candidate<>(iter, comp).advance();
-                if (candidate != null)
-                    heap[size++] = candidate;
-            }
-
-            Arrays.sort(list, 0, size);
-        }
-
-        protected final Out computeNext()
-        {
-            int i;
-            for (i = nonAdvanced - 1; i >= 0; --i)
-                replaceAndSink(list[i].advance(), i);
-
-            reducer.onKeyChange();
-            if (size == 0)
-                return endOfData();
-
-            In item = list[0].item;
-            reducer.reduce(item);
-            for (i = 1; i < size && list[i].equalItem(item); ++i)
-                reducer.reduce(list[i].item);
-            nonAdvanced = i;
-            return reducer.getReduced();
-        }
-
-        private void replaceAndSink(Candidate<In> candidate, int currIdx)
-        {
-            if (candidate != null)
-            {
-                while (currIdx < size - 1 && candidate.compareTo(list[currIdx + 1]) > 0)
-                {
-                    list[currIdx] = list[currIdx + 1];
-                    ++currIdx;
-                }
-            } else {
-                while (currIdx < size - 1)
-                {
-                    list[currIdx] = list[currIdx + 1];
-                    ++currIdx;
-                }
-                --size;
-            }
-            list[currIdx] = candidate;
-        }
-    }
-
     // Holds and is comparable by the head item of an iterator it owns
     protected static final class Candidate<In> implements Comparable<Candidate<In>>
     {
-        public boolean needsAdvance = true;
         private final Iterator<In> iter;
         private final Comparator<In> comp;
         In item;
+        public boolean needsAdvance;
 
         public Candidate(Iterator<In> iter, Comparator<In> comp)
         {
             this.iter = iter;
             this.comp = comp;
+            needsAdvance = true;
         }
 
         /** @return this if our iterator had an item, and it is now available, otherwise null */
