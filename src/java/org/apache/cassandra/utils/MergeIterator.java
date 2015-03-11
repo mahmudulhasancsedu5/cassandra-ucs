@@ -75,8 +75,8 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
      *
      * The most straightforward way to implement this is to use a {@code PriorityQueue} of iterators, {@code poll} it to
      * find the next item to consume, then {@code add} the iterator back after advancing. This is not very efficient as
-     * {@code poll} and {@code add} in almost all cases require at least log N comparisons per consumed item, even if
-     * the input is suitable for fast iteration.
+     * {@code poll} and {@code add} in all cases require at least {@code log(size)} comparisons (usually more than
+     * {@code 2*log(size)}) per consumed item, even if the input is suitable for fast iteration.
      *
      * The implementation below makes use of the fact that replacing the top element in a binary heap can be done much
      * more efficiently than separately removing it and placing it back, especially in the cases where the top iterator
@@ -136,15 +136,10 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
 
             for (Iterator<In> iter : iters)
             {
-                Candidate<In> candidate = new Candidate<>(iter, comp).advance();
-                if (candidate != null)
-                    heap[size++] = candidate;
+                Candidate<In> candidate = new Candidate<>(iter, comp);
+                heap[size++] = candidate;
             }
-
-            // Turn the set of candidates into a heap.
-            for (int i = size - 1; i >= 0; --i)
-                replaceAndSink(heap[i], i);
-            needingAdvance = 0;
+            needingAdvance = size;
         }
 
         protected final Out computeNext()

@@ -39,11 +39,11 @@ import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.utils.MergeIterator.Reducer;
 
-public class MergeIteratorLongTest
+public class MergeIteratorComparisonTest
 {
     static int ITERATOR_COUNT = 25;
-    static int LIST_LENGTH = 40000;
-    static boolean BENCHMARK = true;
+    static int LIST_LENGTH = 20000;
+    static boolean BENCHMARK = false;
     
     @Test
     public void testRandomInts() throws Exception
