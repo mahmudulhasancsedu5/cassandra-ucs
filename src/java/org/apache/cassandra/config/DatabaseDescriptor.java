@@ -25,10 +25,12 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Longs;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.auth.*;
+import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.Config.RequestSchedulerId;
 import org.apache.cassandra.config.EncryptionOptions.ClientEncryptionOptions;
 import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
@@ -181,7 +183,7 @@ public class DatabaseDescriptor
         }
 
         if (conf.commitlog_total_space_in_mb == null)
-            conf.commitlog_total_space_in_mb = hasLargeAddressSpace() ? 8192 : 32;
+            conf.commitlog_total_space_in_mb = 8192;
 
         // Always force standard mode access on Windows - CASSANDRA-6993. Windows won't allow deletion of hard-links to files that
         // are memory-mapped which causes trouble with snapshots.
@@ -1045,6 +1047,16 @@ public class DatabaseDescriptor
         return conf.commitlog_directory;
     }
 
+    public static ParametrizedClass getCommitLogCompression()
+    {
+        return conf.commitlog_compression;
+    }
+
+    public static void setCommitLogCompression(ParametrizedClass compressor)
+    {
+        conf.commitlog_compression = compressor;
+    }
+
     public static int getTombstoneWarnThreshold()
     {
         return conf.tombstone_warn_threshold;
@@ -1071,6 +1083,11 @@ public class DatabaseDescriptor
     public static int getCommitLogSegmentSize()
     {
         return conf.commitlog_segment_size_in_mb * 1024 * 1024;
+    }
+    
+    public static void setCommitLogSegmentSize(int sizeMegabytes)
+    {
+        conf.commitlog_segment_size_in_mb = sizeMegabytes;
     }
 
     public static String getSavedCachesLocation()
@@ -1207,9 +1224,19 @@ public class DatabaseDescriptor
         return conf.commitlog_sync_batch_window_in_ms;
     }
 
+    public static void setCommitLogSyncBatchWindow(double windowMillis)
+    {
+        conf.commitlog_sync_batch_window_in_ms = windowMillis;
+    }
+
     public static int getCommitLogSyncPeriod()
     {
         return conf.commitlog_sync_period_in_ms;
+    }
+    
+    public static void setCommitLogSyncPeriod(int periodMillis)
+    {
+        conf.commitlog_sync_period_in_ms = periodMillis;
     }
 
     public static int getCommitLogPeriodicQueueSize()
@@ -1220,6 +1247,11 @@ public class DatabaseDescriptor
     public static Config.CommitLogSync getCommitLogSync()
     {
         return conf.commitlog_sync;
+    }
+
+    public static void setCommitLogSync(CommitLogSync sync)
+    {
+        conf.commitlog_sync = sync;
     }
 
     public static Config.DiskAccessMode getDiskAccessMode()
