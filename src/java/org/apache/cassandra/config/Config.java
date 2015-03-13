@@ -160,6 +160,7 @@ public class Config
     public Integer commitlog_sync_period_in_ms;
     public int commitlog_segment_size_in_mb = 32;
     public ParametrizedClass commitlog_compression;
+    public int commitlog_max_compression_buffers_in_pool = 3;
  
     @Deprecated
     public int commitlog_periodic_queue_size = -1;

@@ -1057,6 +1057,11 @@ public class DatabaseDescriptor
         conf.commitlog_compression = compressor;
     }
 
+    public static int getCommitLogMaxCompressionBuffersInPool()
+    {
+        return conf.commitlog_max_compression_buffers_in_pool;
+    }
+
     public static int getTombstoneWarnThreshold()
     {
         return conf.tombstone_warn_threshold;

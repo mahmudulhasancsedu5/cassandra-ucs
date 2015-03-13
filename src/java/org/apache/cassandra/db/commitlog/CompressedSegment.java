@@ -41,8 +41,13 @@ public class CompressedSegment extends CommitLogSegment
         }
     };
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
-    static final int MAX_BUFFERPOOL_SIZE = 3;   // One segment in compression, one written to, one in reserve. Anything
-    // more than that should be cleaned by the garbage collector.
+
+    /**
+     * Maximum number of buffers in the compression pool. The default value is 3, it should not be set lower than that
+     * (one segment in compression, one written to, one in reserve); delays in compression may cause the log to use
+     * more, depending on how soon the sync policy stops all writing threads.
+     */
+    static final int MAX_BUFFERPOOL_SIZE = DatabaseDescriptor.getCommitLogMaxCompressionBuffersInPool();
 
     static final int COMPRESSED_MARKER_SIZE = SYNC_MARKER_SIZE + 4;
     final ICompressor compressor;
