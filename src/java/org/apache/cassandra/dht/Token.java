@@ -73,6 +73,12 @@ public abstract class Token implements RingPosition<Token>, Serializable
     abstract public long getHeapSize();
     abstract public Object getTokenValue();
 
+    /**
+     * Returns a measure for the token space covered between this token and next.
+     * Used by the token allocation algorithm (see CASSANDRA-7032).
+     */
+    abstract public double size(Token next);
+
     public Token getToken()
     {
         return this;
