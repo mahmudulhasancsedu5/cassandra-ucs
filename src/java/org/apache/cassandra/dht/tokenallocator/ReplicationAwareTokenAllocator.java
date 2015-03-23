@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.cassandra.dht.tokenallocator;
 
 import java.util.*;
@@ -9,7 +26,6 @@ import com.google.common.collect.Multimap;
 
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.service.StorageService;
 
 class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
 
@@ -32,10 +48,14 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
 
     public Collection<Token> addUnit(Unit newUnit, int numTokens)
     {
+        assert !unitToTokens.containsKey(newUnit);
         // Strategy must already know about this unit.
         if (unitCount() < replicas)
             // Allocation does not matter; everything replicates everywhere.
-            return generateRandomTokens(numTokens);
+            return generateRandomTokens(newUnit, numTokens);
+        if (numTokens > sortedTokens.size())
+            // Some of the heuristics below can't deal with this case. Use random for now, later allocations can fix any problems this may cause.
+            return generateRandomTokens(newUnit, numTokens);
         
         double optTokenOwnership = optimalTokenOwnership(numTokens);
         Map<Object, GroupInfo> groups = Maps.newHashMap();
@@ -74,11 +94,11 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
                 bestToken = improvements.remove().value;
                 candidates = bestToken.removeFrom(candidates);
                 double impr = evaluateImprovement(bestToken, optTokenOwnership, (vn + 1.0) / numTokens);
-                double nextImpr = improvements.peek().weight;
-                
+                Weighted<CandidateInfo<Unit>> next = improvements.peek();
+
                 // If it is better than the next in the queue, it is good enough. This is a heuristic that doesn't
                 // get the best results, but works well enough and on average cuts search time by a factor of O(vunits).
-                if (impr >= nextImpr)
+                if (next == null || impr >= next.weight)
                     break;
                 improvements.add(new Weighted<>(impr, bestToken));
             }
@@ -86,14 +106,17 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         return ImmutableList.copyOf(unitToTokens.get(newUnit));
     }
 
-    private Collection<Token> generateRandomTokens(int numTokens)
+    private Collection<Token> generateRandomTokens(Unit newUnit, int numTokens)
     {
         Set<Token> tokens = new HashSet<Token>(numTokens);
         while (tokens.size() < numTokens)
         {
-            Token token = StorageService.getPartitioner().getRandomToken();
+            Token token = partitioner.getRandomToken();
             if (!sortedTokens.containsKey(token))
+            {
                 tokens.add(token);
+                addSelectedToken(token, newUnit);
+            }
         }
         return tokens;
     }

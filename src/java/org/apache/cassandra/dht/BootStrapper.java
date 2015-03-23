@@ -31,7 +31,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.TypeSizes;
-import org.apache.cassandra.dht.tokenallocator.TokenAllocator;
+import org.apache.cassandra.dht.tokenallocator.TokenAllocation;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.io.IVersionedSerializer;
@@ -193,25 +193,25 @@ public class BootStrapper extends ProgressEventNotifierSupport
         return tokens;
     }
 
-    private static Collection<Token> allocateTokens(final TokenMetadata metadata,
-                                                    InetAddress address,
-                                                    String allocationKeyspace,
-                                                    int numTokens)
+    static Collection<Token> allocateTokens(final TokenMetadata metadata,
+                                            InetAddress address,
+                                            String allocationKeyspace,
+                                            int numTokens)
     {
         Keyspace ks = Keyspace.open(allocationKeyspace);
         if (ks == null)
             throw new ConfigurationException("Problem opening token allocation keyspace " + allocationKeyspace);
         AbstractReplicationStrategy rs = ks.getReplicationStrategy();
         
-        if (logger.isInfoEnabled())
-            logger.info("Replicated node load in datacentre before allocation " + TokenAllocator.replicatedOwnershipAsText(metadata, rs, address));
-        Collection<Token> tokens = TokenAllocator.allocateTokens(metadata, rs, StorageService.getPartitioner(), address, numTokens);
-        if (logger.isInfoEnabled())
+        if (logger.isWarnEnabled())
+            logger.warn("Replicated node load in datacentre before allocation " + TokenAllocation.replicatedOwnershipAsText(metadata, rs, address));
+        Collection<Token> tokens = TokenAllocation.allocateTokens(metadata, rs, StorageService.getPartitioner(), address, numTokens);
+        if (logger.isWarnEnabled())
         {
-            logger.info("Selected tokens {}", tokens);
+            logger.warn("Selected tokens {}", tokens);
             TokenMetadata metadataCopy = metadata.cloneOnlyTokenMap();
             metadataCopy.updateNormalTokens(tokens, address);
-            logger.info("Replicated node load in datacentre after allocation " + TokenAllocator.replicatedOwnershipAsText(metadataCopy, rs, address));
+            logger.warn("Replicated node load in datacentre after allocation " + TokenAllocation.replicatedOwnershipAsText(metadataCopy, rs, address));
         }
         return tokens;
     }

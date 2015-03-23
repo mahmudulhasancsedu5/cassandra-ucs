@@ -17,10 +17,13 @@
  */
 package org.apache.cassandra.dht.tokenallocator;
 
-import java.util.Collection;
+interface ReplicationStrategy<Unit>
+{
+    int replicas();
 
-import org.apache.cassandra.dht.Token;
-
-public interface TokenAllocator<Unit> {
-    public Collection<Token> addUnit(Unit newUnit, int numTokens);
+    /**
+     * Returns a group identifier. getGroup(a) == getGroup(b) iff a and b are on the same group.
+     * @return Some hashable object.
+     */
+    Object getGroup(Unit unit);
 }

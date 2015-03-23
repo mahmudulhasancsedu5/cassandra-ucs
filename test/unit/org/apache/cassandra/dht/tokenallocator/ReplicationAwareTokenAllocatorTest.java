@@ -20,19 +20,26 @@ package org.apache.cassandra.dht.tokenallocator;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import junit.framework.Assert;
+
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
+import org.apache.commons.math.stat.descriptive.SummaryStatistics;
+
+import org.junit.Test;
 
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.dht.tokenallocator.TokenAllocator.ReplicationStrategy;
-import org.apache.cassandra.dht.tokenallocator.ReplicationAwareTokenAllocator;
 
 public class ReplicationAwareTokenAllocatorTest
 {
+    private static final int MAX_VNODE_COUNT = 256;
+
+    private static final int TARGET_CLUSTER_SIZE = 500;
+
     interface TestReplicationStrategy extends ReplicationStrategy<Unit> {
         void addUnit(Unit n);
         void removeUnit(Unit n);
@@ -281,7 +288,7 @@ public class ReplicationAwareTokenAllocatorTest
             Map<Integer, Integer> idToSize = instanceToCount(groupMap);
             Map<Integer, Integer> sizeToCount = Maps.newTreeMap();
             sizeToCount.putAll(instanceToCount(idToSize));
-            return String.format("Group strategy, %d replicas, group size to count %s", replicas, sizeToCount);
+            return String.format("%s strategy, %d replicas, group size to count %s", getClass().getSimpleName(), replicas, sizeToCount);
         }
 
         @Override
@@ -305,7 +312,7 @@ public class ReplicationAwareTokenAllocatorTest
         }
     }
     
-    static<T> Map<T, Integer> instanceToCount(Map<?, T> map)
+    private static<T> Map<T, Integer> instanceToCount(Map<?, T> map)
     {
         Map<T, Integer> idToCount = Maps.newHashMap();
         for (Map.Entry<?, T> en : map.entrySet()) {
@@ -323,14 +330,12 @@ public class ReplicationAwareTokenAllocatorTest
         int groupId;
         int groupCount;
 
-        public FixedGroupCountReplicationStrategy(int replicas, int groupCount, Collection<Unit> units)
+        public FixedGroupCountReplicationStrategy(int replicas, int groupCount)
         {
             super(replicas);
             assert groupCount >= replicas;
             groupId = 0;
             this.groupCount = groupCount;
-            for (Unit n : units)
-                addUnit(n);
         }
 
         public void addUnit(Unit n)
@@ -347,14 +352,11 @@ public class ReplicationAwareTokenAllocatorTest
         int groupId;
         int groupSize;
 
-        public BalancedGroupReplicationStrategy(int replicas, int groupSize, Collection<Unit> units)
+        public BalancedGroupReplicationStrategy(int replicas, int groupSize)
         {
             super(replicas);
-            assert units.size() >= groupSize * replicas;
             groupId = 0;
             this.groupSize = groupSize;
-            for (Unit n : units)
-                addUnit(n);
         }
 
         public void addUnit(Unit n)
@@ -371,18 +373,14 @@ public class ReplicationAwareTokenAllocatorTest
         int minGroupSize;
         int maxGroupSize;
         
-        public UnbalancedGroupReplicationStrategy(int replicas, int minGroupSize, int maxGroupSize, Collection<Unit> units)
+        public UnbalancedGroupReplicationStrategy(int replicas, int minGroupSize, int maxGroupSize)
         {
             super(replicas);
-            assert units.size() >= maxGroupSize * replicas;
             groupId = -1;
             nextSize = 0;
             num = 0;
             this.maxGroupSize = maxGroupSize;
             this.minGroupSize = minGroupSize;
-            
-            for (Unit n : units)
-                addUnit(n);
         }
 
         public void addUnit(Unit n)
@@ -396,52 +394,13 @@ public class ReplicationAwareTokenAllocatorTest
         }
     }
     
-    static IPartitioner partitioner = new Murmur3Partitioner();
-    
-    private static void random(Map<Token, Unit> map, int unitCount, int perUnitCount)
-    {
-        System.out.format("\nRandom generation of %d units with %d tokens each\n", unitCount, perUnitCount);
-        ThreadLocalRandom rand = ThreadLocalRandom.current();
-        for (int i = 0 ; i < unitCount ; i++)
-        {
-            Unit unit = new Unit();
-            int tokens = tokenCount(perUnitCount, rand);
-            for (int j = 0 ; j < tokens ; j++)
-            {
-                map.put(partitioner.getRandomToken(), unit);
-            }
-        }
-    }
-    
-    private static String stats(Collection<Double> data, double normalization, int countPerInc)
-    {
-        double mul = normalization * countPerInc;
-        DoubleSummaryStatistics stat = data.stream().mapToDouble(x->x * mul).summaryStatistics();
-        double avg = stat.getAverage();
-        double dev = data.stream().mapToDouble(x->sq(x * mul - avg)).sum();
-        long sz = stat.getCount();
-        double stdDev = Math.sqrt(dev / (sz - 1));
-        double nextAvg = stat.getSum() / (sz + countPerInc);
-        double nextDev = (data.stream().mapToDouble(x->sq(x * mul - nextAvg)).sum() * sq(sz + countPerInc)) / sq(sz);
-        return String.format("max %.2f min %.2f max:min %.2f stddev %.5f sq %.5f next %.5f",
-                             stat.getMax(),
-                             stat.getMin(),
-                             stat.getMax() / stat.getMin(),
-                             stdDev,
-                             dev,
-                             nextDev);
-        
-    }
-
-    private static double sq(double d)
-    {
-        return d*d;
-    }
-
     static Map<Unit, Double> evaluateReplicatedOwnership(ReplicationAwareTokenAllocator<Unit> t)
     {
         Map<Unit, Double> ownership = Maps.newHashMap();
         Iterator<Token> it = t.sortedTokens.keySet().iterator();
+        if (!it.hasNext())
+            return ownership;
+        
         Token current = it.next();
         while (it.hasNext()) {
             Token next = it.next();
@@ -472,133 +431,217 @@ public class ReplicationAwareTokenAllocatorTest
         return ts.replicationStart(token, sortedTokens.get(token), sortedTokens).size(next);
     }
 
-    private static void printDistribution(ReplicationAwareTokenAllocator<Unit> t)
-    {
-        Map<Unit, Double> ownership = evaluateReplicatedOwnership(t);
-        ownership.replaceAll((n, w) -> w / t.unitToTokens.get(n).size());
-        int size = t.sortedTokens.size();
-        double inverseAverage = 1.0 * size / t.strategy.replicas();
-        List<Double> tokenOwnership = Lists.newArrayList(
-                t.sortedTokens.keySet().stream().mapToDouble(
-                        tok -> replicatedTokenOwnership(tok, t.sortedTokens, t.strategy)).iterator());
-        System.out.format("Size %d(%d)   unit %s  token %s   %s\n",
-                          t.unitCount(), size,
-                          stats(ownership.values(), inverseAverage, 1),
-                          stats(tokenOwnership, inverseAverage, 1),
-                          t.strategy);
+    static interface TokenCount {
+        int tokenCount(int perUnitCount, Random rand);
     }
     
-    // TODO: Turn this file into a test, testing:
-    // -- different vnode counts
-    // -- fixed pernodecount as well as changing
-    // -- simple strategy + rack strategy, rack sizes 4 to 64
-    // -- rf 1 through 5
-    // -- starting from 0 nodes (auto-randoming), starting from 500 nodes
-    
-    public static void main(String[] args)
+    static TokenCount fixedTokenCount = new TokenCount()
     {
-        int perUnitCount = 16;
-        for (perUnitCount = 1; perUnitCount <= 1024; perUnitCount *= 4)
+        public int tokenCount(int perUnitCount, Random rand)
         {
-            final int targetClusterSize = 500;
-            int rf = 3;
-            NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
-    
-            random(tokenMap, targetClusterSize, perUnitCount);
-    
-            Set<Unit> units = Sets.newTreeSet(tokenMap.values());
-
-            ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, new SimpleReplicationStrategy(rf), partitioner);
-            if (units.size() < targetClusterSize)
-                test(t, units.size(), perUnitCount);
-    
-            test(t, targetClusterSize, perUnitCount);
-    
-            test(t, targetClusterSize + 1, perUnitCount);
-    
-            test(t, targetClusterSize * 101 / 100, perUnitCount);
-    
-            test(t, targetClusterSize * 26 / 25, perUnitCount);
-    
-            test(t, targetClusterSize * 5 / 4, perUnitCount);
-    
-            test(t, targetClusterSize * 2, perUnitCount);
-    
-            testLoseAndReplace(t, 1, perUnitCount);
-            testLoseAndReplace(t, targetClusterSize / 100, perUnitCount);
-            testLoseAndReplace(t, targetClusterSize / 25, perUnitCount);
-            testLoseAndReplace(t, targetClusterSize / 4, perUnitCount);
+            return perUnitCount;
         }
-    }
-
-    public static void main2(String[] args)
+    };
+    
+    static TokenCount varyingTokenCount = new TokenCount()
     {
-        int perUnitCount = 16;
-        for (perUnitCount = 4; perUnitCount <= 256; perUnitCount *= 4)
+        public int tokenCount(int perUnitCount, Random rand)
         {
-            final int targetClusterSize = 500;
-            int rf = 3;
-            int initialSize = rf;
-            NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
+            if (perUnitCount == 1) return 1;
+            // 25 to 175%
+            return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount+3)/4;
+        }
+    };
     
-            random(tokenMap, initialSize, perUnitCount);
+    IPartitioner partitioner = new Murmur3Partitioner();
     
-            ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, new SimpleReplicationStrategy(rf), partitioner);
-            for (int i=initialSize; i<=targetClusterSize; i+=1)
-                test(t, i, perUnitCount);
-            
-            testLoseAndReplace(t, targetClusterSize / 4, perUnitCount);
+    private void random(Map<Token, Unit> map, TestReplicationStrategy rs, int unitCount, TokenCount tc, int perUnitCount)
+    {
+        System.out.format("\nRandom generation of %d units with %d tokens each\n", unitCount, perUnitCount);
+        ThreadLocalRandom rand = ThreadLocalRandom.current();
+        for (int i = 0 ; i < unitCount ; i++)
+        {
+            Unit unit = new Unit();
+            rs.addUnit(unit);
+            int tokens = tc.tokenCount(perUnitCount, rand);
+            for (int j = 0 ; j < tokens ; j++)
+            {
+                map.put(partitioner.getRandomToken(), unit);
+            }
         }
     }
     
-    static int tokenCount(int perUnitCount, Random rand)
+    @Test
+    public void testExistingCluster()
     {
-        if (perUnitCount == 1) return 1;
-//        return perUnitCount;
-//        return rand.nextInt(perUnitCount * 2) + 1;
-//        return rand.nextInt(perUnitCount) + (perUnitCount+1)/2;
-        return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount+3)/4;
+        for (int rf = 1; rf <= 5; ++rf)
+            for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
+            {
+                testExistingCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
+                testExistingCluster(perUnitCount, varyingTokenCount, new SimpleReplicationStrategy(rf));
+                if (rf == 1) continue;  // Replication strategy doesn't matter for RF = 1.
+                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 2 < TARGET_CLUSTER_SIZE; groupSize *= 4)
+                {
+                    testExistingCluster(perUnitCount, fixedTokenCount, new BalancedGroupReplicationStrategy(rf, groupSize));
+                    testExistingCluster(perUnitCount, varyingTokenCount, new UnbalancedGroupReplicationStrategy(rf, groupSize / 2, groupSize * 2));
+                }
+                testExistingCluster(perUnitCount, fixedTokenCount, new FixedGroupCountReplicationStrategy(rf, rf * 2));
+            }
+    }
+    
+//    @Test
+    public void testNewCluster()
+    {
+        for (int rf = 1; rf <= 5; ++rf)
+            for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
+            {
+                testNewCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
+                testNewCluster(perUnitCount, varyingTokenCount, new SimpleReplicationStrategy(rf));
+                if (rf == 1) continue;  // Replication strategy doesn't matter for RF = 1.
+                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 2 < TARGET_CLUSTER_SIZE; groupSize *= 4)
+                {
+                    testNewCluster(perUnitCount, fixedTokenCount, new BalancedGroupReplicationStrategy(rf, groupSize));
+                    testNewCluster(perUnitCount, varyingTokenCount, new UnbalancedGroupReplicationStrategy(rf, groupSize / 2, groupSize * 2));
+                }
+                testNewCluster(perUnitCount, fixedTokenCount, new FixedGroupCountReplicationStrategy(rf, rf * 2));
+            }
     }
 
-    private static void testLoseAndReplace(ReplicationAwareTokenAllocator<Unit> t, int howMany, int perUnitCount)
+    public void testExistingCluster(int perUnitCount, TokenCount tc, TestReplicationStrategy rs)
+    {
+        System.out.println("Testing existing cluster, target " + perUnitCount + " vnodes, replication " + rs);
+        final int targetClusterSize = TARGET_CLUSTER_SIZE;
+        NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
+
+        random(tokenMap, rs, targetClusterSize / 2, tc, perUnitCount);
+
+        ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, rs, partitioner);
+        grow(t, targetClusterSize * 9 / 10, tc, perUnitCount, false);
+        grow(t, targetClusterSize, tc, perUnitCount, true);
+        loseAndReplace(t, targetClusterSize / 10, tc, perUnitCount);
+        System.out.println();
+    }
+
+    public void testNewCluster(int perUnitCount, TokenCount tc, ReplicationStrategy<Unit> rs)
+    {
+        System.out.println("Testing new cluster, target " + perUnitCount + " vnodes, replication " + rs);
+        final int targetClusterSize = TARGET_CLUSTER_SIZE;
+        NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
+
+        ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, rs, partitioner);
+        grow(t, targetClusterSize / 10, tc, perUnitCount, false);
+        grow(t, targetClusterSize, tc, perUnitCount, true);
+        loseAndReplace(t, targetClusterSize / 10, tc, perUnitCount);
+        System.out.println();
+    }
+    
+    private void loseAndReplace(ReplicationAwareTokenAllocator<Unit> t, int howMany, TokenCount tc, int perUnitCount)
     {
         int fullCount = t.unitCount();
-        System.out.format("Losing %d units\n", howMany);
+        System.out.format("Losing %d units. ", howMany);
         for (int i=0; i<howMany; ++i) {
             Unit u = t.unitFor(partitioner.getRandomToken());
             t.removeUnit(u);
             ((TestReplicationStrategy) t.strategy).removeUnit(u);
         }
-        test(t, t.unitCount(), perUnitCount);
+        // Grow half without verifying.
+        grow(t, (t.unitCount() + fullCount*3) / 4, tc, perUnitCount, false);
+        // Metrics should be back to normal by now. Check that they remain so.
+        grow(t, fullCount, tc, perUnitCount, true);
+    }
+    
+    static class Summary {
+        double min = 1;
+        double max = 1;
+        double stddev = 0;
         
-        test(t, fullCount, perUnitCount);
+        void update(SummaryStatistics stat)
+        {
+            min = Math.min(min, stat.getMin());
+            max = Math.max(max, stat.getMax());
+            stddev = Math.max(stddev, stat.getStandardDeviation());
+        }
+
+        public String toString()
+        {
+            return String.format("max %.2f min %.2f stddev %.4f", max, min, stddev);
+        }
     }
 
-    public static void test(ReplicationAwareTokenAllocator<Unit> t, int targetClusterSize, int perUnitCount)
+    public void grow(ReplicationAwareTokenAllocator<Unit> t, int targetClusterSize, TokenCount tc, int perUnitCount, boolean verifyMetrics)
     {
         int size = t.unitCount();
+        Summary su = new Summary();
+        Summary st = new Summary();
         Random rand = new Random(targetClusterSize + perUnitCount);
         if (size < targetClusterSize) {
             System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
             long time = System.currentTimeMillis();
             while (size < targetClusterSize)
             {
-                int tokens = tokenCount(perUnitCount, rand);
+                int tokens = tc.tokenCount(perUnitCount, rand);
                 Unit unit = new Unit();
                 ((TestReplicationStrategy) t.strategy).addUnit(unit);
                 t.addUnit(unit, tokens);
                 ++size;
+                if (verifyMetrics)
+                    updateSummary(t, su, st, false);
             }
             System.out.format(" Done in %.3fs\n", (System.currentTimeMillis() - time) / 1000.0);
+            if (verifyMetrics)
+            {
+                updateSummary(t, su, st, true);
+                double maxExpected = 1.0 + 3.0 / perUnitCount;
+                if (su.max > maxExpected)
+                {
+                    Assert.fail(String.format("Expected max unit size below %.4f, was %.4f", maxExpected, su.max));
+                }
+//                Assert.assertTrue(su.min >= 0.85 - 2.0 / (perUnitCount * t.replicas));
+            }
         }
-        printDistribution(t);
     }
 
 
 
-    static int nextUnitId = 0;
+    private void updateSummary(ReplicationAwareTokenAllocator<Unit> t, Summary su, Summary st, boolean print)
+    {
+        int size = t.sortedTokens.size();
+        double inverseAverage = 1.0 * size / t.strategy.replicas();
 
-    static final class Unit implements Comparable<Unit>
+        Map<Unit, Double> ownership = evaluateReplicatedOwnership(t);
+        SummaryStatistics unitStat = new SummaryStatistics();
+        for (Map.Entry<Unit, Double> en : ownership.entrySet())
+            unitStat.addValue(en.getValue() * inverseAverage / t.unitToTokens.get(en.getKey()).size());
+        su.update(unitStat);
+        
+        SummaryStatistics tokenStat = new SummaryStatistics();
+        for (Token tok : t.sortedTokens.keySet())
+            tokenStat.addValue(replicatedTokenOwnership(tok, t.sortedTokens, t.strategy) * inverseAverage);
+        st.update(tokenStat);
+        
+        if (print)
+        {
+            System.out.format("Size %d(%d)   \tunit %s  token %s   %s\n",
+                              t.unitCount(), size,
+                              mms(unitStat),
+                              mms(tokenStat),
+                              t.strategy);
+            System.out.format("Worst intermediate unit\t%s  token %s\n", su, st);
+        }
+    }
+
+
+
+    private static String mms(SummaryStatistics s)
+    {
+        return String.format("max %.2f min %.2f stddev %.4f", s.getMax(), s.getMin(), s.getStandardDeviation());
+    }
+
+
+
+    int nextUnitId = 0;
+
+    final class Unit implements Comparable<Unit>
     {
         int unitId = nextUnitId++;
         

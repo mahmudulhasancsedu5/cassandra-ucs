@@ -65,8 +65,12 @@
   <logger name="org.apache.hadoop" level="WARN"/>
 
   <root level="DEBUG">
+<<<<<<< Upstream, based on origin/trunk
     <appender-ref ref="ASYNCFILE" />
     <appender-ref ref="STDERR" />
+=======
+    <appender-ref ref="FILE" />
+>>>>>>> 6e33677 Working, Java 7, tests.
     <appender-ref ref="STDOUT" />
   </root>
 </configuration>
