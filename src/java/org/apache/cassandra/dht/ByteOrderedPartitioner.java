@@ -123,6 +123,13 @@ public class ByteOrderedPartitioner implements IPartitioner
             throw new UnsupportedOperationException(String.format("Token type %s does not support token allocation.",
                                                                   getClass().getSimpleName()));
         }
+
+        @Override
+        public Token increaseSlightly()
+        {
+            throw new UnsupportedOperationException(String.format("Token type %s does not support token allocation.",
+                                                                  getClass().getSimpleName()));
+        }
     }
 
     public BytesToken getToken(ByteBuffer key)

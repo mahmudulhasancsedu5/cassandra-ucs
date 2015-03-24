@@ -433,6 +433,8 @@ public class ReplicationAwareTokenAllocatorTest
 
     static interface TokenCount {
         int tokenCount(int perUnitCount, Random rand);
+
+        double spreadExpectation();
     }
     
     static TokenCount fixedTokenCount = new TokenCount()
@@ -440,6 +442,11 @@ public class ReplicationAwareTokenAllocatorTest
         public int tokenCount(int perUnitCount, Random rand)
         {
             return perUnitCount;
+        }
+
+        public double spreadExpectation()
+        {
+            return 10;  // High tolerance to avoid flakiness.
         }
     };
     
@@ -450,6 +457,11 @@ public class ReplicationAwareTokenAllocatorTest
             if (perUnitCount == 1) return 1;
             // 25 to 175%
             return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount+3)/4;
+        }
+
+        public double spreadExpectation()
+        {
+            return 15;  // High tolerance to avoid flakiness.
         }
     };
     
@@ -480,7 +492,7 @@ public class ReplicationAwareTokenAllocatorTest
                 testExistingCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
                 testExistingCluster(perUnitCount, varyingTokenCount, new SimpleReplicationStrategy(rf));
                 if (rf == 1) continue;  // Replication strategy doesn't matter for RF = 1.
-                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 2 < TARGET_CLUSTER_SIZE; groupSize *= 4)
+                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 4 < TARGET_CLUSTER_SIZE; groupSize *= 4)
                 {
                     testExistingCluster(perUnitCount, fixedTokenCount, new BalancedGroupReplicationStrategy(rf, groupSize));
                     testExistingCluster(perUnitCount, varyingTokenCount, new UnbalancedGroupReplicationStrategy(rf, groupSize / 2, groupSize * 2));
@@ -489,7 +501,7 @@ public class ReplicationAwareTokenAllocatorTest
             }
     }
     
-//    @Test
+    @Test
     public void testNewCluster()
     {
         for (int rf = 1; rf <= 5; ++rf)
@@ -498,7 +510,7 @@ public class ReplicationAwareTokenAllocatorTest
                 testNewCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
                 testNewCluster(perUnitCount, varyingTokenCount, new SimpleReplicationStrategy(rf));
                 if (rf == 1) continue;  // Replication strategy doesn't matter for RF = 1.
-                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 2 < TARGET_CLUSTER_SIZE; groupSize *= 4)
+                for (int groupSize = 4; groupSize <= 64 && groupSize * rf * 4 < TARGET_CLUSTER_SIZE; groupSize *= 4)
                 {
                     testNewCluster(perUnitCount, fixedTokenCount, new BalancedGroupReplicationStrategy(rf, groupSize));
                     testNewCluster(perUnitCount, varyingTokenCount, new UnbalancedGroupReplicationStrategy(rf, groupSize / 2, groupSize * 2));
@@ -529,9 +541,9 @@ public class ReplicationAwareTokenAllocatorTest
         NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
 
         ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, rs, partitioner);
-        grow(t, targetClusterSize / 10, tc, perUnitCount, false);
+        grow(t, targetClusterSize / 5, tc, perUnitCount, false);
         grow(t, targetClusterSize, tc, perUnitCount, true);
-        loseAndReplace(t, targetClusterSize / 10, tc, perUnitCount);
+        loseAndReplace(t, targetClusterSize / 5, tc, perUnitCount);
         System.out.println();
     }
     
@@ -591,12 +603,12 @@ public class ReplicationAwareTokenAllocatorTest
             if (verifyMetrics)
             {
                 updateSummary(t, su, st, true);
-                double maxExpected = 1.0 + 3.0 / perUnitCount;
+                double maxExpected = 1.0 + tc.spreadExpectation() / (perUnitCount * t.replicas);
                 if (su.max > maxExpected)
                 {
                     Assert.fail(String.format("Expected max unit size below %.4f, was %.4f", maxExpected, su.max));
                 }
-//                Assert.assertTrue(su.min >= 0.85 - 2.0 / (perUnitCount * t.replicas));
+                // We can't verify lower side range as small loads can't always be fixed.
             }
         }
     }

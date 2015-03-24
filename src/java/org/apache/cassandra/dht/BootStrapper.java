@@ -203,17 +203,7 @@ public class BootStrapper extends ProgressEventNotifierSupport
             throw new ConfigurationException("Problem opening token allocation keyspace " + allocationKeyspace);
         AbstractReplicationStrategy rs = ks.getReplicationStrategy();
         
-        if (logger.isWarnEnabled())
-            logger.warn("Replicated node load in datacentre before allocation " + TokenAllocation.replicatedOwnershipAsText(metadata, rs, address));
-        Collection<Token> tokens = TokenAllocation.allocateTokens(metadata, rs, StorageService.getPartitioner(), address, numTokens);
-        if (logger.isWarnEnabled())
-        {
-            logger.warn("Selected tokens {}", tokens);
-            TokenMetadata metadataCopy = metadata.cloneOnlyTokenMap();
-            metadataCopy.updateNormalTokens(tokens, address);
-            logger.warn("Replicated node load in datacentre after allocation " + TokenAllocation.replicatedOwnershipAsText(metadataCopy, rs, address));
-        }
-        return tokens;
+        return TokenAllocation.allocateTokens(metadata, rs, StorageService.getPartitioner(), address, numTokens);
     }
 
     public static Collection<Token> getRandomTokens(TokenMetadata metadata, int numTokens)

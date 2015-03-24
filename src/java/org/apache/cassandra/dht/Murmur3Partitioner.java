@@ -149,6 +149,12 @@ public class Murmur3Partitioner implements IPartitioner
             double d = Math.scalb(v, -Long.SIZE); // Scale so that the full range is 1.
             return d > 0.0 ? d : (d + 1.0); // Adjust for signed long, also making sure t.size(t) == 1.
         }
+
+        @Override
+        public Token increaseSlightly()
+        {
+            return new LongToken(token + 1);
+        }
     }
 
     /**

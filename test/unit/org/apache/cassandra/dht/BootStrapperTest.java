@@ -185,6 +185,7 @@ public class BootStrapperTest
     @Test
     public void testAllocateTokensMultipleKeyspaces() throws UnknownHostException
     {
+        // TODO: This scenario isn't supported very well. Investigate a multi-keyspace version of the algorithm.
         int vn = 16;
         String ks3 = "BootStrapperTestKeyspace4"; // RF = 3
         String ks2 = "BootStrapperTestKeyspace5"; // RF = 2
