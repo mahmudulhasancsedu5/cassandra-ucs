@@ -91,7 +91,6 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         {
             // Use the token with the best improvement.
             adjustData(bestToken);
-            addSelectedToken(bestToken.token, newUnit);
 
             if (vn == numTokens - 1)
                 break;
@@ -107,7 +106,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
                 Weighted<CandidateInfo<Unit>> next = improvements.peek();
 
                 // If it is better than the next in the queue, it is good enough. This is a heuristic that doesn't
-                // get the best results, but works well enough and on average cuts search time by a factor of O(vunits).
+                // get the best results, but works well enough and on average cuts search time by a factor of O(vnodes).
                 if (next == null || impr >= next.weight)
                     break;
                 improvements.add(new Weighted<>(impr, bestToken));
@@ -125,7 +124,8 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
             if (!sortedTokens.containsKey(token))
             {
                 tokens.add(token);
-                addSelectedToken(token, newUnit);
+                sortedTokens.put(token, newUnit);
+                unitToTokens.put(newUnit, token);
             }
         }
         return tokens;
@@ -192,20 +192,24 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
 
     private void adjustData(CandidateInfo<Unit> candidate)
     {
-        // This process is less efficient than it could be (loops through each vunits's replication span instead
+        // This process is less efficient than it could be (loops through each vnode's replication span instead
         // of recalculating replicationStart, rfm1 and expandable from existing data + new token data in an O(1)
         // case analysis similar to evaluateImprovement). This is fine as the method does not dominate processing
         // time.
         
         // Put the accepted candidate in the token list.
+        UnitInfo<Unit> newUnit = candidate.owningUnit;
+        Token newToken = candidate.token;
+        sortedTokens.put(newToken, newUnit.unit);
+        unitToTokens.put(newUnit.unit, newToken);
+
         TokenInfo<Unit> host = candidate.host;
         TokenInfo<Unit> next = host.next;
-        TokenInfo<Unit> candidateToken = new TokenInfo<>(candidate.token, candidate.owningUnit);
+        TokenInfo<Unit> candidateToken = new TokenInfo<>(newToken, newUnit);
         candidateToken.replicatedOwnership = candidate.replicatedOwnership;
         candidateToken.insertAfter(host, host);   // List is not empty so this won't need to change head of list.
 
         // Update data for both candidate and host.
-        UnitInfo<Unit> newUnit = candidateToken.owningUnit;
         GroupInfo newGroup = newUnit.group;
         populateTokenInfoAndAdjustUnit(candidateToken, newGroup);
         UnitInfo<Unit> hostUnit = host.owningUnit;
@@ -214,7 +218,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
 
         GroupInfo groupChain = GroupInfo.TERMINATOR;
 
-        // Loop through all vunits that replicate new token or host and update their data.
+        // Loop through all vnodes that replicate new token or host and update their data.
         // Also update candidate data for units in the replication span.
         int seenOld = 0;
         int seenNew = 0;
@@ -229,7 +233,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
             UnitInfo<Unit> currUnit = curr.owningUnit;
             GroupInfo group = currUnit.group;
             if (group.prevSeen != null)
-                continue evLoop;    // If both have already seen this group, nothing can change within it.
+                continue evLoop;    // If both have already seen this group, the token cannot be affected.
             if (group != newGroup)
                 seenNew += 1;
             if (group != hostGroup)
@@ -256,24 +260,24 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         boolean expandable = false;
         int rf = replicas;
         // Replication start = the end of a token from the RF'th different group seen before the token.
-        Token rs = token.token;
+        Token replicationStart = token.token;
         // The end of a token from the RF-1'th different group seen before the token.
-        Token rfm1 = rs;
-        for (TokenInfo<Unit> curr = token.prevInRing();;rs = curr.token, curr = curr.prev) {
-            GroupInfo ri = curr.owningUnit.group;
-            if (ri.prevPopulate != null)
+        Token replicationMinus1 = replicationStart;
+        for (TokenInfo<Unit> curr = token.prevInRing();;replicationStart = curr.token, curr = curr.prev) {
+            GroupInfo currGroup = curr.owningUnit.group;
+            if (currGroup.prevPopulate != null)
                 continue; // Group is already seen.
             // Mark the group as seen. Also forms a chain that can be used to clear the marks when we are done.
             // We use prevPopulate instead of prevSeen as this may be called within adjustData which also needs
             // group seen markers.
-            ri.prevPopulate = groupChain;
-            groupChain = ri;
+            currGroup.prevPopulate = groupChain;
+            groupChain = currGroup;
             if (++seenGroups == rf)
                 break;
 
-            rfm1 = rs;
+            replicationMinus1 = replicationStart;
             // Another instance of the same group is a replication boundary.
-            if (ri == tokenGroup)
+            if (currGroup == tokenGroup)
             {
                 // Inserting a token that ends at this boundary will increase replication coverage,
                 // but only if the inserted unit is not in the same group.
@@ -282,11 +286,11 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
             }
             // An instance of the new group in the replication span also means that we can expand coverage
             // by inserting a token ending at replicationStart.
-            if (ri == newUnitGroup)
+            if (currGroup == newUnitGroup)
                 expandable = true;
         }
-        token.rfm1Token = rfm1;
-        token.replicationStart = rs;
+        token.replicationMinus1 = replicationMinus1;
+        token.replicationStart = replicationStart;
         token.expandable = expandable;
 
         // Clean group seen markers.
@@ -296,13 +300,13 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
             groupChain.prevPopulate  = null;
             groupChain = prev;
         }
-        return rs;
+        return replicationStart;
     }
     
     private void populateTokenInfoAndAdjustUnit(TokenInfo<Unit> candidate, GroupInfo newUnitGroup)
     {
-        Token rs = populateTokenInfo(candidate, newUnitGroup);
-        double newOwnership = rs.size(candidate.next.token);
+        Token replicationStart = populateTokenInfo(candidate, newUnitGroup);
+        double newOwnership = replicationStart.size(candidate.next.token);
         double oldOwnership = candidate.replicatedOwnership;
         candidate.replicatedOwnership = newOwnership;
         candidate.owningUnit.ownership += newOwnership - oldOwnership;
@@ -313,7 +317,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         double change = 0;
         TokenInfo<Unit> host = candidate.host;
         TokenInfo<Unit> next = host.next;
-        Token cend = next.token;
+        Token candidateEnd = next.token;
 
         // Reflect change in ownership of the splitting token (candidate).
         double oldOwnership = candidate.replicatedOwnership;
@@ -343,18 +347,18 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         GroupInfo hostGroup = hostUnit.group;
         UnitInfo<Unit> unitsChain = hostUnit;
 
-        // Loop through all vunits that replicate candidate or host and update their ownership.
+        // Loop through all vnodes that replicate candidate or host and update their ownership.
         int seenOld = 0;
         int seenNew = 0;
-        int rf = replicas - 1;
+        int replicationFactor = replicas - 1;
       evLoop:
-        for (TokenInfo<Unit> curr = next; seenOld < rf || seenNew < rf; curr = next)
+        for (TokenInfo<Unit> curr = next; seenOld < replicationFactor || seenNew < replicationFactor; curr = next)
         {
             next = curr.next;
             UnitInfo<Unit> currUnit = curr.owningUnit;
             GroupInfo group = currUnit.group;
             if (group.prevSeen != null)
-                continue evLoop;    // If both have already seen this group, nothing can change within it.
+                continue evLoop;    // If both have already seen this group, the token cannot be affected.
             if (group != newGroup)
                 seenNew += 1;
             if (group != hostGroup)
@@ -368,36 +372,36 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
                 unitsChain = currUnit;
             }
 
-            Token rs;
+            Token replicationStart;
             if (curr.expandable) // Sees same or new group before rf-1.
             {
-                if (cend != curr.replicationStart)
-                    continue evLoop;
+                if (candidateEnd != curr.replicationStart)
+                    continue evLoop;  // candidate does not affect token
                 // Replication expands to start of candidate.
-                rs = candidate.token;
+                replicationStart = candidate.token;
             } else {
                 if (group == newGroup)
                 {
-                    if (!preceeds(curr.replicationStart, cend, next.token))
+                    if (!preceeds(curr.replicationStart, candidateEnd, next.token))
                         continue evLoop; // no changes, another newGroup is closer
                     // Replication shrinks to end of candidate.
-                    rs = cend;
+                    replicationStart = candidateEnd;
                 } else {
-                    if (preceeds(curr.rfm1Token, cend, next.token))
+                    if (preceeds(curr.replicationMinus1, candidateEnd, next.token))
                         // Candidate is closer than one-before last.
-                        rs = curr.rfm1Token;
-                    else if (preceeds(cend, curr.rfm1Token, next.token))
+                        replicationStart = curr.replicationMinus1;
+                    else if (preceeds(candidateEnd, curr.replicationMinus1, next.token))
                         // Candidate is the replication boundary.
-                        rs = cend;
+                        replicationStart = candidateEnd;
                     else
                         // Candidate replaces one-before last. The latter becomes the replication boundary.
-                        rs = candidate.token;
+                        replicationStart = candidate.token;
                 }
             }
 
             // Calculate ownership adjustments.
             oldOwnership = curr.replicatedOwnership;
-            newOwnership = rs.size(next.token);
+            newOwnership = replicationStart.size(next.token);
             tokenCount = currUnit.tokenCount;
             assert tokenCount > 0;
             change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
@@ -426,12 +430,6 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         return -change;
     }
 
-    private void addSelectedToken(Token token, Unit unit)
-    {
-        sortedTokens.put(token, unit);
-        unitToTokens.put(unit, token);
-    }
-    
     private Map.Entry<Token, Unit> mapEntryFor(Token t)
     {
         Map.Entry<Token, Unit> en = sortedTokens.floorEntry(t);
@@ -483,10 +481,10 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     private static <Unit> GroupInfo getGroup(Unit unit, Map<Object, GroupInfo> groupMap, ReplicationStrategy<Unit> strategy)
     {
         Object groupClass = strategy.getGroup(unit);
-        GroupInfo ri = groupMap.get(groupClass);
-        if (ri == null)
-            groupMap.put(groupClass, ri = new GroupInfo(groupClass));
-        return ri;
+        GroupInfo group = groupMap.get(groupClass);
+        if (group == null)
+            groupMap.put(groupClass, group = new GroupInfo(groupClass));
+        return group;
     }
 
     /**
@@ -519,7 +517,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     }
 
     /**
-     * Unit information created and used by ReplicationAwareTokenDistributor. Contained vunits all point to the same
+     * Unit information created and used by ReplicationAwareTokenDistributor. Contained vnodes all point to the same
      * instance.
      */
     static class UnitInfo<Unit> {
@@ -598,7 +596,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
          * RF minus one boundary, i.e. the end of the first token of the RF-1'th group seen before the token.
          * Used to determine replicationStart after insertion of new token.
          */
-        Token rfm1Token;
+        Token replicationMinus1;
         /**
          * Whether token can be expanded (and only expanded) by adding new unit that ends at replicationStart.
          */
@@ -629,7 +627,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     }
     
     /**
-     * TokenInfo about existing tokens/vunits.
+     * TokenInfo about existing tokens/vnodes.
      */
     private static class TokenInfo<Unit> extends BaseTokenInfo<Unit, TokenInfo<Unit>> {
         public TokenInfo(Token token, UnitInfo<Unit> owningUnit)
@@ -644,7 +642,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     }
     
     /**
-     * TokenInfo about candidate new tokens/vunits.
+     * TokenInfo about candidate new tokens/vnodes.
      */
     private static class CandidateInfo<Unit> extends BaseTokenInfo<Unit, CandidateInfo<Unit>> {
         final TokenInfo<Unit> host;
@@ -665,7 +663,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     {
         BaseTokenInfo<?, ?> token = tokens;
         do {
-            System.out.format("%s%s: rs %s rfm1 %s size %.2e\n", lead, token, token.replicationStart, token.rfm1Token, token.replicatedOwnership);
+            System.out.format("%s%s: rs %s rfm1 %s size %.2e\n", lead, token, token.replicationStart, token.replicationMinus1, token.replicatedOwnership);
             token = token.next;
         } while (token != null && token != tokens);
     }
@@ -674,10 +672,10 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         final double weight;
         final T value;
 
-        public Weighted(double weight, T unit)
+        public Weighted(double weight, T value)
         {
             this.weight = weight;
-            this.value = unit;
+            this.value = value;
         }
 
         @Override

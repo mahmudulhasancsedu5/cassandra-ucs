@@ -70,7 +70,11 @@
     <appender-ref ref="STDERR" />
 =======
     <appender-ref ref="FILE" />
+<<<<<<< Upstream, based on origin/trunk
 >>>>>>> 6e33677 Working, Java 7, tests.
+=======
+    <appender-ref ref="STDERR" />
+>>>>>>> 5af7b04 Self-review.
     <appender-ref ref="STDOUT" />
   </root>
 </configuration>
