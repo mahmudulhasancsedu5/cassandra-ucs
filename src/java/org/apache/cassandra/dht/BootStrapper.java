@@ -182,7 +182,7 @@ public class BootStrapper extends ProgressEventNotifierSupport
                                                                 Collection<String> initialTokens)
     {
         logger.debug("tokens manually specified as {}",  initialTokens);
-        List<Token> tokens = new ArrayList<Token>(initialTokens.size());
+        List<Token> tokens = new ArrayList<>(initialTokens.size());
         for (String tokenString : initialTokens)
         {
             Token token = StorageService.getPartitioner().getTokenFactory().fromString(tokenString);

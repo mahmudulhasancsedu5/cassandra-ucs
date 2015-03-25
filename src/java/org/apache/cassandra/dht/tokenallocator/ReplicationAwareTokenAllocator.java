@@ -37,7 +37,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
     
     ReplicationAwareTokenAllocator(NavigableMap<Token, Unit> sortedTokens, ReplicationStrategy<Unit> strategy, IPartitioner partitioner)
     {
-        this.sortedTokens = new TreeMap<>(sortedTokens);
+        this.sortedTokens = sortedTokens;
         unitToTokens = HashMultimap.create();
         for (Map.Entry<Token, Unit> en: sortedTokens.entrySet())
             unitToTokens.put(en.getValue(), en.getKey());
@@ -59,8 +59,18 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit> {
         
         double optTokenOwnership = optimalTokenOwnership(numTokens);
         Map<Object, GroupInfo> groups = Maps.newHashMap();
+        Map<Unit, UnitInfo<Unit>> unitInfos = createUnitInfos(groups);
+        if (groups.size() < replicas)
+        {
+            // We need at least replicas groups to do allocation correctly. If there aren't enough, 
+            // use random allocation.
+            // This part of the code should only be reached via the RATATest. StrategyAdapter should disallow
+            // token allocation in this case as the algorithm is not able to cover the behavior as NetworkTopologyStrategy.
+            return generateRandomTokens(newUnit, numTokens);
+        }
         UnitInfo<Unit> newUnitInfo = new UnitInfo<>(newUnit, numTokens * optTokenOwnership, groups, strategy);
-        TokenInfo<Unit> tokens = createTokenInfos(createUnitInfos(groups), newUnitInfo.group);
+
+        TokenInfo<Unit> tokens = createTokenInfos(unitInfos, newUnitInfo.group);
         newUnitInfo.tokenCount = numTokens;
 
         CandidateInfo<Unit> candidates = createCandidates(tokens, newUnitInfo, optTokenOwnership);
