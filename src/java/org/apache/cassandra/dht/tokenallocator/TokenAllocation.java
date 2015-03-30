@@ -43,9 +43,10 @@ import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.locator.TokenMetadata.Topology;
 
-public class TokenAllocation {
+public class TokenAllocation
+{
     private static final Logger logger = LoggerFactory.getLogger(TokenAllocation.class);
-    
+
     public static Collection<Token> allocateTokens(final TokenMetadata tokenMetadata,
                                                    final AbstractReplicationStrategy rs,
                                                    final IPartitioner partitioner,
@@ -74,7 +75,7 @@ public class TokenAllocation {
     }
 
     private static Collection<Token> adjustForCrossDatacenterClashes(final TokenMetadata tokenMetadata,
-            StrategyAdapter strategy, Collection<Token> tokens)
+                                                                     StrategyAdapter strategy, Collection<Token> tokens)
     {
         List<Token> filtered = Lists.newArrayListWithCapacity(tokens.size());
 
@@ -91,14 +92,16 @@ public class TokenAllocation {
         }
         return filtered;
     }
-    
+
+    // return the ratio of ownership for each endpoint
     static public Map<InetAddress, Double> evaluateReplicatedOwnership(TokenMetadata tokenMetadata, AbstractReplicationStrategy rs)
     {
         Map<InetAddress, Double> ownership = Maps.newHashMap();
         List<Token> sortedTokens = tokenMetadata.sortedTokens();
         Iterator<Token> it = sortedTokens.iterator();
         Token current = it.next();
-        while (it.hasNext()) {
+        while (it.hasNext())
+        {
             Token next = it.next();
             addOwnership(tokenMetadata, rs, current, next, ownership);
             current = next;
@@ -117,14 +120,14 @@ public class TokenAllocation {
             ownership.put(n, v != null ? v + size : size);
         }
     }
-    
+
     static public String statToString(SummaryStatistics stat)
     {
         return String.format("max %.2f min %.2f stddev %.4f", stat.getMax() / stat.getMean(), stat.getMin() / stat.getMean(), stat.getStandardDeviation());
     }
 
     static public SummaryStatistics replicatedOwnershipStats(TokenMetadata tokenMetadata,
-            AbstractReplicationStrategy rs, InetAddress endpoint)
+                                                             AbstractReplicationStrategy rs, InetAddress endpoint)
     {
         SummaryStatistics stat = new SummaryStatistics();
         StrategyAdapter strategy = getStrategy(tokenMetadata, rs, endpoint);
@@ -143,12 +146,16 @@ public class TokenAllocation {
         for (Map.Entry<Token, InetAddress> en : tokenMetadata.getNormalAndBootstrappingTokenToEndpointMap().entrySet())
         {
             if (strategy.inAllocationRing(en.getValue()))
-                    sortedTokens.put(en.getKey(), en.getValue());
+                sortedTokens.put(en.getKey(), en.getValue());
         }
         return new ReplicationAwareTokenAllocator<>(sortedTokens, strategy, partitioner);
     }
 
-    interface StrategyAdapter extends ReplicationStrategy<InetAddress> {
+    interface StrategyAdapter extends ReplicationStrategy<InetAddress>
+    {
+        // return true iff the provided endpoint occurs in the same virtual token-ring we are allocating for
+        // i.e. the set of the nodes that share ownership with the node we are allocating
+        // alternatively: return false if the endpoint's ownership is independent of the node we are allocating tokens for
         boolean inAllocationRing(InetAddress other);
     }
 
@@ -165,7 +172,8 @@ public class TokenAllocation {
     {
         final int replicas = rs.getReplicationFactor();
 
-        return new StrategyAdapter() {
+        return new StrategyAdapter()
+        {
             @Override
             public int replicas()
             {
@@ -196,19 +204,20 @@ public class TokenAllocation {
 
         if (replicas >= racks)
         {
-            return new StrategyAdapter() {
+            return new StrategyAdapter()
+            {
                 @Override
                 public int replicas()
                 {
                     return replicas;
                 }
-    
+
                 @Override
                 public Object getGroup(InetAddress unit)
                 {
                     return snitch.getRack(unit);
                 }
-    
+
                 @Override
                 public boolean inAllocationRing(InetAddress other)
                 {
@@ -219,19 +228,20 @@ public class TokenAllocation {
         else if (racks == 1)
         {
             // One rack, each node treated as separate.
-            return new StrategyAdapter() {
+            return new StrategyAdapter()
+            {
                 @Override
                 public int replicas()
                 {
                     return replicas;
                 }
-    
+
                 @Override
                 public Object getGroup(InetAddress unit)
                 {
                     return unit;
                 }
-    
+
                 @Override
                 public boolean inAllocationRing(InetAddress other)
                 {
@@ -241,9 +251,8 @@ public class TokenAllocation {
         }
         else
             throw new ConfigurationException(
-                String.format("Token allocation failed: the number of racks %d in datacentre %s is lower than its replication factor %d.",
-                              replicas, dc, racks));
+                                            String.format("Token allocation failed: the number of racks %d in datacentre %s is lower than its replication factor %d.",
+                                                          replicas, dc, racks));
     }
-
 }
 
