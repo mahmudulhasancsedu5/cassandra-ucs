@@ -47,6 +47,7 @@ public class StandaloneSplitter
     private static final String HELP_OPTION = "help";
     private static final String NO_SNAPSHOT_OPTION = "no-snapshot";
     private static final String SIZE_OPTION = "size";
+    private static final String DELETE_SOURCES = "delete-sources";
 
     public static void main(String args[])
     {
@@ -152,6 +153,12 @@ public class StandaloneSplitter
                 try
                 {
                     new SSTableSplitter(cfs, sstable, options.sizeInMB).split();
+                    if (options.deleteSources)
+                    {
+                        Descriptor desc = sstable.descriptor;
+                        System.out.format("Deleting sstable %s.\n", sstable);
+                        SSTable.delete(desc, parsedFilenames.get(desc));
+                    }
                 }
                 catch (Exception e)
                 {
@@ -187,6 +194,7 @@ public class StandaloneSplitter
         public boolean debug;
         public boolean verbose;
         public boolean snapshot;
+        public boolean deleteSources;
         public int sizeInMB;
 
         private Options(List<String> filenames)
@@ -219,6 +227,7 @@ public class StandaloneSplitter
                 opts.debug = cmd.hasOption(DEBUG_OPTION);
                 opts.verbose = cmd.hasOption(VERBOSE_OPTION);
                 opts.snapshot = !cmd.hasOption(NO_SNAPSHOT_OPTION);
+                opts.deleteSources = cmd.hasOption(DELETE_SOURCES);
                 opts.sizeInMB = DEFAULT_SSTABLE_SIZE;
 
                 if (cmd.hasOption(SIZE_OPTION))
