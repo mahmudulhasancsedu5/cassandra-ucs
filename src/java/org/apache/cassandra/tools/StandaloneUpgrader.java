@@ -106,8 +106,8 @@ public class StandaloneUpgrader
 
                     if (!options.keepSource)
                     {
-                        // Remove the sstable (it's been copied by split and snapshotted)
-                        System.out.format("Deleting table %s.", sstable.descriptor.baseFilename());
+                        // Remove the sstable (it's been copied by upgrade)
+                        System.out.format("Deleting table %s.\n", sstable.descriptor.baseFilename());
                         sstable.markObsolete();
                         sstable.selfRef().release();
                     }

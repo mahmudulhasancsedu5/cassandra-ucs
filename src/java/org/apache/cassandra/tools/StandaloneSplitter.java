@@ -45,7 +45,6 @@ public class StandaloneSplitter
     private static final String DEBUG_OPTION = "debug";
     private static final String HELP_OPTION = "help";
     private static final String NO_SNAPSHOT_OPTION = "no-snapshot";
-    private static final String KEEP_SOURCE = "keep-source";
     private static final String SIZE_OPTION = "size";
 
     public static void main(String args[])
@@ -152,13 +151,10 @@ public class StandaloneSplitter
                 try
                 {
                     new SSTableSplitter(cfs, sstable, options.sizeInMB).split();
-                    if (!options.keepSource)
-                    {
-                        // Remove the sstable (it's been copied by split and snapshotted)
-                        System.out.format("Deleting table %s.", sstable.descriptor.baseFilename());
-                        sstable.markObsolete();
-                        sstable.selfRef().release();
-                    }
+
+                    // Remove the sstable (it's been copied by split and snapshotted)
+                    sstable.markObsolete();
+                    sstable.selfRef().release();
                 }
                 catch (Exception e)
                 {
@@ -193,7 +189,6 @@ public class StandaloneSplitter
 
         public boolean debug;
         public boolean snapshot;
-        public boolean keepSource;
         public int sizeInMB;
 
         private Options(List<String> filenames)
@@ -225,7 +220,6 @@ public class StandaloneSplitter
                 Options opts = new Options(Arrays.asList(args));
                 opts.debug = cmd.hasOption(DEBUG_OPTION);
                 opts.snapshot = !cmd.hasOption(NO_SNAPSHOT_OPTION);
-                opts.keepSource = cmd.hasOption(KEEP_SOURCE);
                 opts.sizeInMB = DEFAULT_SSTABLE_SIZE;
 
                 if (cmd.hasOption(SIZE_OPTION))
@@ -254,7 +248,6 @@ public class StandaloneSplitter
             options.addOption("h",  HELP_OPTION,           "display this help message");
             options.addOption(null, NO_SNAPSHOT_OPTION,    "don't snapshot the sstables before splitting");
             options.addOption("s",  SIZE_OPTION, "size",   "maximum size in MB for the output sstables (default: " + DEFAULT_SSTABLE_SIZE + ")");
-            options.addOption("k",  KEEP_SOURCE,           "do not delete the source sstables");
             return options;
         }
 
