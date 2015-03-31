@@ -21,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+
 import org.apache.commons.cli.*;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -41,6 +42,7 @@ public class StandaloneUpgrader
     private static final String TOOL_NAME = "sstableupgrade";
     private static final String DEBUG_OPTION  = "debug";
     private static final String HELP_OPTION  = "help";
+    private static final String KEEP_SOURCE = "keep-source";
 
     public static void main(String args[])
     {
@@ -101,6 +103,14 @@ public class StandaloneUpgrader
                 {
                     Upgrader upgrader = new Upgrader(cfs, sstable, handler);
                     upgrader.upgrade();
+
+                    if (!options.keepSource)
+                    {
+                        // Remove the sstable (it's been copied by split and snapshotted)
+                        System.out.format("Deleting table %s.", sstable.descriptor.baseFilename());
+                        sstable.markObsolete();
+                        sstable.selfRef().release();
+                    }
                 }
                 catch (Exception e)
                 {
@@ -129,6 +139,7 @@ public class StandaloneUpgrader
         public final String snapshot;
 
         public boolean debug;
+        public boolean keepSource;
 
         private Options(String keyspace, String cf, String snapshot)
         {
@@ -168,6 +179,7 @@ public class StandaloneUpgrader
                 Options opts = new Options(keyspace, cf, snapshot);
 
                 opts.debug = cmd.hasOption(DEBUG_OPTION);
+                opts.keepSource = cmd.hasOption(KEEP_SOURCE);
 
                 return opts;
             }
@@ -190,6 +202,7 @@ public class StandaloneUpgrader
             CmdLineOptions options = new CmdLineOptions();
             options.addOption(null, DEBUG_OPTION,          "display stack traces");
             options.addOption("h",  HELP_OPTION,           "display this help message");
+            options.addOption("k",  KEEP_SOURCE,           "do not delete the source sstables");
             return options;
         }
 
