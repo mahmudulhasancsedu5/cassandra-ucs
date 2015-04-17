@@ -252,8 +252,8 @@ public class MergeIteratorComparisonTest
         IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
         IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
         // If test fails, try the version below for improved reporting:
-        //   Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
-        Assert.assertTrue(Iterators.elementsEqual(base, tested));
+           Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
+        //Assert.assertTrue(Iterators.elementsEqual(base, tested));
         if (!BENCHMARK)
             return;
 
@@ -318,24 +318,30 @@ public class MergeIteratorComparisonTest
     
     static class Counter<T> extends Reducer<T, Counted<T>> {
         Counted<T> current = null;
+        boolean read = true;
 
         @Override
         public void reduce(T next)
         {
             if (current == null)
                 current = new Counted<T>(next);
+            assert current.item.equals(next);
             ++current.count;
         }
 
         @Override
         protected void onKeyChange()
         {
+            assert read;
             current = null;
+            read = false;
         }
 
         @Override
         protected Counted<T> getReduced()
         {
+            assert current != null;
+            read = true;
             return current;
         }
     }
@@ -361,6 +367,7 @@ public class MergeIteratorComparisonTest
     
     static class Union<K extends Comparable<K>, V> extends Reducer<KeyedSet<K, V>, KeyedSet<K, V>> {
         KeyedSet<K, V> current = null;
+        boolean read = true;
 
         @Override
         public void reduce(KeyedSet<K, V> next)
@@ -376,12 +383,16 @@ public class MergeIteratorComparisonTest
         @Override
         protected void onKeyChange()
         {
+            assert read;
             current = null;
+            read = false;
         }
 
         @Override
         protected KeyedSet<K, V> getReduced()
         {
+            assert current != null;
+            read = true;
             return current;
         }
     }
@@ -442,10 +453,10 @@ public class MergeIteratorComparisonTest
         /** Consume values by sending them to the reducer while they are equal. */
         protected final Out consume()
         {
-            reducer.onKeyChange();
             CandidatePQ<In> candidate = queue.peek();
             if (candidate == null)
                 return endOfData();
+            reducer.onKeyChange();
             do
             {
                 candidate = queue.poll();
