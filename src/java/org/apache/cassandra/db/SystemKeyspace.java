@@ -86,7 +86,7 @@ public class SystemKeyspace
     public static final String COMPACTION_HISTORY_CF = "compaction_history";
     public static final String SIZE_ESTIMATES_CF = "size_estimates";
 
-    private static final String LOCAL_KEY = "local";
+    public static final String LOCAL_KEY = "local";
 
     public static final List<String> allSchemaCfs = Arrays.asList(SCHEMA_KEYSPACES_CF,
                                                                   SCHEMA_COLUMNFAMILIES_CF,

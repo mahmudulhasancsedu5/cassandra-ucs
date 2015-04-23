@@ -18,33 +18,38 @@
 package org.apache.cassandra.tools;
 
 import java.io.File;
+import java.io.FilenameFilter;
 import java.net.*;
 import java.util.*;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
 
 import org.apache.commons.cli.*;
+
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TTransport;
-
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableLoader;
 import org.apache.cassandra.streaming.*;
 import org.apache.cassandra.thrift.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.OutputHandler;
+import org.apache.cassandra.utils.Pair;
 
 public class BulkLoader
 {
@@ -58,6 +63,7 @@ public class BulkLoader
     private static final String USER_OPTION = "username";
     private static final String PASSWD_OPTION = "password";
     private static final String THROTTLE_MBITS = "throttle";
+    private static final String RESET_TRUNCATION_RECORD = "reset-truncation-record";
 
     private static final String TRANSPORT_FACTORY = "transport-factory";
 
@@ -88,7 +94,8 @@ public class BulkLoader
                         options.transportFactory,
                         options.storagePort,
                         options.sslStoragePort,
-                        options.serverEncOptions),
+                        options.serverEncOptions,
+                        getCfsToTruncate(options.directory, options.resetTruncation)),
                 handler,
                 options.connectionsPerHost);
         DatabaseDescriptor.setStreamThroughputOutboundMegabitsPerSec(options.throttle);
@@ -135,6 +142,31 @@ public class BulkLoader
             e.printStackTrace(System.err);
             System.exit(1);
         }
+    }
+
+    private static Iterable<String> getCfsToTruncate(File directory, boolean resetTruncation)
+    {
+        if (!resetTruncation)
+            return Collections.emptyList();
+        
+        final List<String> cfsToTruncate = new ArrayList<>();
+        
+        directory.list(new FilenameFilter()
+        {
+            public boolean accept(File dir, String name)
+            {
+                if (new File(dir, name).isDirectory())
+                    return false;
+                Pair<Descriptor, Component> p = SSTable.tryComponentFromFilename(dir, name);
+                Descriptor desc = p == null ? null : p.left;
+                if (p == null || !p.right.equals(Component.DATA) || desc.type.isTemporary)
+                    return false;
+                
+                cfsToTruncate.add(desc.cfname);
+                return true;
+            }
+        });
+        return cfsToTruncate;
     }
 
     // Return true when everything is at 100%
@@ -265,6 +297,7 @@ public class BulkLoader
         private final int storagePort;
         private final int sslStoragePort;
         private final EncryptionOptions.ServerEncryptionOptions serverEncOptions;
+        private final Iterable<String> cfsToTruncate;
 
         public ExternalClient(Set<InetAddress> hosts,
                               int port,
@@ -273,7 +306,8 @@ public class BulkLoader
                               ITransportFactory transportFactory,
                               int storagePort,
                               int sslStoragePort,
-                              EncryptionOptions.ServerEncryptionOptions serverEncryptionOptions)
+                              EncryptionOptions.ServerEncryptionOptions serverEncryptionOptions,
+                              Iterable<String> cfsToTruncate)
         {
             super();
             this.hosts = hosts;
@@ -284,6 +318,7 @@ public class BulkLoader
             this.storagePort = storagePort;
             this.sslStoragePort = sslStoragePort;
             this.serverEncOptions = serverEncryptionOptions;
+            this.cfsToTruncate = cfsToTruncate;
         }
 
         @Override
@@ -329,6 +364,21 @@ public class BulkLoader
 
                         CFMetaData metadata = CFMetaData.fromThriftCqlRow(row, columnsRes);
                         knownCfs.put(metadata.cfName, metadata);
+                    }
+
+                    for (String cfName : cfsToTruncate)
+                    {
+                        CFMetaData metadata = knownCfs.get(cfName);
+                        if (metadata != null)
+                        {
+                            System.out.println("Resetting truncation record for " + cfName);
+                            String columnFamily = UUIDType.instance.getString(UUIDType.instance.decompose(metadata.cfId));
+                            String req = String.format("DELETE truncated_at[%s] from system.%s WHERE key = '%s'",
+                                                       columnFamily,
+                                                       SystemKeyspace.LOCAL_CF,
+                                                       SystemKeyspace.LOCAL_KEY);
+                            client.execute_cql3_query(ByteBufferUtil.bytes(req), Compression.NONE, ConsistencyLevel.ONE);
+                        }
                     }
                     break;
                 }
@@ -376,6 +426,7 @@ public class BulkLoader
         public boolean debug;
         public boolean verbose;
         public boolean noProgress;
+        public boolean resetTruncation;
         public int rpcPort = 9160;
         public String user;
         public String passwd;
@@ -437,6 +488,7 @@ public class BulkLoader
 
                 opts.verbose = cmd.hasOption(VERBOSE_OPTION);
                 opts.noProgress = cmd.hasOption(NOPROGRESS_OPTION);
+                opts.resetTruncation = cmd.hasOption(RESET_TRUNCATION_RECORD);
 
                 if (cmd.hasOption(RPC_PORT_OPTION))
                     opts.rpcPort = Integer.parseInt(cmd.getOptionValue(RPC_PORT_OPTION));
@@ -639,6 +691,7 @@ public class BulkLoader
             options.addOption("pw", PASSWD_OPTION, "password", "password for cassandra authentication");
             options.addOption("tf", TRANSPORT_FACTORY, "transport factory", "Fully-qualified ITransportFactory class name for creating a connection to cassandra");
             options.addOption("cph", CONNECTIONS_PER_HOST, "connectionsPerHost", "number of concurrent connections-per-host.");
+            options.addOption("rtr", RESET_TRUNCATION_RECORD, "if set, any truncation record for affected tables will be deleted");
             // ssl connection-related options
             options.addOption("ts", SSL_TRUSTSTORE, "TRUSTSTORE", "Client SSL: full path to truststore");
             options.addOption("tspw", SSL_TRUSTSTORE_PW, "TRUSTSTORE-PASSWORD", "Client SSL: password of the truststore");
