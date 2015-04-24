@@ -57,6 +57,8 @@ public class CommitLogReplayer
     private final ReplayPosition globalPosition;
     private final PureJavaCrc32 checksum;
     private byte[] buffer;
+    
+    private final ReplayFilter replayFilter;
 
     private final ReplayFilter replayFilter;
 
@@ -214,6 +216,17 @@ public class CommitLogReplayer
                     throw new IllegalArgumentException(String.format("Unknown table %s.%s", pair[0], pair[1]));
 
                 toReplay.put(pair[0], pair[1]);
+
+                // Replay of specified tables is taken to mean that the tables need to be recovered even if they were
+                // deleted at a later point in time. Any truncation record after that point must thus be cleared prior
+                // to recovery (CASSANDRA-9195).
+                long restoreTarget = CommitLog.instance.archiver.restorePointInTime;
+                long truncatedAt = SystemKeyspace.getTruncatedAt(cfs.metadata.cfId);
+                if (truncatedAt > restoreTarget)
+                {
+                    logger.info("Restore point in time is before latest truncation of table {}.{}. Clearing truncation record.", pair[0], pair[1]);
+                    SystemKeyspace.removeTruncationRecord(cfs.metadata.cfId);
+                }
             }
             return new CustomReplayFilter(toReplay);
         }
