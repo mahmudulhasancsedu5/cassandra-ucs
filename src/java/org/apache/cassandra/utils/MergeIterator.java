@@ -117,8 +117,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
          * The number of elements to keep in order before the binary heap starts, exclusive of the top heap element.
          */
         static final int SORTED_SECTION_SIZE = 1;
-        
-        int completedIters = 0;
 
         public ManyToOne(List<? extends Iterator<In>> iters, Comparator<In> comp, Reducer<In, Out> reducer)
         {
@@ -143,44 +141,8 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
 
         protected final Out computeNext()
         {
-            checkcount(completedIters);
             advance();
-            checkcount(completedIters);
             return consume();
-        }
-
-        private void checkcount(int completedIters)
-        {
-            int count = 0;
-            for (int i=0; i<size; ++i)
-                count += heap[i].countLinked();
-            assert count + completedIters == heap.length : count + " should be " + (heap.length - completedIters);
-            checkorder(0);
-        }
-        
-        private void checkorder(int head)
-        {
-            if (head == 0 && size > 0 && heap[head].needsAdvance())
-                ++head;
-            while (head < SORTED_SECTION_SIZE)
-            {
-                int next = head + 1;
-                if (next >= size)
-                    return;
-                assert heap[head].compareTo(heap[next]) < 0 : String.format("violation at %s(%s) vs %s(%s)", head, heap[head], next, heap[next]);
-                head = next;
-            }
-            int next = (head << 1) - (SORTED_SECTION_SIZE - 1);
-            if (next >= size)
-                return;
-            assert heap[head].compareTo(heap[next]) < 0 : String.format("violation at %s(%s) vs %s(%s)", head, heap[head], next, heap[next]);
-            checkorder(next);
-
-            ++next;
-            if (next >= size)
-                return;
-            assert heap[head].compareTo(heap[next]) < 0 : String.format("violation at %s(%s) vs %s(%s)", head, heap[head], next, heap[next]);
-            checkorder(next);
         }
 
         /**
@@ -209,14 +171,11 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                 {
                     if (sunk) {
                         addAndSwim(candidate);
-                        checkcount(completedIters + (queue != null ? queue.countLinked() : 0));
                     }else {
                         replaceAndSink(candidate, 0);
-                        checkcount(completedIters + (queue != null ? queue.countLinked() : 0));
                     }
                     sunk = true;
-                } else
-                    completedIters++;
+                }
             }
             if (!sunk)
             {
@@ -235,7 +194,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         {
             if (size == 0)
             {
-                assert completedIters == heap.length : completedIters + " should be " + heap.length;
                 return endOfData();
             }
             
@@ -464,7 +422,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         
         public void attachEqual(Candidate<In> equalChain)
         {
-            assert item == equalChain.item || this.compareTo(equalChain) == 0;
             Candidate<In> last = this.lastEqual;
             assert last.lastEqual == last;
             assert last.nextEqual == null;
