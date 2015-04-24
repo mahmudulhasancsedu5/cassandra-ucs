@@ -57,6 +57,8 @@ public class CommitLogReplayer
     private final ReplayPosition globalPosition;
     private final PureJavaCrc32 checksum;
     private byte[] buffer;
+    
+    private final ReplayFilter replayFilter;
 
     public CommitLogReplayer()
     {
@@ -67,6 +69,8 @@ public class CommitLogReplayer
         // count the number of replayed mutation. We don't really care about atomicity, but we need it to be a reference.
         this.replayedCount = new AtomicInteger();
         this.checksum = new PureJavaCrc32();
+
+        replayFilter = ReplayFilter.create();
 
         // compute per-CF and global replay positions
         cfPositions = new HashMap<UUID, ReplayPosition>();
@@ -183,10 +187,22 @@ public class CommitLogReplayer
                 Keyspace ks = Schema.instance.getKeyspaceInstance(pair[0]);
                 if (ks == null)
                     throw new IllegalArgumentException("Unknown keyspace " + pair[0]);
-                if (ks.getColumnFamilyStore(pair[1]) == null)
+                ColumnFamilyStore cfs = ks.getColumnFamilyStore(pair[1]);
+                if (cfs == null)
                     throw new IllegalArgumentException(String.format("Unknown table %s.%s", pair[0], pair[1]));
 
                 toReplay.put(pair[0], pair[1]);
+
+                // Replay of specified tables is taken to mean that the tables need to be recovered even if they were
+                // deleted at a later point in time. Any truncation record after that point must thus be cleared prior
+                // to recovery (CASSANDRA-9195).
+                long restoreTarget = CommitLog.instance.archiver.restorePointInTime;
+                long truncatedAt = SystemKeyspace.getTruncatedAt(cfs.metadata.cfId);
+                if (truncatedAt > restoreTarget)
+                {
+                    logger.info("Restore point in time is before latest truncation of table {}.{}. Clearing truncation record.", pair[0], pair[1]);
+                    SystemKeyspace.removeTruncationRecord(cfs.metadata.cfId);
+                }
             }
             return new CustomReplayFilter(toReplay);
         }
@@ -227,7 +243,6 @@ public class CommitLogReplayer
 
     public void recover(File file) throws IOException
     {
-        final ReplayFilter replayFilter = ReplayFilter.create();
         logger.info("Replaying {}", file.getPath());
         CommitLogDescriptor desc = CommitLogDescriptor.fromFileName(file.getName());
         final long segmentId = desc.id;
