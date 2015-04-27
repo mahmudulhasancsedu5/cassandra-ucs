@@ -251,14 +251,10 @@ public class MergeIteratorComparisonTest
     public <T> void testMergeIterator(Comparator<T> comparator, Reducer<T, ?> reducer, List<List<T>> lists)
     {
         IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
-        IMergeIterator<T,?> tested2 = new MergeIteratorNoEqual<>(closeableIterators(lists), comparator, reducer);
-        IMergeIterator<T,?> tested3 = new MergeIteratorAllEqual<>(closeableIterators(lists), comparator, reducer);
         IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
         // If test fails, try the version below for improved reporting:
         Object[] basearr = Iterators.toArray(base, Object.class);
            Assert.assertArrayEquals(basearr, Iterators.toArray(tested, Object.class));
-           Assert.assertArrayEquals(basearr, Iterators.toArray(tested2, Object.class));
-           Assert.assertArrayEquals(basearr, Iterators.toArray(tested3, Object.class));
            //Assert.assertTrue(Iterators.elementsEqual(base, tested));
         if (!BENCHMARK)
             return;
@@ -266,8 +262,6 @@ public class MergeIteratorComparisonTest
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
-            benchmarkIterator(new MergeIteratorNoEqual<>(closeableIterators(lists), comparator, reducer));
-            benchmarkIterator(new MergeIteratorAllEqual<>(closeableIterators(lists), comparator, reducer));
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
         }
     }

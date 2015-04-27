@@ -96,15 +96,22 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
      *             / \   / \
      *             5 6   7 8
      *            .. .. .. ..
-     * Where each line is a <= relationship. In the sorted section we can advance with a single comparison per level,
+     * Where each line is a < relationship. In the sorted section we can advance with a single comparison per level,
      * while advancing a level within the heap requires two (so that we can find the lighter element to pop up).
      * The sorted section adds a constant overhead when data is uniformly distributed among the iterators, but may up
      * to halve the iteration time when one iterator is dominant over sections of the merged data (as is the case with
      * non-overlapping iterators).
      *
-     * The iterator is further complicated by the need to avoid advancing the input iterators until an output is
-     * actually requested. To achieve this {@code consume} walks the heap to find equal items without advancing the
-     * iterators, and {@code advance} moves them and restores the heap structure before any items can be consumed.
+     * To reduce the number of comparisons done over equal iterators, each entry in the heap maintains a linked list of
+     * equal iterators. The lists are joined and one of the equals is removed from the heap the first time the algorithm
+     * is able to recognize the equality. This creates an empty space in the heap which is then filled by moving the
+     * last item there and moving it up or down until it finds its proper place. When advancing consumed iterators a
+     * list of equals expands to multiple individual iterators; the first of them is pushed down the heap while others
+     * are placed at the end to pop up to their proper positions.
+     *
+     * Input iterators are not advanced until their value is actually required. Between calls the top position in the
+     * heap is kept consumed but not advanced. The following hasNext() call starts by advancing, correcting positioning
+     * in the heap
      */
     static final class ManyToOne<In,Out> extends MergeIterator<In,Out>
     {
@@ -114,16 +121,9 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         int size;
 
         /**
-         * Number of iterators that may need advancing before we can start consuming. Because advancing changes the
-         * values of the items of each iterator, the part of the heap before this position is not in the correct order
-         * and needs to be heapified before it can be used.
-         */
-        int needingAdvance;
-
-        /**
          * The number of elements to keep in order before the binary heap starts, exclusive of the top heap element.
          */
-        static final int SORTED_SECTION_SIZE = 4;
+        static final int SORTED_SECTION_SIZE = 1;
 
         public ManyToOne(List<? extends Iterator<In>> iters, Comparator<In> comp, Reducer<In, Out> reducer)
         {
@@ -144,7 +144,6 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
                     queue.attachEqual(candidate);
             }
             heap[size++] = queue;
-            needingAdvance = size;
         }
 
         protected final Out computeNext()
@@ -169,43 +168,27 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
          */
         private void advance()
         {
-            int swimEnd = size;
-            int swimStart = size;
-            // Turn the set of candidates into a heap.
-            for (int i = needingAdvance - 1; i >= 0; --i)
+            Candidate<In> queue = heap[0];
+            boolean sunk = false;
+            while (queue != null)
             {
-                Candidate<In> queue = heap[i];
-                if (queue.needsAdvance())
+                Candidate<In> candidate = queue.advance();
+                queue = queue.detach();
+                if (candidate != null)
                 {
-                    boolean sunk = false;
-                    while (queue != null)
-                    {
-                        Candidate<In> candidate = queue.advance();
-                        queue = queue.detach();
-                        if (candidate != null)
-                        {
-                            if (sunk) {
-                                heap[swimEnd++] = candidate;
-                            } else {
-                                replaceAndSink(candidate, i);
-                            }
-                            sunk = true;
-                        }
+                    if (sunk) {
+                        addAndSwim(candidate);
+                    }else {
+                        replaceAndSink(candidate, 0);
                     }
-                    if (!sunk)
-                    {
-                        replaceAndSink(heap[--size], i);
-                        heap[size] = null;
-                    }
+                    sunk = true;
                 }
             }
-            for (int i=swimStart; i<swimEnd; ++i)
+            if (!sunk)
             {
-                if (addAndSwim(heap[i], size))
-                    ++size;
+                replaceAndSink(heap[--size], 0);
+                heap[size] = null;
             }
-            for (int i=size; i<swimEnd; ++i)
-                heap[i] = null;
         }
 
         /**
@@ -222,42 +205,16 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             }
             
             reducer.onKeyChange();
-            In equalItem = heap[0].item;
             heap[0].consume(reducer);
-            final int size = this.size;
-            final int sortedSectionSize = Math.min(size, SORTED_SECTION_SIZE);
-            int i;
-            consume: {
-                for (i = 1; i < sortedSectionSize; ++i)
-                {
-                    if (!heap[i].equalItem(equalItem))
-                        break consume;
-                    heap[i].consume(reducer);
-                }
-                i = consumeHeap(equalItem, i, i);
-            }
-            needingAdvance = i;
             return reducer.getReduced();
         }
-
-        /**
-         * Recursively consume all items equal to equalItem in the binary subheap rooted at position idx.
-         *
-         * @param maxIndex Upper bound for the largest index of equal element found so far.
-         * @return updated maxIndex reflecting the largest equal index found in this search.
-         */
-        private int consumeHeap(In equalItem, int idx, int maxIndex)
-        {
-            if (idx < size && heap[idx].equalItem(equalItem)) 
-            {
-                heap[idx].consume(reducer);
-                int nextIdx = (idx << 1) - (SORTED_SECTION_SIZE - 1);
-                maxIndex = consumeHeap(equalItem, nextIdx, Math.max(maxIndex, idx + 1));
-                maxIndex = consumeHeap(equalItem, nextIdx + 1, maxIndex);
-            }
-            return maxIndex;
-        }
         
+        private void addAndSwim(Candidate<In> candidate)
+        {
+            if (addAndSwim(candidate, size))
+                ++size;
+        }
+
         private boolean addAndSwim(Candidate<In> candidate, int index)
         {
             int currIndex = index;
@@ -300,45 +257,115 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             return currIndex >= SORTED_SECTION_SIZE ? (currIndex + SORTED_SECTION_SIZE - 1) >> 1 : currIndex - 1;
         }
         
+        private void replaceDeleted(int index)
+        {
+            if (index < SORTED_SECTION_SIZE)
+            {
+                Candidate<In> rep = heap[--size];
+                heap[size] = null;
+                replaceAndSink(rep, index);
+                return;
+            }
+                
+            int prevIndex = parentIndex(index);
+            while (index < --size)
+            {
+                Candidate<In> parent = heap[prevIndex];
+                Candidate<In> rep = heap[size];
+                heap[size] = null;
+                int cmp = rep.compareTo(parent);
+                if (cmp == 0)
+                    parent.attachEqual(rep);
+                else if (cmp > 0)
+                {
+                    replaceAndSink(rep, index);
+                    return;
+                }
+                else
+                {
+                    if (addAndSwim(rep, prevIndex))
+                    {
+                        heap[index] = parent;
+                        return;
+                    }
+                }
+            } 
+            assert size == index;
+            heap[size] = null;
+        }
+
         /**
          * Replace an iterator in the heap with the given position and move it down the heap until it finds its proper
          * position, pulling lighter elements up the heap.
          */
-        private int replaceAndSink(Candidate<In> candidate, int currIdx)
+        private void replaceAndSink(Candidate<In> candidate, int currIdx)
         {
-            final int size = this.size;
-            final int sortedSectionSize = Math.min(size, SORTED_SECTION_SIZE + 1);
             int nextIdx;
+            Candidate<In> next = null;
+            int cmp = -1;
 
             sink:
             {
                 // Advance within the sorted section, pulling up items lighter than candidate.
-                while ((nextIdx = currIdx + 1) < sortedSectionSize)
+                while ((nextIdx = currIdx + 1) <= SORTED_SECTION_SIZE)
                 {
-                    if (candidate.compareTo(heap[nextIdx]) <= 0)
+                    if (nextIdx >= size)
+                        break sink;
+                    next = heap[nextIdx];
+                    cmp = candidate.compareTo(next);
+                    if (cmp <= 0)
                         break sink;
 
-                    heap[currIdx] = heap[nextIdx];
+                    heap[currIdx] = next;
                     currIdx = nextIdx;
                 }
-                if (nextIdx >= size)
-                    break sink;
 
                 // Advance in the binary heap, pulling up the lighter element from the two at each level.
                 while ((nextIdx = (currIdx << 1) - (SORTED_SECTION_SIZE - 1)) < size)
                 {
-                    if (nextIdx + 1 < size && heap[nextIdx + 1].compareTo(heap[nextIdx]) < 0)
-                        ++nextIdx;
+                    next = heap[nextIdx];
+                    if (nextIdx + 1 < size)
+                    {
+                        cmp = heap[nextIdx + 1].compareTo(next);
+                        if (cmp == 0)
+                        {
+                            next.attachEqual(heap[nextIdx + 1]);
+                            cmp = candidate.compareTo(next);
+                            if (cmp < 0)
+                            {
+                                heap[currIdx] = candidate;
+                                replaceDeleted(nextIdx + 1);
+                                return;
+                            }
 
-                    if (candidate.compareTo(heap[nextIdx]) <= 0)
+                            heap[currIdx] = next;
+                            replaceDeleted(nextIdx + 1);
+                            if (cmp == 0)
+                            {
+                                next.attachEqual(candidate);
+                                replaceDeleted(nextIdx);
+                                return;
+                            }
+                            
+                            currIdx = nextIdx;
+                            continue;
+                        } else if (cmp < 0)
+                            next = heap[++nextIdx];
+                    }
+
+                    cmp = candidate.compareTo(next);
+                    if (cmp <= 0)
                         break sink;
-
-                    heap[currIdx] = heap[nextIdx];
+                    heap[currIdx] = next;
                     currIdx = nextIdx;
                 }
             }
             heap[currIdx] = candidate;
-            return currIdx;
+            if (cmp == 0)
+            {
+                candidate.attachEqual(next);
+                replaceDeleted(nextIdx);
+            }
         }
     }
 
