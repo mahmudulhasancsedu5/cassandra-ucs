@@ -41,9 +41,9 @@ import org.apache.cassandra.utils.MergeIterator.Reducer;
 
 public class MergeIteratorComparisonTest
 {
-    static int ITERATOR_COUNT = 25;
-    static int LIST_LENGTH = 20000;
-    static boolean BENCHMARK = false;
+    static int ITERATOR_COUNT = 15;
+    static int LIST_LENGTH = 50000;
+    static boolean BENCHMARK = true;
     
     @Test
     public void testRandomInts() throws Exception
@@ -231,6 +231,7 @@ public class MergeIteratorComparisonTest
         }, comparator);
         testMergeIterator(comparator, reducer, lists);
     }
+    /* */
 
     public <T> List<List<T>> generateLists(int itcount, int length, Callable<T> generator,
             Comparator<T> comparator) throws Exception
@@ -250,23 +251,30 @@ public class MergeIteratorComparisonTest
     public <T> void testMergeIterator(Comparator<T> comparator, Reducer<T, ?> reducer, List<List<T>> lists)
     {
         IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
+        IMergeIterator<T,?> tested2 = new MergeIteratorNoEqual<>(closeableIterators(lists), comparator, reducer);
+        IMergeIterator<T,?> tested3 = new MergeIteratorAllEqual<>(closeableIterators(lists), comparator, reducer);
         IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
         // If test fails, try the version below for improved reporting:
-           Assert.assertArrayEquals(Iterators.toArray(base, Object.class), Iterators.toArray(tested, Object.class));
-        //Assert.assertTrue(Iterators.elementsEqual(base, tested));
+        Object[] basearr = Iterators.toArray(base, Object.class);
+           Assert.assertArrayEquals(basearr, Iterators.toArray(tested, Object.class));
+           Assert.assertArrayEquals(basearr, Iterators.toArray(tested2, Object.class));
+           Assert.assertArrayEquals(basearr, Iterators.toArray(tested3, Object.class));
+           //Assert.assertTrue(Iterators.elementsEqual(base, tested));
         if (!BENCHMARK)
             return;
 
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
+            benchmarkIterator(new MergeIteratorNoEqual<>(closeableIterators(lists), comparator, reducer));
+            benchmarkIterator(new MergeIteratorAllEqual<>(closeableIterators(lists), comparator, reducer));
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
         }
     }
     
     public <T> void benchmarkIterator(IMergeIterator<T, ?> it)
     {
-        System.out.print("Testing " + it.getClass().getSimpleName() + "... ");
+        System.out.format("Testing %30s... ", it.getClass().getSimpleName());
         long time = System.currentTimeMillis();
         Object value = null;
         while (it.hasNext())
@@ -277,7 +285,7 @@ public class MergeIteratorComparisonTest
         {
             type = "type " + ((Counted<?>)value).item.getClass().getSimpleName();
         }
-        System.out.println(type + " time " + time + "ms");
+        System.out.format("%15s time %5dms\n", type, time);
     }
 
     public <T> List<CloseableIterator<T>> closeableIterators(List<List<T>> iterators)
