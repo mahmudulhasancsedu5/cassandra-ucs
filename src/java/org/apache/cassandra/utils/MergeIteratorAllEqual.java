@@ -45,15 +45,22 @@ import java.util.*;
  *             / \   / \
  *             5 6   7 8
  *            .. .. .. ..
- * Where each line is a <= relationship. In the sorted section we can advance with a single comparison per level,
+ * Where each line is a < relationship. In the sorted section we can advance with a single comparison per level,
  * while advancing a level within the heap requires two (so that we can find the lighter element to pop up).
  * The sorted section adds a constant overhead when data is uniformly distributed among the iterators, but may up
  * to halve the iteration time when one iterator is dominant over sections of the merged data (as is the case with
  * non-overlapping iterators).
  *
- * The iterator is further complicated by the need to avoid advancing the input iterators until an output is
- * actually requested. To achieve this {@code consume} walks the heap to find equal items without advancing the
- * iterators, and {@code advance} moves them and restores the heap structure before any items can be consumed.
+ * Each entry in the heap maintains a linked list of equal iterators; equal lists are combined the first time equality
+ * is recognized. When this happens an entry in the heap needs to be removed, which is done by replacing it with the
+ * entry at the end of the heap and moving it down or up to place it in its correct position.
+ *
+ * Input iterators are only advanced when an output is actually requested. To achieve this the top elements of the heap
+ * between computeNext calls is kept consumed but not advanced. Advancing expands the list of equal iterators, advances
+ * each and finds its place: the first one can be pushed down, but the others need to be placed at the end of the heap
+ * and pulled up.
+ * 
+ * This works very well for randomly spaced as well as completely non-overlapping iterators.
  */
 final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
 {
@@ -97,16 +104,9 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
     /**
      * Advance all iterators that need to be advanced and place them into suitable positions in the heap.
      *
-     * By walking the iterators backwards we know that everything after the point being processed already forms
-     * correctly ordered subheaps, thus we can build a subheap rooted at the current position by only sinking down
-     * the newly advanced iterator. Because all parents of a consumed iterator are also consumed there is no way
-     * that we can process one consumed iterator but skip over its parent.
-     *
-     * The procedure is the same as the one used for the initial building of a heap in the heapsort algorithm and
-     * has a maximum number of comparisons {@code (2 * log(size) + SORTED_SECTION_SIZE / 2)} multiplied by the
-     * number of iterators whose items were consumed at the previous step, but is also at most linear in the size of
-     * the heap if the number of consumed elements is high (as it is in the initial heap construction). With non- or
-     * lightly-overlapping iterators the procedure finishes after just one (resp. a couple of) comparisons.
+     * The top of the heap contains a list of equal iterators. Advance each. The first non-exhausted one can be pushed
+     * down to find its position in the heap. There is no room to place the others at the top, so they are attached
+     * at the end and pulled up instead.
      */
     private void advance()
     {
@@ -118,14 +118,16 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
             queue = queue.detach();
             if (candidate != null)
             {
-                if (sunk) {
-                    addAndSwim(candidate);
-                }else {
+                if (!sunk) {
                     replaceAndSink(candidate, 0);
+                } else {
+                    // The heap is correctly-formed at this point (replaceAndSink has placed an element on top).
+                    addAndSwim(candidate);
                 }
                 sunk = true;
             }
         }
+
         if (!sunk)
         {
             replaceAndSink(heap[--size], 0);
@@ -134,10 +136,7 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
     }
 
     /**
-     * Consume all items that sort like the current top of the heap. As we cannot advance the iterators to let
-     * equivalent items pop up, we walk the heap to find them and mark them as needing advance.
-     *
-     * This does at most two comparisons per each consumed item (one while in the sorted section).
+     * Consume all items at the top of the heap.
      */
     private Out consume()
     {
@@ -145,18 +144,28 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
         {
             return endOfData();
         }
-        
+
         reducer.onKeyChange();
         heap[0].consume(reducer);
         return reducer.getReduced();
     }
-    
+
+    /**
+     * Add an item at the end of the heap and pull it up until it finds its place.
+     */
     private void addAndSwim(Candidate<In> candidate)
     {
         if (addAndSwim(candidate, size))
             ++size;
     }
 
+    /**
+     * Place an item at the given position and pull it up until it finds its place.
+     * If there is an equal item in the parents chain, attach to it as equal and return
+     * false (i.e. the target position is still empty).
+     *
+     * The parents chain of the given position must be correctly formed.
+     */
     private boolean addAndSwim(Candidate<In> candidate, int index)
     {
         int currIndex = index;
@@ -199,6 +208,15 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
         return currIndex >= SORTED_SECTION_SIZE ? (currIndex + SORTED_SECTION_SIZE - 1) >> 1 : currIndex - 1;
     }
     
+    /**
+     * Replace an item that has been removed from the heap (normally due to equality).
+     * Takes elements from the end of the heap, places them at the target position and sends them up or down depending
+     * on comparison with parent. May need more than one element to complete (e.g. if one gets attached to an equal
+     * element up the parents chain).
+     *
+     * The parents chain as well as the subheaps rooted at the children of the given target position must be correctly
+     * formed. The target position is treated as empty.
+     */
     private void replaceDeleted(int index)
     {
         if (index < SORTED_SECTION_SIZE)
@@ -208,13 +226,14 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
             replaceAndSink(rep, index);
             return;
         }
-            
+
         int prevIndex = parentIndex(index);
         while (index < --size)
         {
             Candidate<In> parent = heap[prevIndex];
             Candidate<In> rep = heap[size];
             heap[size] = null;
+            // Compare to parent to see if it needs to go up or down.
             int cmp = rep.compareTo(parent);
             if (cmp == 0)
                 parent.attachEqual(rep);
@@ -225,6 +244,7 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
             }
             else
             {
+                // Already compared parent, continue from one step above.
                 if (addAndSwim(rep, prevIndex))
                 {
                     heap[index] = parent;
@@ -239,6 +259,8 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
     /**
      * Replace an iterator in the heap with the given position and move it down the heap until it finds its proper
      * position, pulling lighter elements up the heap.
+     *
+     * The subheaps rooted at the children of the target position must be correctly formed.
      */
     private void replaceAndSink(Candidate<In> candidate, int currIdx)
     {
@@ -271,19 +293,27 @@ final class MergeIteratorAllEqual<In,Out> extends MergeIterator<In,Out>
                     cmp = heap[nextIdx + 1].compareTo(next);
                     if (cmp == 0)
                     {
+                        // Found equality between siblings. Collapse the two siblings, restore some order in the heap
+                        // and place replacements in the voided position.
                         next.attachEqual(heap[nextIdx + 1]);
+                        // Can't replace nextIdx + 1 before knowing what should be at currIdx. Compare next with
+                        // candidate to decide.
                         cmp = candidate.compareTo(next);
                         if (cmp < 0)
                         {
+                            // Easy case, found position for candidate, just replace collapsed entry.
                             heap[currIdx] = candidate;
                             replaceDeleted(nextIdx + 1);
                             return;
                         }
 
+                        // Candidate needs to be processed further, but we know collapsed siblings can be placed at
+                        // currIdx, which is enough structure to let replaceDeleted succeed.
                         heap[currIdx] = next;
                         replaceDeleted(nextIdx + 1);
                         if (cmp == 0)
                         {
+                            // Candidate needs to be collapsed as well. Replace the voided position.
                             next.attachEqual(candidate);
                             replaceDeleted(nextIdx);
                             return;

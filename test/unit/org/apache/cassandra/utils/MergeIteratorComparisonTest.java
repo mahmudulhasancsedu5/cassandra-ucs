@@ -42,8 +42,9 @@ import org.apache.cassandra.utils.MergeIterator.Reducer;
 public class MergeIteratorComparisonTest
 {
     static int ITERATOR_COUNT = 15;
-    static int LIST_LENGTH = 50000;
+    static int LIST_LENGTH = 150000;
     static boolean BENCHMARK = true;
+    
     
     @Test
     public void testRandomInts() throws Exception
@@ -232,6 +233,46 @@ public class MergeIteratorComparisonTest
         testMergeIterator(comparator, reducer, lists);
     }
     /* */
+
+    @Test
+    public void testLimitedOverlapStrings2() throws Exception
+    {
+        Comparator<String> comparator = Ordering.natural();
+        Reducer<String, Counted<String>> reducer = new Counter<String>();
+
+        List<List<String>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<String>() {
+            int next = 0;
+            @Override
+            public String call() throws Exception
+            {
+                ++next;
+                int list = next / LIST_LENGTH;
+                int id = next % LIST_LENGTH;
+                return "longish_prefix_" + (id + list * LIST_LENGTH / 2);
+            }
+        }, comparator);
+        testMergeIterator(comparator, reducer, lists);
+    }
+
+    @Test
+    public void testLimitedOverlapStrings3() throws Exception
+    {
+        Comparator<String> comparator = Ordering.natural();
+        Reducer<String, Counted<String>> reducer = new Counter<String>();
+
+        List<List<String>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<String>() {
+            int next = 0;
+            @Override
+            public String call() throws Exception
+            {
+                ++next;
+                int list = next / LIST_LENGTH;
+                int id = next % LIST_LENGTH;
+                return "longish_prefix_" + (id + list * LIST_LENGTH / 3);
+            }
+        }, comparator);
+        testMergeIterator(comparator, reducer, lists);
+    }
 
     public <T> List<List<T>> generateLists(int itcount, int length, Callable<T> generator,
             Comparator<T> comparator) throws Exception
