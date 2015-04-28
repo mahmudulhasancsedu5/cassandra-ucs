@@ -27,7 +27,9 @@ import java.io.IOException;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.commitlog.CommitLog;
+
 import org.junit.Test;
+
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -38,29 +40,93 @@ public class RecoveryManagerTruncateTest extends SchemaLoader
 	@Test
 	public void testTruncate() throws IOException
 	{
-		Keyspace keyspace = Keyspace.open("Keyspace1");
-		ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("Standard1");
+        Keyspace keyspace = Keyspace.open("Keyspace1");
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("Standard1");
 
-		Mutation rm;
-		ColumnFamily cf;
+        Mutation rm;
+        ColumnFamily cf;
 
-		// add a single cell
+        // add a single cell
         cf = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
-		cf.addColumn(column("col1", "val1", 1L));
+        cf.addColumn(column("col1", "val1", 1L));
         rm = new Mutation("Keyspace1", ByteBufferUtil.bytes("keymulti"), cf);
-		rm.apply();
+        rm.apply();
 
-		// Make sure data was written
-		assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+        // Make sure data was written
+        assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+        long time = System.currentTimeMillis();
 
-		// and now truncate it
-		cfs.truncateBlocking();
-        CommitLog.instance.resetUnsafe();
-		CommitLog.instance.recover();
+        // and now truncate it
+        cfs.truncateBlocking();
 
-		// and validate truncation.
-		assertNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+        // add new data
+        cf = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
+        cf.addColumn(column("col2", "val2", 1L));
+        rm = new Mutation("Keyspace1", ByteBufferUtil.bytes("keymulti"), cf);
+        rm.apply();
+
+        assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col2"));
+            
+        long oldRPIT = CommitLog.instance.archiver.restorePointInTime;
+        try
+        {
+            CommitLog.instance.archiver.restorePointInTime = Long.MAX_VALUE;
+            CommitLog.instance.resetUnsafe();
+            CommitLog.instance.recover();
+    
+            // and validate truncation.
+            assertNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+            assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col2"));
+        } finally {
+            CommitLog.instance.archiver.restorePointInTime = oldRPIT;
+        }
 	}
+
+    @Test
+    public void testTruncatePointInTime() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open("Keyspace1");
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("Standard1");
+
+        Mutation rm;
+        ColumnFamily cf;
+
+        // add a single cell
+        cf = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
+        cf.addColumn(column("col1", "val1", 1L));
+        rm = new Mutation("Keyspace1", ByteBufferUtil.bytes("keymulti"), cf);
+        rm.apply();
+
+        // Make sure data was written
+        assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+        long time = System.currentTimeMillis();
+
+        // and now truncate it
+        cfs.truncateBlocking();
+
+        // add new data
+        cf = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
+        cf.addColumn(column("col2", "val2", 1L));
+        rm = new Mutation("Keyspace1", ByteBufferUtil.bytes("keymulti"), cf);
+        rm.apply();
+
+        assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col2"));
+        cfs.truncateBlocking();
+            
+        long oldRPIT = CommitLog.instance.archiver.restorePointInTime;
+        try
+        {
+            CommitLog.instance.archiver.restorePointInTime = time;
+            CommitLog.instance.resetUnsafe();
+            CommitLog.instance.recover();
+    
+            // and validate truncation.
+            assertNotNull(getFromTable(keyspace, "Standard1", "keymulti", "col1"));
+            assertNull(getFromTable(keyspace, "Standard1", "keymulti", "col2"));
+        } finally {
+            CommitLog.instance.archiver.restorePointInTime = oldRPIT;
+        }
+    }
 
 	private Cell getFromTable(Keyspace keyspace, String cfName, String keyName, String columnName)
 	{
