@@ -86,7 +86,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             // We need at least replicas groups to do allocation correctly. If there aren't enough, 
             // use random allocation.
             // This part of the code should only be reached via the RATATest. StrategyAdapter should disallow
-            // token allocation in this case as the algorithm is not able to cover the behavior as NetworkTopologyStrategy.
+            // token allocation in this case as the algorithm is not able to cover the behavior of NetworkTopologyStrategy.
             return generateRandomTokens(newUnit, numTokens);
         }
 
@@ -124,7 +124,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             if (vn == numTokens - 1)
                 break;
 
-            for (; ; )
+            while (true)
             {
                 // Get the next candidate in the queue. Its improvement may have changed (esp. if multiple tokens
                 // were good suggestions because they could improve the same problem)-- evaluate it again to check
@@ -160,7 +160,6 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         return tokens;
     }
 
-    //
     private Map<Unit, UnitInfo<Unit>> createUnitInfos(Map<Object, GroupInfo> groups)
     {
         Map<Unit, UnitInfo<Unit>> map = Maps.newHashMap();
@@ -174,8 +173,10 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         return map;
     }
 
-    // construct the token ring as a CircularList of TokenInfo,
-    // and populate the ownership of the UnitInfo's provided
+    /**
+     * Construct the token ring as a CircularList of TokenInfo,
+     * and populate the ownership of the UnitInfo's provided
+     */
     private TokenInfo<Unit> createTokenInfos(Map<Unit, UnitInfo<Unit>> units, GroupInfo newUnitGroup)
     {
         // build the circular list
@@ -199,7 +200,6 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
 
         return first;
     }
-
 
     private CandidateInfo<Unit> createCandidates(TokenInfo<Unit> tokens, UnitInfo<Unit> newUnitInfo, double initialTokenOwnership)
     {
@@ -227,7 +227,10 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         populateTokenInfo(candidate, candidate.owningUnit.group);
     }
 
-    // selects the candidate and incorporates it into the ring, adjusting the ownership information
+    /**
+     * Incorporates the selected candidate and into the ring, adjusting ownership information and calculated token
+     * information.
+     */
     private void confirmCandidate(CandidateInfo<Unit> candidate)
     {
         // This process is less efficient than it could be (loops through each vnode's replication span instead
@@ -254,7 +257,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         ReplicationVisitor replicationVisitor = new ReplicationVisitor(newUnit.group, split.owningUnit.group);
         for (TokenInfo<Unit> curr = next; !replicationVisitor.visitedAll() ; curr = next)
         {
-            // update the candidate inbetween curr and next
+            // update the candidate between curr and next
             candidate = candidate.next;
             populateCandidate(candidate);
 
@@ -269,8 +272,10 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         replicationVisitor.clean();
     }
 
-    // set the replicationStart, replicationMinus1 and expandable properties of the TokenInfo;
-    // return replicationStart
+    /**
+     * Calculates the {@code replicationStart}, {@code replicationMinus1} and {@code expandable} properties of the given
+     * {@code TokenInfo}, used by {@code findUpdatedReplicationStart} to quickly identify changes in ownership.
+     */
     private Token populateTokenInfo(BaseTokenInfo<Unit, ?> token, GroupInfo newUnitGroup)
     {
         GroupInfo groupChain = GroupInfo.TERMINATOR;
@@ -288,7 +293,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             if (currGroup.prevPopulate != null)
                 continue; // Group is already seen.
 
-             // Mark the group as seen. Also forms a chain that can be used to clear the marks when we are done.
+            // Mark the group as seen. Also forms a chain that can be used to clear the marks when we are done.
             // We use prevPopulate instead of prevSeen as this may be called within confirmCandidate which also needs
             // group seen markers.
             currGroup.prevPopulate = groupChain;
@@ -334,124 +339,155 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         populate.owningUnit.ownership += newOwnership - oldOwnership;
     }
 
+    /**
+     * Evaluates the improvement in variance for both units and individual tokens when candidate is inserted into the
+     * ring.
+     */
     private double evaluateImprovement(CandidateInfo<Unit> candidate, double optTokenOwnership, double newUnitMult)
     {
-        double change = 0;
+        double tokenChange = 0;
+
+        UnitInfo<Unit> candidateUnit = candidate.owningUnit;
         TokenInfo<Unit> splitToken = candidate.split;
-        TokenInfo<Unit> next = splitToken.next;
-        Token candidateEnd = next.token;
-
-        // Reflect change in ownership of the split token (candidate).
-        double oldOwnership = candidate.replicatedOwnership;
-        double newOwnership = candidate.replicationStart.size(candidateEnd);
-        UnitInfo<Unit> newUnit = candidate.owningUnit;
-        double tokenCount = newUnit.tokenCount;
-        change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-        assert tokenCount > 0;
-        newUnit.adjustedOwnership = newUnit.ownership + newOwnership - oldOwnership;
-
-        // Reflect change of ownership in the token being split
-        oldOwnership = splitToken.replicatedOwnership;
-        newOwnership = splitToken.replicationStart.size(candidate.token);
         UnitInfo<Unit> splitUnit = splitToken.owningUnit;
-        tokenCount = splitUnit.tokenCount;
-        assert tokenCount > 0;
-        change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-        splitUnit.adjustedOwnership = splitUnit.ownership + newOwnership - oldOwnership;
+        Token candidateEnd = splitToken.next.token;
 
         // Form a chain of units affected by the insertion to be able to qualify change of unit ownership.
         // A unit may be affected more than once.
-        assert newUnit.prevUsed == null;
-        newUnit.prevUsed = newUnit;   // end marker
-        GroupInfo newGroup = newUnit.group;
-        assert splitUnit.prevUsed == null;
-        splitUnit.prevUsed = newUnit;
-        GroupInfo splitGroup = splitUnit.group;
-        UnitInfo<Unit> unitsChain = splitUnit;
+        UnitAdjustmentTracker<Unit> unitTracker = new UnitAdjustmentTracker<>(candidateUnit);
+
+        // Reflect change in ownership of the splitting token (candidate).
+        tokenChange += applyOwnershipAdjustment(candidate, candidateUnit, candidate.replicationStart, candidateEnd, optTokenOwnership, unitTracker);
+
+        // Reflect change of ownership in the token being split
+        tokenChange += applyOwnershipAdjustment(splitToken, splitUnit, splitToken.replicationStart, candidate.token, optTokenOwnership, unitTracker);
 
         // Loop through all vnodes that replicate candidate or split and update their ownership.
-        ReplicationVisitor replicationVisitor = new ReplicationVisitor(newGroup, splitGroup);
-        for (TokenInfo<Unit> curr = next; !replicationVisitor.visitedAll() ; curr = next)
+        ReplicationVisitor replicationVisitor = new ReplicationVisitor(candidateUnit.group, splitUnit.group);
+        for (TokenInfo<Unit> curr = splitToken.next; !replicationVisitor.visitedAll(); curr = curr.next)
         {
-            next = curr.next;
             UnitInfo<Unit> currUnit = curr.owningUnit;
 
-            GroupInfo group = currUnit.group;
-            if (!replicationVisitor.add(group))
-                continue;    // If both have already seen this group, the token cannot be affected.
+            if (!replicationVisitor.add(currUnit.group))
+                continue;    // If this group is already seen both before and after splitting, the token cannot be affected.
 
+            Token replicationEnd = curr.next.token;
+            Token replicationStart = findUpdatedReplicationStart(curr, currUnit.group, replicationEnd,
+                                                                 candidate, candidateUnit.group, candidateEnd);
+            tokenChange += applyOwnershipAdjustment(curr, currUnit, replicationStart, replicationEnd, optTokenOwnership, unitTracker);
+        }
+        replicationVisitor.clean();
+
+        double nodeChange = unitTracker.calculateUnitChange(newUnitMult, optTokenOwnership);
+        return -(tokenChange + nodeChange);
+    }
+
+    /**
+     * Returns the start of the replication span for the token {@code curr} when {@code candidate} is inserted into the
+     * ring.
+     */
+    private Token findUpdatedReplicationStart(TokenInfo<Unit> curr, GroupInfo currGroup, Token currEnd,
+                                              CandidateInfo<Unit> candidate, GroupInfo candidateGroup, Token candidateEnd)
+    {
+        if (currGroup == candidateGroup)
+        {
+            if (!preceeds(curr.replicationStart, candidateEnd, currEnd))
+                return curr.replicationStart; // no changes, another newGroup is closer
+            // Replication shrinks to end of candidate.next
+            return candidateEnd;
+        }
+        else if (curr.expandable) // Sees same or new group within rf-1.
+        {
+            if (candidateEnd != curr.replicationStart)
+                return curr.replicationStart;  // candidate does not affect token
+            // Replication expands to start of candidate.
+            return candidate.token;
+        }
+        else if (preceeds(curr.replicationMinus1, candidateEnd, currEnd))
+            // Candidate is closer than one-before last.
+            return curr.replicationMinus1;
+        else if (preceeds(candidateEnd, curr.replicationMinus1, currEnd))
+            // Candidate is the replication boundary.
+            return candidateEnd;
+        else
+            // Candidate replaces one-before last. The latter becomes the replication boundary.
+            return candidate.token;
+    }
+
+    /**
+     * Applies the ownership adjustment for the given element, updating tracked unit ownership and returning the change
+     * of variance.
+     */
+    private double applyOwnershipAdjustment(BaseTokenInfo<Unit, ?> curr, UnitInfo<Unit> currUnit,
+            Token replicationStart, Token replicationEnd,
+            double optTokenOwnership, UnitAdjustmentTracker<Unit> unitTracker)
+    {
+        double oldOwnership = curr.replicatedOwnership;
+        double newOwnership = replicationStart.size(replicationEnd);
+        double tokenCount = currUnit.tokenCount;
+        assert tokenCount > 0;
+        unitTracker.add(currUnit, newOwnership - oldOwnership);
+        return (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
+    }
+
+    /**
+     * Tracker for unit ownership changes. The changes are tracked by a chain of UnitInfos where the adjustedOwnership
+     * field is being updated as we see changes in token ownership.
+     *
+     * The chain ends with an element that points to itself; this element must be specified as argument to the
+     * constructor as well as be the first unit with which 'add' is called; when calculating the variance change
+     * a separate multiplier is applied to it (used to permit more freedom in choosing the first tokens of a unit).
+     */
+    private static class UnitAdjustmentTracker<Unit>
+    {
+        UnitInfo<Unit> unitsChain;
+
+        UnitAdjustmentTracker(UnitInfo<Unit> newUnit)
+        {
+            unitsChain = newUnit;
+        }
+
+        void add(UnitInfo<Unit> currUnit, double diff)
+        {
             if (currUnit.prevUsed == null)
             {
-                currUnit.adjustedOwnership = currUnit.ownership;
+                assert unitsChain.prevUsed != null || currUnit == unitsChain;
+
+                currUnit.adjustedOwnership = currUnit.ownership + diff;
                 currUnit.prevUsed = unitsChain;
                 unitsChain = currUnit;
             }
-
-            // find the new start of our replication range
-            Token replicationStart;
-            if (curr.expandable) // Sees same or new group within rf-1.
-            {
-                // TODO: if curr.expandable and curr.group == newGroup, then don't we
-                // change the replication start to candidateEnd if the new token occurs
-                // after the replicationStart?
-                if (candidateEnd != curr.replicationStart)
-                    continue;  // candidate does not affect token
-                // Replication expands to start of candidate.
-                replicationStart = candidate.token;
-            }
             else
             {
-                if (group == newGroup)
-                {
-                    if (!preceeds(curr.replicationStart, candidateEnd, next.token))
-                        continue; // no changes, another newGroup is closer
-                    // Replication shrinks to end of candidate.next
-                    replicationStart = candidateEnd;
-                }
+                currUnit.adjustedOwnership += diff;
+            }
+        }
+
+        double calculateUnitChange(double newUnitMult, double optTokenOwnership)
+        {
+            double unitChange = 0;
+            UnitInfo<Unit> unitsChain = this.unitsChain;
+            // Now loop through the units chain and add the unit-level changes. Also clear the groups' seen marks.
+            while (true)
+            {
+                double newOwnership = unitsChain.adjustedOwnership;
+                double oldOwnership = unitsChain.ownership;
+                double tokenCount = unitsChain.tokenCount;
+                double diff = (sq(newOwnership / tokenCount - optTokenOwnership) - sq(oldOwnership / tokenCount - optTokenOwnership));
+                UnitInfo<Unit> prev = unitsChain.prevUsed;
+                unitsChain.prevUsed = null;
+                if (unitsChain != prev)
+                    unitChange += diff;
                 else
                 {
-                    if (preceeds(curr.replicationMinus1, candidateEnd, next.token))
-                        // Candidate is closer than one-before last.
-                        replicationStart = curr.replicationMinus1;
-                    else if (preceeds(candidateEnd, curr.replicationMinus1, next.token))
-                        // Candidate is the replication boundary.
-                        replicationStart = candidateEnd;
-                    else
-                        // Candidate replaces one-before last. The latter becomes the replication boundary.
-                        replicationStart = candidate.token;
+                    unitChange += diff * newUnitMult;
+                    break;
                 }
+                unitsChain = prev;
             }
-
-            // Calculate ownership adjustments.
-            oldOwnership = curr.replicatedOwnership;
-            newOwnership = replicationStart.size(next.token);
-            tokenCount = currUnit.tokenCount;
-            assert tokenCount > 0;
-            change += (sq(newOwnership - optTokenOwnership) - sq(oldOwnership - optTokenOwnership)) / sq(tokenCount);
-            currUnit.adjustedOwnership += newOwnership - oldOwnership;
+            this.unitsChain = unitsChain;
+            return unitChange;
         }
-
-        // Now loop through the units chain and add the unit-level changes. Also clear the groups' seen marks.
-        for (; ; )
-        {
-            newOwnership = unitsChain.adjustedOwnership;
-            oldOwnership = unitsChain.ownership;
-            tokenCount = unitsChain.tokenCount;
-            double diff = (sq(newOwnership / tokenCount - optTokenOwnership) - sq(oldOwnership / tokenCount - optTokenOwnership));
-            UnitInfo<Unit> prev = unitsChain.prevUsed;
-            unitsChain.prevUsed = null;
-            unitsChain.group.prevSeen = null;
-            if (unitsChain != newUnit)
-                change += diff;
-            else
-            {
-                change += diff * newUnitMult;
-                break;
-            }
-            unitsChain = prev;
-        }
-
-        return -change;
     }
 
     /**
@@ -485,7 +521,8 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
                 replicatedFromNew += 1;
             if (group != oldGroup)
                 replicatedFromOld += 1;
-            group.prevSeen = group;   // Just mark it as seen, we are not forming a chain of groups.
+            group.prevSeen = groupChain;
+            groupChain = group;
             return true;
         }
 
@@ -498,17 +535,14 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         // Clean group seen markers.
         void clean()
         {
-            cleanSeenChain(groupChain);
-        }
-    }
-
-    static void cleanSeenChain(GroupInfo groupChain)
-    {
-        while (groupChain != GroupInfo.TERMINATOR)
-        {
-            GroupInfo prev = groupChain.prevSeen;
-            groupChain.prevSeen = null;
-            groupChain = prev;
+            GroupInfo groupChain = this.groupChain;
+            while (groupChain != GroupInfo.TERMINATOR)
+            {
+                GroupInfo prev = groupChain.prevSeen;
+                groupChain.prevSeen = null;
+                groupChain = prev;
+            }
+            this.groupChain = GroupInfo.TERMINATOR;
         }
     }
 
