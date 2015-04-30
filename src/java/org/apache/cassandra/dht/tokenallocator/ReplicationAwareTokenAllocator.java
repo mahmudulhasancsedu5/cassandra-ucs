@@ -38,16 +38,6 @@ import org.apache.cassandra.dht.Token;
  */
 class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
 {
-
-    /** TODO: prevent rings that look like: (A is group, 1 is node)
-         A1A2A3A4A5A6B1B2B3B4B5B6C1C2C3C4C5C6
-         A2A3A4A5A6A1B2B3B4B5B6B1C2C3C4C5C6C1
-         A3A4A5A6A2A1B3B4B5B6B1B2C3C4C5C6C1C2
-         A4A5A6A2A1A3B4B5B6B1B2B3C4C5C6C1C2C3
-         A5A6A2A1A3A4B5B6B1B2B3B4C5C6C1C2C3C4
-         A6A2A1A3A4A5B6B1B2B3B4B5C6C1C2C3C4C5
-     */
-
     final NavigableMap<Token, Unit> sortedTokens;
     final Multimap<Unit, Token> unitToTokens;
     final ReplicationStrategy<Unit> strategy;
@@ -253,17 +243,14 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         populateTokenInfoAndAdjustUnit(newTokenInfo, newUnit.group);
         populateTokenInfoAndAdjustUnit(split, newUnit.group);
 
-        TokenInfo<Unit> next = split.next;
         ReplicationVisitor replicationVisitor = new ReplicationVisitor(newUnit.group, split.owningUnit.group);
-        for (TokenInfo<Unit> curr = next; !replicationVisitor.visitedAll() ; curr = next)
+        for (TokenInfo<Unit> curr = newTokenInfo.next; !replicationVisitor.visitedAll() ; curr = curr.next)
         {
             // update the candidate between curr and next
             candidate = candidate.next;
             populateCandidate(candidate);
 
-            next = curr.next;
-
-            if (replicationVisitor.add(curr.owningUnit.group))
+            if (!replicationVisitor.add(curr.owningUnit.group))
                 continue;    // If we've already seen this group, the token cannot be affected.
 
             populateTokenInfoAndAdjustUnit(curr, newUnit.group);
