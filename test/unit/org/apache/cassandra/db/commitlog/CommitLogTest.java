@@ -22,7 +22,6 @@ package org.apache.cassandra.db.commitlog;
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -54,17 +53,14 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.ColumnSerializer.Flag;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.commitlog.CommitLogDescriptor;
-import org.apache.cassandra.db.commitlog.CommitLogReplayer;
 import org.apache.cassandra.db.commitlog.CommitLogSegment;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
-import org.apache.cassandra.db.commitlog.CommitLogReplayer.ReplayFilter;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.util.ByteBufferDataInput;
-import org.apache.cassandra.io.util.FastByteArrayInputStream;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessagingService;
@@ -420,42 +416,5 @@ public class CommitLogTest
         {
             // correct path
         }
-    }
-
-    static public class Replayer extends CommitLogReplayer
-    {
-        final Predicate<Mutation> processor;
-
-        public Replayer(Predicate<Mutation> processor)
-        {
-            this(ReplayPosition.NONE, processor);
-        }
-
-        public Replayer(ReplayPosition discardedPos, Predicate<Mutation> processor)
-        {
-            super(discardedPos, null, ReplayFilter.create());
-            this.processor = processor;
-        }
-
-        @Override
-        void replayMutation(byte[] inputBuffer, int size,
-                final long entryLocation, final CommitLogDescriptor desc, final ReplayFilter replayFilter)
-        {
-            FastByteArrayInputStream bufIn = new FastByteArrayInputStream(inputBuffer, 0, size);
-            Mutation mutation;
-            try
-            {
-                mutation = Mutation.serializer.deserialize(new DataInputStream(bufIn),
-                                                               desc.getMessagingVersion(),
-                                                               ColumnSerializer.Flag.LOCAL);
-                Assert.assertTrue(processor.apply(mutation));
-            }
-            catch (IOException e)
-            {
-                // Test fails.
-                throw new AssertionError(e);
-            }
-        }
-        
     }
 }

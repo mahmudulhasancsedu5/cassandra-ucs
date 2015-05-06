@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.SortedSet;
@@ -37,10 +36,8 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.commitlog.CommitLogTest;
+import org.apache.cassandra.db.commitlog.CommitLogTestReplayer;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composites;
@@ -142,18 +139,14 @@ public class ReadMessageTest
         rm = new Mutation(KEYSPACENOCOMMIT, ByteBufferUtil.bytes("row"));
         rm.add("Standard1", Util.cellname("commit2"), ByteBufferUtil.bytes("abcd"), 0);
         rm.apply();
-        CommitLog.instance.sync(true);
 
         Checker checker = new Checker();
-        CommitLogTest.Replayer replayer = new CommitLogTest.Replayer(checker);
+        CommitLogTestReplayer.examineCommitLog(checker);
 
-        File commitLogDir = new File(DatabaseDescriptor.getCommitLogLocation());
-        replayer.recover(commitLogDir.listFiles());
-        
         assertTrue(checker.commitLogMessageFound);
         assertFalse(checker.noCommitLogMessageFound);
     }
-    
+
     static class Checker implements Predicate<Mutation>
     {
         boolean commitLogMessageFound = false;
