@@ -93,12 +93,11 @@ public class CompressedRandomAccessReader extends RandomAccessReader
         }
     }
 
-    protected ByteBuffer allocateBuffer(int bufferSize, boolean useDirect)
+    @Override
+    protected ByteBuffer allocateBuffer(int bufferSize, BufferType bufferType)
     {
         assert Integer.bitCount(bufferSize) == 1;
-        return useDirect
-                ? ByteBuffer.allocateDirect(bufferSize)
-                : ByteBuffer.allocate(bufferSize);
+        return bufferType.allocate(bufferSize);
     }
 
     @Override
@@ -120,7 +119,7 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 
             if (compressed.capacity() < chunk.length)
-                compressed = ByteBuffer.wrap(new byte[chunk.length]);
+                compressed = allocateBuffer(chunk.length, metadata.compressor().preferredBufferType());
             else
                 compressed.clear();
             compressed.limit(chunk.length);
@@ -197,13 +196,9 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
                 compressedChunk = compressedChunk.duplicate();
-                compressedChunk.reset();
-                compressedChunk.limit(chunkOffset + chunk.length);
+                compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
                 FBUtilities.directCheckSum(checksum, compressedChunk);
-
-                compressedChunk.limit(compressedChunk.capacity());
-
 
                 if (compressedChunk.getInt() != (int) checksum.getValue())
                     throw new CorruptBlockException(getPath(), chunk);
