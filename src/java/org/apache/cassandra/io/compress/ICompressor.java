@@ -28,38 +28,32 @@ public interface ICompressor
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException;
 
     /**
-     * Compression for ByteBuffers
+     * Compression for ByteBuffers.
+     * The compressor must not modify any parameter (position/limit/etc) of the buffers as they may be in other use concurrently.
      */
-    public int compress(ByteBuffer input, WrappedByteBuffer output) throws IOException;
+    public int compress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset) throws IOException;
 
     /**
-     * Decompression for DirectByteBuffers
+     * Decompression for DirectByteBuffers.
+     * The compressor must not modify any parameter (position/limit/etc) of the buffers as they may be in other use concurrently.
      */
-    public int uncompress(ByteBuffer input, ByteBuffer output) throws IOException;
+    public int uncompress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset) throws IOException;
 
     /**
-     * Notifies user if this compressor will wants/requires a direct byte buffers to
-     * decompress direct byteBuffers
+     * Returns the preferred (most efficient) buffer type for this compressor.
      */
-    public boolean useDirectOutputByteBuffers();
+    public BufferType preferredBufferType();
+
+    /**
+     * Checks if the given buffer would be supported by the compressor. If a type is supported the compressor must be
+     * able to use it in combination with all other supported types.
+     */
+    public boolean supports(ByteBuffer buffer);
+
+    /**
+     * Returns whether the compressor would be able to work with mapped buffers.
+     */
+    public boolean supportsMemoryMappedBuffers();
 
     public Set<String> supportedOptions();
-
-    /**
-     * A simple wrapped Bytebuffer.
-     * Not all implementations allow us to know the maximum size after
-     * compression. This makes it hard to size the output buffer for compression
-     * (and we want to reuse the buffer).  Instead we use this wrapped ByteBuffer
-     * so that compress(...) can have the liberty to resize the underlying array if
-     * necessary.
-     */
-    public static class WrappedByteBuffer
-    {
-        public ByteBuffer buffer;
-
-        public WrappedByteBuffer(ByteBuffer buffer)
-        {
-            this.buffer = buffer;
-        }
-    }
 }

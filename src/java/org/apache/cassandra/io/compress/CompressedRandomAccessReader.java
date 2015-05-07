@@ -81,14 +81,14 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
     protected CompressedRandomAccessReader(ChannelProxy channel, CompressionMetadata metadata, ICompressedFile file) throws FileNotFoundException
     {
-        super(channel, metadata.chunkLength(), metadata.compressedFileLength, metadata.compressor().useDirectOutputByteBuffers(), file instanceof PoolingSegmentedFile ? (PoolingSegmentedFile) file : null);
+        super(channel, metadata.chunkLength(), metadata.compressedFileLength, metadata.compressor().preferredBufferType(), file instanceof PoolingSegmentedFile ? (PoolingSegmentedFile) file : null);
         this.metadata = metadata;
         checksum = new Adler32();
 
         chunkSegments = file == null ? null : file.chunkSegments();
         if (chunkSegments == null)
         {
-            compressed = super.allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()), metadata.compressor().useDirectOutputByteBuffers());
+            compressed = super.allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()), metadata.compressor().preferredBufferType());
             checksumBytes = ByteBuffer.wrap(new byte[4]);
         }
     }
@@ -128,25 +128,20 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             if (channel.read(compressed, chunk.offset) != chunk.length)
                 throw new CorruptBlockException(getPath(), chunk);
 
-            // technically flip() is unnecessary since all the remaining work uses the raw array, but if that changes
-            // in the future this will save a lot of hair-pulling
-            compressed.flip();
-            buffer.clear();
-            int decompressedBytes;
             try
             {
-                decompressedBytes = metadata.compressor().uncompress(compressed, buffer);
+                int decompressedBytes = metadata.compressor().uncompress(compressed, 0, chunk.length, buffer, 0);
                 buffer.limit(decompressedBytes);
             }
             catch (IOException e)
             {
-                buffer.limit(0);
+                buffer.position(0).limit(0);
                 throw new CorruptBlockException(getPath(), chunk);
             }
 
             if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
-                compressed.position(0);
+                compressed.position(0).limit(chunk.length);
                 FBUtilities.directCheckSum(checksum, compressed);
 
                 if (checksum(chunk) != (int) checksum.getValue())
@@ -186,31 +181,22 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             Map.Entry<Long, MappedByteBuffer> entry = chunkSegments.floorEntry(chunk.offset);
             long segmentOffset = entry.getKey();
             int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
-            ByteBuffer compressedChunk = entry.getValue().duplicate();
+            ByteBuffer compressedChunk = entry.getValue();
 
-            compressedChunk.position(chunkOffset);
-            compressedChunk.limit(chunkOffset + chunk.length);
-            compressedChunk.mark();
-
-            buffer.clear();
-            int decompressedBytes;
             try
             {
-                decompressedBytes = metadata.compressor().uncompress(compressedChunk, buffer);
+                int decompressedBytes = metadata.compressor().uncompress(compressedChunk, chunkOffset, chunk.length, buffer, 0);
                 buffer.limit(decompressedBytes);
             }
             catch (IOException e)
             {
-                buffer.limit(0);
+                buffer.position(0).limit(0);
                 throw new CorruptBlockException(getPath(), chunk);
-            }
-            finally
-            {
-                compressedChunk.limit(compressedChunk.capacity());
             }
 
             if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
+                compressedChunk = compressedChunk.duplicate();
                 compressedChunk.reset();
                 compressedChunk.limit(chunkOffset + chunk.length);
 

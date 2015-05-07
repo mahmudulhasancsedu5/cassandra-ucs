@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Random;
@@ -28,12 +29,12 @@ import java.util.Random;
 import static org.junit.Assert.*;
 
 import org.apache.cassandra.io.util.RandomAccessReader;
+
 import org.junit.Assert;
 import org.junit.Test;
 
 import com.google.common.io.Files;
 
-import org.apache.cassandra.io.compress.ICompressor.WrappedByteBuffer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class CompressorTest
@@ -62,27 +63,27 @@ public class CompressorTest
 
     public void testArrayUncompress(byte[] data, int off, int len) throws IOException
     {
-        ByteBuffer src = makeBB(len);
+        final int inOffset = 2;
+        ByteBuffer src = makeBB(len + inOffset);
+        src.position(inOffset);
         src.put(data, off, len);
         src.rewind();
 
         final int outOffset = 3;
-        final WrappedByteBuffer compressed = makeWrappedBB(outOffset + compressor.initialCompressedBufferLength(len));
-        fillBBWithRandom(compressed.buffer);
-        compressed.buffer.clear();
-        compressed.buffer.position(outOffset);
+        final ByteBuffer compressed = makeBB(outOffset + compressor.initialCompressedBufferLength(len));
+        fillBBWithRandom(compressed);
 
-        final int compressedLength = compressor.compress(src, compressed);
+        final int compressedLength = compressor.compress(src, inOffset, len, compressed, outOffset);
 
         final int restoreOffset = 5;
         final byte[] restored = new byte[restoreOffset + len];
         new Random().nextBytes(restored);
 
         // need byte[] representation which direct buffers don't have
-        byte[] compressedBytes = new byte[compressed.buffer.capacity()];
-        ByteBufferUtil.arrayCopy(compressed.buffer, outOffset, compressedBytes, 0, compressed.buffer.capacity() - outOffset);
+        byte[] compressedBytes = new byte[compressed.capacity()];
+        ByteBufferUtil.arrayCopy(compressed, outOffset, compressedBytes, outOffset, compressed.capacity() - outOffset);
 
-        final int decompressedLength = compressor.uncompress(compressedBytes, 0, compressedLength, restored, restoreOffset);
+        final int decompressedLength = compressor.uncompress(compressedBytes, outOffset, compressedLength, restored, restoreOffset);
 
         assertEquals(decompressedLength, len);
         assertArrayEquals(Arrays.copyOfRange(data, off, off + len),
@@ -114,6 +115,9 @@ public class CompressorTest
 
     public void testMappedFile() throws IOException
     {
+        if (!compressor.supportsMemoryMappedBuffers())
+            return;
+
         byte[] data = new byte[1 << 20];
         new Random().nextBytes(data);
         ByteBuffer src = makeBB(data.length);
@@ -128,24 +132,22 @@ public class CompressorTest
         final int outOffset = 3;
         byte[] garbage = new byte[outOffset + compressor.initialCompressedBufferLength(data.length)];
         new Random().nextBytes(garbage);
-        WrappedByteBuffer dest = makeWrappedBB(outOffset + compressor.initialCompressedBufferLength(data.length));
-        dest.buffer.put(garbage);
-        dest.buffer.clear();
-        dest.buffer.position(outOffset);
+        ByteBuffer dest = makeBB(outOffset + compressor.initialCompressedBufferLength(data.length));
+        dest.put(garbage);
+        dest.clear();
+        dest.position(outOffset);
 
-        final int compressedLength = compressor.compress(src, dest);
+        final int compressedLength = compressor.compress(src, 0, src.capacity(), dest, outOffset);
 
-        FileChannel channel = new FileOutputStream(temp, false).getChannel();
-        dest.buffer.clear();
-        channel.write(dest.buffer);
+        FileChannel channel = FileChannel.open(temp.toPath(), StandardOpenOption.READ, StandardOpenOption.WRITE);
+        dest.clear();
+        channel.write(dest);
 
         MappedByteBuffer mappedData = Files.map(temp);
-        mappedData.position(outOffset);
-        mappedData.limit(compressedLength + outOffset);
-
         ByteBuffer result = makeBB(data.length + 100);
 
-        int length = compressor.uncompress(mappedData, result);
+        int length = compressor.uncompress(mappedData, outOffset, compressedLength, result, 0);
+        channel.close();
 
         Assert.assertEquals(data.length, length);
         for (int i = 0; i < length; i++)
@@ -177,51 +179,52 @@ public class CompressorTest
 
     private void testByteBuffers() throws IOException
     {
+        for (BufferType in: BufferType.values())
+            for (BufferType comp: BufferType.values())
+                for (BufferType out: BufferType.values())
+                    testByteBuffers(in, comp, out);
+    }
+    private void testByteBuffers(BufferType typeIn, BufferType typeComp, BufferType typeOut) throws IOException
+    {
         int n = RandomAccessReader.DEFAULT_BUFFER_SIZE;
         byte[] srcData = new byte[n];
         new Random().nextBytes(srcData);
 
-        ByteBuffer src = makeBB(n);
+        final int inOffset = 2;
+        ByteBuffer src = typeIn.allocate(n + inOffset);
+        if (!compressor.supports(src))
+            return;
+        src.position(inOffset);
         src.put(srcData, 0, n);
         src.flip();
 
         int outOffset = 5;
-        ICompressor.WrappedByteBuffer compressed = makeWrappedBB(outOffset + compressor.initialCompressedBufferLength(srcData.length));
-        byte[] garbage = new byte[compressed.buffer.capacity()];
+        ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length));
+        if (!compressor.supports(compressed))
+            return;
+        byte[] garbage = new byte[compressed.capacity()];
         new Random().nextBytes(garbage);
-        compressed.buffer.put(garbage);
-        compressed.buffer.clear();
-        compressed.buffer.position(outOffset);
+        compressed.put(garbage);
+        compressed.clear();
 
-        compressor.compress(src, compressed);
-        compressed.buffer.flip();
-        compressed.buffer.position(outOffset);
+        int len = compressor.compress(src, inOffset, n, compressed, outOffset);
+        ByteBuffer result = typeOut.allocate(inOffset + len);
+        if (!compressor.supports(result))
+            return;
+        int decompressed = compressor.uncompress(compressed, outOffset, len, result, inOffset);
 
-        ByteBuffer result = makeBB(outOffset + n);
-        int decompressed = compressor.uncompress(compressed.buffer, result);
-
-        assert decompressed == n;
+        assert decompressed == n : "Failed uncompressed size with compressor: " + compressor.getClass().toString();;
         for (int i = 0; i < n; ++i)
-            assert srcData[i] == result.get(i) : "Failed comparison on index: " + i + " with compressor: " + compressor.getClass().toString();
+            assert srcData[i] == result.get(inOffset + i) : "Failed comparison on index: " + i + " with compressor: " + compressor.getClass().toString();
     }
 
     private ByteBuffer makeBB(int size)
     {
-        return compressor.useDirectOutputByteBuffers()
-                ? ByteBuffer.allocateDirect(size)
-                : ByteBuffer.allocate(size);
-    }
-
-    private WrappedByteBuffer makeWrappedBB(int size)
-    {
-        return compressor.useDirectOutputByteBuffers()
-                ? new WrappedByteBuffer(ByteBuffer.allocateDirect(size))
-                : new WrappedByteBuffer(ByteBuffer.allocate(size));
+        return compressor.preferredBufferType().allocate(size);
     }
 
     private void fillBBWithRandom(ByteBuffer dest)
     {
-        ByteBuffer dupe = dest.duplicate();
         byte[] random = new byte[dest.capacity()];
         new Random().nextBytes(random);
         dest.clear();

@@ -647,6 +647,11 @@ public class FBUtilities
         }
     };
 
+    public static byte[] getThreadLocalScratchBuffer()
+    {
+        return localDigestBuffer.get();
+    }
+
     //Java 7 has this method but it's private till Java 8. Thanks JDK!
     public static boolean supportsDirectChecksum()
     {

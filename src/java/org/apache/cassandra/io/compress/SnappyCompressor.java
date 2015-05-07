@@ -25,9 +25,9 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.xerial.snappy.Snappy;
 import org.xerial.snappy.SnappyError;
-
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 public class SnappyCompressor implements ICompressor
@@ -79,14 +79,13 @@ public class SnappyCompressor implements ICompressor
         return Snappy.maxCompressedLength(chunkLength);
     }
 
-    public int compress(ByteBuffer src, WrappedByteBuffer dest) throws IOException
+    public int compress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset) throws IOException
     {
-        int result = Snappy.compress(src, dest.buffer);
-
-        // Snappy doesn't match LZ4 and Deflate w/regards to state it leaves dest ByteBuffer's counters in
-        dest.buffer.position(dest.buffer.limit());
-        dest.buffer.limit(dest.buffer.capacity());
-        return result;
+        ByteBuffer src = input.duplicate();
+        src.limit(inputOffset + inputLength).position(inputOffset);
+        ByteBuffer dest = output.duplicate();
+        dest.position(outputOffset);
+        return Snappy.compress(src, dest);
     }
 
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException
@@ -94,16 +93,30 @@ public class SnappyCompressor implements ICompressor
         return Snappy.rawUncompress(input, inputOffset, inputLength, output, outputOffset);
     }
 
-    public int uncompress(ByteBuffer input, ByteBuffer output) throws IOException
+    public int uncompress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset)
+            throws IOException
     {
-        if (input.hasArray() && output.hasArray())
-            return Snappy.rawUncompress(input.array(), input.arrayOffset() + input.position(), input.remaining(), output.array(), output.arrayOffset() + output.position());
-        return Snappy.uncompress(input, output);
+        ByteBuffer src = input.duplicate();
+        src.limit(inputOffset + inputLength).position(inputOffset);
+        ByteBuffer dest = output.duplicate();
+        dest.position(outputOffset);
+        return Snappy.uncompress(src, dest);
     }
 
-    @Override
-    public boolean useDirectOutputByteBuffers()
+    public BufferType preferredBufferType()
+    {
+        return BufferType.OFF_HEAP;
+    }
+
+    public boolean supportsMemoryMappedBuffers()
     {
         return true;
+    }
+
+    public boolean supports(ByteBuffer buffer)
+    {
+        // Snappy can't deal with different input and output buffer types.
+        // To avoid possible problems, pretend it can't support array-backed at all.
+        return buffer.isDirect();
     }
 }

@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+
 import org.apache.cassandra.io.compress.*;
 import org.apache.cassandra.io.util.ChannelProxy;
 import org.apache.cassandra.io.util.FileMark;
@@ -28,7 +29,7 @@ public class RandomAccessReaderTest
         final File f = File.createTempFile("testReadFully", "1");
         final String expected = "The quick brown fox jumps over the lazy dog";
 
-        SequentialWriter writer = new SequentialWriter(f, CompressionParameters.DEFAULT_CHUNK_LENGTH, false);
+        SequentialWriter writer = SequentialWriter.open(f);
         writer.write(expected.getBytes());
         writer.finish();
 
@@ -56,7 +57,7 @@ public class RandomAccessReaderTest
         File f = File.createTempFile("testReadBytes", "1");
         final String expected = "The quick brown fox jumps over the lazy dog";
 
-        SequentialWriter writer = new SequentialWriter(f, CompressionParameters.DEFAULT_CHUNK_LENGTH, false);
+        SequentialWriter writer = SequentialWriter.open(f);
         writer.write(expected.getBytes());
         writer.finish();
 
@@ -84,7 +85,7 @@ public class RandomAccessReaderTest
         final String expected = "The quick brown fox jumps over the lazy dog";
         final int numIterations = 10;
 
-        SequentialWriter writer = new SequentialWriter(f, CompressionParameters.DEFAULT_CHUNK_LENGTH, false);
+        SequentialWriter writer = SequentialWriter.open(f);
         for (int i = 0; i < numIterations; i++)
             writer.write(expected.getBytes());
         writer.finish();
@@ -163,7 +164,7 @@ public class RandomAccessReaderTest
         }
         final int totalLength = len;
 
-        SequentialWriter writer = new SequentialWriter(f, CompressionParameters.DEFAULT_CHUNK_LENGTH, false);
+        SequentialWriter writer = SequentialWriter.open(f);
         for (int i = 0; i < expected.length; i++)
             writer.write(expected[i].getBytes());
         writer.finish();

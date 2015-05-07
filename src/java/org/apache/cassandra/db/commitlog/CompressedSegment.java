@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.ICompressor;
-import org.apache.cassandra.io.compress.ICompressor.WrappedByteBuffer;
 import org.apache.cassandra.io.util.FileUtils;
 
 /*
@@ -34,10 +33,10 @@ import org.apache.cassandra.io.util.FileUtils;
  */
 public class CompressedSegment extends CommitLogSegment
 {
-    static private final ThreadLocal<WrappedByteBuffer> compressedBufferHolder = new ThreadLocal<WrappedByteBuffer>() {
-        protected WrappedByteBuffer initialValue()
+    static private final ThreadLocal<ByteBuffer> compressedBufferHolder = new ThreadLocal<ByteBuffer>() {
+        protected ByteBuffer initialValue()
         {
-            return new WrappedByteBuffer(ByteBuffer.allocate(0));
+            return ByteBuffer.allocate(0);
         }
     };
     static Queue<ByteBuffer> bufferPool = new ConcurrentLinkedQueue<>();
@@ -69,17 +68,9 @@ public class CompressedSegment extends CommitLogSegment
         }
     }
 
-    static ByteBuffer allocate(ICompressor compressor, int size)
-    {
-        if (compressor.useDirectOutputByteBuffers())
-            return ByteBuffer.allocateDirect(size);
-        else
-            return ByteBuffer.allocate(size);
-    }
-    
     ByteBuffer allocate(int size)
     {
-        return allocate(compressor, size);
+        return compressor.preferredBufferType().allocate(size);
     }
 
     ByteBuffer createBuffer(CommitLog commitLog)
@@ -88,7 +79,7 @@ public class CompressedSegment extends CommitLogSegment
         if (buf == null)
         {
             // this.compressor is not yet set, so we must use the commitLog's one.
-            buf = allocate(commitLog.compressor, DatabaseDescriptor.getCommitLogSegmentSize());
+            buf = commitLog.compressor.preferredBufferType().allocate(DatabaseDescriptor.getCommitLogSegmentSize());
         } else
             buf.clear();
         return buf;
@@ -107,20 +98,16 @@ public class CompressedSegment extends CommitLogSegment
         try {
 
             int compressedLength = compressor.initialCompressedBufferLength(length);
-            WrappedByteBuffer wrappedCompressedBuffer = compressedBufferHolder.get();
-            ByteBuffer compressedBuffer = wrappedCompressedBuffer.buffer;
-            if (compressedBuffer.isDirect() != compressor.useDirectOutputByteBuffers() ||
+            ByteBuffer compressedBuffer = compressedBufferHolder.get();
+            if (!compressor.supports(compressedBuffer) ||
                 compressedBuffer.capacity() < compressedLength + COMPRESSED_MARKER_SIZE)
             {
+                FileUtils.clean(compressedBuffer);
                 compressedBuffer = allocate(compressedLength + COMPRESSED_MARKER_SIZE);
-                FileUtils.clean(wrappedCompressedBuffer.buffer);
-                wrappedCompressedBuffer.buffer = compressedBuffer;
+                compressedBufferHolder.set(compressedBuffer);
             }
 
-            ByteBuffer inputBuffer = buffer.duplicate();
-            inputBuffer.limit(contentStart + length).position(contentStart);
-            compressedBuffer.limit(compressedBuffer.capacity()).position(COMPRESSED_MARKER_SIZE);
-            compressedLength = compressor.compress(inputBuffer, wrappedCompressedBuffer);
+            compressedLength = compressor.compress(buffer, contentStart, length, compressedBuffer, COMPRESSED_MARKER_SIZE);
 
             compressedBuffer.position(0);
             compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
