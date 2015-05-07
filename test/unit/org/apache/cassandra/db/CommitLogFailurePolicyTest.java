@@ -17,7 +17,7 @@
 * under the License.
 */
 
-package org.apache.cassandra.db.commitlog;
+package org.apache.cassandra.db;
 
 import org.junit.Assert;
 import org.junit.BeforeClass;
