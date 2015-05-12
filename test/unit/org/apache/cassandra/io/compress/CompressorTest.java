@@ -115,9 +115,6 @@ public class CompressorTest
 
     public void testMappedFile() throws IOException
     {
-        if (!compressor.supportsMemoryMappedBuffers())
-            return;
-
         byte[] data = new byte[1 << 20];
         new Random().nextBytes(data);
         ByteBuffer src = makeBB(data.length);
@@ -179,43 +176,50 @@ public class CompressorTest
 
     private void testByteBuffers() throws IOException
     {
+        assert compressor.supports(BufferType.OFF_HEAP);
+        assert compressor.supports(compressor.preferredBufferType());
+
         for (BufferType in: BufferType.values())
-            for (BufferType comp: BufferType.values())
-                for (BufferType out: BufferType.values())
-                    testByteBuffers(in, comp, out);
+            if (compressor.supports(in))
+                for (BufferType comp: BufferType.values())
+                    if (compressor.supports(comp))
+                        for (BufferType out: BufferType.values())
+                            if (compressor.supports(out))
+                                testByteBuffers(in, comp, out);
     }
     private void testByteBuffers(BufferType typeIn, BufferType typeComp, BufferType typeOut) throws IOException
     {
-        int n = RandomAccessReader.DEFAULT_BUFFER_SIZE;
-        byte[] srcData = new byte[n];
-        new Random().nextBytes(srcData);
+        try
+        {
+            int n = RandomAccessReader.DEFAULT_BUFFER_SIZE;
+            byte[] srcData = new byte[n];
+            new Random().nextBytes(srcData);
 
-        final int inOffset = 2;
-        ByteBuffer src = typeIn.allocate(n + inOffset);
-        if (!compressor.supports(src))
-            return;
-        src.position(inOffset);
-        src.put(srcData, 0, n);
-        src.flip();
+            final int inOffset = 2;
+            ByteBuffer src = typeIn.allocate(n + inOffset);
+            src.position(inOffset);
+            src.put(srcData, 0, n);
+            src.flip();
 
-        int outOffset = 5;
-        ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length));
-        if (!compressor.supports(compressed))
-            return;
-        byte[] garbage = new byte[compressed.capacity()];
-        new Random().nextBytes(garbage);
-        compressed.put(garbage);
-        compressed.clear();
+            int outOffset = 5;
+            ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length));
+            byte[] garbage = new byte[compressed.capacity()];
+            new Random().nextBytes(garbage);
+            compressed.put(garbage);
+            compressed.clear();
 
-        int len = compressor.compress(src, inOffset, n, compressed, outOffset);
-        ByteBuffer result = typeOut.allocate(inOffset + len);
-        if (!compressor.supports(result))
-            return;
-        int decompressed = compressor.uncompress(compressed, outOffset, len, result, inOffset);
+            int len = compressor.compress(src, inOffset, n, compressed, outOffset);
+            ByteBuffer result = typeOut.allocate(inOffset + len);
+            int decompressed = compressor.uncompress(compressed, outOffset, len, result, inOffset);
 
-        assert decompressed == n : "Failed uncompressed size with compressor: " + compressor.getClass().toString();;
-        for (int i = 0; i < n; ++i)
-            assert srcData[i] == result.get(inOffset + i) : "Failed comparison on index: " + i + " with compressor: " + compressor.getClass().toString();
+            assert decompressed == n : "Failed uncompressed size";
+            for (int i = 0; i < n; ++i)
+                assert srcData[i] == result.get(inOffset + i) : "Failed comparison on index: " + i;
+        }
+        catch (Throwable e)
+        {
+            throw new AssertionError("Failed testing compressor " + compressor.getClass().getSimpleName() + " with buffer types in:" + typeIn + " compressed:" + typeComp + " out:" + typeOut, e);
+        }
     }
 
     private ByteBuffer makeBB(int size)

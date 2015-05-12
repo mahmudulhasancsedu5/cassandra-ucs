@@ -37,4 +37,9 @@ public enum BufferType
     };
 
     public abstract ByteBuffer allocate(int size);
+
+    public static BufferType typeOf(ByteBuffer buffer)
+    {
+        return buffer.isDirect() ? OFF_HEAP : ON_HEAP;
+    }
 }

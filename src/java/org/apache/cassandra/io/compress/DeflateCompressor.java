@@ -212,12 +212,7 @@ public class DeflateCompressor implements ICompressor
         return uncompress(ByteBufferUtil.getArray(input), 0, input.remaining(), output.array(), output.arrayOffset() + output.position());
     }
 
-    public boolean supportsMemoryMappedBuffers()
-    {
-        return true;
-    }
-
-    public boolean supports(ByteBuffer buffer)
+    public boolean supports(BufferType bufferType)
     {
         return true;
     }

@@ -47,13 +47,10 @@ public interface ICompressor
     /**
      * Checks if the given buffer would be supported by the compressor. If a type is supported the compressor must be
      * able to use it in combination with all other supported types.
+     *
+     * Direct and memory-mapped buffers must be supported by all compressors.
      */
-    public boolean supports(ByteBuffer buffer);
-
-    /**
-     * Returns whether the compressor would be able to work with mapped buffers.
-     */
-    public boolean supportsMemoryMappedBuffers();
+    public boolean supports(BufferType bufferType);
 
     public Set<String> supportedOptions();
 }

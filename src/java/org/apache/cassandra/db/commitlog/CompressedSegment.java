@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.compress.ICompressor;
 import org.apache.cassandra.io.util.FileUtils;
 
@@ -99,7 +100,7 @@ public class CompressedSegment extends CommitLogSegment
 
             int compressedLength = compressor.initialCompressedBufferLength(length);
             ByteBuffer compressedBuffer = compressedBufferHolder.get();
-            if (!compressor.supports(compressedBuffer) ||
+            if (compressor.preferredBufferType() != BufferType.typeOf(compressedBuffer) ||
                 compressedBuffer.capacity() < compressedLength + COMPRESSED_MARKER_SIZE)
             {
                 FileUtils.clean(compressedBuffer);

@@ -108,15 +108,10 @@ public class SnappyCompressor implements ICompressor
         return BufferType.OFF_HEAP;
     }
 
-    public boolean supportsMemoryMappedBuffers()
-    {
-        return true;
-    }
-
-    public boolean supports(ByteBuffer buffer)
+    public boolean supports(BufferType bufferType)
     {
         // Snappy can't deal with different input and output buffer types.
         // To avoid possible problems, pretend it can't support array-backed at all.
-        return buffer.isDirect();
+        return bufferType == BufferType.OFF_HEAP;
     }
 }

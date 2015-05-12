@@ -138,12 +138,7 @@ public class LZ4Compressor implements ICompressor
         return BufferType.OFF_HEAP;
     }
 
-    public boolean supportsMemoryMappedBuffers()
-    {
-        return true;
-    }
-
-    public boolean supports(ByteBuffer buffer)
+    public boolean supports(BufferType bufferType)
     {
         return true;
     }
