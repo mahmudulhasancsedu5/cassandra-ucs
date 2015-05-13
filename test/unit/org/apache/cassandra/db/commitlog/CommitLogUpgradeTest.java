@@ -39,16 +39,19 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.Mutation;
-import org.apache.cassandra.db.composites.CellNameType;
-import org.apache.cassandra.db.composites.CellNames;
-import org.apache.cassandra.db.marshal.AsciiType;
-import org.apache.cassandra.db.marshal.UUIDType;
 
 public class CommitLogUpgradeTest
 {
     static final String DATA_DIR = "test/data/legacy-commitlog/";
+    static final String PROPERTIES_FILE = "hash.txt";
+    static final String CFID_PROPERTY = "cfid";
+    static final String CELLS_PROPERTY = "cells";
+    static final String HASH_PROPERTY = "hash";
+    
+    static final String TABLE = "Standard1";
+    static final String KEYSPACE = "Keyspace1";
+    static final String CELLNAME = "name";
 
     @Test
     public void test20() throws Exception
@@ -66,29 +69,28 @@ public class CommitLogUpgradeTest
     static public void initialize() throws FileNotFoundException, IOException, InterruptedException
     {
         SchemaLoader.loadSchema();
-        SchemaLoader.schemaDefinition(""); // leave def. blank to maintain old behaviour
+        SchemaLoader.schemaDefinition("");
     }
 
 
     public void testRestore(String location) throws IOException, InterruptedException {
         Properties prop = new Properties();
-        prop.load(new FileInputStream(new File(location + File.separatorChar + "hash.txt")));
-        int hash = Integer.parseInt(prop.getProperty("hash"));
-        int cells = Integer.parseInt(prop.getProperty("cells"));
+        prop.load(new FileInputStream(new File(location + File.separatorChar + PROPERTIES_FILE)));
+        int hash = Integer.parseInt(prop.getProperty(HASH_PROPERTY));
+        int cells = Integer.parseInt(prop.getProperty(CELLS_PROPERTY));
 
-        String cfidString = prop.getProperty("cfid");
+        String cfidString = prop.getProperty(CFID_PROPERTY);
         if (cfidString != null)
         {
             UUID cfid = UUID.fromString(cfidString);
             if (Schema.instance.getCF(cfid) == null)
             {
-                CFMetaData cfm = Schema.instance.getCFMetaData("Keyspace1", "Standard1");
+                CFMetaData cfm = Schema.instance.getCFMetaData(KEYSPACE, TABLE);
                 Schema.instance.purge(cfm);
                 Schema.instance.load(cfm.copy(cfid));
             }
         }
 
-        System.out.format("Replaying logs in %s... \n", location); System.out.flush();
         Hasher hasher = new Hasher();
         CommitLogTestReplayer replayer = new CommitLogTestReplayer(hasher);
         File[] files = new File(location).listFiles(new FilenameFilter() {
@@ -124,7 +126,7 @@ public class CommitLogUpgradeTest
         {
             for (ColumnFamily cf : mutation.getColumnFamilies()) {
                 for (Cell c : cf.getSortedColumns()) {
-                    if (new String(c.name().toByteBuffer().array(), StandardCharsets.UTF_8).startsWith("name"))
+                    if (new String(c.name().toByteBuffer().array(), StandardCharsets.UTF_8).startsWith(CELLNAME))
                     {
                         hash = hash(hash, c.value());
                         ++cells;

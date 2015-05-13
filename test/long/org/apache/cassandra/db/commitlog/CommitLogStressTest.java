@@ -136,7 +136,7 @@ public class CommitLogStressTest
         }
 
         SchemaLoader.loadSchema();
-        SchemaLoader.schemaDefinition(""); // leave def. blank to maintain old behaviour
+        SchemaLoader.schemaDefinition("");
 
         File dir = new File(location);
         if (dir.isDirectory())
