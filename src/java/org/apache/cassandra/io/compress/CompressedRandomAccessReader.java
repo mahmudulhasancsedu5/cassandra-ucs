@@ -20,7 +20,6 @@ package org.apache.cassandra.io.compress;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -29,8 +28,6 @@ import java.util.zip.Adler32;
 
 import com.google.common.primitives.Ints;
 
-import org.apache.cassandra.config.Config;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
@@ -200,6 +197,7 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
                 FBUtilities.directCheckSum(checksum, compressedChunk);
 
+                compressedChunk.limit(compressedChunk.capacity());
                 if (compressedChunk.getInt() != (int) checksum.getValue())
                     throw new CorruptBlockException(getPath(), chunk);
 
