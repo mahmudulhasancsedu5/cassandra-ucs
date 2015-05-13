@@ -38,7 +38,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import junit.framework.Assert;
 
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.junit.BeforeClass;
@@ -53,7 +52,6 @@ import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnSerializer;
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.io.util.FastByteArrayInputStream;
 

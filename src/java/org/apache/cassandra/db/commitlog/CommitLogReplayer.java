@@ -280,7 +280,7 @@ public class CommitLogReplayer
                     return;
                 if (globalPosition.segment == desc.id)
                     reader.seek(globalPosition.position);
-                replaySyncSection(reader, -1, desc);
+                replaySyncSection(reader, (int) reader.getPositionLimit(), desc);
                 return;
             }
 

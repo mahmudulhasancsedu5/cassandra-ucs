@@ -1,0 +1,137 @@
+package org.apache.cassandra.db.commitlog;
+/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
+import java.util.UUID;
+
+import junit.framework.Assert;
+
+import com.google.common.base.Predicate;
+
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.Cell;
+import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.composites.CellNameType;
+import org.apache.cassandra.db.composites.CellNames;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.marshal.UUIDType;
+
+public class CommitLogUpgradeTest
+{
+    static final String DATA_DIR = "test/data/legacy-commitlog/";
+
+    @Test
+    public void test20() throws Exception
+    {
+        testRestore(DATA_DIR + "2.0");
+    }
+
+    @Test
+    public void test21() throws Exception
+    {
+        testRestore(DATA_DIR + "2.1");
+    }
+    
+    @BeforeClass
+    static public void initialize() throws FileNotFoundException, IOException, InterruptedException
+    {
+        SchemaLoader.loadSchema();
+        SchemaLoader.schemaDefinition(""); // leave def. blank to maintain old behaviour
+    }
+
+
+    public void testRestore(String location) throws IOException, InterruptedException {
+        Properties prop = new Properties();
+        prop.load(new FileInputStream(new File(location + File.separatorChar + "hash.txt")));
+        int hash = Integer.parseInt(prop.getProperty("hash"));
+        int cells = Integer.parseInt(prop.getProperty("cells"));
+
+        String cfidString = prop.getProperty("cfid");
+        if (cfidString != null)
+        {
+            UUID cfid = UUID.fromString(cfidString);
+            if (Schema.instance.getCF(cfid) == null)
+            {
+                CFMetaData cfm = Schema.instance.getCFMetaData("Keyspace1", "Standard1");
+                Schema.instance.purge(cfm);
+                Schema.instance.load(cfm.copy(cfid));
+            }
+        }
+
+        System.out.format("Replaying logs in %s... \n", location); System.out.flush();
+        Hasher hasher = new Hasher();
+        CommitLogTestReplayer replayer = new CommitLogTestReplayer(hasher);
+        File[] files = new File(location).listFiles(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name)
+            {
+                return name.endsWith(".log");
+            }
+        });
+        replayer.recover(files);
+
+        Assert.assertEquals(cells, hasher.cells);
+        Assert.assertEquals(hash, hasher.hash);
+    }
+
+    public static int hash(int hash, ByteBuffer bytes)
+    {
+        int shift = 0;
+        for (int i=0; i<bytes.limit(); i++) {
+            hash += (bytes.get(i) & 0xFF) << shift;
+            shift = (shift + 8) & 0x1F;
+        }
+        return hash;
+    }
+
+    class Hasher implements Predicate<Mutation>
+    {
+        int hash = 0;
+        int cells = 0;
+
+        @Override
+        public boolean apply(Mutation mutation)
+        {
+            for (ColumnFamily cf : mutation.getColumnFamilies()) {
+                for (Cell c : cf.getSortedColumns()) {
+                    if (new String(c.name().toByteBuffer().array(), StandardCharsets.UTF_8).startsWith("name"))
+                    {
+                        hash = hash(hash, c.value());
+                        ++cells;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+}
