@@ -502,10 +502,15 @@ public class CommitLogSegmentManager
         logger.debug("CLSM done with closing and clearing existing commit log segments.");
     }
 
+    // Used by tests only.
     void awaitManagementTasksCompletion()
     {
         while (!segmentManagementTasks.isEmpty())
             Thread.yield();
+        // The last management task is not yet complete. Wait a while for it.
+        Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
+        // TODO: If this functionality is required by anything other than tests, signalling must be used to ensure
+        // waiting completes correctly.
     }
 
     private static void closeAndDeleteSegmentUnsafe(CommitLogSegment segment, boolean delete)

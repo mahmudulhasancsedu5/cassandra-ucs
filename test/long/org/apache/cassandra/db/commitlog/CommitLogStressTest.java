@@ -43,6 +43,7 @@ import junit.framework.Assert;
 
 import com.google.common.util.concurrent.RateLimiter;
 
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.apache.cassandra.SchemaLoader;
@@ -139,7 +140,11 @@ public class CommitLogStressTest
 
         SchemaLoader.loadSchema();
         SchemaLoader.schemaDefinition(""); // leave def. blank to maintain old behaviour
-
+    }
+    
+    @Before
+    public void cleanDir()
+    {
         File dir = new File(location);
         if (dir.isDirectory())
         {
@@ -229,7 +234,7 @@ public class CommitLogStressTest
             }
             verifySizes(commitLog);
 
-            commitLog.discardCompletedSegments( Schema.instance.getCFMetaData("Keyspace1", "Standard1").cfId, discardedPos);
+            commitLog.discardCompletedSegments(Schema.instance.getCFMetaData("Keyspace1", "Standard1").cfId, discardedPos);
             threads.clear();
             System.out.format("Discarded at %s\n", discardedPos);
             verifySizes(commitLog);
@@ -274,14 +279,14 @@ public class CommitLogStressTest
 
     private void verifySizes(CommitLog commitLog)
     {
-        // Wait for any pending deletes to complete.
-        commitLog.allocator.awaitManagementTasksCompletion();
         // Complete anything that's still left to write.
         commitLog.executor.requestExtraSync().awaitUninterruptibly();
         // One await() does not suffice as we may be signalled when an ongoing sync finished. Request another
         // (which shouldn't write anything) to make sure the first we triggered completes.
         // FIXME: The executor should give us a chance to await completion of the sync we requested.
         commitLog.executor.requestExtraSync().awaitUninterruptibly();
+        // Wait for any pending deletes or segment allocations to complete.
+        commitLog.allocator.awaitManagementTasksCompletion();
         
         long combinedSize = 0;
         for (File f : new File(commitLog.location).listFiles())
@@ -330,7 +335,8 @@ public class CommitLogStressTest
               }
               double time = (System.currentTimeMillis() - start) / 1000.0;
               double avg = (temp / time);
-              System.out.println(String.format("second %d mem max %.0fmb allocated %.0fmb free %.0fmb mutations %d since start %d avg %.3f content %.1fmb ondisk %.1fmb transfer %.3fmb",
+              System.out.println(
+                      String.format("second %d mem max %.0fmb allocated %.0fmb free %.0fmb mutations %d since start %d avg %.3f content %.1fmb ondisk %.1fmb transfer %.3fmb",
                       ((System.currentTimeMillis() - start) / 1000),
                       mb(maxMemory), mb(allocatedMemory), mb(freeMemory), (temp - lastUpdate), lastUpdate, avg,
                       mb(commitLog.getActiveContentSize()), mb(commitLog.getActiveOnDiskSize()), mb(sz / time)));
