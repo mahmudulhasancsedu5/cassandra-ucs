@@ -64,14 +64,24 @@ public interface CommitLogMBean
      * @return file names (not full paths) of active commit log segments (segments containing unflushed data)
      */
     public List<String> getActiveSegmentNames();
-    
+
     /**
      * @return Files which are pending for archival attempt.  Does NOT include failed archive attempts.
      */
     public List<String> getArchivingSegmentNames();
-    
-    public long getActiveContentSize();  // uncompressed
-    public long getActiveOnDiskSize();   // compressed
-    
+
+    /**
+     * @return The size of the mutations in all active commit log segments (uncompressed).
+     */
+    public long getActiveContentSize();
+
+    /**
+     * @return The space taken on disk by the commit log (compressed).
+     */
+    public long getActiveOnDiskSize();
+
+    /**
+     * @return A map between active log segments and the compression ratio achieved for each.
+     */
     public Map<String, Double> getActiveSegmentCompressionRatios();
 }
