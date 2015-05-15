@@ -20,6 +20,7 @@ package org.apache.cassandra.db.commitlog;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 public interface CommitLogMBean
 {
@@ -68,4 +69,9 @@ public interface CommitLogMBean
      * @return Files which are pending for archival attempt.  Does NOT include failed archive attempts.
      */
     public List<String> getArchivingSegmentNames();
+    
+    public long getActiveContentSize();  // uncompressed
+    public long getActiveOnDiskSize();   // compressed
+    
+    public Map<String, Double> getActiveSegmentCompressionRatios();
 }
