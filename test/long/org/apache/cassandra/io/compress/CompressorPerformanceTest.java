@@ -47,16 +47,14 @@ public class CompressorPerformanceTest
         
         int checksum = 0;
         int count = 100;
-        int clen = 0;
-        int dlen = 0;
 
         long time = System.nanoTime();
         for (int i=0; i<count; ++i)
         {
             output.clear();
-            clen = compressor.compress(dataSource, output);
+            compressor.compress(dataSource, output);
             // Make sure not optimized away.
-            checksum += output.get(ThreadLocalRandom.current().nextInt(clen));
+            checksum += output.get(ThreadLocalRandom.current().nextInt(output.position()));
             dataSource.rewind();
         }
         long timec = System.nanoTime() - time;
@@ -68,9 +66,9 @@ public class CompressorPerformanceTest
         for (int i=0; i<count; ++i)
         {
             output.clear();
-            dlen = compressor.uncompress(input, output);
+            compressor.uncompress(input, output);
             // Make sure not optimized away.
-            checksum += output.get(ThreadLocalRandom.current().nextInt(dlen));
+            checksum += output.get(ThreadLocalRandom.current().nextInt(output.position()));
             input.rewind();
         }
         long timed = System.nanoTime() - time;

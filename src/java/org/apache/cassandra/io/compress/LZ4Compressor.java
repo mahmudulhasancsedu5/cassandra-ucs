@@ -55,9 +55,8 @@ public class LZ4Compressor implements ICompressor
         return INTEGER_BYTES + compressor.maxCompressedLength(chunkLength);
     }
 
-    public int compress(ByteBuffer input, ByteBuffer output) throws IOException
+    public void compress(ByteBuffer input, ByteBuffer output) throws IOException
     {
-        int start = output.position();
         int len = input.remaining();
         output.put((byte) len);
         output.put((byte) (len >>> 8));
@@ -67,7 +66,6 @@ public class LZ4Compressor implements ICompressor
         try
         {
             compressor.compress(input, output);
-            return output.position() - start;
         }
         catch (LZ4Exception e)
         {
@@ -102,19 +100,18 @@ public class LZ4Compressor implements ICompressor
         return decompressedLength;
     }
 
-    public int uncompress(ByteBuffer input, ByteBuffer output) throws IOException
+    public void uncompress(ByteBuffer input, ByteBuffer output) throws IOException
     {
         final int decompressedLength = (input.get() & 0xFF)
                 | ((input.get() & 0xFF) << 8)
                 | ((input.get() & 0xFF) << 16)
                 | ((input.get() & 0xFF) << 24);
 
-        int limit = output.limit();
-        assert limit >= output.position() + decompressedLength;
-        output.limit(output.position() + decompressedLength);
         try
         {
-            decompressor.decompress(input, output);
+            int compressedLength = decompressor.decompress(input, input.position(), output, output.position(), decompressedLength);
+            input.position(input.position() + compressedLength);
+            output.position(output.position() + decompressedLength);
         }
         catch (LZ4Exception e)
         {
@@ -125,8 +122,6 @@ public class LZ4Compressor implements ICompressor
         {
             throw new IOException("Compressed lengths mismatch - "+input.remaining()+" bytes remain");
         }
-        output.limit(limit);
-        return decompressedLength;
     }
 
     public Set<String> supportedOptions()

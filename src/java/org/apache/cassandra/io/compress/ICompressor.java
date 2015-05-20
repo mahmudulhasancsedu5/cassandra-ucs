@@ -32,20 +32,16 @@ public interface ICompressor
      * 
      * The data between input.position() and input.limit() is compressed and placed into output starting from output.position().
      * Positions in both buffers are moved to reflect the bytes read and written. Limits are not changed.
-     *
-     * Returns the number of compressed bytes.
      */
-    public int compress(ByteBuffer input, ByteBuffer output) throws IOException;
+    public void compress(ByteBuffer input, ByteBuffer output) throws IOException;
 
     /**
      * Decompression for DirectByteBuffers.
      * 
      * The data between input.position() and input.limit() is uncompressed and placed into output starting from output.position().
      * Positions in both buffers are moved to reflect the bytes read and written. Limits are not changed.
-     *
-     * Returns the number of uncompressed bytes.
      */
-    public int uncompress(ByteBuffer input, ByteBuffer output) throws IOException;
+    public void uncompress(ByteBuffer input, ByteBuffer output) throws IOException;
 
     /**
      * Returns the preferred (most efficient) buffer type for this compressor.

@@ -79,16 +79,15 @@ public class SnappyCompressor implements ICompressor
         return Snappy.maxCompressedLength(chunkLength);
     }
 
-    public int compress(ByteBuffer input, ByteBuffer output) throws IOException
+    public void compress(ByteBuffer input, ByteBuffer output) throws IOException
     {
     	int dlimit = output.limit();
-        int result = Snappy.compress(input, output);
+        Snappy.compress(input, output);
 
-        // Snappy doesn't match LZ4 and Deflate w/regards to state it leaves dest ByteBuffer's counters in
+        // Snappy doesn't match the ICompressor contract w/regards to state it leaves dest ByteBuffer's counters in
         output.position(output.limit());
         output.limit(dlimit);
         input.position(input.limit());
-        return result;
     }
 
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException
@@ -96,17 +95,16 @@ public class SnappyCompressor implements ICompressor
         return Snappy.rawUncompress(input, inputOffset, inputLength, output, outputOffset);
     }
 
-    public int uncompress(ByteBuffer input, ByteBuffer output)
+    public void uncompress(ByteBuffer input, ByteBuffer output)
             throws IOException
     {
         int dlimit = output.limit();
-        int result = Snappy.uncompress(input, output);
+        Snappy.uncompress(input, output);
 
-        // Snappy doesn't match LZ4 and Deflate w/regards to state it leaves dest ByteBuffer's counters in
+        // Snappy doesn't match the ICompressor contract w/regards to state it leaves dest ByteBuffer's counters in
         output.position(output.limit());
         output.limit(dlimit);
         input.position(input.limit());
-        return result;
     }
 
     public BufferType preferredBufferType()

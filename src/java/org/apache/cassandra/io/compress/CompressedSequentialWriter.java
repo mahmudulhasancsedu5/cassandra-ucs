@@ -100,19 +100,19 @@ public class CompressedSequentialWriter extends SequentialWriter
     {
         seekToChunkStart(); // why is this necessary? seems like it should always be at chunk start in normal operation
 
-        int compressedLength;
         try
         {
             // compressing data with buffer re-use
             buffer.flip();
             compressed.clear();
-            compressedLength = compressor.compress(buffer, compressed);
+            compressor.compress(buffer, compressed);
         }
         catch (IOException e)
         {
             throw new RuntimeException("Compression exception", e); // shouldn't happen
         }
 
+        int compressedLength = compressed.position();
         uncompressedSize += buffer.position();
         compressedSize += compressedLength;
 
