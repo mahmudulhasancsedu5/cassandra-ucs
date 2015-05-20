@@ -67,13 +67,14 @@ public class CompressorTest
         ByteBuffer src = makeBB(len + inOffset);
         src.position(inOffset);
         src.put(data, off, len);
-        src.rewind();
+        src.flip().position(inOffset);
 
         final int outOffset = 3;
         final ByteBuffer compressed = makeBB(outOffset + compressor.initialCompressedBufferLength(len));
         fillBBWithRandom(compressed);
+        compressed.position(outOffset);
 
-        final int compressedLength = compressor.compress(src, inOffset, len, compressed, outOffset);
+        final int compressedLength = compressor.compress(src, compressed);
 
         final int restoreOffset = 5;
         final byte[] restored = new byte[restoreOffset + len];
@@ -134,7 +135,7 @@ public class CompressorTest
         dest.clear();
         dest.position(outOffset);
 
-        final int compressedLength = compressor.compress(src, 0, src.capacity(), dest, outOffset);
+        final int compressedLength = compressor.compress(src, dest);
 
         FileChannel channel = FileChannel.open(temp.toPath(), StandardOpenOption.READ, StandardOpenOption.WRITE);
         dest.clear();
@@ -142,9 +143,11 @@ public class CompressorTest
 
         MappedByteBuffer mappedData = Files.map(temp);
         ByteBuffer result = makeBB(data.length + 100);
+        mappedData.position(outOffset).limit(outOffset + compressedLength);
 
-        int length = compressor.uncompress(mappedData, outOffset, compressedLength, result, 0);
+        int length = compressor.uncompress(mappedData, result);
         channel.close();
+        result.flip();
 
         Assert.assertEquals(data.length, length);
         for (int i = 0; i < length; i++)
@@ -209,21 +212,32 @@ public class CompressorTest
             new Random().nextBytes(srcData);
 
             final int inOffset = 2;
-            ByteBuffer src = typeIn.allocate(n + inOffset);
+            ByteBuffer src = typeIn.allocate(inOffset + n + inOffset);
             src.position(inOffset);
             src.put(srcData, 0, n);
-            src.flip();
+            src.flip().position(inOffset);
 
             int outOffset = 5;
-            ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length));
+            ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length) + outOffset);
             byte[] garbage = new byte[compressed.capacity()];
             new Random().nextBytes(garbage);
             compressed.put(garbage);
-            compressed.clear();
+            compressed.position(outOffset).limit(compressed.capacity() - outOffset);
 
-            int len = compressor.compress(src, inOffset, n, compressed, outOffset);
-            ByteBuffer result = typeOut.allocate(inOffset + len);
-            int decompressed = compressor.uncompress(compressed, outOffset, len, result, inOffset);
+            int len = compressor.compress(src, compressed);
+            assertEquals(inOffset + n, src.position());
+            assertEquals(inOffset + n, src.limit());
+            assertEquals(outOffset + len, compressed.position());
+            assertEquals(compressed.capacity() - outOffset, compressed.limit());
+            compressed.flip().position(outOffset);
+            
+            ByteBuffer result = typeOut.allocate(inOffset + len + inOffset);
+            result.position(inOffset).limit(result.capacity() - inOffset);
+            int decompressed = compressor.uncompress(compressed, result);
+            assertEquals(outOffset + len, compressed.position());
+            assertEquals(outOffset + len, compressed.limit());
+            assertEquals(inOffset + decompressed, result.position());
+            assertEquals(result.capacity() - inOffset, result.limit());
 
             assert decompressed == n : "Failed uncompressed size";
             for (int i = 0; i < n; ++i)

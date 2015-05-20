@@ -98,20 +98,22 @@ public class CompressedSegment extends CommitLogSegment
 
         try {
 
-            int compressedLength = compressor.initialCompressedBufferLength(length);
+            int neededBufferSize = compressor.initialCompressedBufferLength(length) + COMPRESSED_MARKER_SIZE;
             ByteBuffer compressedBuffer = compressedBufferHolder.get();
             if (compressor.preferredBufferType() != BufferType.typeOf(compressedBuffer) ||
-                compressedBuffer.capacity() < compressedLength + COMPRESSED_MARKER_SIZE)
+                compressedBuffer.capacity() < neededBufferSize)
             {
                 FileUtils.clean(compressedBuffer);
-                compressedBuffer = allocate(compressedLength + COMPRESSED_MARKER_SIZE);
+                compressedBuffer = allocate(neededBufferSize);
                 compressedBufferHolder.set(compressedBuffer);
             }
 
-            compressedLength = compressor.compress(buffer, contentStart, length, compressedBuffer, COMPRESSED_MARKER_SIZE);
+            ByteBuffer inputBuffer = buffer.duplicate();
+            inputBuffer.limit(contentStart + length).position(contentStart);
+            compressedBuffer.limit(compressedBuffer.capacity()).position(COMPRESSED_MARKER_SIZE);
+            compressor.compress(inputBuffer, compressedBuffer);
 
-            compressedBuffer.position(0);
-            compressedBuffer.limit(COMPRESSED_MARKER_SIZE + compressedLength);
+            compressedBuffer.flip();
             compressedBuffer.putInt(SYNC_MARKER_SIZE, length);
 
             // Only one thread can be here at a given time.
@@ -119,7 +121,6 @@ public class CompressedSegment extends CommitLogSegment
             writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             channel.write(compressedBuffer);
             channel.force(true);
-            compressedBuffer.limit(compressedBuffer.capacity());
         }
         catch (Exception e)
         {

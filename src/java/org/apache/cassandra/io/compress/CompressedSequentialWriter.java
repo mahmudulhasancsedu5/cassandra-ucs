@@ -104,8 +104,9 @@ public class CompressedSequentialWriter extends SequentialWriter
         try
         {
             // compressing data with buffer re-use
-            compressedLength = compressor.compress(buffer, 0, buffer.position(), compressed, 0);
-            // Compressors don't modify sentinels in our BB - we rely on buffer.position() for bufferOffset adjustment
+            buffer.flip();
+            compressed.clear();
+            compressedLength = compressor.compress(buffer, compressed);
         }
         catch (IOException e)
         {
@@ -121,10 +122,8 @@ public class CompressedSequentialWriter extends SequentialWriter
             metadataWriter.addOffset(chunkOffset);
             chunkCount++;
 
-            assert compressedLength <= compressed.capacity();
-
             // write out the compressed data
-            compressed.position(0).limit(compressedLength);
+            compressed.flip();
             channel.write(compressed);
 
             // write corresponding checksum
@@ -192,12 +191,13 @@ public class CompressedSequentialWriter extends SequentialWriter
             compressed.limit(chunkSize);
             channel.position(chunkOffset);
             channel.read(compressed);
-            compressed.flip();
 
             try
             {
                 // Repopulate buffer from compressed data
-                compressor.uncompress(compressed, 0, chunkSize, buffer, 0);
+            	buffer.clear();
+                compressed.flip();
+                compressor.uncompress(compressed, buffer);
             }
             catch (IOException e)
             {
@@ -205,7 +205,7 @@ public class CompressedSequentialWriter extends SequentialWriter
             }
 
             Adler32 checksum = new Adler32();
-
+            compressed.rewind();
             FBUtilities.directCheckSum(checksum, compressed);
 
             crcCheckBuffer.clear();

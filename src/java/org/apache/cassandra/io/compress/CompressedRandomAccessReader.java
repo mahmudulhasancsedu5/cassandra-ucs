@@ -123,21 +123,25 @@ public class CompressedRandomAccessReader extends RandomAccessReader
 
             if (channel.read(compressed, chunk.offset) != chunk.length)
                 throw new CorruptBlockException(getPath(), chunk);
-
+            compressed.flip();
+            buffer.clear();
+            
             try
             {
-                int decompressedBytes = metadata.compressor().uncompress(compressed, 0, chunk.length, buffer, 0);
-                buffer.limit(decompressedBytes);
+                metadata.compressor().uncompress(compressed, buffer);
             }
             catch (IOException e)
             {
-                buffer.position(0).limit(0);
                 throw new CorruptBlockException(getPath(), chunk);
+            }
+            finally
+            {
+                buffer.flip();
             }
 
             if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
-                compressed.position(0).limit(chunk.length);
+                compressed.rewind();
                 FBUtilities.directCheckSum(checksum, compressed);
 
                 if (checksum(chunk) != (int) checksum.getValue())
@@ -177,22 +181,27 @@ public class CompressedRandomAccessReader extends RandomAccessReader
             Map.Entry<Long, MappedByteBuffer> entry = chunkSegments.floorEntry(chunk.offset);
             long segmentOffset = entry.getKey();
             int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
-            ByteBuffer compressedChunk = entry.getValue();
+            ByteBuffer compressedChunk = entry.getValue().duplicate(); // TODO: change to slice(chunkOffset) when we upgrade LZ4-java
+
+            compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
+
+            buffer.clear();
 
             try
             {
-                int decompressedBytes = metadata.compressor().uncompress(compressedChunk, chunkOffset, chunk.length, buffer, 0);
-                buffer.limit(decompressedBytes);
+                metadata.compressor().uncompress(compressedChunk, buffer);
             }
             catch (IOException e)
             {
-                buffer.position(0).limit(0);
                 throw new CorruptBlockException(getPath(), chunk);
+            }
+            finally
+            {
+            	buffer.flip();
             }
 
             if (metadata.parameters.getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
             {
-                compressedChunk = compressedChunk.duplicate();
                 compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
                 FBUtilities.directCheckSum(checksum, compressedChunk);

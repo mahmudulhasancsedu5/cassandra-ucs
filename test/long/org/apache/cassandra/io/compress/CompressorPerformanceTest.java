@@ -5,8 +5,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 
-import org.apache.cassandra.utils.ByteBufferUtil;
-
 public class CompressorPerformanceTest
 {
 
@@ -55,19 +53,25 @@ public class CompressorPerformanceTest
         long time = System.nanoTime();
         for (int i=0; i<count; ++i)
         {
-            clen = compressor.compress(dataSource, 0, len, output, 0);
+            output.clear();
+            clen = compressor.compress(dataSource, output);
             // Make sure not optimized away.
             checksum += output.get(ThreadLocalRandom.current().nextInt(clen));
+            dataSource.rewind();
         }
         long timec = System.nanoTime() - time;
-        ByteBufferUtil.arrayCopy(output, 0, input, 0, bufLen);
+        output.flip();
+        input.put(output);
+        input.flip();
 
         time = System.nanoTime();
         for (int i=0; i<count; ++i)
         {
-            dlen = compressor.uncompress(input, 0, clen, output, 0);
+            output.clear();
+            dlen = compressor.uncompress(input, output);
             // Make sure not optimized away.
             checksum += output.get(ThreadLocalRandom.current().nextInt(dlen));
+            input.rewind();
         }
         long timed = System.nanoTime() - time;
         System.out.format("Compressor %s %s->%s compress %.3f ns/b %.3f mb/s uncompress %.3f ns/b %.3f mb/s.%s\n",

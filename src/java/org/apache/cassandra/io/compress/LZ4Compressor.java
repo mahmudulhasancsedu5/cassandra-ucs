@@ -55,19 +55,19 @@ public class LZ4Compressor implements ICompressor
         return INTEGER_BYTES + compressor.maxCompressedLength(chunkLength);
     }
 
-    public int compress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset) throws IOException
+    public int compress(ByteBuffer input, ByteBuffer output) throws IOException
     {
-        output.put(outputOffset + 0, (byte) inputLength);
-        output.put(outputOffset + 1, (byte) (inputLength >>> 8));
-        output.put(outputOffset + 2, (byte) (inputLength >>> 16));
-        output.put(outputOffset + 3, (byte) (inputLength >>> 24));
-        outputOffset += INTEGER_BYTES;
+        int start = output.position();
+        int len = input.remaining();
+        output.put((byte) len);
+        output.put((byte) (len >>> 8));
+        output.put((byte) (len >>> 16));
+        output.put((byte) (len >>> 24));
 
         try
         {
-            int maxOutputLength = output.capacity() - outputOffset;
-            int outputLength = compressor.compress(input, inputOffset, inputLength, output, outputOffset, maxOutputLength);
-            return INTEGER_BYTES + outputLength;
+            compressor.compress(input, output);
+            return output.position() - start;
         }
         catch (LZ4Exception e)
         {
@@ -102,29 +102,30 @@ public class LZ4Compressor implements ICompressor
         return decompressedLength;
     }
 
-    public int uncompress(ByteBuffer input, int inputOffset, int inputLength, ByteBuffer output, int outputOffset) throws IOException
+    public int uncompress(ByteBuffer input, ByteBuffer output) throws IOException
     {
-        final int decompressedLength = (input.get(inputOffset) & 0xFF)
-                | ((input.get(inputOffset + 1) & 0xFF) << 8)
-                | ((input.get(inputOffset + 2) & 0xFF) << 16)
-                | ((input.get(inputOffset + 3) & 0xFF) << 24);
-        inputLength -= INTEGER_BYTES;
+        final int decompressedLength = (input.get() & 0xFF)
+                | ((input.get() & 0xFF) << 8)
+                | ((input.get() & 0xFF) << 16)
+                | ((input.get() & 0xFF) << 24);
 
-        final int compressedLength;
+        int limit = output.limit();
+        assert limit >= output.position() + decompressedLength;
+        output.limit(output.position() + decompressedLength);
         try
         {
-            compressedLength = decompressor.decompress(input, inputOffset + INTEGER_BYTES, output, outputOffset, decompressedLength);
+            decompressor.decompress(input, output);
         }
         catch (LZ4Exception e)
         {
             throw new IOException(e);
         }
 
-        if (compressedLength != inputLength)
+        if (input.remaining() > 0)
         {
-            throw new IOException("Compressed lengths mismatch - got: "+compressedLength+" vs expected: "+inputLength);
+            throw new IOException("Compressed lengths mismatch - "+input.remaining()+" bytes remain");
         }
-
+        output.limit(limit);
         return decompressedLength;
     }
 
