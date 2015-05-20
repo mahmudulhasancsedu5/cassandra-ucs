@@ -119,6 +119,7 @@ public class CompressedSegment extends CommitLogSegment
             writeSyncMarker(compressedBuffer, 0, (int) channel.position(), (int) channel.position() + compressedBuffer.remaining());
             channel.write(compressedBuffer);
             channel.force(true);
+            compressedBuffer.limit(compressedBuffer.capacity());
         }
         catch (Exception e)
         {
