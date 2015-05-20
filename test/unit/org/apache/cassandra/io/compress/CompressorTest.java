@@ -26,15 +26,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Random;
 
+import com.google.common.io.Files;
 import static org.junit.Assert.*;
-
-import org.apache.cassandra.io.util.RandomAccessReader;
-
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.google.common.io.Files;
-
+import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class CompressorTest

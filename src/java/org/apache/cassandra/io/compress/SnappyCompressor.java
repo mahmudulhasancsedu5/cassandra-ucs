@@ -81,7 +81,7 @@ public class SnappyCompressor implements ICompressor
 
     public void compress(ByteBuffer input, ByteBuffer output) throws IOException
     {
-    	int dlimit = output.limit();
+        int dlimit = output.limit();
         Snappy.compress(input, output);
 
         // Snappy doesn't match the ICompressor contract w/regards to state it leaves dest ByteBuffer's counters in

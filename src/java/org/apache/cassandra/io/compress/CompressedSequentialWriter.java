@@ -195,7 +195,7 @@ public class CompressedSequentialWriter extends SequentialWriter
             try
             {
                 // Repopulate buffer from compressed data
-            	buffer.clear();
+                buffer.clear();
                 compressed.flip();
                 compressor.uncompress(compressed, buffer);
             }
