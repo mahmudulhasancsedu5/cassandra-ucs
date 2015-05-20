@@ -180,13 +180,26 @@ public class CompressorTest
         assert compressor.supports(compressor.preferredBufferType());
 
         for (BufferType in: BufferType.values())
+        {
             if (compressor.supports(in))
+            {
                 for (BufferType comp: BufferType.values())
+                {
                     if (compressor.supports(comp))
+                    {
                         for (BufferType out: BufferType.values())
+                        {
                             if (compressor.supports(out))
+                            {
                                 testByteBuffers(in, comp, out);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
     private void testByteBuffers(BufferType typeIn, BufferType typeComp, BufferType typeOut) throws IOException
     {
         try
