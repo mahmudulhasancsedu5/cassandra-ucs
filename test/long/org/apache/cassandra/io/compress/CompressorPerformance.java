@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 
-public class CompressorPerformanceTest
+public class CompressorPerformance
 {
 
     static public void testPerformances() throws IOException
