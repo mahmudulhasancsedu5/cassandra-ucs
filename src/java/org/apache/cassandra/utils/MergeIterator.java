@@ -96,62 +96,68 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
      *             / \   / \
      *             5 6   7 8
      *            .. .. .. ..
-     * Where each line is a < relationship. In the sorted section we can advance with a single comparison per level,
-     * while advancing a level within the heap requires two (so that we can find the lighter element to pop up).
+     * Where each line is a <= relationship.
+     *
+     * In the sorted section we can advance with a single comparison per level, while advancing a level within the heap
+     * requires two (so that we can find the lighter element to pop up).
      * The sorted section adds a constant overhead when data is uniformly distributed among the iterators, but may up
      * to halve the iteration time when one iterator is dominant over sections of the merged data (as is the case with
      * non-overlapping iterators).
      *
-     * To reduce the number of comparisons done over equal iterators, each entry in the heap maintains a linked list of
-     * equal iterators. The lists are joined and one of the equals is removed from the heap the first time the algorithm
-     * is able to recognize the equality. This creates an empty space in the heap which is then filled by moving the
-     * last item there and moving it up or down until it finds its proper place. When advancing consumed iterators a
-     * list of equals expands to multiple individual iterators; the first of them is pushed down the heap while others
-     * are placed at the end to pop up to their proper positions.
+     * The iterator is further complicated by the need to avoid advancing the input iterators until an output is
+     * actually requested. To achieve this {@code consume} walks the heap to find equal items without advancing the
+     * iterators, and {@code advance} moves them and restores the heap structure before any items can be consumed.
+     * 
+     * To avoid having to do additional comparisons in consume to identify the equal items, we keep track of equality
+     * between children and their parents in the heap. More precisely, the lines in the diagram above define the
+     * following relationship:
+     *   parent <= child && (parent == child) == child.equalParent
+     * We can track, make use of and update the equalParent field without any additional comparisons.
      *
-     * Input iterators are not advanced until their value is actually required. Between calls the top position in the
-     * heap is kept consumed but not advanced. The following hasNext() call starts by advancing, correcting positioning
-     * in the heap
+     * For more formal definitions and proof of correctness, see CASSANDRA-8915.
      */
     static final class ManyToOne<In,Out> extends MergeIterator<In,Out>
     {
         protected final Candidate<In>[] heap;
-
+    
         /** Number of non-exhausted iterators. */
         int size;
-
+    
+        /**
+         * Number of iterators that may need advancing before we can start consuming. Because advancing changes the
+         * values of the items of each iterator, the part of the heap before this position is not in the correct order
+         * and needs to be heapified before it can be used.
+         */
+        int needingAdvance;
+    
         /**
          * The number of elements to keep in order before the binary heap starts, exclusive of the top heap element.
          */
-        static final int SORTED_SECTION_SIZE = 1;
-
+        static final int SORTED_SECTION_SIZE = 4;
+    
         public ManyToOne(List<? extends Iterator<In>> iters, Comparator<In> comp, Reducer<In, Out> reducer)
         {
             super(iters, reducer);
-
+    
             @SuppressWarnings("unchecked")
             Candidate<In>[] heap = new Candidate[iters.size()];
             this.heap = heap;
             size = 0;
-            Candidate<In> queue = null;
-
+    
             for (Iterator<In> iter : iters)
             {
                 Candidate<In> candidate = new Candidate<>(iter, comp);
-                if (queue == null)
-                    queue = candidate;
-                else
-                    queue.attachEqual(candidate);
+                heap[size++] = candidate;
             }
-            heap[size++] = queue;
+            needingAdvance = size;
         }
-
+    
         protected final Out computeNext()
         {
             advance();
             return consume();
         }
-
+    
         /**
          * Advance all iterators that need to be advanced and place them into suitable positions in the heap.
          *
@@ -168,204 +174,168 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
          */
         private void advance()
         {
-            Candidate<In> queue = heap[0];
-            boolean sunk = false;
-            while (queue != null)
+            // Turn the set of candidates into a heap.
+            for (int i = needingAdvance - 1; i >= 0; --i)
             {
-                Candidate<In> candidate = queue.advance();
-                queue = queue.detach();
-                if (candidate != null)
-                {
-                    if (sunk) {
-                        addAndSwim(candidate);
-                    }else {
-                        replaceAndSink(candidate, 0);
-                    }
-                    sunk = true;
-                }
-            }
-            if (!sunk)
-            {
-                replaceAndSink(heap[--size], 0);
-                heap[size] = null;
+                Candidate<In> candidate = heap[i];
+                if (candidate.needsAdvance())
+                    replaceAndSink(candidate.advance(), i);
             }
         }
-
+    
         /**
          * Consume all items that sort like the current top of the heap. As we cannot advance the iterators to let
          * equivalent items pop up, we walk the heap to find them and mark them as needing advance.
          *
-         * This does at most two comparisons per each consumed item (one while in the sorted section).
+         * This relies on the equalParent flag to avoid doing any comparisons.
          */
         private Out consume()
         {
             if (size == 0)
-            {
                 return endOfData();
-            }
-            
+    
             reducer.onKeyChange();
-            heap[0].consume(reducer);
+            assert !heap[0].equalParent;
+            reducer.reduce(heap[0].consume());
+            final int size = this.size;
+            final int sortedSectionSize = Math.min(size, SORTED_SECTION_SIZE);
+            int i;
+            consume: {
+                for (i = 1; i < sortedSectionSize; ++i)
+                {
+                    if (!heap[i].equalParent)
+                        break consume;
+                    reducer.reduce(heap[i].consume());
+                }
+                i = Math.max(i, consumeHeap(i) + 1);
+            }
+            needingAdvance = i;
             return reducer.getReduced();
         }
-        
-        private void addAndSwim(Candidate<In> candidate)
+    
+        /**
+         * Recursively consume all items equal to equalItem in the binary subheap rooted at position idx.
+         *
+         * @return the largest equal index found in this search.
+         */
+        private int consumeHeap(int idx)
         {
-            if (addAndSwim(candidate, size))
-                ++size;
+            if (idx >= size || !heap[idx].equalParent)
+                return -1;
+    
+            reducer.reduce(heap[idx].consume());
+            int nextIdx = (idx << 1) - (SORTED_SECTION_SIZE - 1);
+            return Math.max(idx, Math.max(consumeHeap(nextIdx), consumeHeap(nextIdx + 1)));
         }
-
-        private boolean addAndSwim(Candidate<In> candidate, int index)
-        {
-            int currIndex = index;
-            int cmp = -1;
-            // Find where we should attach or insert candidate.
-            while ((currIndex = parentIndex(currIndex)) >= 0)
-            {
-                cmp = heap[currIndex].compareTo(candidate);
-                if (cmp <= 0)
-                    break;
-            }
-
-            if (cmp == 0)
-            {
-                // Equality means we can simply attach.
-                heap[currIndex].attachEqual(candidate);
-                return false;
-            }
-            else
-            {
-                // Otherwise shift everything downwards.
-                int stopIndex = currIndex;
-                currIndex = index;
-                while (true)
-                {
-                    int nextIndex = parentIndex(currIndex);
-                    if (nextIndex == stopIndex)
-                        break;
-                    heap[currIndex] = heap[nextIndex];
-                    currIndex = nextIndex;
-                }
-                
-                heap[currIndex] = candidate;
-                return true;
-            }
-        }
-
-        static private int parentIndex(int currIndex)
-        {
-            return currIndex >= SORTED_SECTION_SIZE ? (currIndex + SORTED_SECTION_SIZE - 1) >> 1 : currIndex - 1;
-        }
-        
-        private void replaceDeleted(int index)
-        {
-            if (index < SORTED_SECTION_SIZE)
-            {
-                Candidate<In> rep = heap[--size];
-                heap[size] = null;
-                replaceAndSink(rep, index);
-                return;
-            }
-                
-            int prevIndex = parentIndex(index);
-            while (index < --size)
-            {
-                Candidate<In> parent = heap[prevIndex];
-                Candidate<In> rep = heap[size];
-                heap[size] = null;
-                int cmp = rep.compareTo(parent);
-                if (cmp == 0)
-                    parent.attachEqual(rep);
-                else if (cmp > 0)
-                {
-                    replaceAndSink(rep, index);
-                    return;
-                }
-                else
-                {
-                    if (addAndSwim(rep, prevIndex))
-                    {
-                        heap[index] = parent;
-                        return;
-                    }
-                }
-            } 
-            assert size == index;
-            heap[size] = null;
-        }
-
+    
         /**
          * Replace an iterator in the heap with the given position and move it down the heap until it finds its proper
          * position, pulling lighter elements up the heap.
+         *
+         * Whenever an equality is found between two elements that form a new parent-child relationship, the child's
+         * equalParent flag is set to true if the elements are equal.
          */
         private void replaceAndSink(Candidate<In> candidate, int currIdx)
         {
-            int nextIdx;
-            Candidate<In> next = null;
-            int cmp = -1;
-
-            sink:
+            if (candidate == null)
             {
-                // Advance within the sorted section, pulling up items lighter than candidate.
-                while ((nextIdx = currIdx + 1) <= SORTED_SECTION_SIZE)
+                // Drop iterator by replacing it with the last one in the heap.
+                candidate = heap[--size];
+                heap[size] = null; // not necessary but helpful for debugging
+            }
+            // The new element will be top of its heap, at this point there is no parent to be equal to.
+            candidate.equalParent = false;
+    
+            final int size = this.size;
+            final int sortedSectionSize = Math.min(size - 1, SORTED_SECTION_SIZE);
+            int nextIdx = currIdx;
+    
+            // Advance within the sorted section, pulling up items lighter than candidate.
+            while ((nextIdx = currIdx + 1) <= sortedSectionSize)
+            {
+                if (!heap[nextIdx].equalParent) // if we were greater than an equal parent, we are greater than child
                 {
-                    if (nextIdx >= size)
-                        break sink;
-                    next = heap[nextIdx];
-                    cmp = candidate.compareTo(next);
+                    int cmp = candidate.compareTo(heap[nextIdx]);
                     if (cmp <= 0)
-                        break sink;
-
-                    heap[currIdx] = next;
-                    currIdx = nextIdx;
-                }
-
-                // Advance in the binary heap, pulling up the lighter element from the two at each level.
-                while ((nextIdx = (currIdx << 1) - (SORTED_SECTION_SIZE - 1)) < size)
-                {
-                    next = heap[nextIdx];
-                    if (nextIdx + 1 < size)
                     {
-                        cmp = heap[nextIdx + 1].compareTo(next);
-                        if (cmp == 0)
-                        {
-                            next.attachEqual(heap[nextIdx + 1]);
-                            cmp = candidate.compareTo(next);
-                            if (cmp < 0)
-                            {
-                                heap[currIdx] = candidate;
-                                replaceDeleted(nextIdx + 1);
-                                return;
-                            }
-
-                            heap[currIdx] = next;
-                            replaceDeleted(nextIdx + 1);
-                            if (cmp == 0)
-                            {
-                                next.attachEqual(candidate);
-                                replaceDeleted(nextIdx);
-                                return;
-                            }
-                            
-                            currIdx = nextIdx;
-                            continue;
-                        } else if (cmp < 0)
-                            next = heap[++nextIdx];
+                        heap[nextIdx].equalParent = cmp == 0;
+                        heap[currIdx] = candidate;
+                        return;
                     }
-
-                    cmp = candidate.compareTo(next);
-                    if (cmp <= 0)
-                        break sink;
-                    heap[currIdx] = next;
-                    currIdx = nextIdx;
+                }
+    
+                heap[currIdx] = heap[nextIdx];
+                currIdx = nextIdx;
+            }
+            // If size <= SORTED_SECTION_SIZE, nextIdx below will be no less than size,
+            // because currIdx == sortedSectionSize == size - 1 and nextIdx becomes
+            // (size - 1) * 2) - (size - 1 - 1) == size.
+    
+            // Advance in the binary heap, pulling up the lighter element from the two at each level.
+            while ((nextIdx = (currIdx * 2) - (sortedSectionSize - 1)) + 1 < size)
+            {
+                if (!heap[nextIdx].equalParent)
+                {
+                    if (!heap[nextIdx + 1].equalParent)
+                    {
+                        int siblingCmp = heap[nextIdx + 1].compareTo(heap[nextIdx]);
+                        if (siblingCmp != 0)
+                        {
+                            if (siblingCmp < 0)
+                                ++nextIdx;
+    
+                            int cmp = candidate.compareTo(heap[nextIdx]);
+                            if (cmp <= 0)
+                            {
+                                heap[nextIdx].equalParent = cmp == 0;
+                                heap[currIdx] = candidate;
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            int cmp = candidate.compareTo(heap[nextIdx]);
+                            if (cmp <= 0)
+                            {
+                                if (cmp == 0)
+                                {
+                                    heap[nextIdx].equalParent = true;
+                                    heap[nextIdx + 1].equalParent = true;
+                                }
+                                heap[currIdx] = candidate;
+                                return;
+                            }
+                            // We are pulling the left sibling up, it becomes the parent of the other.
+                            heap[nextIdx + 1].equalParent = true;
+                        }
+                    }
+                    else
+                        ++nextIdx;  // descend down the path where we found the equal child
+                }
+    
+                heap[currIdx] = heap[nextIdx];
+                currIdx = nextIdx;
+            }
+            if (nextIdx >= size)
+            {
+                heap[currIdx] = candidate;
+                return;
+            }
+    
+            // We still have one child to process.
+            if (!heap[nextIdx].equalParent)
+            {
+                int cmp = candidate.compareTo(heap[nextIdx]);
+                if (cmp <= 0)
+                {
+                    heap[nextIdx].equalParent = cmp == 0;
+                    heap[currIdx] = candidate;
+                    return;
                 }
             }
-            heap[currIdx] = candidate;
-            if (cmp == 0)
-            {
-                candidate.attachEqual(next);
-                replaceDeleted(nextIdx);
-            }
+    
+            heap[currIdx] = heap[nextIdx];
+            heap[nextIdx] = candidate;
         }
     }
 
@@ -375,16 +345,13 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
         private final Iterator<In> iter;
         private final Comparator<In> comp;
         private In item;
-        private Candidate<In> nextEqual;
-        private Candidate<In> lastEqual;
+        boolean equalParent;
 
         public Candidate(Iterator<In> iter, Comparator<In> comp)
         {
             this.iter = iter;
             this.comp = comp;
             item = null;
-            nextEqual = null;
-            lastEqual = this;
         }
 
         /** @return this if our iterator had an item, and it is now available, otherwise null */
@@ -408,62 +375,17 @@ public abstract class MergeIterator<In,Out> extends AbstractIterator<Out> implem
             return comp.compare(this.item, thatItem) == 0;
         }
 
-        public void consume(Reducer<In, ?> reducer)
+        public In consume()
         {
-            Candidate<In> curr = this;
-            do
-            {
-                In temp = curr.item;
-                curr.item = null;
-                assert temp != null;
-                reducer.reduce(temp);
-                curr = curr.nextEqual;
-            }
-            while (curr != null);
+            In temp = item;
+            item = null;
+            assert temp != null;
+            return temp;
         }
 
         public boolean needsAdvance()
         {
             return item == null;
-        }
-        
-        public void attachEqual(Candidate<In> equalChain)
-        {
-            Candidate<In> last = this.lastEqual;
-            assert last.lastEqual == last;
-            assert last.nextEqual == null;
-            last.nextEqual = equalChain;
-            lastEqual = equalChain.lastEqual;
-        }
-        
-        public Candidate<In> detach()
-        {
-            Candidate<In> next = nextEqual;
-            nextEqual = null;
-            lastEqual = this;
-            return next;
-        }
-        
-        public String toString()
-        {
-            int cnt = countLinked();
-            String rep = cnt == 1 ? "" : "x" + cnt;
-
-            if (item == null)
-                return "consumed " + rep + " " + Integer.toString(hashCode(), 16);
-            else
-                return item.toString() + rep;
-        }
-
-        private int countLinked()
-        {
-            int cnt = 0;
-            Candidate<In> curr = this;
-            while (curr != null) {
-                ++cnt;
-                curr = curr.nextEqual;
-            }
-            return cnt;
         }
     }
 
