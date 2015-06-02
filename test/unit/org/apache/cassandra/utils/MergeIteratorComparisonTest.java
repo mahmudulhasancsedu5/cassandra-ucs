@@ -43,7 +43,7 @@ public class MergeIteratorComparisonTest
 {
     static int ITERATOR_COUNT = 15;
     static int LIST_LENGTH = 50000;
-    static boolean BENCHMARK = true;
+    static boolean BENCHMARK = false;
     
     @Test
     public void testRandomInts() throws Exception
