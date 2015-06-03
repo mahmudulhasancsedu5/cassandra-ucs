@@ -20,7 +20,6 @@ package org.apache.cassandra.utils;
 
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.Callable;
 
 import com.google.common.base.Function;
 import com.google.common.base.Objects;
@@ -41,232 +40,453 @@ import org.apache.cassandra.utils.MergeIterator.Reducer;
 
 public class MergeIteratorComparisonTest
 {
-    static int ITERATOR_COUNT = 15;
-    static int LIST_LENGTH = 50000;
-    static boolean BENCHMARK = false;
-    
-    @Test
-    public void testRandomInts() throws Exception
+    private static class CountingComparator<T> implements Comparator<T>
     {
+        final Comparator<T> wrapped;
+        int count = 0;
+
+        protected CountingComparator(Comparator<T> wrapped)
+        {
+            this.wrapped = wrapped;
+        }
+
+        public int compare(T o1, T o2)
+        {
+            count++;
+            return wrapped.compare(o1, o2);
+        }
+    }
+
+    static int ITERATOR_COUNT = 15;
+    static int LIST_LENGTH = 15000;
+    static boolean BENCHMARK = false;
+
+    @Test
+    public void testRandomInts()
+    {
+        System.out.println("testRandomInts");
         final Random r = new Random();
-        Comparator<Integer> comparator = Ordering.natural();
         Reducer<Integer, Counted<Integer>> reducer = new Counter<Integer>();
 
-        List<List<Integer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<Integer>() {
+        List<List<Integer>> lists = new NaturalListGenerator<Integer>(ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public Integer call() throws Exception
+            public Integer next()
             {
                 return r.nextInt(5 * LIST_LENGTH);
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
     
     @Test
-    public void testNonOverlapInts() throws Exception
+    public void testNonOverlapInts()
     {
-        Comparator<Integer> comparator = Ordering.natural();
+        System.out.println("testNonOverlapInts");
         Reducer<Integer, Counted<Integer>> reducer = new Counter<Integer>();
 
-        List<List<Integer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<Integer>() {
+        List<List<Integer>> lists = new NaturalListGenerator<Integer>(ITERATOR_COUNT, LIST_LENGTH) {
             int next = 1;
             @Override
-            public Integer call() throws Exception
+            public Integer next()
             {
                 return next++;
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
     @Test
-    public void testCombinationInts() throws Exception
+    public void testCombinationInts()
     {
+        System.out.println("testCombinationInts");
         final Random r = new Random();
-        Comparator<Integer> comparator = Ordering.natural();
         Reducer<Integer, Counted<Integer>> reducer = new Counter<Integer>();
 
-        List<List<Integer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<Integer>() {
+        List<List<Integer>> lists = new NaturalListGenerator<Integer>(ITERATOR_COUNT, LIST_LENGTH) {
             int next = 1;
             @Override
-            public Integer call() throws Exception
+            public Integer next()
             {
                 return r.nextBoolean() ? r.nextInt(5 * LIST_LENGTH) : next++;
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
-    
+
     @Test
-    public void testRandomStrings() throws Exception
+    public void testLCSTotalOverlap()
     {
+        testLCS(2, LIST_LENGTH / 100, 1f);
+        testLCS(3, LIST_LENGTH / 100, 1f);
+        testLCS(3, LIST_LENGTH / 100, 1f, 10, LIST_LENGTH);
+        testLCS(4, LIST_LENGTH / 100, 1f);
+        testLCS(4, LIST_LENGTH / 100, 1f, 10, LIST_LENGTH);
+    }
+
+    @Test
+    public void testLCSPartialOverlap()
+    {
+        testLCS(2, LIST_LENGTH / 100, 0.5f);
+        testLCS(3, LIST_LENGTH / 100, 0.5f);
+        testLCS(3, LIST_LENGTH / 100, 0.5f, 10, LIST_LENGTH);
+        testLCS(4, LIST_LENGTH / 100, 0.5f);
+        testLCS(4, LIST_LENGTH / 100, 0.5f, 10, LIST_LENGTH);
+    }
+
+    @Test
+    public void testLCSNoOverlap()
+    {
+        testLCS(2, LIST_LENGTH / 100, 0f);
+        testLCS(3, LIST_LENGTH / 100, 0f);
+        testLCS(3, LIST_LENGTH / 100, 0f, 10, LIST_LENGTH);
+        testLCS(4, LIST_LENGTH / 100, 0f);
+        testLCS(4, LIST_LENGTH / 100, 0f, 10, LIST_LENGTH);
+    }
+
+    public void testLCS(int levelCount, int levelMultiplier, float levelOverlap)
+    {
+        testLCS(levelCount, levelMultiplier, levelOverlap, 0, 0);
+    }
+    public void testLCS(int levelCount, int levelMultiplier, float levelOverlap, int countOfL0, int sizeOfL0)
+    {
+        System.out.printf("testLCS(lc=%d,lm=%d,o=%.2f,L0=%d*%d)\n", levelCount, levelMultiplier, levelOverlap, countOfL0, countOfL0 == 0 ? 0 : sizeOfL0 / countOfL0);
         final Random r = new Random();
-        Comparator<String> comparator = Ordering.natural();
+        Reducer<Integer, Counted<Integer>> reducer = new Counter<Integer>();
+        List<List<Integer>> lists = new LCSGenerator<Integer>(Ordering.<Integer>natural(), levelCount, levelMultiplier, levelOverlap) {
+            @Override
+            public Integer newItem()
+            {
+                return r.nextInt();
+            }
+        }.result;
+        if (sizeOfL0 > 0 && countOfL0 > 0)
+            lists.addAll(new NaturalListGenerator<Integer>(countOfL0, sizeOfL0 / countOfL0)
+            {
+                Integer next()
+                {
+                    return r.nextInt();
+                }
+            }.result);
+        testMergeIterator(reducer, lists);
+    }
+
+    @Test
+    public void testRandomStrings()
+    {
+        System.out.println("testRandomStrings");
+        final Random r = new Random();
         Reducer<String, Counted<String>> reducer = new Counter<String>();
 
-        List<List<String>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<String>() {
+        List<List<String>> lists = new NaturalListGenerator<String>(ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public String call() throws Exception
+            public String next()
             {
                 return "longish_prefix_" + r.nextInt(5 * LIST_LENGTH);
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
     
     @Test
-    public void testNonOverlapStrings() throws Exception
+    public void testNonOverlapStrings()
     {
-        Comparator<String> comparator = Ordering.natural();
+        System.out.println("testNonOverlapStrings");
         Reducer<String, Counted<String>> reducer = new Counter<String>();
 
-        List<List<String>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<String>() {
+        List<List<String>> lists = new NaturalListGenerator<String>(ITERATOR_COUNT, LIST_LENGTH) {
             int next = 1;
             @Override
-            public String call() throws Exception
+            public String next()
             {
                 return "longish_prefix_" + next++;
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
     @Test
-    public void testCombinationStrings() throws Exception
+    public void testCombinationStrings()
     {
+        System.out.println("testCombinationStrings");
         final Random r = new Random();
-        Comparator<String> comparator = Ordering.natural();
         Reducer<String, Counted<String>> reducer = new Counter<String>();
 
-        List<List<String>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<String>() {
+        List<List<String>> lists = new NaturalListGenerator<String>(ITERATOR_COUNT, LIST_LENGTH) {
             int next = 1;
-            @Override
-            public String call() throws Exception
+            public String next()
             {
                 return "longish_prefix_" + (r.nextBoolean() ? r.nextInt(5 * LIST_LENGTH) : next++);
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
     @Test
-    public void testTimeUuids() throws Exception
+    public void testTimeUuids()
     {
-        Comparator<UUID> comparator = Ordering.natural();
+        System.out.println("testTimeUuids");
         Reducer<UUID, Counted<UUID>> reducer = new Counter<UUID>();
 
-        List<List<UUID>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<UUID>() {
+        List<List<UUID>> lists = new NaturalListGenerator<UUID>(ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public UUID call() throws Exception
+            public UUID next()
             {
                 return UUIDGen.getTimeUUID();
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
     @Test
-    public void testRandomUuids() throws Exception
+    public void testRandomUuids()
     {
-        Comparator<UUID> comparator = Ordering.natural();
+        System.out.println("testRandomUuids");
         Reducer<UUID, Counted<UUID>> reducer = new Counter<UUID>();
 
-        List<List<UUID>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<UUID>() {
+        List<List<UUID>> lists = new NaturalListGenerator<UUID>(ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public UUID call() throws Exception
+            public UUID next()
             {
                 return UUID.randomUUID();
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
     @Test
-    public void testTimeUuidType() throws Exception
+    public void testTimeUuidType()
     {
-        final AbstractType<UUID> comparator = TimeUUIDType.instance;
+        System.out.println("testTimeUuidType");
+        final AbstractType<UUID> type = TimeUUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
-        List<List<ByteBuffer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<ByteBuffer>() {
+        List<List<ByteBuffer>> lists = new SimpleListGenerator<ByteBuffer>(type, ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public ByteBuffer call() throws Exception
+            public ByteBuffer next()
             {
-                return comparator.decompose(UUIDGen.getTimeUUID());
+                return type.decompose(UUIDGen.getTimeUUID());
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists, type);
     }
 
     @Test
-    public void testUuidType() throws Exception
+    public void testUuidType()
     {
-        final AbstractType<UUID> comparator = UUIDType.instance;
+        System.out.println("testUuidType");
+        final AbstractType<UUID> type = UUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
-        List<List<ByteBuffer>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<ByteBuffer>() {
+        List<List<ByteBuffer>> lists = new SimpleListGenerator<ByteBuffer>(type, ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public ByteBuffer call() throws Exception
+            public ByteBuffer next()
             {
-                return comparator.decompose(UUID.randomUUID());
+                return type.decompose(UUIDGen.getTimeUUID());
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists, type);
     }
 
     
     @Test
-    public void testSets() throws Exception
+    public void testSets()
     {
+        System.out.println("testSets");
         final Random r = new Random();
-        final Comparator<KeyedSet<Integer, UUID>> comparator = Ordering.natural();
-        
+
         Reducer<KeyedSet<Integer, UUID>, KeyedSet<Integer, UUID>> reducer = new Union<Integer, UUID>();
 
-        List<List<KeyedSet<Integer, UUID>>> lists = generateLists(ITERATOR_COUNT, LIST_LENGTH, new Callable<KeyedSet<Integer, UUID>>() {
+        List<List<KeyedSet<Integer, UUID>>> lists = new NaturalListGenerator<KeyedSet<Integer, UUID>>(ITERATOR_COUNT, LIST_LENGTH) {
             @Override
-            public KeyedSet<Integer, UUID> call() throws Exception
+            public KeyedSet<Integer, UUID> next()
             {
                 return new KeyedSet<>(r.nextInt(5 * LIST_LENGTH), UUIDGen.getTimeUUID());
             }
-        }, comparator);
-        testMergeIterator(comparator, reducer, lists);
+        }.result;
+        testMergeIterator(reducer, lists);
     }
     /* */
 
-    public <T> List<List<T>> generateLists(int itcount, int length, Callable<T> generator,
-            Comparator<T> comparator) throws Exception
+    @Test
+    public void testLimitedOverlapStrings2()
     {
-        List<List<T>> lists = Lists.newArrayList();
-        for (int i=0; i<itcount; ++i) {
-            List<T> l = Lists.newArrayList();
-            for (int j=0; j<length; ++j) {
-                l.add(generator.call());
+        System.out.println("testLimitedOverlapStrings2");
+        Reducer<String, Counted<String>> reducer = new Counter<String>();
+
+        List<List<String>> lists = new NaturalListGenerator<String>(ITERATOR_COUNT, LIST_LENGTH) {
+            int next = 0;
+            @Override
+            public String next()
+            {
+                ++next;
+                int list = next / LIST_LENGTH;
+                int id = next % LIST_LENGTH;
+                return "longish_prefix_" + (id + list * LIST_LENGTH / 2);
             }
-            Collections.sort(l, comparator);
-            lists.add(l);
-        }
-        return lists;
+        }.result;
+        testMergeIterator(reducer, lists);
     }
 
-    public <T> void testMergeIterator(Comparator<T> comparator, Reducer<T, ?> reducer, List<List<T>> lists)
+    @Test
+    public void testLimitedOverlapStrings3()
     {
-        IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
-        IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
-        // If test fails, try the version below for improved reporting:
-        Object[] basearr = Iterators.toArray(base, Object.class);
-           Assert.assertArrayEquals(basearr, Iterators.toArray(tested, Object.class));
-           //Assert.assertTrue(Iterators.elementsEqual(base, tested));
-        if (!BENCHMARK)
-            return;
+        System.out.println("testLimitedOverlapStrings3");
+        Reducer<String, Counted<String>> reducer = new Counter<String>();
 
+        List<List<String>> lists = new NaturalListGenerator<String>(ITERATOR_COUNT, LIST_LENGTH) {
+            int next = 0;
+            @Override
+            public String next()
+            {
+                ++next;
+                int list = next / LIST_LENGTH;
+                int id = next % LIST_LENGTH;
+                return "longish_prefix_" + (id + list * LIST_LENGTH / 3);
+            }
+        }.result;
+        testMergeIterator(reducer, lists);
+    }
+
+    private static abstract class ListGenerator<T>
+    {
+        abstract boolean hasMoreItems();
+        abstract boolean hasMoreLists();
+        abstract T next();
+
+        final Comparator<T> comparator;
+        final List<List<T>> result = Lists.newArrayList();
+
+        protected ListGenerator(Comparator<T> comparator)
+        {
+            this.comparator = comparator;
+        }
+
+        void build()
+        {
+            while (hasMoreLists())
+            {
+                List<T> l = Lists.newArrayList();
+                while (hasMoreItems())
+                    l.add(next());
+                Collections.sort(l, comparator);
+                result.add(l);
+            }
+        }
+    }
+
+    private static abstract class NaturalListGenerator<T extends Comparable<T>> extends SimpleListGenerator<T>
+    {
+        private NaturalListGenerator(int listCount, int perListCount)
+        {
+            super(Ordering.natural(), listCount, perListCount);
+        }
+    }
+    private static abstract class SimpleListGenerator<T> extends ListGenerator<T>
+    {
+        final int listCount;
+        final int perListCount;
+
+        int listIdx = 0, itemIdx = 0;
+
+        private SimpleListGenerator(Comparator<T> comparator, int listCount, int perListCount)
+        {
+            super(comparator);
+            this.listCount = listCount;
+            this.perListCount = perListCount;
+            build();
+        }
+
+        public boolean hasMoreItems()
+        {
+            return itemIdx++ < perListCount;
+        }
+
+        public boolean hasMoreLists()
+        {
+            itemIdx = 0;
+            return listIdx++ < listCount;
+        }
+    }
+
+    private static abstract class LCSGenerator<T> extends ListGenerator<T>
+    {
+        final int levelCount;
+        final int itemMultiplier;
+        final float levelOverlap;
+
+        int levelIdx, itemIdx;
+        int levelItems, overlapItems, runningTotalItems;
+        final Random random = new Random();
+
+        public LCSGenerator(Comparator<T> comparator, int levelCount, int l1Items, float levelOverlap)
+        {
+            super(comparator);
+            this.levelCount = levelCount;
+            this.itemMultiplier = l1Items;
+            this.levelOverlap = levelOverlap;
+            build();
+        }
+
+        public boolean hasMoreItems()
+        {
+            return itemIdx++ < levelItems;
+        }
+
+        public boolean hasMoreLists()
+        {
+            if (result.size() > 0)
+                runningTotalItems += result.get(result.size() - 1).size();
+            itemIdx = 0;
+            levelItems = itemMultiplier * (int)Math.pow(10, levelCount - levelIdx);
+            overlapItems = levelIdx == 0 ? 0 : (int) (levelItems * levelOverlap);
+            return levelIdx++ < levelCount;
+        }
+
+        abstract T newItem();
+
+        T next()
+        {
+            if (itemIdx < overlapItems)
+            {
+                int item = random.nextInt(runningTotalItems);
+                for (List<T> list : result)
+                {
+                    if (item < list.size()) return list.get(item);
+                    else item -= list.size();
+                }
+            }
+            return newItem();
+        }
+    }
+
+    public <T extends Comparable<T>> void testMergeIterator(Reducer<T, ?> reducer, List<List<T>> lists)
+    {
+        testMergeIterator(reducer, lists, Ordering.natural());
+    }
+    public <T> void testMergeIterator(Reducer<T, ?> reducer, List<List<T>> lists, Comparator<T> comparator)
+    {
+        {
+            IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
+            IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
+            // If test fails, try the version below for improved reporting:
+            Object[] basearr = Iterators.toArray(base, Object.class);
+            Assert.assertArrayEquals(basearr, Iterators.toArray(tested, Object.class));
+            //Assert.assertTrue(Iterators.elementsEqual(base, tested));
+            if (!BENCHMARK)
+                return;
+        }
+
+        CountingComparator<T> cmp, cmpb;
+        cmp = new CountingComparator<>(comparator); cmpb = new CountingComparator<>(comparator);
         System.out.println();
         for (int i=0; i<10; ++i) {
-            benchmarkIterator(MergeIterator.get(closeableIterators(lists), comparator, reducer));
-            benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer));
+            benchmarkIterator(MergeIterator.get(closeableIterators(lists), cmp, reducer), cmp);
+            benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), cmpb, reducer), cmpb);
         }
+        System.out.format("MI: %.2f\n", cmp.count / (double) cmpb.count);
     }
     
-    public <T> void benchmarkIterator(IMergeIterator<T, ?> it)
+    public <T> void benchmarkIterator(IMergeIterator<T, ?> it, CountingComparator<T> comparator)
     {
         System.out.format("Testing %30s... ", it.getClass().getSimpleName());
         long time = System.currentTimeMillis();
@@ -279,7 +499,7 @@ public class MergeIteratorComparisonTest
         {
             type = "type " + ((Counted<?>)value).item.getClass().getSimpleName();
         }
-        System.out.format("%15s time %5dms\n", type, time);
+        System.out.format("%15s time %5dms; comparisons: %d\n", type, time, comparator.count);
     }
 
     public <T> List<CloseableIterator<T>> closeableIterators(List<List<T>> iterators)
