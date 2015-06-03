@@ -467,29 +467,23 @@ public class MergeIteratorComparisonTest
     {
         {
             IMergeIterator<T,?> tested = MergeIterator.get(closeableIterators(lists), comparator, reducer);
-            IMergeIterator<T,?> tested2 = new MergeIteratorNoEqual<>(closeableIterators(lists), comparator, reducer);
-            IMergeIterator<T,?> tested3 = new MergeIteratorAllEqual<>(closeableIterators(lists), comparator, reducer);
             IMergeIterator<T,?> base = new MergeIteratorPQ<>(closeableIterators(lists), comparator, reducer);
             // If test fails, try the version below for improved reporting:
             Object[] basearr = Iterators.toArray(base, Object.class);
             Assert.assertArrayEquals(basearr, Iterators.toArray(tested, Object.class));
-            Assert.assertArrayEquals(basearr, Iterators.toArray(tested2, Object.class));
-            Assert.assertArrayEquals(basearr, Iterators.toArray(tested3, Object.class));
             //Assert.assertTrue(Iterators.elementsEqual(base, tested));
             if (!BENCHMARK)
                 return;
         }
 
-        CountingComparator<T> cmp, cmp2, cmp3, cmpb;
-        cmp = new CountingComparator<>(comparator); cmp2 = new CountingComparator<>(comparator); cmp3 = new CountingComparator<>(comparator); cmpb = new CountingComparator<>(comparator);
+        CountingComparator<T> cmp, cmpb;
+        cmp = new CountingComparator<>(comparator); cmpb = new CountingComparator<>(comparator);
         System.out.println();
         for (int i=0; i<10; ++i) {
             benchmarkIterator(MergeIterator.get(closeableIterators(lists), cmp, reducer), cmp);
-            benchmarkIterator(new MergeIteratorNoEqual<>(closeableIterators(lists), cmp2, reducer), cmp2);
-            benchmarkIterator(new MergeIteratorAllEqual<>(closeableIterators(lists), cmp3, reducer), cmp3);
             benchmarkIterator(new MergeIteratorPQ<>(closeableIterators(lists), cmpb, reducer), cmpb);
         }
-        System.out.format("M21: %.2f, NE: %.2f, AE:%.2f\n", cmp.count / (double) cmpb.count, cmp2.count / (double) cmpb.count, cmp3.count / (double) cmpb.count);
+        System.out.format("MI: %.2f\n", cmp.count / (double) cmpb.count);
     }
     
     public <T> void benchmarkIterator(IMergeIterator<T, ?> it, CountingComparator<T> comparator)
