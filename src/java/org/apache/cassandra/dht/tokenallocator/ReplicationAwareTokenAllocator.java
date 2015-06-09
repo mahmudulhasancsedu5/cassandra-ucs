@@ -24,8 +24,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 
-import org.apache.commons.math.stat.descriptive.SummaryStatistics;
-
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 
@@ -60,7 +58,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
     public Collection<Token> addUnit(Unit newUnit, int numTokens)
     {
         assert !unitToTokens.containsKey(newUnit);
-        // Strategy must already know about this unit.
+
         if (unitCount() < replicas)
             // Allocation does not matter; everything replicates everywhere.
             return generateRandomTokens(newUnit, numTokens);
@@ -83,6 +81,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         }
 
         // initialise our new unit's state (with an idealised ownership)
+        // strategy must already know about this unit
         UnitInfo<Unit> newUnitInfo = new UnitInfo<>(newUnit, numTokens * optTokenOwnership, groups, strategy);
 
         // build the current token ring state
@@ -110,10 +109,6 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         CandidateInfo<Unit> bestToken = improvements.remove().value;
         for (int vn = 1; ; ++vn)
         {
-//            System.out.println("\nTokens before:");
-//            dumpTokens("", tokens);
-//            System.out.println("Candidates:");
-//            dumpCandidates(candidates, bestToken, optTokenOwnership, vn/numTokens);
             candidates = bestToken.removeFrom(candidates);
             confirmCandidate(bestToken);
 
@@ -136,30 +131,8 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
                 improvements.add(new Weighted<>(impr, bestToken));
             }
         }
-        
-//        System.out.println("Tokens after:");
-//        dumpTokens("", tokens);
-//        SummaryStatistics stat = new SummaryStatistics();
-//        stat.addValue(newUnitInfo.ownership / newUnitInfo.tokenCount / optTokenOwnership);
-//        for (UnitInfo<Unit> ui : unitInfos.values())
-//            stat.addValue(ui.ownership / ui.tokenCount / optTokenOwnership);
-//        System.out.println("Ownership stat according to RATA " + TokenAllocation.statToString(stat));
-            
-        return ImmutableList.copyOf(unitToTokens.get(newUnit));
-    }
 
-    private void dumpCandidates(
-            CandidateInfo<Unit> candidates,
-            CandidateInfo<Unit> selected,
-            double optTokenOwnership,
-            double newUnitMult)
-    {
-        CandidateInfo<Unit> c = candidates;
-        do
-        {
-            System.out.format("Candidate %s host %s improvement %.3e%s\n", c, c.split, evaluateImprovement(c, optTokenOwnership, newUnitMult), c == selected ? " [SELECTED]" : "");
-            c = c.next;
-        } while (c != candidates);
+        return ImmutableList.copyOf(unitToTokens.get(newUnit));
     }
 
     private Collection<Token> generateRandomTokens(Unit newUnit, int numTokens)
@@ -246,13 +219,13 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
     }
 
     /**
-     * Incorporates the selected candidate and into the ring, adjusting ownership information and calculated token
+     * Incorporates the selected candidate into the ring, adjusting ownership information and calculated token
      * information.
      */
     private void confirmCandidate(CandidateInfo<Unit> candidate)
     {
         // This process is less efficient than it could be (loops through each vnode's replication span instead
-        // of recalculating replicationStart, rfm1 and expandable from existing data + new token data in an O(1)
+        // of recalculating replicationStart, replicationMinus1 from existing data + new token data in an O(1)
         // case analysis similar to evaluateImprovement). This is fine as the method does not dominate processing
         // time.
 
@@ -272,7 +245,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
 
         ReplicationVisitor replicationVisitor = new ReplicationVisitor();
         assert newTokenInfo.next == candidate.split;
-        for (TokenInfo<Unit> curr = newTokenInfo.next; !replicationVisitor.visitedAll() ; curr = curr.next)
+        for (TokenInfo<Unit> curr = newTokenInfo.next; !replicationVisitor.visitedAll(); curr = curr.next)
         {
             // update the candidate between curr and next
             candidate = candidate.next;
@@ -293,28 +266,22 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
      */
     private Token populateTokenInfo(BaseTokenInfo<Unit, ?> token, GroupInfo newUnitGroup)
     {
-        GroupInfo groupChain = GroupInfo.TERMINATOR;
         GroupInfo tokenGroup = token.owningUnit.group;
-        int seenGroups = 0;
-        int rf = replicas;
+        PopulateVisitor visitor = new PopulateVisitor();
+
         // Replication start = the end of a token from the RF'th different group seen before the token.
         Token replicationStart;
         // The end of a token from the RF-1'th different group seen before the token.
         Token replicationMinus1 = token.token;
+        GroupInfo currGroup;
         for (TokenInfo<Unit> curr = token.prevInRing(); ; curr = curr.prev)
         {
             replicationStart = curr.token;
-            GroupInfo currGroup = curr.owningUnit.group;
-            if (currGroup.prevPopulate != null)
+            currGroup = curr.owningUnit.group;
+            if (!visitor.add(currGroup))
                 continue; // Group is already seen.
-            if (++seenGroups == rf) // Don't mark last group as seen
+            if (visitor.visitedAll())
                 break;
-
-            // Mark the group as seen. Also forms a chain that can be used to clear the marks when we are done.
-            // We use prevPopulate instead of prevSeen as this may be called within confirmCandidate which also needs
-            // group seen markers.
-            currGroup.prevPopulate = groupChain;
-            groupChain = currGroup;
 
             replicationMinus1 = replicationStart;
             // Another instance of the same group precedes us in the replication range of the ring,
@@ -322,22 +289,49 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             if (currGroup == tokenGroup)
                 break;
         }
-        if (newUnitGroup == tokenGroup) // new token is always a boundary (if closer than existing replicationStart)
+        if (newUnitGroup == tokenGroup)
+            // new token is always a boundary (as long as it's closer than existing replicationStart)
             replicationMinus1 = token.token;
-        else if (newUnitGroup.prevPopulate != null)
+        else if (newUnitGroup != currGroup && visitor.seen(newUnitGroup))
             // already has new group in replication span before last seen. cannot be affected
             replicationMinus1 = replicationStart;
+        visitor.clean();
 
         token.replicationMinus1 = replicationMinus1;
         token.replicationStart = replicationStart;
+        return replicationStart;
+    }
 
-        // Clean group seen markers.
-        while (groupChain != GroupInfo.TERMINATOR)
+    /**
+     * Calculates the {@code replicationStart}, {@code replicationMinus1} and {@code expandable} properties of the given
+     * {@code TokenInfo}, used by {@code findUpdatedReplicationStart} to quickly identify changes in ownership.
+     * @param candidate 
+     */
+    private Token replicationStart(BaseTokenInfo<Unit, ?> token, CandidateInfo<Unit> candidate)
+    {
+        GroupInfo tokenGroup = token.owningUnit.group;
+        PopulateVisitor visitor = new PopulateVisitor();
+
+        // Replication start = the end of a token from the RF'th different group seen before the token.
+        Token replicationStart;
+        GroupInfo currGroup;
+        BaseTokenInfo<Unit, ?> curr = token;
+        while (true)
         {
-            GroupInfo prev = groupChain.prevPopulate;
-            groupChain.prevPopulate = null;
-            groupChain = prev;
+            curr = curr == candidate.split ? candidate : curr.prevInRing();
+            replicationStart = curr.token;
+            currGroup = curr.owningUnit.group;
+            if (!visitor.add(currGroup))
+                continue; // Group is already seen.
+            if (visitor.visitedAll())
+                break;
+
+            // Another instance of the same group precedes us in the replication range of the ring,
+            // so this is where our replication range begins
+            if (currGroup == tokenGroup)
+                break;
         }
+        visitor.clean();
         return replicationStart;
     }
 
@@ -393,21 +387,9 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
      */
     private Token findUpdatedReplicationStart(TokenInfo<Unit> curr, CandidateInfo<Unit> candidate)
     {
-        if (preceeds(curr.replicationMinus1, candidate.token, curr.token))
-            // Candidate is closer than one-before last.
-            return curr.replicationMinus1;
-        
-        return candidate.token;
-//        // ************ REMOVE
-//        else if (preceeds(candidate.token, curr.replicationStart, curr.token))
-//            // Candidate is further than replication start, no changes. To be removed.
-//            return curr.replicationStart;
-//        else if (preceeds(candidate.token, curr.replicationMinus1, curr.token))
-//            // Candidate is the replication boundary.
-//            return candidateEnd;
-//        else
-//            // Candidate replaces one-before last. The latter becomes the replication boundary.
-//            return candidate.token;
+        Token t = furtherStartToken(curr.replicationMinus1, candidate.token, curr.token);
+        assert t == replicationStart(curr, candidate);
+        return t;
     }
 
     /**
@@ -486,38 +468,37 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         }
     }
 
+
     /**
-     * Loop through all tokens following a candidate or final new token, until all tokens whose replication
-     * range may be affected have been visited
-     *
-     * Once we've visited RF - 1 many groups different to both old and new group, we're done
+     * Helper class for marking/unmarking visited a chain of groups
      */
-    private class ReplicationVisitor
+    private abstract class GroupVisitor
     {
-        // number of groups visited not equal to the new group
-        int replicated = 0;
-
         GroupInfo groupChain = GroupInfo.TERMINATOR;
+        int seen = 0;
 
-        private ReplicationVisitor()
-        {
-        }
+        abstract GroupInfo prevSeen(GroupInfo group);
+        abstract void setPrevSeen(GroupInfo group, GroupInfo prevSeen);
 
         // true iff this is the first time we've visited this group
         boolean add(GroupInfo group)
         {
-            if (group.prevSeen != null)
+            if (prevSeen(group) != null)
                 return false;
-            group.prevSeen = groupChain;
+            ++seen;
+            setPrevSeen(group, groupChain);
             groupChain = group;
-            ++replicated;
             return true;
         }
 
-        // true iff we've visited all groups that may be affected
         boolean visitedAll()
         {
-            return replicated >= replicas;
+            return seen >= replicas;
+        }
+
+        boolean seen(GroupInfo group)
+        {
+            return prevSeen(group) != null;
         }
 
         // Clean group seen markers.
@@ -526,11 +507,37 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             GroupInfo groupChain = this.groupChain;
             while (groupChain != GroupInfo.TERMINATOR)
             {
-                GroupInfo prev = groupChain.prevSeen;
-                groupChain.prevSeen = null;
+                GroupInfo prev = prevSeen(groupChain);
+                setPrevSeen(groupChain, null);
                 groupChain = prev;
             }
             this.groupChain = GroupInfo.TERMINATOR;
+        }
+    }
+
+    private class ReplicationVisitor extends GroupVisitor
+    {
+        GroupInfo prevSeen(GroupInfo group)
+        {
+            return group.prevSeen;
+        }
+
+        void setPrevSeen(GroupInfo group, GroupInfo prevSeen)
+        {
+            group.prevSeen = prevSeen;
+        }
+    }
+
+    private class PopulateVisitor extends GroupVisitor
+    {
+        GroupInfo prevSeen(GroupInfo group)
+        {
+            return group.prevPopulate;
+        }
+
+        void setPrevSeen(GroupInfo group, GroupInfo prevSeen)
+        {
+            group.prevPopulate = prevSeen;
         }
     }
 
@@ -552,17 +559,18 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         return 1.0 * replicas / (sortedTokens.size() + tokensToAdd);
     }
 
-    // easier mechanism for dealing with wrapping; all we care about is which Token creates the larger range,
-    // and consider this to precede the other in the uroboros token ring
-    
-    // equal to towards should count as closest
-    private static boolean preceeds(Token t1, Token t2, Token towards)
+    /**
+     * Selects from {@code t1}, {@code t2} the token that forms a bigger range with {@code towards} as the upper bound,
+     * taking into account wrapping.
+     */
+    private static Token furtherStartToken(Token t1, Token t2, Token towards)
     {
         if (t1.equals(towards))
-            return false;
+            return t2;
         if (t2.equals(towards))
-            return true;
-        return t1.size(towards) > t2.size(towards);
+            return t1;
+
+        return t1.size(towards) > t2.size(towards) ? t1 : t2;
     }
 
     private static double sq(double d)

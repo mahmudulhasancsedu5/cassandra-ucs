@@ -34,7 +34,7 @@ import org.apache.cassandra.dht.Token;
 
 public class ReplicationAwareTokenAllocatorTest
 {
-    private static final int MAX_VNODE_COUNT = 256;
+    private static final int MAX_VNODE_COUNT = 16;
 
     private static final int TARGET_CLUSTER_SIZE = 500;
 
@@ -54,6 +54,8 @@ public class ReplicationAwareTokenAllocatorTest
          * group seen in front of it.
          */
         Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens);
+
+        public double spreadExpectation();
     }
     
     static class NoReplicationStrategy implements TestReplicationStrategy
@@ -89,6 +91,11 @@ public class ReplicationAwareTokenAllocatorTest
         public Object getGroup(Unit unit)
         {
             return unit;
+        }
+
+        public double spreadExpectation()
+        {
+            return 1;
         }
     }
     
@@ -167,6 +174,11 @@ public class ReplicationAwareTokenAllocatorTest
         {
             // The unit is the group.
             return unit;
+        }
+
+        public double spreadExpectation()
+        {
+            return 1;
         }
     }
     
@@ -283,6 +295,11 @@ public class ReplicationAwareTokenAllocatorTest
         public Integer getGroup(Unit unit)
         {
             return groupMap.get(unit);
+        }
+
+        public double spreadExpectation()
+        {
+            return 1.66;   // Even balanced racks get disbalanced when they lose nodes.
         }
     }
     
@@ -438,7 +455,7 @@ public class ReplicationAwareTokenAllocatorTest
 
         public double spreadExpectation()
         {
-            return 6;  // High tolerance to avoid flakiness.
+            return 5;  // High tolerance to avoid flakiness.
         }
     };
     
@@ -464,7 +481,7 @@ public class ReplicationAwareTokenAllocatorTest
     @Test
     public void testExistingCluster()
     {
-        for (int rf = 1; rf <= 5; ++rf)
+        for (int rf = 2; rf <= 5; ++rf)
             for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
             {
                 testExistingCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
@@ -523,7 +540,7 @@ public class ReplicationAwareTokenAllocatorTest
         NavigableMap<Token, Unit> tokenMap = Maps.newTreeMap();
 
         ReplicationAwareTokenAllocator<Unit> t = new ReplicationAwareTokenAllocator<>(tokenMap, rs, partitioner);
-        grow(t, targetClusterSize / 5, tc, perUnitCount, false);
+        grow(t, targetClusterSize * 2 / 5, tc, perUnitCount, false);
         grow(t, targetClusterSize, tc, perUnitCount, true);
         loseAndReplace(t, targetClusterSize / 5, tc, perUnitCount);
         System.out.println();
@@ -568,6 +585,7 @@ public class ReplicationAwareTokenAllocatorTest
         Summary su = new Summary();
         Summary st = new Summary();
         Random rand = new Random(targetClusterSize + perUnitCount);
+        TestReplicationStrategy strategy = (TestReplicationStrategy) t.strategy;
         if (size < targetClusterSize) {
             System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
             long time = System.currentTimeMillis();
@@ -575,7 +593,7 @@ public class ReplicationAwareTokenAllocatorTest
             {
                 int tokens = tc.tokenCount(perUnitCount, rand);
                 Unit unit = new Unit();
-                ((TestReplicationStrategy) t.strategy).addUnit(unit);
+                strategy.addUnit(unit);
                 t.addUnit(unit, tokens);
                 ++size;
                 if (verifyMetrics)
@@ -585,7 +603,7 @@ public class ReplicationAwareTokenAllocatorTest
             if (verifyMetrics)
             {
                 updateSummary(t, su, st, true);
-                double maxExpected = 1.0 + tc.spreadExpectation() / (perUnitCount * t.replicas);
+                double maxExpected = 1.0 + tc.spreadExpectation() * strategy.spreadExpectation() / (perUnitCount * t.replicas);
                 if (su.max > maxExpected)
                 {
                     Assert.fail(String.format("Expected max unit size below %.4f, was %.4f", maxExpected, su.max));
