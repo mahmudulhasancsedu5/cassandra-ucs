@@ -31,6 +31,7 @@ import java.util.Set;
 
 import com.google.common.collect.Lists;
 
+import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.commons.math.stat.descriptive.SummaryStatistics;
 
 import org.junit.AfterClass;
@@ -156,11 +157,42 @@ public class BootStrapperTest
     public void testAllocateTokens() throws UnknownHostException
     {
         int vn = 16;
-        String ks = "BootStrapperTestKeyspace3";
+        String ks = "BootStrapperTestKeyspace4";
         TokenMetadata tm = new TokenMetadata();
         generateFakeEndpoints(tm, 10, vn);
+        AbstractReplicationStrategy rs = Keyspace.open(ks).getReplicationStrategy();
+        IPartitioner p = StorageService.getPartitioner();
+        Token token = p.getRandomToken();
+        dumpEndpoints(tm, token, rs);
+        dumpEndpoints(tm, tm.getSuccessor(token), rs);
+        dumpEndpoints(tm, tm.getPredecessor(token), rs);
         InetAddress addr = FBUtilities.getBroadcastAddress();
         allocateTokensForNode(vn, ks, tm, addr);
+    }
+
+    private void dumpEndpoints(TokenMetadata tm, Token token, AbstractReplicationStrategy rs)
+    {
+        Token t1 = tm.getSuccessor(token);
+        Token t2 = tm.getSuccessor(t1);
+        Token t3 = tm.getSuccessor(t2);
+        Token t4 = tm.getSuccessor(t3);
+        Token t5 = tm.getSuccessor(t4);
+        System.out.format("Endpoints for %s [first token %s(%s)]\n" +
+                "prev %s(%s)\n" +
+                "next1 %s(%s)\n" +
+                "next2 %s(%s)\n" +
+                "next3 %s(%s)\n" +
+                "next4 %s(%s)\n" +
+                "next5 %s(%s)\n",
+        token, TokenMetadata.firstToken(tm.sortedTokens(), token), tm.getEndpoint(TokenMetadata.firstToken(tm.sortedTokens(), token)),
+        tm.getPredecessor(token), tm.getEndpoint(tm.getPredecessor(token)),
+        t1, tm.getEndpoint(t1),
+        t2, tm.getEndpoint(t2),
+        t3, tm.getEndpoint(t3),
+        t4, tm.getEndpoint(t4),
+        t5, tm.getEndpoint(t5));
+        List<InetAddress> endpoints = rs.calculateNaturalEndpoints(token, tm);
+        System.out.format("ep: %s\n", endpoints);
     }
 
     private void allocateTokensForNode(int vn, String ks, TokenMetadata tm, InetAddress addr)

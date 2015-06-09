@@ -20,10 +20,7 @@ package org.apache.cassandra.dht;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.cassandra.db.DecoratedKey;
@@ -185,7 +182,12 @@ public class Murmur3Partitioner implements IPartitioner
 
     public LongToken getRandomToken()
     {
-        return new LongToken(normalize(ThreadLocalRandom.current().nextLong()));
+        return getRandomToken(ThreadLocalRandom.current());
+    }
+
+    public LongToken getRandomToken(Random r)
+    {
+        return new LongToken(normalize(r.nextLong()));
     }
 
     private long normalize(long v)
