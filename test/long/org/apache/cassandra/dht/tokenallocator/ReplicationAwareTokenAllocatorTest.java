@@ -38,8 +38,10 @@ public class ReplicationAwareTokenAllocatorTest
 
     private static final int TARGET_CLUSTER_SIZE = 500;
 
-    interface TestReplicationStrategy extends ReplicationStrategy<Unit> {
+    interface TestReplicationStrategy extends ReplicationStrategy<Unit>
+    {
         void addUnit(Unit n);
+
         void removeUnit(Unit n);
 
         /**
@@ -55,9 +57,13 @@ public class ReplicationAwareTokenAllocatorTest
          */
         Token replicationStart(Token token, Unit unit, NavigableMap<Token, Unit> sortedTokens);
 
+        /**
+         * Multiplier for the acceptable disbalance in the cluster. With some strategies it is harder to achieve good
+         * results.
+         */
         public double spreadExpectation();
     }
-    
+
     static class NoReplicationStrategy implements TestReplicationStrategy
     {
         public List<Unit> getReplicas(Token token, NavigableMap<Token, Unit> sortedTokens)
@@ -74,9 +80,14 @@ public class ReplicationAwareTokenAllocatorTest
         {
             return "No replication";
         }
-        
-        public void addUnit(Unit n) {}
-        public void removeUnit(Unit n) {}
+
+        public void addUnit(Unit n)
+        {
+        }
+
+        public void removeUnit(Unit n)
+        {
+        }
 
         public int replicas()
         {
@@ -98,7 +109,7 @@ public class ReplicationAwareTokenAllocatorTest
             return 1;
         }
     }
-    
+
     static class SimpleReplicationStrategy implements TestReplicationStrategy
     {
         int replicas;
@@ -119,7 +130,6 @@ public class ReplicationAwareTokenAllocatorTest
             Iterator<Unit> iter = Iterables.concat(sortedTokens.tailMap(token, true).values(), sortedTokens.values()).iterator();
             while (endpoints.size() < replicas)
             {
-                // presumably list can't be exhausted before finding all replicas.
                 if (!iter.hasNext())
                     return endpoints;
                 Unit ep = iter.next();
@@ -135,11 +145,12 @@ public class ReplicationAwareTokenAllocatorTest
             int unitsFound = 0;
 
             for (Map.Entry<Token, Unit> en : Iterables.concat(
-                     sortedTokens.headMap(token, false).descendingMap().entrySet(),
-                     sortedTokens.descendingMap().entrySet())) {
+                                                             sortedTokens.headMap(token, false).descendingMap().entrySet(),
+                                                             sortedTokens.descendingMap().entrySet()))
+            {
                 Unit n = en.getValue();
                 // Same group as investigated unit is a break; anything that could replicate in it replicates there.
-                if (n.equals(unit))
+                if (n == unit)
                     break;
 
                 if (seenUnits.add(n))
@@ -152,8 +163,13 @@ public class ReplicationAwareTokenAllocatorTest
             return token;
         }
 
-        public void addUnit(Unit n) {}
-        public void removeUnit(Unit n) {}
+        public void addUnit(Unit n)
+        {
+        }
+
+        public void removeUnit(Unit n)
+        {
+        }
 
         public String toString()
         {
@@ -181,7 +197,7 @@ public class ReplicationAwareTokenAllocatorTest
             return 1;
         }
     }
-    
+
     static abstract class GroupReplicationStrategy implements TestReplicationStrategy
     {
         final int replicas;
@@ -228,12 +244,13 @@ public class ReplicationAwareTokenAllocatorTest
             if (token == null)
                 token = sortedTokens.firstKey();
             for (Map.Entry<Token, Unit> en :
-                Iterables.concat(sortedTokens.tailMap(token, true).entrySet(),
-                                 sortedTokens.entrySet()))
+            Iterables.concat(sortedTokens.tailMap(token, true).entrySet(),
+                             sortedTokens.entrySet()))
             {
                 Unit ep = en.getValue();
                 int group = groupMap.get(ep);
-                if (!usedGroups.get(group)){
+                if (!usedGroups.get(group))
+                {
                     usedGroups.set(group);
                     if (++groupsFound >= replicas)
                         return en.getKey();
@@ -250,8 +267,9 @@ public class ReplicationAwareTokenAllocatorTest
             int groupsFound = 0;
 
             for (Map.Entry<Token, Unit> en : Iterables.concat(
-                     sortedTokens.headMap(token, true).descendingMap().entrySet(),
-                     sortedTokens.descendingMap().entrySet())) {
+                                                             sortedTokens.headMap(token, false).descendingMap().entrySet(),
+                                                             sortedTokens.descendingMap().entrySet()))
+            {
                 Unit n = en.getValue();
                 int ngroup = groupMap.get(n);
                 // Same group as investigated unit is a break; anything that could replicate in it replicates there.
@@ -288,7 +306,8 @@ public class ReplicationAwareTokenAllocatorTest
             return groupMap.get(n1).equals(groupMap.get(n2));
         }
 
-        public void removeUnit(Unit n) {
+        public void removeUnit(Unit n)
+        {
             groupMap.remove(n);
         }
 
@@ -302,11 +321,12 @@ public class ReplicationAwareTokenAllocatorTest
             return 1.5;   // Even balanced racks get disbalanced when they lose nodes.
         }
     }
-    
-    private static<T> Map<T, Integer> instanceToCount(Map<?, T> map)
+
+    private static <T> Map<T, Integer> instanceToCount(Map<?, T> map)
     {
         Map<T, Integer> idToCount = Maps.newHashMap();
-        for (Map.Entry<?, T> en : map.entrySet()) {
+        for (Map.Entry<?, T> en : map.entrySet())
+        {
             Integer old = idToCount.get(en.getValue());
             idToCount.put(en.getValue(), old != null ? old + 1 : 1);
         }
@@ -355,7 +375,7 @@ public class ReplicationAwareTokenAllocatorTest
             groupMap.put(n, groupId++ / groupSize);
         }
     }
-    
+
     static class UnbalancedGroupReplicationStrategy extends GroupReplicationStrategy
     {
         int groupId;
@@ -364,7 +384,7 @@ public class ReplicationAwareTokenAllocatorTest
         int minGroupSize;
         int maxGroupSize;
         Random rand;
-        
+
         public UnbalancedGroupReplicationStrategy(int replicas, int minGroupSize, int maxGroupSize, Random rand)
         {
             super(replicas);
@@ -378,7 +398,8 @@ public class ReplicationAwareTokenAllocatorTest
 
         public void addUnit(Unit n)
         {
-            if (++num > nextSize) {
+            if (++num > nextSize)
+            {
                 nextSize = minGroupSize + rand.nextInt(maxGroupSize - minGroupSize + 1);
                 ++groupId;
                 num = 0;
@@ -391,16 +412,17 @@ public class ReplicationAwareTokenAllocatorTest
             return 2;
         }
     }
-    
+
     static Map<Unit, Double> evaluateReplicatedOwnership(ReplicationAwareTokenAllocator<Unit> t)
     {
         Map<Unit, Double> ownership = Maps.newHashMap();
         Iterator<Token> it = t.sortedTokens.keySet().iterator();
         if (!it.hasNext())
             return ownership;
-        
+
         Token current = it.next();
-        while (it.hasNext()) {
+        while (it.hasNext())
+        {
             Token next = it.next();
             addOwnership(t, current, next, ownership);
             current = next;
@@ -415,7 +437,8 @@ public class ReplicationAwareTokenAllocatorTest
         TestReplicationStrategy ts = (TestReplicationStrategy) t.strategy;
         double size = current.size(next);
         Token representative = t.partitioner.midpoint(current, next);
-        for (Unit n : ts.getReplicas(representative, t.sortedTokens)) {
+        for (Unit n : ts.getReplicas(representative, t.sortedTokens))
+        {
             Double v = ownership.get(n);
             ownership.put(n, v != null ? v + size : size);
         }
@@ -430,12 +453,13 @@ public class ReplicationAwareTokenAllocatorTest
         return ts.replicationStart(token, sortedTokens.get(token), sortedTokens).size(next);
     }
 
-    static interface TokenCount {
+    static interface TokenCount
+    {
         int tokenCount(int perUnitCount, Random rand);
 
         double spreadExpectation();
     }
-    
+
     static TokenCount fixedTokenCount = new TokenCount()
     {
         public int tokenCount(int perUnitCount, Random rand)
@@ -448,45 +472,46 @@ public class ReplicationAwareTokenAllocatorTest
             return 4;  // High tolerance to avoid flakiness.
         }
     };
-    
+
     static TokenCount varyingTokenCount = new TokenCount()
     {
         public int tokenCount(int perUnitCount, Random rand)
         {
             if (perUnitCount == 1) return 1;
             // 25 to 175%
-            return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount+3)/4;
+            return rand.nextInt(perUnitCount * 3 / 2) + (perUnitCount + 3) / 4;
         }
 
         public double spreadExpectation()
         {
-            return 6;  // High tolerance to avoid flakiness.
+            return 8;  // High tolerance to avoid flakiness.
         }
     };
-    
+
     Murmur3Partitioner partitioner = new Murmur3Partitioner();
     Random seededRand = new Random(2);
-    
+
     private void random(Map<Token, Unit> map, TestReplicationStrategy rs, int unitCount, TokenCount tc, int perUnitCount)
     {
         System.out.format("\nRandom generation of %d units with %d tokens each\n", unitCount, perUnitCount);
         Random rand = seededRand;
-        for (int i = 0 ; i < unitCount ; i++)
+        for (int i = 0; i < unitCount; i++)
         {
             Unit unit = new Unit();
             rs.addUnit(unit);
             int tokens = tc.tokenCount(perUnitCount, rand);
-            for (int j = 0 ; j < tokens ; j++)
+            for (int j = 0; j < tokens; j++)
             {
                 map.put(partitioner.getRandomToken(rand), unit);
             }
         }
     }
-    
+
     @Test
     public void testExistingCluster()
     {
         for (int rf = 1; rf <= 5; ++rf)
+        {
             for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
             {
                 testExistingCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
@@ -499,6 +524,7 @@ public class ReplicationAwareTokenAllocatorTest
                 }
                 testExistingCluster(perUnitCount, fixedTokenCount, new FixedGroupCountReplicationStrategy(rf, rf * 2));
             }
+        }
     }
 
     public void testExistingCluster(int perUnitCount, TokenCount tc, TestReplicationStrategy rs)
@@ -515,15 +541,12 @@ public class ReplicationAwareTokenAllocatorTest
         loseAndReplace(t, targetClusterSize / 10, tc, perUnitCount);
         System.out.println();
     }
-    
-    // Not tested for now as it is too flaky. Certain random initial choices (optimal or close to it) cause the cluster
-    // to alternate between excellent distribution and pretty bad regardless of vnode count.
-    // Some work is needed to figure out how to distribute first RF units' tokens to make sure the distribution is
-    // always kept at very good.
+
     @Test
     public void testNewCluster()
     {
         for (int rf = 2; rf <= 5; ++rf)
+        {
             for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
             {
                 testNewCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
@@ -536,6 +559,7 @@ public class ReplicationAwareTokenAllocatorTest
                 }
                 testNewCluster(perUnitCount, fixedTokenCount, new FixedGroupCountReplicationStrategy(rf, rf * 2));
             }
+        }
     }
 
     public void testNewCluster(int perUnitCount, TokenCount tc, TestReplicationStrategy rs)
@@ -550,27 +574,29 @@ public class ReplicationAwareTokenAllocatorTest
         loseAndReplace(t, targetClusterSize / 5, tc, perUnitCount);
         System.out.println();
     }
-    
+
     private void loseAndReplace(ReplicationAwareTokenAllocator<Unit> t, int howMany, TokenCount tc, int perUnitCount)
     {
         int fullCount = t.unitCount();
         System.out.format("Losing %d units. ", howMany);
-        for (int i=0; i<howMany; ++i) {
+        for (int i = 0; i < howMany; ++i)
+        {
             Unit u = t.unitFor(partitioner.getRandomToken(seededRand));
             t.removeUnit(u);
             ((TestReplicationStrategy) t.strategy).removeUnit(u);
         }
         // Grow half without verifying.
-        grow(t, (t.unitCount() + fullCount*3) / 4, tc, perUnitCount, false);
+        grow(t, (t.unitCount() + fullCount * 3) / 4, tc, perUnitCount, false);
         // Metrics should be back to normal by now. Check that they remain so.
         grow(t, fullCount, tc, perUnitCount, true);
     }
-    
-    static class Summary {
+
+    static class Summary
+    {
         double min = 1;
         double max = 1;
         double stddev = 0;
-        
+
         void update(SummaryStatistics stat)
         {
             min = Math.min(min, stat.getMin());
@@ -591,7 +617,8 @@ public class ReplicationAwareTokenAllocatorTest
         Summary st = new Summary();
         Random rand = new Random(targetClusterSize + perUnitCount);
         TestReplicationStrategy strategy = (TestReplicationStrategy) t.strategy;
-        if (size < targetClusterSize) {
+        if (size < targetClusterSize)
+        {
             System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
             long time = System.currentTimeMillis();
             while (size < targetClusterSize)
@@ -619,7 +646,6 @@ public class ReplicationAwareTokenAllocatorTest
     }
 
 
-
     private void updateSummary(ReplicationAwareTokenAllocator<Unit> t, Summary su, Summary st, boolean print)
     {
         int size = t.sortedTokens.size();
@@ -630,12 +656,12 @@ public class ReplicationAwareTokenAllocatorTest
         for (Map.Entry<Unit, Double> en : ownership.entrySet())
             unitStat.addValue(en.getValue() * inverseAverage / t.unitToTokens.get(en.getKey()).size());
         su.update(unitStat);
-        
+
         SummaryStatistics tokenStat = new SummaryStatistics();
         for (Token tok : t.sortedTokens.keySet())
             tokenStat.addValue(replicatedTokenOwnership(tok, t.sortedTokens, t.strategy) * inverseAverage);
         st.update(tokenStat);
-        
+
         if (print)
         {
             System.out.format("Size %d(%d)   \tunit %s  token %s   %s\n",
@@ -648,12 +674,10 @@ public class ReplicationAwareTokenAllocatorTest
     }
 
 
-
     private static String mms(SummaryStatistics s)
     {
         return String.format("max %.2f min %.2f stddev %.4f", s.getMax(), s.getMin(), s.getStandardDeviation());
     }
-
 
 
     int nextUnitId = 0;
@@ -661,8 +685,9 @@ public class ReplicationAwareTokenAllocatorTest
     final class Unit implements Comparable<Unit>
     {
         int unitId = nextUnitId++;
-        
-        public String toString() {
+
+        public String toString()
+        {
             return Integer.toString(unitId);
         }
 
