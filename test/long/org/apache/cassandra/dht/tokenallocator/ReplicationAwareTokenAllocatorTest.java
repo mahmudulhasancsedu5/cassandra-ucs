@@ -34,7 +34,7 @@ import org.apache.cassandra.dht.Token;
 
 public class ReplicationAwareTokenAllocatorTest
 {
-    private static final int MAX_VNODE_COUNT = 16;
+    private static final int MAX_VNODE_COUNT = 256;
 
     private static final int TARGET_CLUSTER_SIZE = 500;
 
@@ -299,7 +299,7 @@ public class ReplicationAwareTokenAllocatorTest
 
         public double spreadExpectation()
         {
-            return 1.66;   // Even balanced racks get disbalanced when they lose nodes.
+            return 1.5;   // Even balanced racks get disbalanced when they lose nodes.
         }
     }
     
@@ -385,6 +385,11 @@ public class ReplicationAwareTokenAllocatorTest
             }
             groupMap.put(n, groupId);
         }
+
+        public double spreadExpectation()
+        {
+            return 2;
+        }
     }
     
     static Map<Unit, Double> evaluateReplicatedOwnership(ReplicationAwareTokenAllocator<Unit> t)
@@ -455,7 +460,7 @@ public class ReplicationAwareTokenAllocatorTest
 
         public double spreadExpectation()
         {
-            return 5;  // High tolerance to avoid flakiness.
+            return 6;  // High tolerance to avoid flakiness.
         }
     };
     
@@ -481,7 +486,7 @@ public class ReplicationAwareTokenAllocatorTest
     @Test
     public void testExistingCluster()
     {
-        for (int rf = 2; rf <= 5; ++rf)
+        for (int rf = 1; rf <= 5; ++rf)
             for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
             {
                 testExistingCluster(perUnitCount, fixedTokenCount, new SimpleReplicationStrategy(rf));
@@ -533,7 +538,7 @@ public class ReplicationAwareTokenAllocatorTest
             }
     }
 
-    public void testNewCluster(int perUnitCount, TokenCount tc, ReplicationStrategy<Unit> rs)
+    public void testNewCluster(int perUnitCount, TokenCount tc, TestReplicationStrategy rs)
     {
         System.out.println("Testing new cluster, target " + perUnitCount + " vnodes, replication " + rs);
         final int targetClusterSize = TARGET_CLUSTER_SIZE;

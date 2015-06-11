@@ -225,7 +225,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
     private void confirmCandidate(CandidateInfo<Unit> candidate)
     {
         // This process is less efficient than it could be (loops through each vnode's replication span instead
-        // of recalculating replicationStart, replicationMinus1 from existing data + new token data in an O(1)
+        // of recalculating replicationStart, replicationThreshold from existing data + new token data in an O(1)
         // case analysis similar to evaluateImprovement). This is fine as the method does not dominate processing
         // time.
 
@@ -261,8 +261,8 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
     }
 
     /**
-     * Calculates the {@code replicationStart}, {@code replicationMinus1} and {@code expandable} properties of the given
-     * {@code TokenInfo}, used by {@code findUpdatedReplicationStart} to quickly identify changes in ownership.
+     * Calculates the {@code replicationStart} of a token, as well as {@code replicationThreshold} which is chosen in a way
+     * that permits {@code findUpdatedReplicationStart} to quickly identify changes in ownership.
      */
     private Token populateTokenInfo(BaseTokenInfo<Unit, ?> token, GroupInfo newUnitGroup)
     {
@@ -272,7 +272,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         // Replication start = the end of a token from the RF'th different group seen before the token.
         Token replicationStart;
         // The end of a token from the RF-1'th different group seen before the token.
-        Token replicationMinus1 = token.token;
+        Token replicationThreshold = token.token;
         GroupInfo currGroup;
         for (TokenInfo<Unit> curr = token.prevInRing(); ; curr = curr.prev)
         {
@@ -283,55 +283,22 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             if (visitor.visitedAll())
                 break;
 
-            replicationMinus1 = replicationStart;
+            replicationThreshold = replicationStart;
             // Another instance of the same group precedes us in the replication range of the ring,
             // so this is where our replication range begins
             if (currGroup == tokenGroup)
                 break;
         }
         if (newUnitGroup == tokenGroup)
-            // new token is always a boundary (as long as it's closer than existing replicationStart)
-            replicationMinus1 = token.token;
+            // new token is always a boundary (as long as it's closer than replicationStart)
+            replicationThreshold = token.token;
         else if (newUnitGroup != currGroup && visitor.seen(newUnitGroup))
             // already has new group in replication span before last seen. cannot be affected
-            replicationMinus1 = replicationStart;
+            replicationThreshold = replicationStart;
         visitor.clean();
 
-        token.replicationMinus1 = replicationMinus1;
+        token.replicationThreshold = replicationThreshold;
         token.replicationStart = replicationStart;
-        return replicationStart;
-    }
-
-    /**
-     * Calculates the {@code replicationStart}, {@code replicationMinus1} and {@code expandable} properties of the given
-     * {@code TokenInfo}, used by {@code findUpdatedReplicationStart} to quickly identify changes in ownership.
-     * @param candidate 
-     */
-    private Token replicationStart(BaseTokenInfo<Unit, ?> token, CandidateInfo<Unit> candidate)
-    {
-        GroupInfo tokenGroup = token.owningUnit.group;
-        PopulateVisitor visitor = new PopulateVisitor();
-
-        // Replication start = the end of a token from the RF'th different group seen before the token.
-        Token replicationStart;
-        GroupInfo currGroup;
-        BaseTokenInfo<Unit, ?> curr = token;
-        while (true)
-        {
-            curr = curr == candidate.split ? candidate : curr.prevInRing();
-            replicationStart = curr.token;
-            currGroup = curr.owningUnit.group;
-            if (!visitor.add(currGroup))
-                continue; // Group is already seen.
-            if (visitor.visitedAll())
-                break;
-
-            // Another instance of the same group precedes us in the replication range of the ring,
-            // so this is where our replication range begins
-            if (currGroup == tokenGroup)
-                break;
-        }
-        visitor.clean();
         return replicationStart;
     }
 
@@ -369,7 +336,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
             UnitInfo<Unit> currUnit = curr.owningUnit;
 
             if (!replicationVisitor.add(currUnit.group))
-                continue;    // If this group is already seen both before and after splitting, the token cannot be affected.
+                continue;    // If this group is already seen, the token cannot be affected.
 
             Token replicationEnd = curr.token;
             Token replicationStart = findUpdatedReplicationStart(curr, candidate);
@@ -387,9 +354,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
      */
     private Token findUpdatedReplicationStart(TokenInfo<Unit> curr, CandidateInfo<Unit> candidate)
     {
-        Token t = furtherStartToken(curr.replicationMinus1, candidate.token, curr.token);
-        assert t == replicationStart(curr, candidate);
-        return t;
+        return furtherStartToken(curr.replicationThreshold, candidate.token, curr.token);
     }
 
     /**
@@ -562,6 +527,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
     /**
      * Selects from {@code t1}, {@code t2} the token that forms a bigger range with {@code towards} as the upper bound,
      * taking into account wrapping.
+     * Unlike Token.size(), equality is taken to mean "same as" rather than covering the whole range.
      */
     private static Token furtherStartToken(Token t1, Token t2, Token towards)
     {
@@ -679,7 +645,9 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
 
         public String toString()
         {
-            return String.format("%s%s(%.2e)%s", unit, group.prevSeen != null ? "*" : "", ownership, prevUsed != null ? "prev " + (prevUsed == this ? "this" : prevUsed.toString()) : "");
+            return String.format("%s%s(%.2e)%s",
+                    unit, unit == group.group ? (group.prevSeen != null ? "*" : "") : ":" + group.toString(),
+                    ownership, prevUsed != null ? (prevUsed == this ? "#" : "->" + prevUsed.toString()) : "");
         }
     }
 
@@ -726,15 +694,17 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         final UnitInfo<Unit> owningUnit;
 
         /**
-         * Start of the replication span for the vnode, i.e. the end of the first token of the RF'th group seen before
-         * the token. The replicated ownership of the unit is the range between replicationStart and next.token.
+         * Start of the replication span for the vnode, i.e. the first token of the RF'th group seen before the token.
+         * The replicated ownership of the unit is the range between {@code replicationStart} and {@code token}.
          */
         Token replicationStart;
         /**
-         * RF minus one boundary, i.e. the end of the first token of the RF-1'th group seen before the token.
-         * Used to determine replicationStart after insertion of new token.
+         * The closest position that the new candidate can take to become the new replication start. If candidate is
+         * closer, the start moves to this position. Used to determine replicationStart after insertion of new token.
+         *
+         * Usually the RF minus one boundary, i.e. the first token of the RF-1'th group seen before the token.
          */
-        Token replicationMinus1;
+        Token replicationThreshold;
         /**
          * Current replicated ownership. This number is reflected in the owning unit's ownership.
          */
@@ -802,7 +772,7 @@ class ReplicationAwareTokenAllocator<Unit> implements TokenAllocator<Unit>
         BaseTokenInfo<?, ?> token = tokens;
         do
         {
-            System.out.format("%s%s: rs %s rfm1 %s size %.2e\n", lead, token, token.replicationStart, token.replicationMinus1, token.replicatedOwnership);
+            System.out.format("%s%s: rs %s rt %s size %.2e\n", lead, token, token.replicationStart, token.replicationThreshold, token.replicatedOwnership);
             token = token.next;
         } while (token != null && token != tokens);
     }

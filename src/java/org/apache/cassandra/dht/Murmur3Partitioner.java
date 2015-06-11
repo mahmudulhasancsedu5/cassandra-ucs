@@ -143,7 +143,7 @@ public class Murmur3Partitioner implements IPartitioner
         {
             LongToken n = (LongToken) next;
             long v = n.token - token;  // Overflow acceptable and desired.
-            double d = Math.scalb(v, -Long.SIZE); // Scale so that the full range is 1.
+            double d = Math.scalb((double) v, -Long.SIZE); // Scale so that the full range is 1.
             return d > 0.0 ? d : (d + 1.0); // Adjust for signed long, also making sure t.size(t) == 1.
         }
 
