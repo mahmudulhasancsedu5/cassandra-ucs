@@ -34,9 +34,9 @@ import org.apache.cassandra.dht.Token;
 
 public class ReplicationAwareTokenAllocatorTest
 {
-    private static final int MAX_VNODE_COUNT = 256;
+    private static final int MAX_VNODE_COUNT = 64;
 
-    private static final int TARGET_CLUSTER_SIZE = 500;
+    private static final int TARGET_CLUSTER_SIZE = 250;
 
     interface TestReplicationStrategy extends ReplicationStrategy<Unit>
     {
