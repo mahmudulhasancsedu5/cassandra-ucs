@@ -41,6 +41,8 @@ public interface RangeTombstoneMarker extends Unfiltered
     public boolean isClose(boolean reversed);
     public DeletionTime openDeletionTime(boolean reversed);
     public DeletionTime closeDeletionTime(boolean reversed);
+    public boolean openIsInclusive(boolean reversed);
+    public boolean closeIsInclusive(boolean reversed);
 
     public interface Writer extends Slice.Bound.Writer
     {
@@ -143,12 +145,12 @@ public interface RangeTombstoneMarker extends Unfiltered
                     case INCL_END_EXCL_START_BOUNDARY:
                     case INCL_END_BOUND:
                         return reversed ? INCL_OPEN : INCL_CLOSE;
+                    default:
+                        throw new AssertionError();
                 }
-                throw new AssertionError();
             }
         }
 
-        private final CFMetaData metadata;
         private final UnfilteredRowIterators.MergeListener listener;
         private final DeletionTime partitionDeletion;
         private final boolean reversed;
@@ -164,7 +166,6 @@ public interface RangeTombstoneMarker extends Unfiltered
 
         public Merger(CFMetaData metadata, int size, DeletionTime partitionDeletion, boolean reversed, UnfilteredRowIterators.MergeListener listener)
         {
-            this.metadata = metadata;
             this.listener = listener;
             this.partitionDeletion = partitionDeletion;
             this.reversed = reversed;
