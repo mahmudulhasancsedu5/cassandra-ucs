@@ -19,8 +19,10 @@ package org.apache.cassandra.db.rows;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 
 import org.junit.Assert;
@@ -62,32 +64,53 @@ public class UnfilteredRowIteratorsMergeTest
     @Test
     public void testTombstoneMerge()
     {
-        testTombstoneMerge(false);
+        testTombstoneMerge(false, false);
     }
 
-    @Test
-    public void testTombstoneMergeReversed()
-    {
-        testTombstoneMerge(true);
-    }
+//    @Test
+//    public void testTombstoneMergeReversed()
+//    {
+//        testTombstoneMerge(true, false);
+//    }
+//
+//    @Test
+//    public void testTombstoneMergeIterative()
+//    {
+//        testTombstoneMerge(false, true);
+//    }
+//
+//    @Test
+//    public void testTombstoneMergeReversedIterative()
+//    {
+//        testTombstoneMerge(true, true);
+//    }
 
-    public void testTombstoneMerge(boolean reversed)
+    public void testTombstoneMerge(boolean reversed, boolean iterations)
     {
-        for (int seed = 1; seed <= 1; ++seed)
+        for (int seed = 1; seed <= 100; ++seed)
         {
-            System.out.println("\nSeed " + seed);
+            if (ITEMS <= 20)
+                System.out.println("\nSeed " + seed);
 
             Random r = new Random(seed);
+            List<Function<Integer, Integer>> timeGenerators = ImmutableList.of(
+                    x -> -1,
+                    x -> DEL_RANGE,
+                    x -> r.nextInt(DEL_RANGE)
+                );
             List<List<Unfiltered>> sources = new ArrayList<>(ITERATORS);
-            System.out.println("Merging");
+            if (ITEMS <= 20)
+                System.out.println("Merging");
             for (int i=0; i<ITERATORS; ++i)
-                sources.add(generateSource(r, reversed));
+                sources.add(generateSource(r, reversed, timeGenerators.get(r.nextInt(timeGenerators.size()))));
             List<UnfilteredRowIterator> us = sources.stream().map(l -> new Source(l.iterator(), reversed)).collect(Collectors.toList());
             List<Unfiltered> merged = new ArrayList<>();
-            Iterators.addAll(merged, safeIterator(UnfilteredRowIterators.merge(us)));
+            Iterators.addAll(merged, safeIterator(merge(us, iterations)));
     
-            System.out.println("results in");
-            dumpList(merged);
+            if (ITEMS <= 20)
+                System.out.println("results in");
+            if (ITEMS <= 20)
+                dumpList(merged);
             verifyEquivalent(sources, merged, reversed);
             if (reversed)
                 Collections.reverse(merged);
@@ -95,8 +118,26 @@ public class UnfilteredRowIteratorsMergeTest
             verifyValid(merged);
         }
     }
+    
+    public UnfilteredRowIterator merge(List<UnfilteredRowIterator> us, boolean iterations)
+    {
+        if (iterations)
+        {
+            UnfilteredRowIterator mi = us.get(0);
+            int i;
+            for (i = 1; i + 2 <= ITERATORS; i += 2)
+                mi = UnfilteredRowIterators.merge(ImmutableList.of(mi, us.get(i), us.get(i+1)));
+            if (i + 1 <= ITERATORS)
+                mi = UnfilteredRowIterators.merge(ImmutableList.of(mi, us.get(i)));
+            return mi;
+        }
+        else
+        {
+            return UnfilteredRowIterators.merge(us);
+        }
+    }
 
-    private static List<Unfiltered> generateSource(Random r, boolean reversed)
+    private static List<Unfiltered> generateSource(Random r, boolean reversed, Function<Integer, Integer> timeGenerator)
     {
         int[] positions = new int[ITEMS + 1];
         for (int i=0; i<ITEMS; ++i)
@@ -120,68 +161,55 @@ public class UnfilteredRowIteratorsMergeTest
             }
             else
             {
-                content.add(emptyRowAt(pos));
+                content.add(emptyRowAt(pos, timeGenerator));
             }
             prev = pos;
         }
-        // TODO: Remove some close bounds for implicit close case.
+
         verifyValid(content);
         if (reversed)
             Collections.reverse(content);
-        dumpList(content);
+        if (ITEMS <= 20)
+            dumpList(content);
         return content;
     }
 
     static void verifyValid(List<Unfiltered> list)
     {
         try {
-            Unfiltered prev = null;
-            for (Unfiltered curr : list)
+            RangeTombstoneMarker prev = null;
+            Unfiltered prevUnfiltered = null;
+            for (Unfiltered unfiltered : list)
             {
-                if (prev == null)
-                {
-                    prev = curr;
-                    continue;
-                }
-                
-                Assert.assertTrue(str(prev) + " not ordered before " + str(curr), comparator.compare(prev, curr) <= 0);
-                if (curr.kind() == Kind.ROW)
-                {
-                    if (prev.kind() != Kind.ROW)
-                        Assert.assertFalse("Row succeeds open marker " + str(prev), ((RangeTombstoneMarker) prev).clustering().isStart());
-                }
-                else
-                {
-                    Assert.assertFalse("Duplicate marker " + str(curr), prev.equals(curr));
-                        
-                    Bound currBound = (Bound) curr.clustering();
-                    if (prev.kind() == Kind.ROW)
-                    {
-                        Assert.assertTrue(str(curr) + " should be preceded by open marker, found " + str(prev), currBound.isStart());
-                    }
-                    else
-                    {
-                        Bound prevBound = (Bound) prev.clustering();
+                if (prevUnfiltered != null)
+                    Assert.assertTrue(str(prevUnfiltered) + " not ordered before " + str(unfiltered), comparator.compare(prevUnfiltered, unfiltered) <= 0);
+                prevUnfiltered = unfiltered;
 
-                        Assert.assertFalse("Deletion time for " + str(curr) + " shouldn't be live", ((RangeTombstoneMarker)curr).deletionTime().isLive());
-                        
+                if (unfiltered.kind() == Kind.RANGE_TOMBSTONE_MARKER)
+                {
+                    RangeTombstoneMarker curr = (RangeTombstoneMarker) unfiltered;
+                    if (prev != null)
+                    {
+                        Bound currBound = curr.clustering();
+                        Bound prevBound = prev.clustering();
+
                         if (currBound.isEnd())
                         {
-                            Assert.assertTrue(str(curr) + " should be preceded by open marker, found " + str(prev), prevBound.isStart());
-                            Assert.assertEquals("Deletion time mismatch for open " + str(prev) + " and close " + str(curr),
-                                                ((RangeTombstoneMarker) prev).deletionTime(),
-                                                ((RangeTombstoneMarker) curr).deletionTime());
+                            Assert.assertTrue(str(unfiltered) + " follows another close marker " + str(prev), prevBound.isStart());
+                            Assert.assertEquals("Deletion time mismatch for open " + str(prev) + " and close " + str(unfiltered),
+                                                prev.deletionTime(),
+                                                curr.deletionTime());
                         }
-                        if (currBound.isStart())                    // Remove for implicit close.
+                        else
                             Assert.assertTrue(str(curr) + " follows another open marker " + str(prev), prevBound.isEnd());
                     }
-                    
+
+                    prev = curr;
                 }
-                prev = curr;
             }
-            Assert.assertFalse("Cannot end in open marker " + str(prev), prev.kind() == Kind.RANGE_TOMBSTONE_MARKER && ((Bound) prev.clustering()).isStart());
-    
-            } catch (AssertionError e) {
+            Assert.assertFalse("Cannot end in open marker " + str(prev), prev != null && prev.clustering().isStart());
+
+        } catch (AssertionError e) {
             System.out.println(e);
             dumpList(list);
             throw e;
@@ -198,16 +226,14 @@ public class UnfilteredRowIteratorsMergeTest
                 DeletionTime dt = DeletionTime.LIVE;
                 for (List<Unfiltered> source : sources)
                 {
-                    DeletionTime sdt = deletionFor(c, source, reversed);
-                    if (sdt.supersedes(dt))
-                        dt = sdt;
+                    dt = deletionFor(c, source, dt, reversed);
                 }
                 Assert.assertEquals("Deletion time mismatch for position " + str(c), dt, deletionFor(c, merged, reversed));
                 if (dt == DeletionTime.LIVE)
                 {
                     Optional<Unfiltered> sourceOpt = sources.stream().map(source -> rowFor(c, source, reversed)).filter(x -> x != null).findAny();
                     Unfiltered mergedRow = rowFor(c, merged, reversed);
-                    Assert.assertEquals("Content mismatch for position " + str(c), sourceOpt.orElse(null), mergedRow);
+                    Assert.assertEquals("Content mismatch for position " + str(c), str(sourceOpt.orElse(null)), str(mergedRow));
                 }
             }
         }
@@ -239,25 +265,29 @@ public class UnfilteredRowIteratorsMergeTest
             return def;
 
         int index = Collections.binarySearch(list, pointer, reversed ? comparator.reversed() : comparator);
-        if (index >= 0)     // Found equal row. Bounds cannot equal SimpleClustering.
+        if (index < 0)
+            index = -1 - index;
+        else
         {
             Row row = (Row) list.get(index);
-            return row.deletion() != null ? row.deletion() : def;
+            if (row.deletion() != null && row.deletion().supersedes(def))
+                def = row.deletion();
         }
-        index = -1 - index;
-        if (reversed)
-            index += 1;
 
-        if (index == 0 || index >= list.size())
+        if (index >= list.size())
             return def;
 
-        Unfiltered unfiltered = list.get(index - 1);
-        if (unfiltered.kind() == Kind.ROW)
-            return def;
-        RangeTombstoneMarker lower = (RangeTombstoneMarker) unfiltered;
-        if (lower.clustering().isEnd())
-            return def;
-        return lower.deletionTime();
+        while (--index >= 0)
+        {
+            Unfiltered unfiltered = list.get(index);
+            if (unfiltered.kind() == Kind.ROW)
+                continue;
+            RangeTombstoneMarker lower = (RangeTombstoneMarker) unfiltered;
+            if (lower.clustering().isEnd() != reversed)
+                return def;
+            return lower.deletionTime().supersedes(def) ? lower.deletionTime() : def;
+        }
+        return def;
     }
 
     private static Bound boundFor(int pos, boolean start, boolean inclusive)
@@ -269,13 +299,12 @@ public class UnfilteredRowIteratorsMergeTest
     {
         return new SimpleClustering(Int32Type.instance.decompose(i));
     }
-
-    static Row emptyRowAt(int pos)
+    
+    static Row emptyRowAt(int pos, Function<Integer, Integer> timeGenerator)
     {
         final Clustering clustering = clusteringFor(pos);
-        // Using liveness time of -1 to make rows covered by tombstone ranges always disappear.
-        final LivenessInfo live = SimpleLivenessInfo.forUpdate(-1, 0, nowInSec, metadata);
-        return emptyRowAt(clustering, live);
+        final LivenessInfo live = SimpleLivenessInfo.forUpdate(timeGenerator.apply(pos), 0, nowInSec, metadata);
+        return emptyRowAt(clustering, live, DeletionTime.LIVE);
     }
 
     public static class TestCell extends AbstractCell
@@ -316,8 +345,8 @@ public class UnfilteredRowIteratorsMergeTest
             return null;
         }
     }
-
-    static Row emptyRowAt(final Clustering clustering, final LivenessInfo live)
+    
+    static Row emptyRowAt(final Clustering clustering, final LivenessInfo live, final DeletionTime deletion)
     {
         final ColumnDefinition columnDef = metadata.getColumnDefinition(new ColumnIdentifier("data", true));
         final Cell cell = new TestCell(columnDef, clustering.get(0), live);
@@ -346,7 +375,7 @@ public class UnfilteredRowIteratorsMergeTest
 
             public DeletionTime deletion()
             {
-                return DeletionTime.LIVE;
+                return deletion;
             }
 
             public boolean isEmpty()
@@ -432,6 +461,8 @@ public class UnfilteredRowIteratorsMergeTest
 
     private static String str(Clusterable prev)
     {
+        if (prev == null)
+            return "null";
         String val = Int32Type.instance.getString(prev.clustering().get(0));
         if (prev instanceof RangeTombstoneMarker)
         {
@@ -477,7 +508,12 @@ public class UnfilteredRowIteratorsMergeTest
     {
         return Bound.create(clustering.kind(), new ByteBuffer[] {clustering.get(0)});
     }
-
+    
+    private static Row safeRow(Row row)
+    {
+        return emptyRowAt(new SimpleClustering(row.clustering().get(0)), SimpleLivenessInfo.forUpdate(row.maxLiveTimestamp(), 0, nowInSec, metadata), row.deletion());
+    }
+    
     public static UnfilteredRowIterator safeIterator(UnfilteredRowIterator iterator)
     {
         return new WrappingUnfilteredRowIterator(iterator)
@@ -486,7 +522,7 @@ public class UnfilteredRowIteratorsMergeTest
             {
                 Unfiltered next = super.next();
                 return next.kind() == Unfiltered.Kind.ROW
-                     ? emptyRowAt(Int32Type.instance.compose(next.clustering().get(0)))
+                     ? safeRow((Row) next)
                      : new SimpleRangeTombstoneMarker(safeBound((Bound) next.clustering()), safeDeletionTime((RangeTombstoneMarker)next));
             }
         };
