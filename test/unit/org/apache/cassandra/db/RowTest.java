@@ -103,7 +103,8 @@ public class RowTest
         {
             Object[][] expected = new Object[][]{ { "1", "11", 123l, 123 },
                                                   { "111", "112", 1230l, 123 },
-                                                  { "2", "24", 123l, 123 },
+                                                  { "2", null, 123l, 123 },
+                                                  { "22", "24", 123l, 123 },
                                                   { "3", "31", 1230l, 123 },
                                                   { "4", "41", 123l, 1230 },
                                                   { "5", "51", 123l, 1230 } };
@@ -115,12 +116,17 @@ public class RowTest
                 DeletionTime openDeletion = new SimpleDeletionTime(openMarker.deletionTime().markedForDeleteAt(),
                                                                    openMarker.deletionTime().localDeletionTime());
 
-                RangeTombstoneMarker closeMarker = (RangeTombstoneMarker)merged.next();
-                Slice.Bound closeBound = closeMarker.clustering();
-                DeletionTime closeDeletion = new SimpleDeletionTime(closeMarker.deletionTime().markedForDeleteAt(),
-                                                                    closeMarker.deletionTime().localDeletionTime());
+                RangeTombstoneMarker closeMarker = null;
+                Slice.Bound closeBound = null;
+                if (expected[i][1] != null)
+                {
+                    closeMarker = (RangeTombstoneMarker)merged.next();
+                    closeBound = closeMarker.clustering();
+                    DeletionTime closeDeletion = new SimpleDeletionTime(closeMarker.deletionTime().markedForDeleteAt(),
+                                                                        closeMarker.deletionTime().localDeletionTime());
+                    assertEquals(openDeletion, closeDeletion);
+                }
 
-                assertEquals(openDeletion, closeDeletion);
                 assertRangeTombstoneMarkers(openBound, closeBound, openDeletion, expected[i++]);
             }
         }
@@ -188,9 +194,12 @@ public class RowTest
         assertEquals(start.kind(), Slice.Bound.Kind.INCL_START_BOUND);
         assertEquals(expected[0], clusteringType.getString(start.get(0)));
 
-        assertEquals(1, end.size());
-        assertEquals(end.kind(), Slice.Bound.Kind.INCL_END_BOUND);
-        assertEquals(expected[1], clusteringType.getString(end.get(0)));
+        if (end != null)
+        {
+            assertEquals(1, end.size());
+            assertEquals(end.kind(), Slice.Bound.Kind.INCL_END_BOUND);
+            assertEquals(expected[1], clusteringType.getString(end.get(0)));
+        }
 
         assertEquals(expected[2], deletionTime.markedForDeleteAt());
         assertEquals(expected[3], deletionTime.localDeletionTime());

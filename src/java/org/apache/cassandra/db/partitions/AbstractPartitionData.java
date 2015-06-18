@@ -815,6 +815,7 @@ public abstract class AbstractPartitionData implements Partition, Iterable<Row>
         private DeletionTime nextDeletion;
 
         private Slice.Bound start;
+        private DeletionTime startDeletion;
 
         public RangeTombstoneCollector()
         {
@@ -832,55 +833,42 @@ public abstract class AbstractPartitionData implements Partition, Iterable<Row>
 
         public void writeMarkerDeletion(DeletionTime deletion)
         {
-            if (nextKind.isStart())
-                nextDeletion = deletion.takeAlias();
-            else
-                assert nextDeletion.equals(deletion);
+            nextDeletion = deletion;
         }
 
         public void endOfMarker()
         {
             if (nextKind.isStart())
             {
-                start = Slice.Bound.create(nextKind, Arrays.copyOfRange(nextValues, 0, size));
+                Slice.Bound next = Slice.Bound.create(nextKind, Arrays.copyOfRange(nextValues, 0, size));
+                if (start != null)
+                {
+                    // we already have an open RTM, so this is either a re-image, or a change of DeletionTime
+                    if (startDeletion.equals(nextDeletion))
+                        return; // do nothing; this is just a re-image of the same RT
+
+                    // we've changed the DeletionTime, so we must insert RT up to this new bound
+                    AbstractPartitionData.this.addRangeTombstone(Slice.make(start, next.invert()), nextDeletion);
+                }
+                start = next;
+                startDeletion = nextDeletion;
             }
             else
             {
+                assert start != null && nextDeletion.equals(startDeletion);
                 Slice.Bound end = Slice.Bound.create(nextKind, Arrays.copyOfRange(nextValues, 0, size));
-                addRangeTombstone(Slice.make(start, end), nextDeletion);
+                AbstractPartitionData.this.addRangeTombstone(Slice.make(start, end), nextDeletion);
                 reset();
             }
+            nextDeletion = null;
             Arrays.fill(nextValues, null);
             size = 0;
-        }
-
-        /**
-         * Whether there is a currently open marker in the collector.
-         */
-        public boolean hasOpenMarker()
-        {
-            return start != null;
-        }
-
-        /**
-         * Provided the collector has an open marker, close that marker using the provided bound.
-         */
-        public void closeOpenMarker(Slice.Bound bound)
-        {
-            assert hasOpenMarker();
-            addRangeTombstone(Slice.make(start, bound), nextDeletion);
-            reset();
-        }
-
-        private void addRangeTombstone(Slice deletionSlice, DeletionTime dt)
-        {
-            AbstractPartitionData.this.addRangeTombstone(deletionSlice, dt);
         }
 
         public void reset()
         {
             start = null;
-            nextDeletion = null;
+            startDeletion = null;
             size = 0;
             nextKind = null;
         }

@@ -102,7 +102,7 @@ public class DataResolver extends ResponseResolver
 
         public UnfilteredRowIterators.MergeListener getRowMergeListener(DecoratedKey partitionKey, List<UnfilteredRowIterator> versions)
         {
-            return new MergeListener(partitionKey, columns(versions), nowInSec(versions));
+            return new RepairRowMergeListener(partitionKey, columns(versions), nowInSec(versions));
         }
 
         private PartitionColumns columns(List<UnfilteredRowIterator> versions)
@@ -150,7 +150,7 @@ public class DataResolver extends ResponseResolver
             }
         }
 
-        private class MergeListener implements UnfilteredRowIterators.MergeListener
+        private class RepairRowMergeListener implements UnfilteredRowIterators.MergeListener
         {
             private final DecoratedKey partitionKey;
             private final PartitionColumns columns;
@@ -159,12 +159,11 @@ public class DataResolver extends ResponseResolver
 
             private final Row.Writer[] currentRows = new Row.Writer[sources.length];
             private Clustering currentClustering;
-            private ColumnDefinition currentColumn;
 
             private final Slice.Bound[] markerOpen = new Slice.Bound[sources.length];
             private final DeletionTime[] markerTime = new DeletionTime[sources.length];
 
-            public MergeListener(DecoratedKey partitionKey, PartitionColumns columns, int nowInSec)
+            public RepairRowMergeListener(DecoratedKey partitionKey, PartitionColumns columns, int nowInSec)
             {
                 this.partitionKey = partitionKey;
                 this.columns = columns;
@@ -224,7 +223,6 @@ public class DataResolver extends ResponseResolver
 
             public void onMergedComplexDeletion(ColumnDefinition c, DeletionTime mergedCompositeDeletion, DeletionTime[] versions)
             {
-                currentColumn = c;
                 for (int i = 0; i < versions.length; i++)
                 {
                     DeletionTime version = versions[i] == null ? DeletionTime.LIVE : versions[i];

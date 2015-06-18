@@ -29,6 +29,7 @@ public abstract class RangeTombstoneMarkers
 {
     private RangeTombstoneMarkers() {}
 
+    // TODO: move to RangeTombstoneMarker? seems like it doesn't make much sense to keep this one inner class on its own in a static utilities container class
     public static class Merger
     {
         private final CFMetaData metadata;
@@ -63,23 +64,25 @@ public abstract class RangeTombstoneMarkers
         public void clear()
         {
             Arrays.fill(markers, null);
+            bound = null;
         }
 
         public void add(int i, RangeTombstoneMarker marker)
         {
+            assert bound == null || bound.equals(marker.clustering()) : bound.toString(metadata) + " " + marker.clustering().toString(metadata);
             bound = marker.clustering();
             markers[i] = marker;
         }
 
-        public UnfilteredRowIterators.MergedUnfiltered merge(UnfilteredRowIterators.MergedUnfiltered merged)
+        public Unfiltered merge()
         {
             if (bound.kind().isStart())
-                return mergeOpenMarkers(merged);
+                return mergeOpenMarkers();
             else
-                return mergeCloseMarkers(merged);
+                return mergeCloseMarkers();
         }
 
-        private UnfilteredRowIterators.MergedUnfiltered mergeOpenMarkers(UnfilteredRowIterators.MergedUnfiltered merged)
+        private Unfiltered mergeOpenMarkers()
         {
             int toReturn = -1;
             for (int i = 0; i < markers.length; i++)
@@ -102,52 +105,51 @@ public abstract class RangeTombstoneMarkers
             }
 
             if (toReturn < 0)
-                return merged.setTo(null);
+                return null;
 
             openMarkersCursor.setTo(openMarkers, toReturn);
             if (listener != null)
                 listener.onMergedRangeTombstoneMarkers(bound, openMarkersCursor, markers);
-            return merged.setTo(reusableMarker.setTo(bound, openMarkersCursor));
+            return reusableMarker.setTo(bound, openMarkersCursor);
         }
 
-        private UnfilteredRowIterators.MergedUnfiltered mergeCloseMarkers(UnfilteredRowIterators.MergedUnfiltered merged)
+        private Unfiltered mergeCloseMarkers()
         {
+            RangeTombstoneMarker closed = markers[openMarker];
+
+            if (listener != null)
+                listener.onMergedRangeTombstoneMarkers(bound, closed.deletionTime(), markers);
+
             for (int i = 0; i < markers.length; i++)
             {
                 RangeTombstoneMarker marker = markers[i];
                 if (marker == null)
                     continue;
 
-                // Close the marker for this iterator
+                openMarkersCursor.setTo(openMarkers, i);
+                assert openMarkersCursor.equals(marker.deletionTime());
                 openMarkers.clear(i);
-
-                // What we do now depends on what the current open marker is. If it's not i, then we can
-                // just ignore that close (the corresponding open marker has been ignored).
-                // If it's i, we need to issue a close for that marker. However, we also need to find the
-                // next biggest open marker. If there is none, then we're good, but otherwise, on top
-                // of closing the marker, we need to open that new biggest marker.
-                if (i == openMarker)
-                {
-                    if (listener != null)
-                        listener.onMergedRangeTombstoneMarkers(bound, marker.deletionTime(), markers);
-
-                    merged.setTo(reusableMarker.setTo(bound, marker.deletionTime()));
-
-                    // We've cleaned i so updateOpenMarker will return the new biggest one
-                    updateOpenMarker();
-
-                    if (openMarker >= 0)
-                    {
-                        openMarkersCursor.setTo(openMarkers, openMarker);
-                        Slice.Bound openingBound = bound.withNewKind(ClusteringPrefix.Kind.INCL_START_BOUND);
-                        if (listener != null)
-                            listener.onMergedRangeTombstoneMarkers(openingBound, openMarkersCursor, markers);
-
-                        merged.setSecondTo(reusableMarker.setTo(openingBound, openMarkersCursor));
-                    }
-                }
             }
-            return merged;
+
+            // We've cleaned all of the open markers so updateOpenMarker will return the new biggest one
+            updateOpenMarker();
+
+            if (openMarker >= 0)
+            {
+                // if we are on a DeletionTime boundary, just send an open marker
+
+                openMarkersCursor.setTo(openMarkers, openMarker);
+                Slice.Bound openingBound = bound.withNewKind(bound.kind().invert());
+                if (listener != null)
+                    listener.onMergedRangeTombstoneMarkers(openingBound, openMarkersCursor, markers);
+
+                return reusableMarker.setTo(openingBound, openMarkersCursor);
+            }
+            else
+            {
+                // if there is no new RT, just send a close marker
+                return reusableMarker.setTo(bound, closed.deletionTime());
+            }
         }
 
         public DeletionTime activeDeletion()

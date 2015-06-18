@@ -500,10 +500,8 @@ public abstract class UnfilteredRowIterators
      */
     private static class UnfilteredRowMergeIterator extends AbstractUnfilteredRowIterator
     {
-        private final IMergeIterator<Unfiltered, MergedUnfiltered> mergeIterator;
+        private final IMergeIterator<Unfiltered, Unfiltered> mergeIterator;
         private final MergeListener listener;
-
-        private Unfiltered toReturn;
 
         private UnfilteredRowMergeIterator(CFMetaData metadata,
                                            List<UnfilteredRowIterator> iterators,
@@ -638,24 +636,11 @@ public abstract class UnfilteredRowIterators
 
         protected Unfiltered computeNext()
         {
-            if (toReturn != null)
-            {
-                Unfiltered a = toReturn;
-                toReturn = null;
-                return a;
-            }
-
             while (mergeIterator.hasNext())
             {
-                MergedUnfiltered merged = mergeIterator.next();
-                if (!merged.isSingleAtom())
-                {
-                    toReturn = merged.getSecondAtom();
-                    return merged.getAtom();
-                }
-
-                if (merged.getAtom() != null)
-                    return merged.getAtom();
+                Unfiltered merged = mergeIterator.next();
+                if (merged != null)
+                    return merged;
             }
             return endOfData();
         }
@@ -673,11 +658,9 @@ public abstract class UnfilteredRowIterators
          * Specific reducer for merge operations that rewrite the same reusable
          * row every time. This also skip cells shadowed by range tombstones when writing.
          */
-        private class MergeReducer extends MergeIterator.Reducer<Unfiltered, MergedUnfiltered>
+        private class MergeReducer extends MergeIterator.Reducer<Unfiltered, Unfiltered>
         {
             private Unfiltered.Kind nextKind;
-
-            private final MergedUnfiltered mergedUnfiltered = new MergedUnfiltered();
 
             private final Rows.Merger rowMerger;
             private final RangeTombstoneMarkers.Merger markerMerger;
@@ -703,69 +686,20 @@ public abstract class UnfilteredRowIterators
                     markerMerger.add(idx, (RangeTombstoneMarker)current);
             }
 
-            protected MergedUnfiltered getReduced()
+            protected Unfiltered getReduced()
             {
                 return nextKind == Unfiltered.Kind.ROW
-                     ? mergedUnfiltered.setTo(rowMerger.merge(markerMerger.activeDeletion()))
-                     : markerMerger.merge(mergedUnfiltered);
+                     ? rowMerger.merge(markerMerger.activeDeletion())
+                     : markerMerger.merge();
             }
 
             protected void onKeyChange()
             {
-                mergedUnfiltered.reset();
                 if (nextKind == Unfiltered.Kind.ROW)
                     rowMerger.clear();
                 else
                     markerMerger.clear();
             }
-        }
-    }
-
-    /**
-     * A MergedUnfiltered is either an Unfiltered (a row or a rangeTombstoneMarker) or a pair
-     * of RangeTombstoneMarker.
-     *
-     * The reason we need this is that when we merge closing markers, we may have
-     * to "generate" both a close marker and a new open one. But MergeIterator doesn't
-     * allow us to return 2 Atoms that way, so we group them under a MergedUnfiltered and
-     * UnfilteredRowMergeIterator untangled it just afterwards.
-     */
-    static class MergedUnfiltered
-    {
-        private Unfiltered first;
-        private Unfiltered second;
-
-        public MergedUnfiltered setTo(Unfiltered unfiltered)
-        {
-            this.first = unfiltered;
-            return this;
-        }
-
-        public MergedUnfiltered setSecondTo(Unfiltered unfiltered)
-        {
-            this.second = unfiltered;
-            return this;
-        }
-
-        public boolean isSingleAtom()
-        {
-            return second == null;
-        }
-
-        public Unfiltered getAtom()
-        {
-            return first;
-        }
-
-        public Unfiltered getSecondAtom()
-        {
-            return second;
-        }
-
-        public MergedUnfiltered reset()
-        {
-            first = second = null;
-            return this;
         }
     }
 

@@ -53,18 +53,17 @@ public class UnfilteredRowIteratorsMergeTest
 
     static final int RANGE = 100;
     static final int DEL_RANGE = 100;
-    static final int ITERATORS = 3;
+    static final int ITERATORS = 7;
     static final int ITEMS = 10;
 
     public UnfilteredRowIteratorsMergeTest()
     {
     }
     
-    
     @Test
     public void testTombstoneMerge()
     {
-        for (int seed = 1; seed <= 1000; ++seed)
+        for (int seed = 1; seed <= 100; ++seed)
         {
             System.out.println("\nSeed " + seed);
 
@@ -82,6 +81,40 @@ public class UnfilteredRowIteratorsMergeTest
             List<Unfiltered> merged = new ArrayList<>();
             Iterators.addAll(merged, safeIterator(UnfilteredRowIterators.merge(us)));
     
+            System.out.println("results in");
+            dumpList(merged);
+            verifyValid(merged);
+            verifyEquivalent(sources, merged);
+        }
+    }
+    
+    @Test
+    public void testTombstoneMergeIterations()
+    {
+        for (int seed = 1; seed <= 100; ++seed)
+        {
+            System.out.println("\nSeed " + seed);
+
+            Random r = new Random(seed);
+            List<Function<Integer, Integer>> timeGenerators = ImmutableList.of(
+                  x -> -1,
+                  x -> DEL_RANGE,
+                  x -> r.nextInt(DEL_RANGE)
+              );
+            List<List<Unfiltered>> sources = new ArrayList<>(ITERATORS);
+            System.out.println("Merging");
+            for (int i=0; i<ITERATORS; ++i)
+                sources.add(generateSource(r, timeGenerators.get(r.nextInt(timeGenerators.size()))));
+            List<UnfilteredRowIterator> us = sources.stream().map(l -> new Source(l.iterator())).collect(Collectors.toList());
+            List<Unfiltered> merged = new ArrayList<>();
+            UnfilteredRowIterator mi = us.get(0);
+            int i;
+            for (i = 1; i + 2 <= ITERATORS; i += 2)
+                mi = UnfilteredRowIterators.merge(ImmutableList.of(mi, us.get(i), us.get(i+1)));
+            if (i + 1 <= ITERATORS)
+                mi = UnfilteredRowIterators.merge(ImmutableList.of(mi, us.get(i)));
+            Iterators.addAll(merged, safeIterator(mi));
+
             System.out.println("results in");
             dumpList(merged);
             verifyValid(merged);
@@ -126,38 +159,45 @@ public class UnfilteredRowIteratorsMergeTest
     static void verifyValid(List<Unfiltered> list)
     {
         try {
-            Unfiltered prev = null;
-            for (Unfiltered curr : list)
+            RangeTombstoneMarker prev = null;
+            Unfiltered prevUnfiltered = null;
+            for (Unfiltered unfiltered : list)
             {
-                if (prev != null)
-                    Assert.assertTrue(str(prev) + " not ordered before " + str(curr), comparator.compare(prev, curr) <= 0);
+                if (prevUnfiltered != null)
+                    Assert.assertTrue(str(prevUnfiltered) + " not ordered before " + str(unfiltered), comparator.compare(prevUnfiltered, unfiltered) <= 0);
+                prevUnfiltered = unfiltered;
 
-                if (curr.kind() == Kind.RANGE_TOMBSTONE_MARKER)
+                if (unfiltered.kind() == Kind.RANGE_TOMBSTONE_MARKER)
                 {
+                    RangeTombstoneMarker curr = (RangeTombstoneMarker) unfiltered;
                     if (prev != null)
                     {
-                        Assert.assertFalse("Duplicate marker " + str(curr), prev.equals(curr));
-                            
-                        Bound currBound = (Bound) curr.clustering();
-                        Bound prevBound = (Bound) prev.clustering();
+                        Bound currBound = curr.clustering();
+                        Bound prevBound = prev.clustering();
                         
                         if (currBound.isEnd())
                         {
-                            Assert.assertTrue(str(curr) + " should be preceded by open marker, found " + str(prev), prevBound.isStart());
-                            Assert.assertEquals("Deletion time mismatch for open " + str(prev) + " and close " + str(curr),
-                                                ((RangeTombstoneMarker) prev).deletionTime(),
-                                                ((RangeTombstoneMarker) curr).deletionTime());
+                            Assert.assertTrue(str(unfiltered) + " should be preceded by open marker, found " + str(prev), prevBound.isStart());
+                            Assert.assertEquals("Deletion time mismatch for open " + str(prev) + " and close " + str(unfiltered),
+                                                prev.deletionTime(),
+                                                curr.deletionTime());
                         }
-                        if (currBound.isStart())                    // Remove for implicit close.
-                            Assert.assertTrue(str(curr) + " follows another open marker " + str(prev), prevBound.isEnd());
+                        else if (prevBound.equals(currBound))
+                        {
+                            // Duplicate marker. Might be best to disallow, but that's a bit hard.
+                            // Just make sure the right one is last.
+                            assert currBound.isStart();
+                            Assert.assertTrue("Second duplicate marker " + str(curr) + " is not as high as " + str(prev),
+                                              curr.deletionTime().compareTo(prev.deletionTime()) >= 0);
+                        }
                     }
                     
                     prev = curr;
                 }
             }
-            Assert.assertFalse("Cannot end in open marker " + str(prev), prev.kind() == Kind.RANGE_TOMBSTONE_MARKER && ((Bound) prev.clustering()).isStart());
+            Assert.assertFalse("Cannot end in open marker " + str(prev), prev != null && prev.clustering().isStart());
     
-            } catch (AssertionError e) {
+        } catch (AssertionError e) {
             System.out.println(e);
             dumpList(list);
             throw e;
@@ -181,7 +221,7 @@ public class UnfilteredRowIteratorsMergeTest
                 {
                     Optional<Unfiltered> sourceOpt = sources.stream().map(source -> rowFor(c, source)).filter(x -> x != null).findAny();
                     Unfiltered mergedRow = rowFor(c, merged);
-                    Assert.assertEquals("Content mismatch for position " + str(c), sourceOpt.orElse(null), mergedRow);
+                    Assert.assertEquals("Content mismatch for position " + str(c), str(sourceOpt.orElse(null)), str(mergedRow));
                 }
             }
         }
@@ -394,6 +434,8 @@ public class UnfilteredRowIteratorsMergeTest
     
     private static String str(Clusterable prev)
     {
+        if (prev == null)
+            return "null";
         String val = Int32Type.instance.getString(prev.clustering().get(0));
         if (prev instanceof RangeTombstoneMarker)
         {

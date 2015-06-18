@@ -142,13 +142,13 @@ public class ColumnIndex
                 // open range tombstone, we need to "repeat" it at the beginning of the block so a
                 // reader that start by this block is aware of that ongoing deletion.
                 // If we do have an open marker, unfiltered can only be either a Clustering, or a close marker.
-                // If it's a close marker, then there is really nothing to do. If it's a clustering, we
-                // close and re-open the current marker.
+                // If it's a close marker, then there is really nothing to do. If it's a clustering, we re-open the current marker.
                 if (openMarker != null && !isMarker)
                 {
-                    UnfilteredSerializer.serializer.serialize(SimpleRangeTombstoneMarker.close(firstClustering, openMarker), header, writer.stream, version);
+                    // a single stream should never have two open RTs, so we should never need a pair of close/open; we can just open again,
+                    // and any consumer can interpret that as either: the boundary of two RTs or, if the same DT, just a re-image of the same RT
                     UnfilteredSerializer.serializer.serialize(SimpleRangeTombstoneMarker.open(firstClustering, openMarker), header, writer.stream, version);
-                    written += 2;
+                    written += 1;
                 }
             }
 

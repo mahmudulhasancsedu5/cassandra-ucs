@@ -62,7 +62,7 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
 
     private static SortedSet<Clustering> reverse(SortedSet<Clustering> set)
     {
-        SortedSet<Clustering> reversed = new TreeSet<>(Collections.reverseOrder(set.comparator()));
+        SortedSet<Clustering> reversed = new TreeSet<Clustering>(Collections.reverseOrder(set.comparator()));
         reversed.addAll(set);
         return reversed;
     }
