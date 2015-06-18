@@ -182,14 +182,9 @@ public class UnfilteredRowIteratorsMergeTest
                                                 prev.deletionTime(),
                                                 curr.deletionTime());
                         }
-                        else if (prevBound.equals(currBound))
-                        {
-                            // Duplicate marker. Might be best to disallow, but that's a bit hard.
-                            // Just make sure the right one is last.
-                            assert currBound.isStart();
-                            Assert.assertTrue("Second duplicate marker " + str(curr) + " is not as high as " + str(prev),
-                                              curr.deletionTime().compareTo(prev.deletionTime()) >= 0);
-                        }
+                        else
+                            Assert.assertFalse("Duplicate marker open marker " + str(curr) + " after " + str(prev),
+                                               prevBound.equals(currBound));
                     }
                     
                     prev = curr;
