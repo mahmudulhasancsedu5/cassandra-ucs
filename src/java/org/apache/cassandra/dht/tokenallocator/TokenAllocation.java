@@ -94,7 +94,7 @@ public class TokenAllocation
     }
 
     // return the ratio of ownership for each endpoint
-    static public Map<InetAddress, Double> evaluateReplicatedOwnership(TokenMetadata tokenMetadata, AbstractReplicationStrategy rs)
+    public static Map<InetAddress, Double> evaluateReplicatedOwnership(TokenMetadata tokenMetadata, AbstractReplicationStrategy rs)
     {
         Map<InetAddress, Double> ownership = Maps.newHashMap();
         List<Token> sortedTokens = tokenMetadata.sortedTokens();
@@ -122,12 +122,12 @@ public class TokenAllocation
         }
     }
 
-    static public String statToString(SummaryStatistics stat)
+    public static String statToString(SummaryStatistics stat)
     {
         return String.format("max %.2f min %.2f stddev %.4f", stat.getMax() / stat.getMean(), stat.getMin() / stat.getMean(), stat.getStandardDeviation());
     }
 
-    static public SummaryStatistics replicatedOwnershipStats(TokenMetadata tokenMetadata,
+    public static SummaryStatistics replicatedOwnershipStats(TokenMetadata tokenMetadata,
                                                              AbstractReplicationStrategy rs, InetAddress endpoint)
     {
         SummaryStatistics stat = new SummaryStatistics();
