@@ -1,4 +1,5 @@
 package org.apache.cassandra.db.commitlog;
+
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -19,7 +20,6 @@ package org.apache.cassandra.db.commitlog;
  * under the License.
  *
  */
-
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -49,44 +49,47 @@ public class CommitLogUpgradeTestMaker
 {
 
     public static ByteBuffer dataSource;
-    
-    public static int NUM_THREADS = 4 * Runtime.getRuntime().availableProcessors() - 1;
+
+    private static int NUM_THREADS = 4 * Runtime.getRuntime().availableProcessors() - 1;
 
     public static int numCells = 1;
 
     public static int cellSize = 256;
-    
+
     public static int rateLimit = 0;
-    
+
     public static int runTimeMs = 1000;
-    
-    public static void main(String[] args) throws Exception {
+
+    public static void main(String[] args) throws Exception
+    {
         try
         {
             initialize();
-            
+
             CommitLogUpgradeTestMaker tester = new CommitLogUpgradeTestMaker();
             tester.makeLog();
         }
-        catch (Exception e)
+        catch (Throwable e)
         {
             e.printStackTrace(System.err);
         }
-        finally {
+        finally
+        {
             System.exit(0);
         }
     }
-    
+
     volatile boolean stop = false;
     boolean randomSize = true;
-    ReplayPosition discardedPos;
-    
-    static public void initialize() throws FileNotFoundException, IOException, InterruptedException, ConfigurationException
+
+    static public void initialize() throws FileNotFoundException, IOException, InterruptedException,
+            ConfigurationException
     {
         try (FileInputStream fis = new FileInputStream("CHANGES.txt"))
         {
-            dataSource = ByteBuffer.allocateDirect((int)fis.getChannel().size());
-            while (dataSource.hasRemaining()) {
+            dataSource = ByteBuffer.allocateDirect((int) fis.getChannel().size());
+            while (dataSource.hasRemaining())
+            {
                 fis.getChannel().read(dataSource);
             }
             dataSource.flip();
@@ -96,13 +99,14 @@ public class CommitLogUpgradeTestMaker
         SchemaLoader.schemaDefinition("");
     }
 
-    public void makeLog() throws IOException, InterruptedException {
+    public void makeLog() throws IOException, InterruptedException
+    {
         CommitLog commitLog = CommitLog.instance;
         System.out.format("\nUsing commit log size %dmb, compressor %s, sync %s%s\n",
-                           mb(DatabaseDescriptor.getCommitLogSegmentSize()),
-                           commitLog.compressor != null ? commitLog.compressor.getClass().getSimpleName() : "none",
-                           commitLog.executor.getClass().getSimpleName(),
-                           randomSize ? " random size" : "");
+                          mb(DatabaseDescriptor.getCommitLogSegmentSize()),
+                          commitLog.compressor != null ? commitLog.compressor.getClass().getSimpleName() : "none",
+                          commitLog.executor.getClass().getSimpleName(),
+                          randomSize ? " random size" : "");
         final List<CommitlogExecutor> threads = new ArrayList<>();
         ScheduledExecutorService scheduled = startThreads(commitLog, threads);
 
@@ -113,7 +117,8 @@ public class CommitLogUpgradeTestMaker
 
         int hash = 0;
         int cells = 0;
-        for (CommitlogExecutor t: threads) {
+        for (CommitlogExecutor t : threads)
+        {
             t.join();
             hash += t.hash;
             cells += t.cells;
@@ -124,49 +129,61 @@ public class CommitLogUpgradeTestMaker
         System.out.format("Data will be stored in %s\n", dataDir);
         if (dataDir.exists())
             FileUtils.deleteRecursive(dataDir);
-        
+
         dataDir.mkdirs();
         for (File f : new File(DatabaseDescriptor.getCommitLogLocation()).listFiles())
             FileUtils.createHardLink(f, new File(dataDir, f.getName()));
-        
+
         Properties prop = new Properties();
         prop.setProperty(CFID_PROPERTY, Schema.instance.getId(KEYSPACE, TABLE).toString());
         prop.setProperty(CELLS_PROPERTY, Integer.toString(cells));
         prop.setProperty(HASH_PROPERTY, Integer.toString(hash));
-        prop.store(new FileOutputStream(new File(dataDir, PROPERTIES_FILE)), "CommitLog upgrade test, version " + FBUtilities.getReleaseVersionString());
+        prop.store(new FileOutputStream(new File(dataDir, PROPERTIES_FILE)),
+                   "CommitLog upgrade test, version " + FBUtilities.getReleaseVersionString());
         System.out.println("Done");
     }
 
     public ScheduledExecutorService startThreads(CommitLog commitLog, final List<CommitlogExecutor> threads)
     {
         stop = false;
-        for (int ii = 0; ii < NUM_THREADS; ii++) {
+        for (int ii = 0; ii < NUM_THREADS; ii++)
+        {
             final CommitlogExecutor t = new CommitlogExecutor(commitLog);
             threads.add(t);
             t.start();
         }
 
         final long start = System.currentTimeMillis();
-        Runnable printRunnable = new Runnable() {
+        Runnable printRunnable = new Runnable()
+        {
             long lastUpdate = 0;
 
-            public void run() {
-              Runtime runtime = Runtime.getRuntime();
-              long maxMemory = mb(runtime.maxMemory());
-              long allocatedMemory = mb(runtime.totalMemory());
-              long freeMemory = mb(runtime.freeMemory());
-              long temp = 0;
-              long sz = 0;
-              for (CommitlogExecutor cle : threads) {
-                  temp += cle.counter.get();
-                  sz += cle.dataSize;
-              }
-              double time = (System.currentTimeMillis() - start) / 1000.0;
-              double avg = (temp / time);
-              System.out.println(String.format("second %d mem max %dmb allocated %dmb free %dmb mutations %d since start %d avg %.3f transfer %.3fmb",
-                      ((System.currentTimeMillis() - start) / 1000),
-                      maxMemory, allocatedMemory, freeMemory, (temp - lastUpdate), lastUpdate, avg, mb(sz / time)));
-              lastUpdate = temp;
+            public void run()
+            {
+                Runtime runtime = Runtime.getRuntime();
+                long maxMemory = mb(runtime.maxMemory());
+                long allocatedMemory = mb(runtime.totalMemory());
+                long freeMemory = mb(runtime.freeMemory());
+                long temp = 0;
+                long sz = 0;
+                for (CommitlogExecutor cle : threads)
+                {
+                    temp += cle.counter.get();
+                    sz += cle.dataSize;
+                }
+                double time = (System.currentTimeMillis() - start) / 1000.0;
+                double avg = (temp / time);
+                System.out.println(
+                        String.format("second %d mem max %dmb allocated %dmb free %dmb mutations %d since start %d avg %.3f transfer %.3fmb",
+                                      ((System.currentTimeMillis() - start) / 1000),
+                                      maxMemory,
+                                      allocatedMemory,
+                                      freeMemory,
+                                      (temp - lastUpdate),
+                                      lastUpdate,
+                                      avg,
+                                      mb(sz / time)));
+                lastUpdate = temp;
             }
         };
         ScheduledExecutorService scheduled = Executors.newScheduledThreadPool(1);
@@ -174,15 +191,18 @@ public class CommitLogUpgradeTestMaker
         return scheduled;
     }
 
-    private static long mb(long maxMemory) {
+    private static long mb(long maxMemory)
+    {
         return maxMemory / (1024 * 1024);
     }
 
-    private static double mb(double maxMemory) {
+    private static double mb(double maxMemory)
+    {
         return maxMemory / (1024 * 1024);
     }
 
-    public static ByteBuffer randomBytes(int quantity, ThreadLocalRandom tlr) {
+    public static ByteBuffer randomBytes(int quantity, ThreadLocalRandom tlr)
+    {
         ByteBuffer slice = ByteBuffer.allocate(quantity);
         ByteBuffer source = dataSource.duplicate();
         source.position(tlr.nextInt(source.capacity() - quantity));
@@ -192,7 +212,8 @@ public class CommitLogUpgradeTestMaker
         return slice;
     }
 
-    public class CommitlogExecutor extends Thread {
+    public class CommitlogExecutor extends Thread
+    {
         final AtomicLong counter = new AtomicLong();
         int hash = 0;
         int cells = 0;
@@ -206,21 +227,24 @@ public class CommitLogUpgradeTestMaker
             this.commitLog = commitLog;
         }
 
-        public void run() {
+        public void run()
+        {
             RateLimiter rl = rateLimit != 0 ? RateLimiter.create(rateLimit) : null;
             final ThreadLocalRandom tlr = ThreadLocalRandom.current();
-            while (!stop) {
+            while (!stop)
+            {
                 if (rl != null)
                     rl.acquire();
                 String ks = KEYSPACE;
                 ByteBuffer key = randomBytes(16, tlr);
                 Mutation mutation = new Mutation(ks, key);
 
-                for (int ii = 0; ii < numCells; ii++) {
+                for (int ii = 0; ii < numCells; ii++)
+                {
                     int sz = randomSize ? tlr.nextInt(cellSize) : cellSize;
                     ByteBuffer bytes = randomBytes(sz, tlr);
                     mutation.add(TABLE, Util.cellname(CELLNAME + ii), bytes,
-                            System.currentTimeMillis());
+                                 System.currentTimeMillis());
                     hash = hash(hash, bytes);
                     ++cells;
                     dataSize += sz;

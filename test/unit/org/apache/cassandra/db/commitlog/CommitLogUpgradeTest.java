@@ -1,4 +1,5 @@
 package org.apache.cassandra.db.commitlog;
+
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -19,7 +20,6 @@ package org.apache.cassandra.db.commitlog;
  * under the License.
  *
  */
-
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -48,7 +48,7 @@ public class CommitLogUpgradeTest
     static final String CFID_PROPERTY = "cfid";
     static final String CELLS_PROPERTY = "cells";
     static final String HASH_PROPERTY = "hash";
-    
+
     static final String TABLE = "Standard1";
     static final String KEYSPACE = "Keyspace1";
     static final String CELLNAME = "name";
@@ -64,7 +64,7 @@ public class CommitLogUpgradeTest
     {
         testRestore(DATA_DIR + "2.1");
     }
-    
+
     @BeforeClass
     static public void initialize() throws FileNotFoundException, IOException, InterruptedException
     {
@@ -72,8 +72,8 @@ public class CommitLogUpgradeTest
         SchemaLoader.schemaDefinition("");
     }
 
-
-    public void testRestore(String location) throws IOException, InterruptedException {
+    public void testRestore(String location) throws IOException, InterruptedException
+    {
         Properties prop = new Properties();
         prop.load(new FileInputStream(new File(location + File.separatorChar + PROPERTIES_FILE)));
         int hash = Integer.parseInt(prop.getProperty(HASH_PROPERTY));
@@ -93,7 +93,8 @@ public class CommitLogUpgradeTest
 
         Hasher hasher = new Hasher();
         CommitLogTestReplayer replayer = new CommitLogTestReplayer(hasher);
-        File[] files = new File(location).listFiles(new FilenameFilter() {
+        File[] files = new File(location).listFiles(new FilenameFilter()
+        {
             @Override
             public boolean accept(File dir, String name)
             {
@@ -109,7 +110,8 @@ public class CommitLogUpgradeTest
     public static int hash(int hash, ByteBuffer bytes)
     {
         int shift = 0;
-        for (int i=0; i<bytes.limit(); i++) {
+        for (int i = 0; i < bytes.limit(); i++)
+        {
             hash += (bytes.get(i) & 0xFF) << shift;
             shift = (shift + 8) & 0x1F;
         }
@@ -124,8 +126,10 @@ public class CommitLogUpgradeTest
         @Override
         public boolean apply(Mutation mutation)
         {
-            for (ColumnFamily cf : mutation.getColumnFamilies()) {
-                for (Cell c : cf.getSortedColumns()) {
+            for (ColumnFamily cf : mutation.getColumnFamilies())
+            {
+                for (Cell c : cf.getSortedColumns())
+                {
                     if (new String(c.name().toByteBuffer().array(), StandardCharsets.UTF_8).startsWith(CELLNAME))
                     {
                         hash = hash(hash, c.value());
