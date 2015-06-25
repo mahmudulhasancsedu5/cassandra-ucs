@@ -233,7 +233,7 @@ public class CounterMutation implements IMutation
     private void updateWithCurrentValuesFromCFS(List<PartitionUpdate.CounterMark> marks, ColumnFamilyStore cfs)
     {
         ColumnsSelection.Builder builder = ColumnsSelection.builder();
-        SortedSet<Clustering> names = new TreeSet<>(cfs.metadata.comparator);
+        NavigableSet<Clustering> names = new TreeSet<>(cfs.metadata.comparator);
         for (PartitionUpdate.CounterMark mark : marks)
         {
             names.add(mark.clustering().takeAlias());

@@ -176,7 +176,7 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions
     }
 
     @Override
-    public SortedSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
+    public NavigableSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
     {
         return appendTo(MultiCBuilder.create(comparator), options).build();
     }

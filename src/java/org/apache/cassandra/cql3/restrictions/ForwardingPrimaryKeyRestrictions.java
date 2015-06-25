@@ -92,7 +92,7 @@ abstract class ForwardingPrimaryKeyRestrictions implements PrimaryKeyRestriction
     }
 
     @Override
-    public SortedSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
+    public NavigableSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
     {
         return getDelegate().valuesAsClustering(options);
     }

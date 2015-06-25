@@ -41,7 +41,7 @@ public class SlicePartitionFilter extends AbstractPartitionFilter
 
     public SlicePartitionFilter(ColumnsSelection columns, Slices slices, boolean reversed)
     {
-        super(Kind.SLICE, columns, reversed);
+        super(columns, reversed);
         this.slices = slices;
     }
 
@@ -95,7 +95,7 @@ public class SlicePartitionFilter extends AbstractPartitionFilter
         final Slices.InOrderTester tester = slices.inOrderTester(reversed);
 
         // Note that we don't filter markers because that's a bit trickier (we don't know in advance until when
-        // the range extend) and it's harmless to left them.
+        // the range extend) and it's harmless to leave them.
         return new FilteringRowIterator(iterator)
         {
             @Override
@@ -154,6 +154,11 @@ public class SlicePartitionFilter extends AbstractPartitionFilter
         appendOrderByToCQLString(metadata, sb);
 
         return sb.toString();
+    }
+
+    Kind kind()
+    {
+        return Kind.SLICE;
     }
 
     protected void serializeInternal(DataOutputPlus out, int version) throws IOException

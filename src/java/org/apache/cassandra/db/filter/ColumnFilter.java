@@ -251,14 +251,13 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
         // Note: the order of this enum matter, it's used for serialization
         protected enum Kind { SIMPLE, MAP_EQUALITY, THRIFT_DYN_EXPR }
 
-        private final Kind kind;
+        abstract Kind kind();
         protected final ColumnDefinition column;
         protected final Operator operator;
         protected final ByteBuffer value;
 
-        protected Expression(Kind kind, ColumnDefinition column, Operator operator, ByteBuffer value)
+        protected Expression(ColumnDefinition column, Operator operator, ByteBuffer value)
         {
-            this.kind = kind;
             this.column = column;
             this.operator = operator;
             this.value = value;
@@ -349,7 +348,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
 
             Expression that = (Expression)o;
 
-            return Objects.equal(this.kind, that.kind)
+            return Objects.equal(this.kind(), that.kind())
                 && Objects.equal(this.column.name, that.column.name)
                 && Objects.equal(this.operator, that.operator)
                 && Objects.equal(this.value, that.value);
@@ -369,9 +368,9 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
                 expression.operator.writeTo(out);
 
                 if (version >= MessagingService.VERSION_30)
-                    out.writeByte(expression.kind.ordinal());
+                    out.writeByte(expression.kind().ordinal());
 
-                switch (expression.kind)
+                switch (expression.kind())
                 {
                     case SIMPLE:
                         ByteBufferUtil.writeWithShortLength(((SimpleExpression)expression).value, out);
@@ -448,7 +447,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
                 long size = ByteBufferUtil.serializedSizeWithShortLength(expression.column().name.bytes, sizes)
                           + expression.operator.serializedSize();
 
-                switch (expression.kind)
+                switch (expression.kind())
                 {
                     case SIMPLE:
                         size += ByteBufferUtil.serializedSizeWithShortLength(((SimpleExpression)expression).value, sizes);
@@ -477,7 +476,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
     {
         public SimpleExpression(ColumnDefinition column, Operator operator, ByteBuffer value)
         {
-            super(Kind.SIMPLE, column, operator, value);
+            super(column, operator, value);
         }
 
         public boolean isSatisfiedBy(DecoratedKey partitionKey, Row row)
@@ -505,7 +504,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
                     }
                 case CONTAINS:
                     assert column.type.isCollection();
-                    CollectionType type = (CollectionType)column.type;
+                    CollectionType<?> type = (CollectionType<?>)column.type;
                     if (column.isComplex())
                     {
                         Iterator<Cell> iter = row.getCells(column);
@@ -534,20 +533,20 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
                         switch (type.kind)
                         {
                             case LIST:
-                                ListType<?> listType = (ListType)type;
+                                ListType<?> listType = (ListType<?>)type;
                                 return listType.compose(foundValue).contains(listType.getElementsType().compose(value));
                             case SET:
-                                SetType<?> setType = (SetType)type;
+                                SetType<?> setType = (SetType<?>)type;
                                 return setType.compose(foundValue).contains(setType.getElementsType().compose(value));
                             case MAP:
-                                MapType<?,?> mapType = (MapType)type;
+                                MapType<?,?> mapType = (MapType<?, ?>)type;
                                 return mapType.compose(foundValue).containsValue(mapType.getValuesType().compose(value));
                         }
                         throw new AssertionError();
                     }
                 case CONTAINS_KEY:
                     assert column.type.isCollection() && column.type instanceof MapType;
-                    MapType<?, ?> mapType = (MapType)column.type;
+                    MapType<?, ?> mapType = (MapType<?, ?>)column.type;
                     if (column.isComplex())
                     {
                          return row.getCell(column, CellPath.create(value)) != null;
@@ -574,18 +573,26 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
             {
                 case CONTAINS:
                     assert type instanceof CollectionType;
-                    CollectionType ct = (CollectionType)type;
+                    CollectionType<?> ct = (CollectionType<?>)type;
                     type = ct.kind == CollectionType.Kind.SET ? ct.nameComparator() : ct.valueComparator();
                     break;
                 case CONTAINS_KEY:
                     assert type instanceof MapType;
-                    type = ((MapType)type).nameComparator();
+                    type = ((MapType<?, ?>)type).nameComparator();
                     break;
                 case IN:
                     type = ListType.getInstance(type, false);
                     break;
+                default:
+                    break;
             }
             return String.format("%s %s %s", column.name, operator, type.getString(value));
+        }
+
+        @Override
+        Kind kind()
+        {
+            return Kind.SIMPLE;
         }
     }
 
@@ -599,7 +606,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
 
         public MapEqualityExpression(ColumnDefinition column, ByteBuffer key, Operator operator, ByteBuffer value)
         {
-            super(Kind.MAP_EQUALITY, column, operator, value);
+            super(column, operator, value);
             assert column.type instanceof MapType && operator == Operator.EQ;
             this.key = key;
         }
@@ -628,7 +635,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
             if (row.isStatic() != column.isStatic())
                 return true;
 
-            MapType mt = (MapType)column.type;
+            MapType<?, ?> mt = (MapType<?, ?>)column.type;
             if (column.isComplex())
             {
                 Cell cell = row.getCell(column, CellPath.create(key));
@@ -648,7 +655,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
         @Override
         public String toString()
         {
-            MapType mt = (MapType)column.type;
+            MapType<?, ?> mt = (MapType<?, ?>)column.type;
             return String.format("%s[%s] = %s", column.name, mt.nameComparator().getString(key), mt.valueComparator().getString(value));
         }
 
@@ -674,6 +681,12 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
         {
             return Objects.hashCode(column.name, operator, key, value);
         }
+
+        @Override
+        Kind kind()
+        {
+            return Kind.MAP_EQUALITY;
+        }
     }
 
     /**
@@ -686,7 +699,7 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
 
         public ThriftExpression(CFMetaData metadata, ByteBuffer name, Operator operator, ByteBuffer value)
         {
-            super(Kind.THRIFT_DYN_EXPR, makeDefinition(metadata, name), operator, value);
+            super(makeDefinition(metadata, name), operator, value);
             assert metadata.isCompactTable();
             this.metadata = metadata;
         }
@@ -718,6 +731,12 @@ public abstract class ColumnFilter implements Iterable<ColumnFilter.Expression>
         public String toString()
         {
             return String.format("%s %s %s", column.name, operator, column.type.getString(value));
+        }
+
+        @Override
+        Kind kind()
+        {
+            return Kind.THRIFT_DYN_EXPR;
         }
     }
 

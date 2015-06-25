@@ -112,7 +112,7 @@ public abstract class DataLimits
      * The max number of results this limits enforces.
      * <p>
      * Note that the actual definition of "results" depends a bit: for CQL, it's always rows, but for
-     * thrift, it means cells. The {@link #countCells} allows to distinguish between the two cases if
+     * thrift, it means cells. The {@link #countsCells} allows to distinguish between the two cases if
      * needed.
      *
      * @return the maximum number of results this limits enforces.
@@ -121,7 +121,7 @@ public abstract class DataLimits
 
     public abstract int perPartitionCount();
 
-    public abstract boolean countCells();
+    public abstract boolean countsCells();
 
     public UnfilteredPartitionIterator filter(UnfilteredPartitionIterator iter)
     {
@@ -165,7 +165,7 @@ public abstract class DataLimits
     }
 
     /**
-     * Limits used by CQL; this count rows.
+     * Limits used by CQL; this counts rows.
      */
     private static class CQLLimits extends DataLimits
     {
@@ -262,7 +262,7 @@ public abstract class DataLimits
             return perPartitionLimit;
         }
 
-        public boolean countCells()
+        public boolean countsCells()
         {
             return false;
         }
@@ -479,7 +479,7 @@ public abstract class DataLimits
             return cellPerPartitionLimit;
         }
 
-        public boolean countCells()
+        public boolean countsCells()
         {
             return true;
         }
@@ -527,7 +527,7 @@ public abstract class DataLimits
 
             public boolean isDoneForPartition()
             {
-                // Note that as we count partition at the beginning while this is called withing a partition, we don't want to
+                // Note that as we count partition at the beginning while this is called within a partition, we don't want to
                 // check isDone() as this would make use stop too early.
                 return cellsInCurrentPartition >= cellPerPartitionLimit;
             }
@@ -635,8 +635,6 @@ public abstract class DataLimits
                     out.writeInt(thriftLimits.partitionLimit);
                     out.writeInt(thriftLimits.cellPerPartitionLimit);
                     break;
-                default:
-                    throw new AssertionError();
             }
         }
 

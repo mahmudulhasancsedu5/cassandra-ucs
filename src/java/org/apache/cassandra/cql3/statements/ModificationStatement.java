@@ -387,7 +387,7 @@ public abstract class ModificationStatement implements CQLStatement
             r.appendTo(keyBuilder, options);
         }
 
-        SortedSet<Clustering> clusterings = keyBuilder.build();
+        NavigableSet<Clustering> clusterings = keyBuilder.build();
         List<ByteBuffer> keys = new ArrayList<ByteBuffer>(clusterings.size());
         for (Clustering clustering : clusterings)
         {
@@ -504,7 +504,7 @@ public abstract class ModificationStatement implements CQLStatement
 
         PartitionColumns toRead = builder.build();
 
-        SortedSet<Clustering> clusterings = FBUtilities.singleton(cbuilder.build(), cfm.comparator);
+        NavigableSet<Clustering> clusterings = FBUtilities.singleton(cbuilder.build(), cfm.comparator);
         List<SinglePartitionReadCommand<?>> commands = new ArrayList<>(partitionKeys.size());
         int nowInSec = FBUtilities.nowInSeconds();
         for (ByteBuffer key : partitionKeys)

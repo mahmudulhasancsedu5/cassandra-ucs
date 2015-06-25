@@ -442,7 +442,7 @@ public class CassandraServer implements Cassandra.Iface
                     }
                     else
                     {
-                        SortedSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
+                        NavigableSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
                         for (ByteBuffer bb : predicate.column_names)
                             clusterings.add(new SimpleClustering(bb));
                         return new NamesPartitionFilter(metadata.partitionColumns(), clusterings, false);
@@ -450,7 +450,7 @@ public class CassandraServer implements Cassandra.Iface
                 }
                 else
                 {
-                    SortedSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
+                    NavigableSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
                     PartitionColumns.Builder builder = new PartitionColumns.Builder();
                     for (ByteBuffer bb : predicate.column_names)
                     {
@@ -2437,7 +2437,7 @@ public class CassandraServer implements Cassandra.Iface
             }
 
             // Gather the clustering for the expected values and query those.
-            SortedSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
+            NavigableSet<Clustering> clusterings = new TreeSet<>(metadata.comparator);
             for (Row row : expected)
                 clusterings.add(row.clustering().takeAlias());
             PartitionColumns columns = expected.staticRow().isEmpty()

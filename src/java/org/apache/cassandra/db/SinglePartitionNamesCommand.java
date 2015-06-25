@@ -178,7 +178,7 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Name
         SearchIterator<Clustering, Row> searchIter = result.searchIterator(queriedColumns(), false, nowInSec());
 
         PartitionColumns columns = filter.queriedColumns().columns();
-        SortedSet<Clustering> clusterings = filter.requestedRows();
+        NavigableSet<Clustering> clusterings = filter.requestedRows();
 
         // We want to remove rows for which we have values for all requested columns. We have to deal with both static and regular rows.
         // TODO: we could also remove a selected column if we've found values for every requested row but we'll leave
@@ -191,7 +191,7 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Name
             removeStatic = staticRow != null && canRemoveRow(staticRow, columns.statics, sstableTimestamp);
         }
 
-        SortedSet<Clustering> toRemove = null;
+        NavigableSet<Clustering> toRemove = null;
         for (Clustering clustering : clusterings)
         {
             if (!searchIter.hasNext())
@@ -219,7 +219,7 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Name
         if (removeStatic)
             newColumns = new PartitionColumns(Columns.NONE, columns.regulars);
 
-        SortedSet<Clustering> newClusterings = clusterings;
+        NavigableSet<Clustering> newClusterings = clusterings;
         if (toRemove != null)
         {
             newClusterings = new TreeSet<>(result.metadata().comparator);

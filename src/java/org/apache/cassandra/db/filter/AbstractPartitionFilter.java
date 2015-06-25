@@ -43,13 +43,12 @@ public abstract class AbstractPartitionFilter implements PartitionFilter
 
     static final Serializer serializer = new FilterSerializer();
 
-    private final Kind kind;
+    abstract Kind kind();
     protected final ColumnsSelection queriedColumns;
     protected final boolean reversed;
 
-    protected AbstractPartitionFilter(Kind kind, ColumnsSelection queriedColumns, boolean reversed)
+    protected AbstractPartitionFilter(ColumnsSelection queriedColumns, boolean reversed)
     {
-        this.kind = kind;
         this.queriedColumns = queriedColumns;
         this.reversed = reversed;
     }
@@ -85,7 +84,7 @@ public abstract class AbstractPartitionFilter implements PartitionFilter
         {
             AbstractPartitionFilter filter = (AbstractPartitionFilter)pfilter;
 
-            out.writeByte(filter.kind.ordinal());
+            out.writeByte(filter.kind().ordinal());
             ColumnsSelection.serializer.serialize(filter.queriedColumns(), out, version);
             out.writeBoolean(filter.isReversed());
 

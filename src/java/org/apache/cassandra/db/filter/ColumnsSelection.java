@@ -164,7 +164,7 @@ public class ColumnsSelection
         public Builder select(ColumnDefinition c, CellPath elt)
         {
             add(c);
-            selections.add(ColumnSubselection.elementSelection(c, elt));
+            selections.add(ColumnSubselection.element(c, elt));
             return this;
         }
 

@@ -42,7 +42,7 @@ public abstract class ColumnSubselection
 {
     public static final Serializer serializer = new Serializer();
 
-    private enum Kind { SLICE, ELT_SELECTION }
+    private enum Kind { SLICE, ELEMENT }
 
     protected final ColumnDefinition column;
 
@@ -58,11 +58,11 @@ public abstract class ColumnSubselection
         return new Slice(column, from, to);
     }
 
-    public static ColumnSubselection elementSelection(ColumnDefinition column, CellPath elt)
+    public static ColumnSubselection element(ColumnDefinition column, CellPath elt)
     {
         assert column.isComplex() && column.type instanceof CollectionType;
         assert elt.size() == 1;
-        return new ElementSelection(column, elt);
+        return new Element(column, elt);
     }
 
     public ColumnDefinition column()
@@ -113,48 +113,48 @@ public abstract class ColumnSubselection
         public String toString()
         {
             // This assert we're dealing with a collection since that's the only thing it's used for so far.
-            AbstractType<?> type = ((CollectionType)column().type).nameComparator();
+            AbstractType<?> type = ((CollectionType<?>)column().type).nameComparator();
             return String.format("[%s:%s]", from == CellPath.BOTTOM ? "" : type.getString(from.get(0)), to == CellPath.TOP ? "" : type.getString(to.get(0)));
         }
     }
 
-    private static class ElementSelection extends ColumnSubselection
+    private static class Element extends ColumnSubselection
     {
-        private final CellPath elt;
+        private final CellPath element;
 
-        private ElementSelection(ColumnDefinition column, CellPath elt)
+        private Element(ColumnDefinition column, CellPath elt)
         {
             super(column);
-            this.elt = elt;
+            this.element = elt;
         }
 
         protected Kind kind()
         {
-            return Kind.ELT_SELECTION;
+            return Kind.ELEMENT;
         }
 
         public CellPath minIncludedPath()
         {
-            return elt;
+            return element;
         }
 
         public CellPath maxIncludedPath()
         {
-            return elt;
+            return element;
         }
 
         public boolean includes(CellPath path)
         {
             Comparator<CellPath> cmp = column.cellPathComparator();
-            return cmp.compare(elt, path) == 0;
+            return cmp.compare(element, path) == 0;
         }
 
         @Override
         public String toString()
         {
             // This assert we're dealing with a collection since that's the only thing it's used for so far.
-            AbstractType<?> type = ((CollectionType)column().type).nameComparator();
-            return String.format("[%s]", type.getString(elt.get(0)));
+            AbstractType<?> type = ((CollectionType<?>)column().type).nameComparator();
+            return String.format("[%s]", type.getString(element.get(0)));
         }
     }
 
@@ -172,9 +172,9 @@ public abstract class ColumnSubselection
                     column.cellPathSerializer().serialize(slice.from, out);
                     column.cellPathSerializer().serialize(slice.to, out);
                     break;
-                case ELT_SELECTION:
-                    ElementSelection eltSelection = (ElementSelection)subSel;
-                    column.cellPathSerializer().serialize(eltSelection.elt, out);
+                case ELEMENT:
+                    Element eltSelection = (Element)subSel;
+                    column.cellPathSerializer().serialize(eltSelection.element, out);
                     break;
             }
             throw new AssertionError();
@@ -201,9 +201,9 @@ public abstract class ColumnSubselection
                     CellPath from = column.cellPathSerializer().deserialize(in);
                     CellPath to = column.cellPathSerializer().deserialize(in);
                     return new Slice(column, from, to);
-                case ELT_SELECTION:
+                case ELEMENT:
                     CellPath elt = column.cellPathSerializer().deserialize(in);
-                    return new ElementSelection(column, elt);
+                    return new Element(column, elt);
             }
             throw new AssertionError();
         }
@@ -222,9 +222,9 @@ public abstract class ColumnSubselection
                     size += column.cellPathSerializer().serializedSize(slice.from, sizes);
                     size += column.cellPathSerializer().serializedSize(slice.to, sizes);
                     break;
-                case ELT_SELECTION:
-                    ElementSelection eltSelection = (ElementSelection)subSel;
-                    size += column.cellPathSerializer().serializedSize(eltSelection.elt, sizes);
+                case ELEMENT:
+                    Element element = (Element)subSel;
+                    size += column.cellPathSerializer().serializedSize(element.element, sizes);
                     break;
             }
             return size;

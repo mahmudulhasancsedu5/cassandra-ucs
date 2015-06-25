@@ -342,7 +342,7 @@ public class SelectStatement implements CQLStatement
         }
         else
         {
-            SortedSet<Clustering> clusterings = getRequestedRows(options);
+            NavigableSet<Clustering> clusterings = getRequestedRows(options);
             if (clusterings.isEmpty() && !selection.containsStaticColumns()) // in case of IN () for the last column of the key
                 return null;
 
@@ -418,7 +418,7 @@ public class SelectStatement implements CQLStatement
         return userLimit < 0 ? DataLimits.NONE : DataLimits.cqlLimits(userLimit);
     }
 
-    private SortedSet<Clustering> getRequestedRows(QueryOptions options) throws InvalidRequestException
+    private NavigableSet<Clustering> getRequestedRows(QueryOptions options) throws InvalidRequestException
     {
         // Note: getRequestedColumns don't handle static columns, but due to CASSANDRA-5762
         // we always do a slice for CQL3 tables, so it's ok to ignore them here

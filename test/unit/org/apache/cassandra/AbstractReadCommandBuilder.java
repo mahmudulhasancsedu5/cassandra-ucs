@@ -50,7 +50,7 @@ public abstract class AbstractReadCommandBuilder
     private Slice.Bound lowerClusteringBound;
     private Slice.Bound upperClusteringBound;
 
-    private SortedSet<Clustering> clusterings;
+    private NavigableSet<Clustering> clusterings;
 
     // Use Util.cmd() instead of this ctor directly
     AbstractReadCommandBuilder(ColumnFamilyStore cfs)

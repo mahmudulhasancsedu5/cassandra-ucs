@@ -83,7 +83,7 @@ final class TokenFilter extends ForwardingPrimaryKeyRestrictions
     }
 
     @Override
-    public SortedSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
+    public NavigableSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
     {
         throw new UnsupportedOperationException();
     }

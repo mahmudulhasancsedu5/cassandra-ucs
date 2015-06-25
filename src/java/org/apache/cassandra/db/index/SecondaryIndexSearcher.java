@@ -108,8 +108,8 @@ public abstract class SecondaryIndexSearcher
 
             if (filter instanceof NamesPartitionFilter)
             {
-                SortedSet<Clustering> requested = ((NamesPartitionFilter)filter).requestedRows();
-                SortedSet<Clustering> clusterings = new TreeSet<>(index.getIndexComparator());
+                NavigableSet<Clustering> requested = ((NamesPartitionFilter)filter).requestedRows();
+                NavigableSet<Clustering> clusterings = new TreeSet<>(index.getIndexComparator());
                 for (Clustering c : requested)
                     clusterings.add(index.makeIndexClustering(pk, c, (Cell)null).takeAlias());
                 return new NamesPartitionFilter(PartitionColumns.NONE, clusterings, filter.isReversed());

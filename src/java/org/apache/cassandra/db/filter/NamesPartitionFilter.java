@@ -37,34 +37,27 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
 {
     static final InternalDeserializer deserializer = new NamesDeserializer();
 
-    // This could be empty if selectedColums only has static columns (in which case the filter still
+    // This could be empty if selectedColumns only has static columns (in which case the filter still
     // selects the static row)
-    private final SortedSet<Clustering> clusterings;
+    private final NavigableSet<Clustering> clusterings;
 
     // clusterings is always in clustering order (because we need it that way in some methods), but we also
     // sometimes need those clustering in "query" order (i.e. in reverse clustering order if the query is
     // reversed), so we keep that too for simplicity.
-    private final SortedSet<Clustering> clusteringsInQueryOrder;
+    private final NavigableSet<Clustering> clusteringsInQueryOrder;
 
-    public NamesPartitionFilter(ColumnsSelection columns, SortedSet<Clustering> clusterings, boolean reversed)
+    public NamesPartitionFilter(ColumnsSelection columns, NavigableSet<Clustering> clusterings, boolean reversed)
     {
-        super(Kind.NAMES, columns, reversed);
+        super(columns, reversed);
         assert !clusterings.isEmpty() || !columns.columns().statics.isEmpty();
         assert !clusterings.contains(Clustering.STATIC_CLUSTERING);
         this.clusterings = clusterings;
-        this.clusteringsInQueryOrder = reversed ? reverse(clusterings) : clusterings;
+        this.clusteringsInQueryOrder = reversed ? clusterings.descendingSet() : clusterings;
     }
 
-    public NamesPartitionFilter(PartitionColumns columns, SortedSet<Clustering> clusterings, boolean reversed)
+    public NamesPartitionFilter(PartitionColumns columns, NavigableSet<Clustering> clusterings, boolean reversed)
     {
         this(ColumnsSelection.withoutSubselection(columns), clusterings, reversed);
-    }
-
-    private static SortedSet<Clustering> reverse(SortedSet<Clustering> set)
-    {
-        SortedSet<Clustering> reversed = new TreeSet<>(Collections.reverseOrder(set.comparator()));
-        reversed.addAll(set);
-        return reversed;
     }
 
     /**
@@ -75,7 +68,7 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
      * @return the set of requested clustering in clustering order (note that
      * this is always in clustering order even if the query is reversed).
      */
-    public SortedSet<Clustering> requestedRows()
+    public NavigableSet<Clustering> requestedRows()
     {
         return clusterings;
     }
@@ -94,23 +87,14 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
 
     public NamesPartitionFilter forPaging(ClusteringComparator comparator, Clustering lastReturned, boolean inclusive)
     {
+        // TODO: Consider removal of the initial check.
         int cmp = comparator.compare(lastReturned, clusteringsInQueryOrder.first());
         if (cmp < 0 || (inclusive && cmp == 0))
             return this;
 
-        SortedSet<Clustering> newClusterings;
-        if (reversed)
-        {
-            newClusterings = new TreeSet<>(clusterings.headSet(lastReturned));
-            if (!inclusive && comparator.compare(newClusterings.last(), lastReturned) == 0)
-                newClusterings.remove(lastReturned);
-        }
-        else
-        {
-            newClusterings = new TreeSet<>(clusterings.tailSet(lastReturned));
-            if (!inclusive && comparator.compare(newClusterings.first(), lastReturned) == 0)
-                newClusterings.remove(lastReturned);
-        }
+        NavigableSet<Clustering> newClusterings = reversed ?
+                                                  clusterings.headSet(lastReturned, inclusive) :
+                                                  clusterings.tailSet(lastReturned, inclusive);
 
         return new NamesPartitionFilter(queriedColumns, newClusterings, reversed);
     }
@@ -119,7 +103,7 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
     {
         // 'partition' contains all columns, so it covers our filter if our last clusterings
         // is smaller than the last in the cache
-        return ((ClusteringComparator)clusterings.comparator()).compare(clusterings.last(), partition.lastRow().clustering()) <= 0;
+        return clusterings.comparator().compare(clusterings.last(), partition.lastRow().clustering()) <= 0;
     }
 
     public boolean isHeadFilter()
@@ -239,7 +223,7 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
             sb.append(i++ == 0 ? "" : ", ").append(clustering.toString(metadata));
         if (reversed)
             sb.append(", reversed");
-        return sb.append("}").toString();
+        return sb.append("})").toString();
     }
 
     public String toCQLString(CFMetaData metadata)
@@ -257,6 +241,11 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
 
         appendOrderByToCQLString(metadata, sb);
         return sb.toString();
+    }
+
+    Kind kind()
+    {
+        return Kind.NAMES;
     }
 
     protected void serializeInternal(DataOutputPlus out, int version) throws IOException
@@ -281,7 +270,7 @@ public class NamesPartitionFilter extends AbstractPartitionFilter
         public PartitionFilter deserialize(DataInput in, int version, CFMetaData metadata, ColumnsSelection columns, boolean reversed) throws IOException
         {
             ClusteringComparator comparator = metadata.comparator;
-            SortedSet<Clustering> clusterings = new TreeSet(comparator);
+            NavigableSet<Clustering> clusterings = new TreeSet<>(comparator);
             int size = in.readInt();
             for (int i = 0; i < size; i++)
                 clusterings.add(Clustering.serializer.deserialize(in, version, comparator.subtypes()).takeAlias());

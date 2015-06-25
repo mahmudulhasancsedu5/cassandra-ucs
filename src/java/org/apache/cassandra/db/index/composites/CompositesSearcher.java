@@ -102,7 +102,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                 // in memory so we should consider adding some paging mechanism. However, index hits should
                 // be relatively small so it's much better than the previous code that was materializing all
                 // *data* for a given partition.
-                SortedSet<Clustering> clusterings = new TreeSet<>(baseCfs.getComparator());
+                NavigableSet<Clustering> clusterings = new TreeSet<>(baseCfs.getComparator());
                 Map<Clustering, CompositesIndex.IndexedEntry> entries = new HashMap<>();
                 DecoratedKey partitionKey = baseCfs.partitioner.decorateKey(nextEntry.indexedKey);
 

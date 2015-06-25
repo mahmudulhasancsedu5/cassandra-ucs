@@ -112,7 +112,7 @@ public abstract class MultiCBuilder
                 return hasMissingElements;
             }
 
-            public SortedSet<Clustering> build()
+            public NavigableSet<Clustering> build()
             {
                 return FBUtilities.singleton(builder.build(), builder.comparator());
             }
@@ -192,7 +192,7 @@ public abstract class MultiCBuilder
      *
      * @return the clusterings
      */
-    public abstract SortedSet<Clustering> build();
+    public abstract NavigableSet<Clustering> build();
 
     /**
      * Builds the <code>clusterings</code> with the specified EOC.
@@ -381,7 +381,7 @@ public abstract class MultiCBuilder
             return hasMissingElements;
         }
 
-        public SortedSet<Clustering> build()
+        public NavigableSet<Clustering> build()
         {
             built = true;
 
@@ -394,7 +394,7 @@ public abstract class MultiCBuilder
                 return FBUtilities.singleton(builder.build(), builder.comparator());
 
             // Use a TreeSet to sort and eliminate duplicates
-            SortedSet<Clustering> set = new TreeSet<>(builder.comparator());
+            NavigableSet<Clustering> set = new TreeSet<>(builder.comparator());
 
             for (int i = 0, m = elementsList.size(); i < m; i++)
             {

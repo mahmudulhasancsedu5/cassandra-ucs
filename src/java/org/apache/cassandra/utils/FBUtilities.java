@@ -507,14 +507,14 @@ public class FBUtilities
         }
     }
 
-    public static <T> SortedSet<T> singleton(T column, Comparator<? super T> comparator)
+    public static <T> NavigableSet<T> singleton(T column, Comparator<? super T> comparator)
     {
-        SortedSet<T> s = new TreeSet<T>(comparator);
+        NavigableSet<T> s = new TreeSet<T>(comparator);
         s.add(column);
         return s;
     }
 
-    public static <T> SortedSet<T> emptySortedSet(Comparator<? super T> comparator)
+    public static <T> NavigableSet<T> emptySortedSet(Comparator<? super T> comparator)
     {
         return new TreeSet<T>(comparator);
     }

@@ -471,7 +471,7 @@ public final class StatementRestrictions
      * @return the requested clustering columns
      * @throws InvalidRequestException if the query is not valid
      */
-    public SortedSet<Clustering> getClusteringColumns(QueryOptions options) throws InvalidRequestException
+    public NavigableSet<Clustering> getClusteringColumns(QueryOptions options) throws InvalidRequestException
     {
         return clusteringColumnsRestrictions.valuesAsClustering(options);
     }
