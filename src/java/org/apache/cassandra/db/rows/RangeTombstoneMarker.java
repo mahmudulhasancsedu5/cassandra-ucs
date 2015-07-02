@@ -41,6 +41,8 @@ public interface RangeTombstoneMarker extends Unfiltered
     public boolean isClose(boolean reversed);
     public DeletionTime openDeletionTime(boolean reversed);
     public DeletionTime closeDeletionTime(boolean reversed);
+    public boolean openIsInclusive(boolean reversed);
+    public boolean closeIsInclusive(boolean reversed);
 
     public interface Writer extends Slice.Bound.Writer
     {

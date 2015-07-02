@@ -87,6 +87,16 @@ public class RangeTombstoneBoundaryMarker extends AbstractRangeTombstoneMarker
         return reversed ? endDeletion : startDeletion;
     }
 
+    public boolean openIsInclusive(boolean reversed)
+    {
+        return (bound.kind() == ClusteringPrefix.Kind.EXCL_END_INCL_START_BOUNDARY) ^ reversed;
+    }
+
+    public boolean closeIsInclusive(boolean reversed)
+    {
+        return (bound.kind() == ClusteringPrefix.Kind.INCL_END_EXCL_START_BOUNDARY) ^ reversed;
+    }
+
     public boolean isOpen(boolean reversed)
     {
         // A boundary always open one side
