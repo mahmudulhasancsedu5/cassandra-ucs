@@ -36,9 +36,9 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.db.rows.RowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.io.compress.CompressionParameters;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.OpOrder;
@@ -309,7 +309,8 @@ public final class LegacySchemaMigrator
 
         // The legacy schema did not have views, so we know that we are not loading a materialized view
         boolean isMaterializedView = false;
-        CFMetaData cfm = CFMetaData.create(ksName, cfName, cfId, isDense, isCompound, isSuper, isCounter, isMaterializedView, columnDefs);
+        IPartitioner partitioner = tableRow.has("partitioner") ? FBUtilities.newPartitioner(tableRow.getString("partitioner")) : DatabaseDescriptor.getPartitioner();
+        CFMetaData cfm = CFMetaData.create(ksName, cfName, cfId, isDense, isCompound, isSuper, isCounter, isMaterializedView, columnDefs, partitioner);
 
         cfm.readRepairChance(tableRow.getDouble("read_repair_chance"));
         cfm.dcLocalReadRepairChance(tableRow.getDouble("local_read_repair_chance"));
@@ -579,7 +580,7 @@ public final class LegacySchemaMigrator
         ClusteringComparator comparator = store.metadata.comparator;
         Slices slices = Slices.with(comparator, Slice.make(comparator, typeName));
         int nowInSec = FBUtilities.nowInSeconds();
-        DecoratedKey key = StorageService.getPartitioner().decorateKey(AsciiType.instance.fromString(keyspaceName));
+        DecoratedKey key = store.metadata.decorateKey(AsciiType.instance.fromString(keyspaceName));
         SinglePartitionReadCommand command = SinglePartitionSliceCommand.create(store.metadata, nowInSec, key, slices);
 
         try (OpOrder.Group op = store.readOrdering.start();

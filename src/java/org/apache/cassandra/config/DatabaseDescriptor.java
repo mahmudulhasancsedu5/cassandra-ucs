@@ -18,7 +18,6 @@
 package org.apache.cassandra.config;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.*;
 import java.util.*;
 
@@ -537,7 +536,7 @@ public class DatabaseDescriptor
                 partitioner.getTokenFactory().validate(token);
 
         if (conf.num_tokens == null)
-        	conf.num_tokens = 1;
+            conf.num_tokens = 1;
         else if (conf.num_tokens > MAX_NUM_TOKENS)
             throw new ConfigurationException(String.format("A maximum number of %d tokens per node is supported", MAX_NUM_TOKENS), false);
 
@@ -743,10 +742,12 @@ public class DatabaseDescriptor
         return paritionerName;
     }
 
-    /* For tests ONLY, don't use otherwise or all hell will break loose */
-    public static void setPartitioner(IPartitioner newPartitioner)
+    /* For tests ONLY, don't use otherwise or all hell will break loose. Tests should restore value at the end. */
+    public static IPartitioner setPartitionerUnsafe(IPartitioner newPartitioner)
     {
+        IPartitioner old = partitioner;
         partitioner = newPartitioner;
+        return old;
     }
 
     public static IEndpointSnitch getEndpointSnitch()

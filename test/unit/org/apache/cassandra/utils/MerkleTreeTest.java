@@ -25,7 +25,6 @@ import com.google.common.collect.AbstractIterator;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
@@ -34,7 +33,6 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.io.util.NIODataInputStream;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.MerkleTree.Hashable;
 import org.apache.cassandra.utils.MerkleTree.RowHash;
@@ -67,8 +65,6 @@ public class MerkleTreeTest
     {
         TOKEN_SCALE = new BigInteger("8");
         partitioner = RandomPartitioner.instance;
-        // TODO need to trickle TokenSerializer
-        DatabaseDescriptor.setPartitioner(partitioner);
         mt = new MerkleTree(partitioner, fullRange(), RECOMMENDED_DEPTH, Integer.MAX_VALUE);
     }
 
