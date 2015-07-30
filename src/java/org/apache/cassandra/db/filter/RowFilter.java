@@ -222,28 +222,28 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
             if (expressions.isEmpty())
                 return iter;
 
-            return new AlteringUnfilteredPartitionIterator(iter)
-            {
-                protected Row computeNext(DecoratedKey partitionKey, Row row)
-                {
-                    // We filter tombstones when passing the row to isSatisfiedBy so that the method doesn't have to bother with them.
-                    Row purged = row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-                    return purged != null && CQLFilter.this.isSatisfiedBy(partitionKey, purged) ? row : null;
-                }
-            };
+            return Transformer.apply(iter, filter(nowInSec));
         }
 
-        /**
-         * Returns whether the provided row (with it's partition key) satisfies
-         * this row filter or not (that is, if it satisfies all of its expressions).
-         */
-        private boolean isSatisfiedBy(DecoratedKey partitionKey, Row row)
+        private Transformer.UnfilteredPartitionFunction filter(int nowInSec)
         {
-            for (Expression e : expressions)
-                if (!e.isSatisfiedBy(partitionKey, row))
-                    return false;
+            return (iter) -> Transformer.apply(iter, filter(iter, nowInSec));
+        }
 
-            return true;
+        private Transformer.RowFunction filter(UnfilteredRowIterator iter, int nowInSec)
+        {
+            DecoratedKey pk = iter.partitionKey();
+            return (row) ->
+                   {
+                       Row purged = row.purge(DeletionPurger.PURGE_ALL, nowInSec);
+                       if (purged == null)
+                           return null;
+
+                       for (Expression e : expressions)
+                           if (!e.isSatisfiedBy(pk, purged))
+                               return null;
+                       return row;
+                   };
         }
 
         protected RowFilter withNewExpressions(List<Expression> expressions)
@@ -264,16 +264,17 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
             if (expressions.isEmpty())
                 return iter;
 
-            return new WrappingUnfilteredPartitionIterator(iter)
+            class Filter implements Transformer.UnfilteredPartitionFunction
             {
                 @Override
-                public UnfilteredRowIterator computeNext(final UnfilteredRowIterator iter)
+                public UnfilteredRowIterator applyToPartition(final UnfilteredRowIterator iter)
                 {
                     // Thrift does not filter rows, it filters entire partition if any of the expression is not
                     // satisfied, which forces us to materialize the result (in theory we could materialize only
                     // what we need which might or might not be everything, but we keep it simple since in practice
                     // it's not worth that it has ever been).
                     ImmutableBTreePartition result = ImmutableBTreePartition.create(iter);
+                    iter.close();
 
                     // The partition needs to have a row for every expression, and the expression needs to be valid.
                     for (Expression expr : expressions)
@@ -286,7 +287,8 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
                     // If we get there, it means all expressions where satisfied, so return the original result
                     return result.unfilteredIterator();
                 }
-            };
+            }
+            return Transformer.apply(iter, new Filter());
         }
 
         protected RowFilter withNewExpressions(List<Expression> expressions)

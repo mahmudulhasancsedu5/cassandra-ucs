@@ -386,7 +386,8 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
      */
     private UnfilteredPartitionIterator withMetricsRecording(UnfilteredPartitionIterator iter, final TableMetrics metric, final long startTimeNanos)
     {
-        return new WrappingUnfilteredPartitionIterator(iter)
+        class MetricRecording implements Transformer.UnfilteredPartitionFunction,
+                                         Transformer.RunOnClose
         {
             private final int failureThreshold = DatabaseDescriptor.getTombstoneFailureThreshold();
             private final int warningThreshold = DatabaseDescriptor.getTombstoneWarnThreshold();
@@ -399,20 +400,20 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
             private DecoratedKey currentKey;
 
             @Override
-            public UnfilteredRowIterator computeNext(UnfilteredRowIterator iter)
+            public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator iter)
             {
                 currentKey = iter.partitionKey();
 
-                return new AlteringUnfilteredRowIterator(iter)
+                class MetricsRecorder implements Transformer.StaticRowFunction, Transformer.RowFunction, Transformer.MarkerFunction
                 {
                     @Override
-                    protected Row computeNextStatic(Row row)
+                    public Row applyToStatic(Row row)
                     {
-                        return computeNext(row);
+                        return applyToRow(row);
                     }
 
                     @Override
-                    protected Row computeNext(Row row)
+                    public Row applyToRow(Row row)
                     {
                         if (row.hasLiveData(ReadCommand.this.nowInSec()))
                             ++liveRows;
@@ -426,7 +427,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                     }
 
                     @Override
-                    protected RangeTombstoneMarker computeNext(RangeTombstoneMarker marker)
+                    public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
                     {
                         countTombstone(marker.clustering());
                         return marker;
@@ -442,35 +443,32 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                             throw new TombstoneOverwhelmingException(tombstones, query, ReadCommand.this.metadata(), currentKey, clustering);
                         }
                     }
-                };
+                }
+
+                return Transformer.apply(iter, new MetricsRecorder());
             }
 
             @Override
-            public void close()
+            public void runOnClose()
             {
-                try
+                recordLatency(metric, System.nanoTime() - startTimeNanos);
+
+                metric.tombstoneScannedHistogram.update(tombstones);
+                metric.liveScannedHistogram.update(liveRows);
+
+                boolean warnTombstones = tombstones > warningThreshold && respectTombstoneThresholds;
+                if (warnTombstones)
                 {
-                    super.close();
+                    String msg = String.format("Read %d live rows and %d tombstone cells for query %1.512s (see tombstone_warn_threshold)", liveRows, tombstones, ReadCommand.this.toCQLString());
+                    ClientWarn.warn(msg);
+                    logger.warn(msg);
                 }
-                finally
-                {
-                    recordLatency(metric, System.nanoTime() - startTimeNanos);
 
-                    metric.tombstoneScannedHistogram.update(tombstones);
-                    metric.liveScannedHistogram.update(liveRows);
-
-                    boolean warnTombstones = tombstones > warningThreshold && respectTombstoneThresholds;
-                    if (warnTombstones)
-                    {
-                        String msg = String.format("Read %d live rows and %d tombstone cells for query %1.512s (see tombstone_warn_threshold)", liveRows, tombstones, ReadCommand.this.toCQLString());
-                        ClientWarn.warn(msg);
-                        logger.warn(msg);
-                    }
-
-                    Tracing.trace("Read {} live and {} tombstone cells{}", liveRows, tombstones, (warnTombstones ? " (see tombstone_warn_threshold)" : ""));
-                }
+                Tracing.trace("Read {} live and {} tombstone cells{}", liveRows, tombstones, (warnTombstones ? " (see tombstone_warn_threshold)" : ""));
             }
         };
+
+        return Transformer.apply(iter, new MetricRecording());
     }
 
     protected UnfilteredPartitionIterator withStateTracking(UnfilteredPartitionIterator iter)
@@ -527,13 +525,19 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
     // are to some extend an artefact of compaction lagging behind and hence counting them is somewhat unintuitive).
     protected UnfilteredPartitionIterator withoutPurgeableTombstones(UnfilteredPartitionIterator iterator, ColumnFamilyStore cfs)
     {
-        return new PurgingPartitionIterator(iterator, cfs.gcBefore(nowInSec()), oldestUnrepairedTombstone(), cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones())
+        class WithoutPurgeableTombstones extends PurgeFunction
         {
+            public WithoutPurgeableTombstones()
+            {
+                super(iterator.isForThrift(), cfs.gcBefore(nowInSec()), oldestUnrepairedTombstone(), cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones());
+            }
+
             protected long getMaxPurgeableTimestamp()
             {
                 return Long.MAX_VALUE;
             }
-        };
+        }
+        return Transformer.apply(iterator, new WithoutPurgeableTombstones());
     }
 
     /**

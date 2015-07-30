@@ -22,7 +22,6 @@ import java.security.MessageDigest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.google.common.collect.AbstractIterator;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
@@ -63,8 +62,7 @@ public abstract class UnfilteredRowIterators
      */
     public static RowIterator filter(UnfilteredRowIterator iter, int nowInSec)
     {
-        return new FilteringIterator(iter, nowInSec);
-
+        return Transformer.filter(iter, nowInSec);
     }
 
     /**
@@ -90,17 +88,15 @@ public abstract class UnfilteredRowIterators
         return UnfilteredRowMergeIterator.create(iterators, nowInSec, mergeListener);
     }
 
-    public static UnfilteredRowIterator emptyIterator(final CFMetaData cfm, final DecoratedKey partitionKey, final boolean isReverseOrder)
-    {
-        return noRowsIterator(cfm, partitionKey, Rows.EMPTY_STATIC_ROW, DeletionTime.LIVE, isReverseOrder);
-    }
     /**
      * Returns an empty atom iterator for a given partition.
      */
     public static UnfilteredRowIterator noRowsIterator(final CFMetaData cfm, final DecoratedKey partitionKey, final Row staticRow, final DeletionTime partitionDeletion, final boolean isReverseOrder)
     {
-        PartitionColumns columns = staticRow == Rows.EMPTY_STATIC_ROW ? PartitionColumns.NONE
-                                                                      : new PartitionColumns(Columns.from(staticRow.columns()), Columns.NONE);
+        if (staticRow.isEmpty() && partitionDeletion.isLive())
+            return EmptyIterators.unfilteredRow(cfm, partitionKey, isReverseOrder);
+
+        PartitionColumns columns = new PartitionColumns(Columns.from(staticRow.columns()), Columns.NONE);
         return new UnfilteredRowIterator()
         {
             public CFMetaData metadata()
@@ -201,65 +197,45 @@ public abstract class UnfilteredRowIterators
             && iter1.columns().equals(iter2.columns())
             && iter1.staticRow().equals(iter2.staticRow());
 
-        return new AbstractUnfilteredRowIterator(iter1.metadata(),
-                                                 iter1.partitionKey(),
-                                                 iter1.partitionLevelDeletion(),
-                                                 iter1.columns(),
-                                                 iter1.staticRow(),
-                                                 iter1.isReverseOrder(),
-                                                 iter1.stats())
+        class Extend implements Transformer.RefillRows
         {
-            protected Unfiltered computeNext()
+            boolean returned = false;
+            public UnfilteredRowIterator newContents()
             {
-                if (iter1.hasNext())
-                    return iter1.next();
-
-                return iter2.hasNext() ? iter2.next() : endOfData();
+                if (returned)
+                    return null;
+                returned = true;
+                return iter2;
             }
+        }
 
-            @Override
-            public void close()
-            {
-                try
-                {
-                    iter1.close();
-                }
-                finally
-                {
-                    iter2.close();
-                }
-            }
-        };
+        return Transformer.apply(iter1, new Extend());
     }
 
     public static UnfilteredRowIterator cloningIterator(UnfilteredRowIterator iterator, final AbstractAllocator allocator)
     {
-        return new AlteringUnfilteredRowIterator(iterator)
+        class Cloner implements Transformer.StaticRowFunction, Transformer.RowFunction, Transformer.MarkerFunction
         {
-            private Row.Builder regularBuilder;
+            private final Row.Builder builder = allocator.cloningBTreeRowBuilder();
 
-            @Override
-            protected Row computeNextStatic(Row row)
+            public Row applyToStatic(Row row)
             {
-                Row.Builder staticBuilder = allocator.cloningBTreeRowBuilder();
-                return Rows.copy(row, staticBuilder).build();
+                return Rows.copy(row, builder).build();
             }
 
             @Override
-            protected Row computeNext(Row row)
+            public Row applyToRow(Row row)
             {
-                if (regularBuilder == null)
-                    regularBuilder = allocator.cloningBTreeRowBuilder();
-
-                return Rows.copy(row, regularBuilder).build();
+                return Rows.copy(row, builder).build();
             }
 
             @Override
-            protected RangeTombstoneMarker computeNext(RangeTombstoneMarker marker)
+            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
             {
                 return marker.copy(allocator);
             }
-        };
+        }
+        return Transformer.apply(iterator, new Cloner());
     }
 
     /**
@@ -277,24 +253,24 @@ public abstract class UnfilteredRowIterators
      */
     public static UnfilteredRowIterator withValidation(UnfilteredRowIterator iterator, final String filename)
     {
-        return new AlteringUnfilteredRowIterator(iterator)
+        class Validator implements Transformer.RowFunction, Transformer.StaticRowFunction, Transformer.MarkerFunction
         {
             @Override
-            protected Row computeNextStatic(Row row)
+            public Row applyToStatic(Row row)
             {
                 validate(row);
                 return row;
             }
 
             @Override
-            protected Row computeNext(Row row)
+            public Row applyToRow(Row row)
             {
                 validate(row);
                 return row;
             }
 
             @Override
-            protected RangeTombstoneMarker computeNext(RangeTombstoneMarker marker)
+            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
             {
                 validate(marker);
                 return marker;
@@ -311,7 +287,8 @@ public abstract class UnfilteredRowIterators
                     throw new CorruptSSTableException(me, filename);
                 }
             }
-        };
+        }
+        return Transformer.apply(iterator, new Validator());
     }
 
     /**
@@ -331,30 +308,31 @@ public abstract class UnfilteredRowIterators
                     iterator.isReverseOrder(),
                     iterator.partitionLevelDeletion().markedForDeleteAt());
 
-        return new AlteringUnfilteredRowIterator(iterator)
+        class Logger implements Transformer.RowFunction, Transformer.StaticRowFunction, Transformer.MarkerFunction
         {
             @Override
-            protected Row computeNextStatic(Row row)
+            public Row applyToStatic(Row row)
             {
                 if (!row.isEmpty())
-                    logger.info("[{}] {}", id, row.toString(metadata(), fullDetails));
+                    logger.info("[{}] {}", id, row.toString(metadata, fullDetails));
                 return row;
             }
 
             @Override
-            protected Row computeNext(Row row)
+            public Row applyToRow(Row row)
             {
-                logger.info("[{}] {}", id, row.toString(metadata(), fullDetails));
+                logger.info("[{}] {}", id, row.toString(metadata, fullDetails));
                 return row;
             }
 
             @Override
-            protected RangeTombstoneMarker computeNext(RangeTombstoneMarker marker)
+            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
             {
-                logger.info("[{}] {}", id, marker.toString(metadata()));
+                logger.info("[{}] {}", id, marker.toString(metadata));
                 return marker;
             }
-        };
+        }
+        return Transformer.apply(iterator, new Logger());
     }
 
     /**
@@ -575,68 +553,6 @@ public abstract class UnfilteredRowIterators
                 else
                     markerMerger.clear();
             }
-        }
-    }
-
-    private static class FilteringIterator extends AbstractIterator<Row> implements RowIterator
-    {
-        private final UnfilteredRowIterator iter;
-        private final int nowInSec;
-
-        public FilteringIterator(UnfilteredRowIterator iter, int nowInSec)
-        {
-            this.iter = iter;
-            this.nowInSec = nowInSec;
-        }
-
-        public CFMetaData metadata()
-        {
-            return iter.metadata();
-        }
-
-        public boolean isReverseOrder()
-        {
-            return iter.isReverseOrder();
-        }
-
-        public PartitionColumns columns()
-        {
-            return iter.columns();
-        }
-
-        public DecoratedKey partitionKey()
-        {
-            return iter.partitionKey();
-        }
-
-        public Row staticRow()
-        {
-            Row row = iter.staticRow();
-            if (row.isEmpty())
-                return Rows.EMPTY_STATIC_ROW;
-
-            row = row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-            return row == null ? Rows.EMPTY_STATIC_ROW : row;
-        }
-
-        protected Row computeNext()
-        {
-            while (iter.hasNext())
-            {
-                Unfiltered next = iter.next();
-                if (next.isRangeTombstoneMarker())
-                    continue;
-
-                Row row = ((Row)next).purge(DeletionPurger.PURGE_ALL, nowInSec);
-                if (row != null)
-                    return row;
-            }
-            return endOfData();
-        }
-
-        public void close()
-        {
-            iter.close();
         }
     }
 }

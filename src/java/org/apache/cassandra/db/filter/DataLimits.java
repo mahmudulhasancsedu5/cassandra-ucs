@@ -125,17 +125,17 @@ public abstract class DataLimits
 
     public UnfilteredPartitionIterator filter(UnfilteredPartitionIterator iter, int nowInSec)
     {
-        return new CountingUnfilteredPartitionIterator(iter, newCounter(nowInSec, false));
+        return Counting.count(iter, this, nowInSec);
     }
 
     public UnfilteredRowIterator filter(UnfilteredRowIterator iter, int nowInSec)
     {
-        return new CountingUnfilteredRowIterator(iter, newCounter(nowInSec, false));
+        return Counting.count(iter, this, nowInSec);
     }
 
     public PartitionIterator filter(PartitionIterator iter, int nowInSec)
     {
-        return new CountingPartitionIterator(iter, this, nowInSec);
+        return Counting.count(iter, this, nowInSec);
     }
 
     /**
@@ -241,13 +241,15 @@ public abstract class DataLimits
                 return false;
 
             // Otherwise, we need to re-count
+
+            DataLimits.Counter counter = newCounter(nowInSec, false);
             try (UnfilteredRowIterator cacheIter = cached.unfilteredIterator(ColumnFilter.selection(cached.columns()), Slices.ALL, false);
-                 CountingUnfilteredRowIterator iter = new CountingUnfilteredRowIterator(cacheIter, newCounter(nowInSec, false)))
+                 UnfilteredRowIterator iter = Counting.count(cacheIter, counter))
             {
                 // Consume the iterator until we've counted enough
-                while (iter.hasNext() && !iter.counter().isDone())
+                while (iter.hasNext() && !counter.isDone())
                     iter.next();
-                return iter.counter().isDone();
+                return counter.isDone();
             }
         }
 
@@ -481,13 +483,14 @@ public abstract class DataLimits
                 return false;
 
             // Otherwise, we need to re-count
+            DataLimits.Counter counter = newCounter(nowInSec, false);
             try (UnfilteredRowIterator cacheIter = cached.unfilteredIterator(ColumnFilter.selection(cached.columns()), Slices.ALL, false);
-                 CountingUnfilteredRowIterator iter = new CountingUnfilteredRowIterator(cacheIter, newCounter(nowInSec, false)))
+                 UnfilteredRowIterator iter = Counting.count(cacheIter, counter))
             {
                 // Consume the iterator until we've counted enough
-                while (iter.hasNext() && !iter.counter().isDone())
+                while (iter.hasNext() && !counter.isDone())
                     iter.next();
-                return iter.counter().isDone();
+                return counter.isDone();
             }
         }
 

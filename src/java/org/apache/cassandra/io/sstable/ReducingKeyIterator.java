@@ -70,12 +70,10 @@ public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
         }
     }
 
-    public void close() throws IOException
+    public void close()
     {
         if (mi != null)
-        {
             mi.close();
-        }
     }
 
     public long getTotalBytes()

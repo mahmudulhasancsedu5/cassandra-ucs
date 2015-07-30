@@ -23,6 +23,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
@@ -67,7 +68,7 @@ public class DataResolver extends ResponseResolver
         // Even though every responses should honor the limit, we might have more than requested post reconciliation,
         // so ensure we're respecting the limit.
         DataLimits.Counter counter = command.limits().newCounter(command.nowInSec(), true);
-        return new CountingPartitionIterator(mergeWithShortReadProtection(iters, sources, counter), counter);
+        return Counting.count(mergeWithShortReadProtection(iters, sources, counter), counter);
     }
 
     private PartitionIterator mergeWithShortReadProtection(List<UnfilteredPartitionIterator> results, InetAddress[] sources, DataLimits.Counter resultCounter)
@@ -80,11 +81,11 @@ public class DataResolver extends ResponseResolver
 
         // So-called "short reads" stems from nodes returning only a subset of the results they have for a partition due to the limit,
         // but that subset not being enough post-reconciliation. So if we don't have limit, don't bother.
-        if (command.limits().isUnlimited())
-            return UnfilteredPartitionIterators.mergeAndFilter(results, command.nowInSec(), listener);
-
-        for (int i = 0; i < results.size(); i++)
-            results.set(i, new ShortReadProtectedIterator(sources[i], results.get(i), resultCounter));
+        if (!command.limits().isUnlimited())
+        {
+            for (int i = 0; i < results.size(); i++)
+                results.set(i, Transformer.apply(results.get(i), new ShortReadProtection(sources[i], resultCounter)));
+        }
 
         return UnfilteredPartitionIterators.mergeAndFilter(results, command.nowInSec(), listener);
     }
@@ -281,78 +282,45 @@ public class DataResolver extends ResponseResolver
         }
     }
 
-    private class ShortReadProtectedIterator extends CountingUnfilteredPartitionIterator
+    private class ShortReadProtection extends Counting.UnfilteredPartitionCounter implements Transformer.UnfilteredPartitionFunction
     {
         private final InetAddress source;
         private final DataLimits.Counter postReconciliationCounter;
 
-        private ShortReadProtectedIterator(InetAddress source, UnfilteredPartitionIterator iterator, DataLimits.Counter postReconciliationCounter)
+        private ShortReadProtection(InetAddress source, DataLimits.Counter postReconciliationCounter)
         {
-            super(iterator, command.limits().newCounter(command.nowInSec(), false));
+            super(command.limits().newCounter(command.nowInSec(), false));
             this.source = source;
             this.postReconciliationCounter = postReconciliationCounter;
         }
 
         @Override
-        public UnfilteredRowIterator next()
+        public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
         {
-            return new ShortReadProtectedRowIterator(super.next());
+            return Transformer.apply(super.applyToPartition(partition),
+                                     new ShortReadRowProtection(partition.metadata(), partition.partitionKey()));
         }
 
-        private class ShortReadProtectedRowIterator extends WrappingUnfilteredRowIterator
+        private class ShortReadRowProtection implements Transformer.RowFunction, Transformer.RefillRows
         {
-            private boolean initialReadIsDone;
-            private UnfilteredRowIterator shortReadContinuation;
+            final CFMetaData metadata;
+            final DecoratedKey partitionKey;
             private Clustering lastClustering;
 
-            ShortReadProtectedRowIterator(UnfilteredRowIterator iter)
+            private ShortReadRowProtection(CFMetaData metadata, DecoratedKey partitionKey)
             {
-                super(iter);
+                this.metadata = metadata;
+                this.partitionKey = partitionKey;
             }
 
-            @Override
-            public boolean hasNext()
+            public Row applyToRow(Row row)
             {
-                if (super.hasNext())
-                    return true;
-
-                initialReadIsDone = true;
-
-                if (shortReadContinuation != null && shortReadContinuation.hasNext())
-                    return true;
-
-                return checkForShortRead();
+                lastClustering = row.clustering();
+                return row;
             }
 
-            @Override
-            public Unfiltered next()
+            public UnfilteredRowIterator newContents()
             {
-                Unfiltered next = initialReadIsDone ? shortReadContinuation.next() : super.next();
-
-                if (next.kind() == Unfiltered.Kind.ROW)
-                    lastClustering = ((Row)next).clustering();
-
-                return next;
-            }
-
-            @Override
-            public void close()
-            {
-                try
-                {
-                    super.close();
-                }
-                finally
-                {
-                    if (shortReadContinuation != null)
-                        shortReadContinuation.close();
-                }
-            }
-
-            private boolean checkForShortRead()
-            {
-                assert shortReadContinuation == null || !shortReadContinuation.hasNext();
-
                 // We have a short read if the node this is the result of has returned the requested number of
                 // rows for that partition (i.e. it has stopped returning results due to the limit), but some of
                 // those results haven't made it in the final result post-reconciliation due to other nodes
@@ -364,7 +332,7 @@ public class DataResolver extends ResponseResolver
                 // if the node had returned the requested number but we still get there, it imply some results were
                 // skipped during reconciliation.
                 if (!counter.isDoneForPartition())
-                    return false;
+                    return null;
 
                 assert !postReconciliationCounter.isDoneForPartition();
 
@@ -383,18 +351,17 @@ public class DataResolver extends ResponseResolver
                               : Math.max(((n * n) / x) - n, 1);
 
                 DataLimits retryLimits = command.limits().forShortReadRetry(toQuery);
-                ClusteringIndexFilter filter = command.clusteringIndexFilter(partitionKey());
-                ClusteringIndexFilter retryFilter = lastClustering == null ? filter : filter.forPaging(metadata().comparator, lastClustering, false);
+                ClusteringIndexFilter filter = command.clusteringIndexFilter(partitionKey);
+                ClusteringIndexFilter retryFilter = lastClustering == null ? filter : filter.forPaging(metadata.comparator, lastClustering, false);
                 SinglePartitionReadCommand<?> cmd = SinglePartitionReadCommand.create(command.metadata(),
                                                                                       command.nowInSec(),
                                                                                       command.columnFilter(),
                                                                                       command.rowFilter(),
                                                                                       retryLimits,
-                                                                                      partitionKey(),
+                                                                                      partitionKey,
                                                                                       retryFilter);
 
-                shortReadContinuation = doShortReadRetry(cmd);
-                return shortReadContinuation.hasNext();
+                return doShortReadRetry(cmd);
             }
 
             private UnfilteredRowIterator doShortReadRetry(SinglePartitionReadCommand<?> retryCommand)
