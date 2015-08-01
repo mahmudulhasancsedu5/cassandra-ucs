@@ -26,11 +26,9 @@ import java.util.concurrent.*;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.RateLimiter;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,14 +36,11 @@ import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.WriteFailureException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.FailureDetector;
-import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
@@ -58,7 +53,6 @@ import org.apache.cassandra.service.WriteResponseHandler;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
-
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternalWithPaging;
 
@@ -66,13 +60,12 @@ public class BatchlogManager implements BatchlogManagerMBean
 {
     public static final String MBEAN_NAME = "org.apache.cassandra.db:type=BatchlogManager";
     private static final long REPLAY_INTERVAL = 60 * 1000; // milliseconds
-    private static final int PAGE_SIZE = 128; // same as HHOM, for now, w/out using any heuristics. TODO: set based on avg batch size.
+    private static final int DEFAULT_PAGE_SIZE = 128;
 
     private static final Logger logger = LoggerFactory.getLogger(BatchlogManager.class);
     public static final BatchlogManager instance = new BatchlogManager();
 
     private volatile long totalBatchesReplayed = 0; // no concurrency protection necessary as only written by replay thread.
-    private UUID lastReplayedUuid = UUIDGen.minTimeUUID(0);
 
     private Runnable replayBatchlogRunnable = new WrappedRunnable()
     {
@@ -190,16 +183,25 @@ public class BatchlogManager implements BatchlogManagerMBean
         int throttleInKB = DatabaseDescriptor.getBatchlogReplayThrottleInKB() / StorageService.instance.getTokenMetadata().getAllEndpoints().size();
         RateLimiter rateLimiter = RateLimiter.create(throttleInKB == 0 ? Double.MAX_VALUE : throttleInKB * 1024);
 
-        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) > token(?) AND token(id) <= token(?)",
+        UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
+        int pageSize = calculatePageSize();
+        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
                                      SystemKeyspace.NAME,
                                      SystemKeyspace.BATCHLOG);
-        UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
-        int pageSize = PAGE_SIZE;
-        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, lastReplayedUuid, limitUuid);
+        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, limitUuid);
         processBatchlogEntries(batches, pageSize, rateLimiter);
-        lastReplayedUuid = limitUuid;
-        cleanup();
         logger.debug("Finished replayAllFailedBatches");
+    }
+
+    // read less rows (batches) per page if they are very large
+    private int calculatePageSize()
+    {
+        ColumnFamilyStore hintStore = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHLOG);
+        double averageRowSize = hintStore.getMeanPartitionSize();
+        if (averageRowSize <= 0)
+            return DEFAULT_PAGE_SIZE;
+
+        return (int) Math.max(1, Math.min(DEFAULT_PAGE_SIZE, 4 * 1024 * 1024 / averageRowSize));
     }
 
     private void deleteBatch(UUID id)
@@ -467,7 +469,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         String query = String.format("SELECT id, data, written_at, version FROM %s.%s",
                                      SystemKeyspace.NAME,
                                      SystemKeyspace.BATCHLOG_LEGACY);
-        UntypedResultSet batches = executeInternalWithPaging(query, PAGE_SIZE);
+        UntypedResultSet batches = executeInternalWithPaging(query, DEFAULT_PAGE_SIZE);
         int convertedBatches = 0;
         for (UntypedResultSet.Row row : batches)
         {
@@ -495,18 +497,6 @@ public class BatchlogManager implements BatchlogManagerMBean
             Keyspace.openAndGetStore(SystemKeyspace.BatchlogLegacy).truncateBlocking();
         // cleanup will be called after replay
         logger.debug("Finished convertOldBatchEntries");
-    }
-
-    // force flush + compaction to reclaim space from the replayed batches
-    private void cleanup() throws ExecutionException, InterruptedException
-    {
-        ColumnFamilyStore cfs = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHLOG);
-        cfs.forceBlockingFlush();
-        Collection<Descriptor> descriptors = new ArrayList<>();
-        for (SSTableReader sstr : cfs.getLiveSSTables())
-            descriptors.add(sstr.descriptor);
-        if (!descriptors.isEmpty()) // don't pollute the logs if there is nothing to compact.
-            CompactionManager.instance.submitUserDefined(cfs, descriptors, Integer.MAX_VALUE).get();
     }
 
     public static class EndpointFilter
