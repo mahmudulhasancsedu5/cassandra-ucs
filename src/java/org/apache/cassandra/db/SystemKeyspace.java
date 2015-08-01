@@ -42,6 +42,7 @@ import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.compaction.CompactionHistoryTabularData;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -88,7 +89,8 @@ public final class SystemKeyspace
     public static final String NAME = "system";
 
     public static final String HINTS = "hints";
-    public static final String BATCHLOG = "batchlog";
+    public static final String BATCHLOG = "batches";
+    public static final String BATCHLOG_LEGACY = "batchlog";
     public static final String PAXOS = "paxos";
     public static final String BUILT_INDEXES = "IndexInfo";
     public static final String LOCAL = "local";
@@ -126,6 +128,18 @@ public final class SystemKeyspace
     public static final CFMetaData Batchlog =
         compile(BATCHLOG,
                 "batches awaiting replay",
+                "CREATE TABLE %s ("
+                + "id timeuuid,"
+                + "data blob,"
+                + "version int,"
+                + "PRIMARY KEY ((id)))")
+                .copy(new LocalPartitioner(TimeUUIDType.instance))
+                .compactionStrategyOptions(Collections.singletonMap("min_threshold", "2"))
+                .gcGraceSeconds(0);
+
+    public static final CFMetaData BatchlogLegacy =
+        compile(BATCHLOG_LEGACY,
+                "legacy batchlog",
                 "CREATE TABLE %s ("
                 + "id uuid,"
                 + "data blob,"
@@ -410,6 +424,7 @@ public final class SystemKeyspace
         return Tables.of(BuiltIndexes,
                          Hints,
                          Batchlog,
+                         BatchlogLegacy,
                          Paxos,
                          Local,
                          Peers,
