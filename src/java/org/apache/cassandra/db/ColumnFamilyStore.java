@@ -290,10 +290,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         try
         {
-            // TODO: this doesn't affect sstables being written
-            for (SSTableReader sstable : keyspace.getAllSSTables(SSTableSet.CANONICAL))
-                if (sstable.compression)
-                    sstable.getCompressionMetadata().parameters.setCrcCheckChance(crcCheckChance);
+            metadata.compressionParameters.setCrcCheckChance(crcCheckChance);
         }
         catch (ConfigurationException e)
         {
