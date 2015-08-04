@@ -134,7 +134,7 @@ public final class SystemKeyspace
                 + "version int,"
                 + "PRIMARY KEY ((id)))")
                 .copy(new LocalPartitioner(TimeUUIDType.instance))
-                .compactionStrategyOptions(Collections.singletonMap("min_threshold", "2"))
+                .compaction(CompactionParams.scts(singletonMap("min_threshold", "2")))
                 .gcGraceSeconds(0);
 
     public static final CFMetaData BatchlogLegacy =
