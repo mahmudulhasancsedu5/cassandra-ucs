@@ -52,7 +52,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.WriteResponseHandler;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
-import org.apache.cassandra.utils.WrappedRunnable;
+
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternalWithPaging;
 
@@ -66,14 +66,6 @@ public class BatchlogManager implements BatchlogManagerMBean
     public static final BatchlogManager instance = new BatchlogManager();
 
     private volatile long totalBatchesReplayed = 0; // no concurrency protection necessary as only written by replay thread.
-
-    private Runnable replayBatchlogRunnable = new WrappedRunnable()
-    {
-        public void runMayThrow() throws ExecutionException, InterruptedException
-        {
-            replayAllFailedBatches();
-        }
-    };
 
     // Single-thread executor service for scheduling and serializing log replay.
     private static final ScheduledExecutorService batchlogTasks = new DebuggableScheduledThreadPoolExecutor("BatchlogTasks");
@@ -90,26 +82,20 @@ public class BatchlogManager implements BatchlogManagerMBean
             throw new RuntimeException(e);
         }
 
-        batchlogTasks.schedule(getInitialReplayRunnable(), StorageService.RING_DELAY, TimeUnit.MILLISECONDS);
+        batchlogTasks.schedule(this::replayInitially, StorageService.RING_DELAY, TimeUnit.MILLISECONDS);
 
-        batchlogTasks.scheduleWithFixedDelay(replayBatchlogRunnable,
+        batchlogTasks.scheduleWithFixedDelay(this::replayAllFailedBatches,
                                              StorageService.RING_DELAY + REPLAY_INTERVAL,
                                              REPLAY_INTERVAL,
                                              TimeUnit.MILLISECONDS);
     }
 
-    private WrappedRunnable getInitialReplayRunnable()
+    private void replayInitially()
     {
-        return new WrappedRunnable() {
-            @Override
-            public void runMayThrow() throws ExecutionException, InterruptedException
-            {
-                // Initial run must take care of non-time-uuid batches as written by Version 1.2.
-                convertOldBatchEntries();
+        // Initial run must take care of non-time-uuid batches as written by Version 1.2.
+        convertOldBatchEntries();
 
-                replayAllFailedBatches();
-            }
-        };
+        replayAllFailedBatches();
     }
 
     public static void shutdown() throws InterruptedException
@@ -140,13 +126,13 @@ public class BatchlogManager implements BatchlogManagerMBean
     public Future<?> startBatchlogReplay()
     {
         // If a replay is already in progress this request will be executed after it completes.
-        return batchlogTasks.submit(replayBatchlogRunnable);
+        return batchlogTasks.submit(this::replayAllFailedBatches);
     }
 
     void performInitialReplay() throws InterruptedException, ExecutionException
     {
         // Invokes initial replay. Used for testing only.
-        batchlogTasks.submit(getInitialReplayRunnable()).get();
+        batchlogTasks.submit(this::replayInitially).get();
     }
 
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
@@ -174,7 +160,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         }
     }
 
-    private void replayAllFailedBatches() throws ExecutionException, InterruptedException
+    private void replayAllFailedBatches()
     {
         logger.debug("Started replayAllFailedBatches");
 
@@ -194,7 +180,7 @@ public class BatchlogManager implements BatchlogManagerMBean
     }
 
     // read less rows (batches) per page if they are very large
-    private int calculatePageSize()
+    private static int calculatePageSize()
     {
         ColumnFamilyStore hintStore = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES);
         double averageRowSize = hintStore.getMeanPartitionSize();
@@ -204,7 +190,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         return (int) Math.max(1, Math.min(DEFAULT_PAGE_SIZE, 4 * 1024 * 1024 / averageRowSize));
     }
 
-    private void deleteBatch(UUID id)
+    private static void deleteBatch(UUID id)
     {
         Mutation mutation = new Mutation(
                 PartitionUpdate.fullPartitionDelete(SystemKeyspace.Batches,
@@ -265,7 +251,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         batches.clear();
     }
 
-    public long getBatchlogTimeout()
+    public static long getBatchlogTimeout()
     {
         return DatabaseDescriptor.getWriteRpcTimeout() * 2; // enough time for the actual write + BM removal mutation
     }
@@ -279,7 +265,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 
         private List<ReplayWriteResponseHandler<Mutation>> replayHandlers;
 
-        public Batch(UUID id, ByteBuffer data, int version)
+        Batch(UUID id, ByteBuffer data, int version)
         {
             this.id = id;
             this.writtenAt = UUIDGen.unixTimestamp(id);
@@ -375,7 +361,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             }
         }
 
-        private List<ReplayWriteResponseHandler<Mutation>> sendReplays(List<Mutation> mutations, long writtenAt, int ttl)
+        private static List<ReplayWriteResponseHandler<Mutation>> sendReplays(List<Mutation> mutations, long writtenAt, int ttl)
         {
             List<ReplayWriteResponseHandler<Mutation>> handlers = new ArrayList<>(mutations.size());
             for (Mutation mutation : mutations)
@@ -393,7 +379,7 @@ public class BatchlogManager implements BatchlogManagerMBean
          *
          * @return direct delivery handler to wait on or null, if no live nodes found
          */
-        private ReplayWriteResponseHandler<Mutation> sendSingleReplayMutation(final Mutation mutation, long writtenAt, int ttl)
+        private static ReplayWriteResponseHandler<Mutation> sendSingleReplayMutation(final Mutation mutation, long writtenAt, int ttl)
         {
             Set<InetAddress> liveEndpoints = new HashSet<>();
             String ks = mutation.getKeyspaceName();
@@ -438,9 +424,9 @@ public class BatchlogManager implements BatchlogManagerMBean
          */
         private static class ReplayWriteResponseHandler<T> extends WriteResponseHandler<T>
         {
-            private final Set<InetAddress> undelivered = Collections.newSetFromMap(new ConcurrentHashMap<InetAddress, Boolean>());
+            private final Set<InetAddress> undelivered = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-            public ReplayWriteResponseHandler(Collection<InetAddress> writeEndpoints)
+            ReplayWriteResponseHandler(Collection<InetAddress> writeEndpoints)
             {
                 super(writeEndpoints, Collections.<InetAddress>emptySet(), null, null, null, WriteType.UNLOGGED_BATCH);
                 undelivered.addAll(writeEndpoints);
@@ -462,7 +448,8 @@ public class BatchlogManager implements BatchlogManagerMBean
         }
     }
 
-    private void convertOldBatchEntries() throws ExecutionException, InterruptedException
+    @SuppressWarnings("deprecation")
+    private static void convertOldBatchEntries()
     {
         logger.debug("Started convertOldBatchEntries");
 
