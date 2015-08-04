@@ -120,7 +120,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     public int countAllBatches()
     {
-        String query = String.format("SELECT count(*) FROM %s.%s", SystemKeyspace.NAME, SystemKeyspace.BATCHLOG);
+        String query = String.format("SELECT count(*) FROM %s.%s", SystemKeyspace.NAME, SystemKeyspace.BATCHES);
         UntypedResultSet results = executeInternal(query);
         if (results.isEmpty())
             return 0;
@@ -151,7 +151,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     public static Mutation getBatchlogMutationFor(Collection<Mutation> mutations, UUID uuid, int version)
     {
-        return new RowUpdateBuilder(SystemKeyspace.Batchlog, FBUtilities.timestampMicros(), uuid)
+        return new RowUpdateBuilder(SystemKeyspace.Batches, FBUtilities.timestampMicros(), uuid)
                .clustering()
                .add("data", serializeMutations(mutations, version))
                .add("version", version)
@@ -187,7 +187,7 @@ public class BatchlogManager implements BatchlogManagerMBean
         int pageSize = calculatePageSize();
         String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
                                      SystemKeyspace.NAME,
-                                     SystemKeyspace.BATCHLOG);
+                                     SystemKeyspace.BATCHES);
         UntypedResultSet batches = executeInternalWithPaging(query, pageSize, limitUuid);
         processBatchlogEntries(batches, pageSize, rateLimiter);
         logger.debug("Finished replayAllFailedBatches");
@@ -196,7 +196,7 @@ public class BatchlogManager implements BatchlogManagerMBean
     // read less rows (batches) per page if they are very large
     private int calculatePageSize()
     {
-        ColumnFamilyStore hintStore = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHLOG);
+        ColumnFamilyStore hintStore = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES);
         double averageRowSize = hintStore.getMeanPartitionSize();
         if (averageRowSize <= 0)
             return DEFAULT_PAGE_SIZE;
@@ -207,7 +207,7 @@ public class BatchlogManager implements BatchlogManagerMBean
     private void deleteBatch(UUID id)
     {
         Mutation mutation = new Mutation(
-                PartitionUpdate.fullPartitionDelete(SystemKeyspace.Batchlog,
+                PartitionUpdate.fullPartitionDelete(SystemKeyspace.Batches,
                                                     UUIDType.instance.decompose(id),
                                                     FBUtilities.timestampMicros(),
                                                     FBUtilities.nowInSeconds()));
@@ -468,7 +468,7 @@ public class BatchlogManager implements BatchlogManagerMBean
 
         String query = String.format("SELECT id, data, written_at, version FROM %s.%s",
                                      SystemKeyspace.NAME,
-                                     SystemKeyspace.BATCHLOG_LEGACY);
+                                     SystemKeyspace.LEGACY_BATCHLOG);
         UntypedResultSet batches = executeInternalWithPaging(query, DEFAULT_PAGE_SIZE);
         int convertedBatches = 0;
         for (UntypedResultSet.Row row : batches)
@@ -483,7 +483,7 @@ public class BatchlogManager implements BatchlogManagerMBean
                 newId = UUIDGen.getTimeUUID(timestamp, convertedBatches);
             ++convertedBatches;
 
-            Mutation addRow = new RowUpdateBuilder(SystemKeyspace.Batchlog,
+            Mutation addRow = new RowUpdateBuilder(SystemKeyspace.Batches,
                                                    FBUtilities.timestampMicros(),
                                                    newId)
                     .clustering()
@@ -494,7 +494,7 @@ public class BatchlogManager implements BatchlogManagerMBean
             addRow.apply();
         }
         if (convertedBatches > 0)
-            Keyspace.openAndGetStore(SystemKeyspace.BatchlogLegacy).truncateBlocking();
+            Keyspace.openAndGetStore(SystemKeyspace.LegacyBatchlog).truncateBlocking();
         // cleanup will be called after replay
         logger.debug("Finished convertOldBatchEntries");
     }
