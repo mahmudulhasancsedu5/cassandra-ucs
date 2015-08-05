@@ -182,8 +182,8 @@ public class BatchlogManager implements BatchlogManagerMBean
     // read less rows (batches) per page if they are very large
     private static int calculatePageSize()
     {
-        ColumnFamilyStore hintStore = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES);
-        double averageRowSize = hintStore.getMeanPartitionSize();
+        ColumnFamilyStore store = Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES);
+        double averageRowSize = store.getMeanPartitionSize();
         if (averageRowSize <= 0)
             return DEFAULT_PAGE_SIZE;
 
@@ -229,7 +229,8 @@ public class BatchlogManager implements BatchlogManagerMBean
                 deleteBatch(id);
             }
 
-            if (++positionInPage == pageSize) {
+            if (++positionInPage == pageSize)
+            {
                 // We have reached the end of a batch. To avoid keeping more than a page of mutations in memory,
                 // finish processing the page before requesting the next row.
                 finishAndClearBatches(unfinishedBatches);
