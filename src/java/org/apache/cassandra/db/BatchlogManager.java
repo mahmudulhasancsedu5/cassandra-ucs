@@ -59,13 +59,14 @@ import static org.apache.cassandra.cql3.QueryProcessor.executeInternalWithPaging
 public class BatchlogManager implements BatchlogManagerMBean
 {
     public static final String MBEAN_NAME = "org.apache.cassandra.db:type=BatchlogManager";
-    private static final long REPLAY_INTERVAL = 60 * 1000; // milliseconds
+    private static final long REPLAY_INTERVAL = 10 * 1000; // milliseconds
     private static final int DEFAULT_PAGE_SIZE = 128;
 
     private static final Logger logger = LoggerFactory.getLogger(BatchlogManager.class);
     public static final BatchlogManager instance = new BatchlogManager();
 
     private volatile long totalBatchesReplayed = 0; // no concurrency protection necessary as only written by replay thread.
+    private volatile UUID lastReplayedUuid = UUIDGen.minTimeUUID(0);
 
     // Single-thread executor service for scheduling and serializing log replay.
     private static final ScheduledExecutorService batchlogTasks = new DebuggableScheduledThreadPoolExecutor("BatchlogTasks");
@@ -171,11 +172,15 @@ public class BatchlogManager implements BatchlogManagerMBean
 
         UUID limitUuid = UUIDGen.maxTimeUUID(System.currentTimeMillis() - getBatchlogTimeout());
         int pageSize = calculatePageSize();
-        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) <= token(?)",
+        // There cannot be any live content where token(id) <= token(lastReplayedUuid) as every processed batch is
+        // deleted, but the tombstoned content may still be present in the tables. To avoid walking over it we specify
+        // token(id) > token(lastReplayedUuid) as part of the query.
+        String query = String.format("SELECT id, data, version FROM %s.%s WHERE token(id) > token(?) AND token(id) <= token(?)",
                                      SystemKeyspace.NAME,
                                      SystemKeyspace.BATCHES);
-        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, limitUuid);
+        UntypedResultSet batches = executeInternalWithPaging(query, pageSize, lastReplayedUuid, limitUuid);
         processBatchlogEntries(batches, pageSize, rateLimiter);
+        lastReplayedUuid = limitUuid;
         logger.debug("Finished replayAllFailedBatches");
     }
 
