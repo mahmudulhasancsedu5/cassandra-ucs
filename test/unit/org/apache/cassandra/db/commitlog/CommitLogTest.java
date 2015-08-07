@@ -17,7 +17,7 @@
 * under the License.
 */
 
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.commitlog;
 
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
@@ -39,15 +39,15 @@ import com.google.common.collect.ImmutableMap;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.ParameterizedClass;
-import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.commitlog.CommitLogDescriptor;
-import org.apache.cassandra.db.commitlog.CommitLogSegment;
-import org.apache.cassandra.db.commitlog.ReplayPosition;
+import org.apache.cassandra.config.Config.CommitFailurePolicy;
+import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
@@ -83,44 +83,69 @@ public class CommitLogTest
                                     KSMetaData.optsWithRF(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF2));
-        System.setProperty("cassandra.commitlog.stop_on_errors", "true");
         CompactionManager.instance.disableAutoCompaction();
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithEmptyLog() throws Exception
     {
         CommitLog.instance.recover(new File[]{ tmpFile() });
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithShortLog() throws Exception
     {
         // force EOF while reading log
         testRecoveryWithBadSizeArgument(100, 10);
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithShortSize() throws Exception
     {
         testRecovery(new byte[2]);
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithShortCheckSum() throws Exception
     {
         testRecovery(new byte[6]);
     }
 
-    @Test
-    public void testRecoveryWithGarbageLog() throws Exception
+    private void testRecoveryWithGarbageLog() throws Exception
     {
         byte[] garbage = new byte[100];
         (new java.util.Random()).nextBytes(garbage);
         testRecovery(garbage);
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
+    public void testRecoveryWithGarbageLog_fail() throws Exception
+    {
+        testRecoveryWithGarbageLog();
+    }
+
+    public void testRecoveryWithGarbageLog_ignoredByProperty() throws Exception
+    {
+        try {
+            System.setProperty(CommitLogReplayer.IGNORE_REPLAY_ERRORS_PROPERTY, "true");
+            testRecoveryWithGarbageLog();
+        } finally {
+            System.clearProperty(CommitLogReplayer.IGNORE_REPLAY_ERRORS_PROPERTY);
+        }
+    }
+
+    public void testRecoveryWithGarbageLog_ignoredByPolicy() throws Exception
+    {
+        CommitFailurePolicy existingPolicy = DatabaseDescriptor.getCommitFailurePolicy();
+        try {
+            DatabaseDescriptor.setCommitFailurePolicy(CommitFailurePolicy.ignore);
+            testRecoveryWithGarbageLog();
+        } finally {
+            DatabaseDescriptor.setCommitFailurePolicy(existingPolicy);
+        }
+    }
+
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithBadSizeChecksum() throws Exception
     {
         Checksum checksum = new CRC32();
@@ -128,14 +153,14 @@ public class CommitLogTest
         testRecoveryWithBadSizeArgument(100, 100, ~checksum.getValue());
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithZeroSegmentSizeArgument() throws Exception
     {
         // many different combinations of 4 bytes (garbage) will be read as zero by readInt()
         testRecoveryWithBadSizeArgument(0, 10); // zero size, but no EOF
     }
 
-    @Test
+    @Test(expected = CommitLogReplayException.class)
     public void testRecoveryWithNegativeSizeArgument() throws Exception
     {
         // garbage from a partial/bad flush could be read as a negative size even if there is no EOF
