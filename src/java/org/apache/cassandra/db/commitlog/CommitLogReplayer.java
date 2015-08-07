@@ -613,11 +613,16 @@ public class CommitLogReplayer
         String msg = String.format(message, messageArgs);
         IOException e = new CommitLogReplayException(msg);
         if (permissible)
-            logger.error("Ignoring commit log replay error likely due to incomplete flush", e);
+            logger.error("Ignoring commit log replay error likely due to incomplete flush to disk", e);
         else if (Boolean.parseBoolean(System.getProperty(IGNORE_REPLAY_ERRORS_PROPERTY)))
             logger.error("Ignoring commit log replay error", e);
         else if (!CommitLog.handleCommitError("Failed commit log replay", e))
+        {
+            logger.error("Replay stopped. If you wish to override this error and continue starting the node ignoring " +
+                         "commit log replay problems, specify -D" + IGNORE_REPLAY_ERRORS_PROPERTY +
+                         " on the command line");
             throw e;
+        }
     }
 
     @SuppressWarnings("serial")
