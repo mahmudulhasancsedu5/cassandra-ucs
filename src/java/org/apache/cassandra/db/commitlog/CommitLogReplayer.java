@@ -300,7 +300,12 @@ public class CommitLogReplayer
                 handleReplayError(false, "Could not read commit log descriptor in file %s", file);
                 return;
             }
-            assert segmentId == desc.id;
+            if (segmentId != desc.id)
+            {
+                handleReplayError(false, "Segment id mismatch (filename %d, descriptor %d) in file %s", segmentId, desc.id, file);
+                // continue processing if ignored.
+            }
+
             if (logAndCheckIfShouldSkip(file, desc))
                 return;
 
@@ -369,7 +374,7 @@ public class CommitLogReplayer
                         sectionReader = new ByteBufferDataInput(ByteBuffer.wrap(uncompressedBuffer), reader.getPath(), replayPos, 0);
                         errorContext = "compressed section at " + start + " in " + errorContext;
                     }
-                    catch (IOException e)
+                    catch (IOException | ArrayIndexOutOfBoundsException e)
                     {
                         handleReplayError(tolerateErrorsInSection,
                                           "Unexpected exception decompressing section at %d: %s",
@@ -436,7 +441,12 @@ public class CommitLogReplayer
                 // 2-byte length from writeUTF/writeWithShortLength) and 4 bytes for column count.
                 // This prevents CRC by being fooled by special-case garbage in the file; see CASSANDRA-2128
                 if (serializedSize < 10)
+                {
+                    handleReplayError(tolerateErrors,
+                                      "Invalid mutation size %d at %d in %s",
+                                      serializedSize, mutationStart, errorContext);
                     return false;
+                }
 
                 long claimedSizeChecksum;
                 if (desc.version < CommitLogDescriptor.VERSION_21)
@@ -478,7 +488,7 @@ public class CommitLogReplayer
             if (claimedCRC32 != checksum.getValue())
             {
                 handleReplayError(tolerateErrors,
-                                  "Mutation size checksum failure at %d in %s",
+                                  "Mutation checksum failure at %d in %s",
                                   mutationStart, errorContext);
                 continue;
             }
