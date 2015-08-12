@@ -34,12 +34,9 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Ordering;
-
 import org.apache.commons.lang3.StringUtils;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import com.github.tjake.ICRC32;
 
 import org.apache.cassandra.concurrent.Stage;
@@ -183,11 +180,10 @@ public class CommitLogReplayer
         {
             if (end != 0 || filecrc != 0)
             {
-                Object[] messageArgs = { offset, reader.getPath() };
                 handleReplayError(false,
                                   "Encountered bad header at position %d of commit log %s, with invalid CRC. " +
                                   "The end of segment marker should be zero.",
-                                  messageArgs);
+                                  offset, reader.getPath());
             }
             return -1;
         }
@@ -301,8 +297,7 @@ public class CommitLogReplayer
                 desc = null;
             }
             if (desc == null) {
-                Object[] messageArgs = { file };
-                handleReplayError(false, "Could not read commit log descriptor in file %s", messageArgs);
+                handleReplayError(false, "Could not read commit log descriptor in file %s", file);
                 return;
             }
             assert segmentId == desc.id;
@@ -318,8 +313,7 @@ public class CommitLogReplayer
                 }
                 catch (ConfigurationException e)
                 {
-                    Object[] messageArgs = { e.getMessage() };
-                    handleReplayError(false, "Unknown compression: %s", messageArgs);
+                    handleReplayError(false, "Unknown compression: %s", e.getMessage());
                     return;
                 }
             }
@@ -534,10 +528,14 @@ public class CommitLogReplayer
             {
                 out.write(inputBuffer, 0, size);
             }
-            Object[] messageArgs = { f.getAbsolutePath(), t };
 
             // Checksum passed so this error can't be permissible.
-            handleReplayError(false, "Unexpected error deserializing mutation; saved to %s.  This may be caused by replaying a mutation against a table with the same name but incompatible schema.  Exception follows: %s", messageArgs);
+            handleReplayError(false,
+                              "Unexpected error deserializing mutation; saved to %s.  " +
+                              "This may be caused by replaying a mutation against a table with the same name but incompatible schema.  " +
+                              "Exception follows: %s",
+                              f.getAbsolutePath(),
+                              t);
             return;
         }
 
@@ -612,13 +610,13 @@ public class CommitLogReplayer
         IOException e = new CommitLogReplayException(msg);
         if (permissible)
             logger.error("Ignoring commit log replay error likely due to incomplete flush to disk", e);
-        else if (Boolean.parseBoolean(System.getProperty(IGNORE_REPLAY_ERRORS_PROPERTY)))
+        else if (Boolean.getBoolean(IGNORE_REPLAY_ERRORS_PROPERTY))
             logger.error("Ignoring commit log replay error", e);
         else if (!CommitLog.handleCommitError("Failed commit log replay", e))
         {
             logger.error("Replay stopped. If you wish to override this error and continue starting the node ignoring " +
-                         "commit log replay problems, specify -D" + IGNORE_REPLAY_ERRORS_PROPERTY +
-                         " on the command line");
+                         "commit log replay problems, specify -D" + IGNORE_REPLAY_ERRORS_PROPERTY + "=true " +
+                         "on the command line");
             throw e;
         }
     }
