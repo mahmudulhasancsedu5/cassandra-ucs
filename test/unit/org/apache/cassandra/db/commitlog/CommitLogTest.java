@@ -386,10 +386,20 @@ public class CommitLogTest
             Assert.fail("Expected exception " + expected + " but call completed successfully.");
     }
 
-    protected void testRecovery(byte[] logData, Class<?> expected) throws Exception
+    protected void testRecovery(final byte[] logData, Class<?> expected) throws Exception
     {
-        runExpecting(() -> testRecovery(logData, CommitLogDescriptor.VERSION_20), expected);
-        runExpecting(() -> testRecovery(new CommitLogDescriptor(4, null), logData), expected);
+        runExpecting(new Callable<Void>() {
+            public Void call() throws Exception
+            {
+                return testRecovery(logData, CommitLogDescriptor.VERSION_20);
+            }
+        }, expected);
+        runExpecting(new Callable<Void>() {
+            public Void call() throws Exception
+            {
+                return testRecovery(new CommitLogDescriptor(4, null), logData);
+            }
+        }, expected);
     }
 
     @Test
