@@ -140,6 +140,7 @@ public class CommitLogTest
         testRecoveryWithGarbageLog();
     }
 
+    @Test
     public void testRecoveryWithGarbageLog_ignoredByProperty() throws Exception
     {
         try {
@@ -150,6 +151,7 @@ public class CommitLogTest
         }
     }
 
+    @Test
     public void testRecoveryWithGarbageLog_ignoredByPolicy() throws Exception
     {
         CommitFailurePolicy existingPolicy = DatabaseDescriptor.getCommitFailurePolicy();
