@@ -38,15 +38,15 @@ import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 import com.google.common.collect.ImmutableMap;
+
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+
+import org.junit.*;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
@@ -65,6 +65,8 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.JVMStabilityInspector;
+import org.apache.cassandra.utils.KillerForTests;
 import org.apache.cassandra.utils.vint.VIntCoding;
 
 public class CommitLogTest
@@ -86,14 +88,16 @@ public class CommitLogTest
                                     KeyspaceParams.simpleTransient(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, STANDARD1, 0, AsciiType.instance, BytesType.instance),
                                     SchemaLoader.standardCFMD(KEYSPACE1, STANDARD2, 0, AsciiType.instance, BytesType.instance));
-        System.setProperty("cassandra.commitlog.stop_on_errors", "true");
         CompactionManager.instance.disableAutoCompaction();
     }
 
-    @Test(expected = CommitLogReplayException.class)
+    @Test
     public void testRecoveryWithEmptyLog() throws Exception
     {
-        CommitLog.instance.recover(new File[]{ tmpFile(CommitLogDescriptor.current_version) });
+        runExpecting(() -> {
+            CommitLog.instance.recover(new File[]{ tmpFile(CommitLogDescriptor.current_version) });
+            return null;
+        }, CommitLogReplayException.class);
     }
 
     @Test
@@ -115,10 +119,13 @@ public class CommitLogTest
         testRecoveryWithBadSizeArgument(100, 10);
     }
 
-    @Test(expected = CommitLogReplayException.class)
+    @Test
     public void testRecoveryWithShortSize() throws Exception
     {
-        testRecovery(new byte[2], CommitLogDescriptor.VERSION_20);
+        runExpecting(() -> {
+            testRecovery(new byte[2], CommitLogDescriptor.VERSION_20);
+            return null;
+        }, CommitLogReplayException.class);
     }
 
     @Test
@@ -142,10 +149,13 @@ public class CommitLogTest
         testRecovery(garbage, CommitLogDescriptor.current_version);
     }
 
-    @Test(expected = CommitLogReplayException.class)
+    @Test
     public void testRecoveryWithGarbageLog_fail() throws Exception
     {
-        testRecoveryWithGarbageLog();
+        runExpecting(() -> {
+            testRecoveryWithGarbageLog();
+            return null;
+        }, CommitLogReplayException.class);
     }
 
     @Test
@@ -156,18 +166,6 @@ public class CommitLogTest
             testRecoveryWithGarbageLog();
         } finally {
             System.clearProperty(CommitLogReplayer.IGNORE_REPLAY_ERRORS_PROPERTY);
-        }
-    }
-
-    @Test
-    public void testRecoveryWithGarbageLog_ignoredByPolicy() throws Exception
-    {
-        CommitFailurePolicy existingPolicy = DatabaseDescriptor.getCommitFailurePolicy();
-        try {
-            DatabaseDescriptor.setCommitFailurePolicy(CommitFailurePolicy.ignore);
-            testRecoveryWithGarbageLog();
-        } finally {
-            DatabaseDescriptor.setCommitFailurePolicy(existingPolicy);
         }
     }
 
@@ -390,7 +388,7 @@ public class CommitLogTest
         return null;
     }
 
-    @Test(expected = CommitLogReplayException.class)
+    @Test
     public void testRecoveryWithIdMismatch() throws Exception
     {
         CommitLogDescriptor desc = new CommitLogDescriptor(4, null);
@@ -400,20 +398,32 @@ public class CommitLogTest
         try (OutputStream lout = new FileOutputStream(logFile))
         {
             lout.write(buf.array(), 0, buf.position());
-            //statics make it annoying to test things correctly
-            CommitLog.instance.recover(logFile.getPath()); //CASSANDRA-1119 / CASSANDRA-1179 throw on failure*/
+
+            runExpecting(() -> {
+                CommitLog.instance.recover(logFile.getPath()); //CASSANDRA-1119 / CASSANDRA-1179 throw on failure*/
+                return null;
+            }, CommitLogReplayException.class);
         }
     }
 
-    @Test(expected = CommitLogReplayException.class)
+    @Test
     public void testRecoveryWithBadCompressor() throws Exception
     {
         CommitLogDescriptor desc = new CommitLogDescriptor(4, new ParameterizedClass("UnknownCompressor", null));
-        testRecovery(desc, new byte[0]);
+        runExpecting(() -> {
+            testRecovery(desc, new byte[0]);
+            return null;
+        }, CommitLogReplayException.class);
     }
 
     protected void runExpecting(Callable<Void> r, Class<?> expected)
     {
+        JVMStabilityInspector.Killer originalKiller;
+        KillerForTests killerForTests;
+
+        killerForTests = new KillerForTests();
+        originalKiller = JVMStabilityInspector.replaceKiller(killerForTests);
+
         Throwable caught = null;
         try
         {
@@ -427,22 +437,15 @@ public class CommitLogTest
         }
         if (expected != null && caught == null)
             Assert.fail("Expected exception " + expected + " but call completed successfully.");
+
+        JVMStabilityInspector.replaceKiller(originalKiller);
+        assertEquals("JVM killed", expected != null, killerForTests.wasKilled());
     }
 
     protected void testRecovery(final byte[] logData, Class<?> expected) throws Exception
     {
-        runExpecting(new Callable<Void>() {
-            public Void call() throws Exception
-            {
-                return testRecovery(logData, CommitLogDescriptor.VERSION_20);
-            }
-        }, expected);
-        runExpecting(new Callable<Void>() {
-            public Void call() throws Exception
-            {
-                return testRecovery(new CommitLogDescriptor(4, null), logData);
-            }
-        }, expected);
+        runExpecting(() -> testRecovery(logData, CommitLogDescriptor.VERSION_20), expected);
+        runExpecting(() -> testRecovery(new CommitLogDescriptor(4, null), logData), expected);
     }
 
     @Test

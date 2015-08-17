@@ -30,14 +30,14 @@ import junit.framework.Assert;
 
 import com.google.common.base.Predicate;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.config.Config.CommitFailurePolicy;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
@@ -45,6 +45,8 @@ import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.JVMStabilityInspector;
+import org.apache.cassandra.utils.KillerForTests;
 import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
 
 public class CommitLogUpgradeTest
@@ -58,6 +60,24 @@ public class CommitLogUpgradeTest
     static final String TABLE = "Standard1";
     static final String KEYSPACE = "Keyspace1";
     static final String CELLNAME = "name";
+
+    private JVMStabilityInspector.Killer originalKiller;
+    private KillerForTests killerForTests;
+    private boolean shouldBeKilled = false;
+
+    @Before
+    public void prepareToBeKilled()
+    {
+        killerForTests = new KillerForTests();
+        originalKiller = JVMStabilityInspector.replaceKiller(killerForTests);
+    }
+
+    @After
+    public void cleanUp()
+    {
+        JVMStabilityInspector.replaceKiller(originalKiller);
+        Assert.assertEquals("JVM killed", shouldBeKilled, killerForTests.wasKilled());
+    }
 
     @Test
     public void test20() throws Exception
@@ -98,6 +118,7 @@ public class CommitLogUpgradeTest
     @Test(expected = CommitLogReplayException.class)
     public void test22_bitrot() throws Exception
     {
+        shouldBeKilled = true;
         testRestore(DATA_DIR + "2.2-lz4-bitrot");
     }
 
@@ -112,21 +133,10 @@ public class CommitLogUpgradeTest
         }
     }
 
-    @Test
-    public void test22_bitrot_ignore_policy() throws Exception
-    {
-        CommitFailurePolicy existingPolicy = DatabaseDescriptor.getCommitFailurePolicy();
-        try {
-            DatabaseDescriptor.setCommitFailurePolicy(CommitFailurePolicy.ignore);
-            testRestore(DATA_DIR + "2.2-lz4-bitrot");
-        } finally {
-            DatabaseDescriptor.setCommitFailurePolicy(existingPolicy);
-        }
-    }
-
     @Test(expected = CommitLogReplayException.class)
     public void test22_bitrot2() throws Exception
     {
+        shouldBeKilled = true;
         testRestore(DATA_DIR + "2.2-lz4-bitrot2");
     }
 
