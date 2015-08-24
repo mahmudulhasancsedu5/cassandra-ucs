@@ -43,7 +43,7 @@ public class ChecksummedRandomAccessReader extends RandomAccessReader
 
     protected ChecksummedRandomAccessReader(File file, ChannelProxy channel, DataIntegrityMetadata.ChecksumValidator validator)
     {
-        super(channel, validator.chunkSize, -1, BufferType.ON_HEAP);
+        super(channel, validator.chunkSize, -1, BufferType.OFF_HEAP);
         this.validator = validator;
         this.file = file;
     }

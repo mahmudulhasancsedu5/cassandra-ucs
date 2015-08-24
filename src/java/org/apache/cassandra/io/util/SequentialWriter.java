@@ -155,7 +155,7 @@ public class SequentialWriter extends BufferedDataOutputStreamPlus implements Tr
      */
     public static SequentialWriter open(File file)
     {
-        return new SequentialWriter(file, DEFAULT_BUFFER_SIZE, BufferType.ON_HEAP);
+        return new SequentialWriter(file, DEFAULT_BUFFER_SIZE, BufferType.OFF_HEAP);
     }
 
     public static ChecksummedSequentialWriter open(File file, File crcPath)
