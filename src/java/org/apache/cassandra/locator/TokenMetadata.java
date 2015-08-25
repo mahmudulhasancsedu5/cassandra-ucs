@@ -109,10 +109,16 @@ public class TokenMetadata
 
     public TokenMetadata()
     {
+        this(DatabaseDescriptor.getEndpointSnitch(),
+             DatabaseDescriptor.getPartitioner());
+    }
+
+    TokenMetadata(IEndpointSnitch snitch, IPartitioner partitioner)
+    {
         this(SortedBiMultiValMap.<Token, InetAddress>create(null, inetaddressCmp),
              HashBiMap.<InetAddress, UUID>create(),
-             new Topology(),
-             DatabaseDescriptor.getPartitioner());
+             new Topology(snitch),
+             partitioner);
     }
 
     private TokenMetadata(BiMultiValMap<Token, InetAddress> tokenToEndpointMap, BiMap<InetAddress, UUID> endpointsMap, Topology topology, IPartitioner partitioner)
@@ -1158,8 +1164,11 @@ public class TokenMetadata
         /** reverse-lookup map for endpoint to current known dc/rack assignment */
         private final Map<InetAddress, Pair<String, String>> currentLocations;
 
-        Topology()
+        IEndpointSnitch snitch;
+
+        protected Topology(IEndpointSnitch snitch)
         {
+            this.snitch = snitch;
             dcEndpoints = HashMultimap.create();
             dcRacks = new HashMap<>();
             currentLocations = new HashMap<>();
@@ -1189,7 +1198,6 @@ public class TokenMetadata
          */
         void addEndpoint(InetAddress ep)
         {
-            IEndpointSnitch snitch = DatabaseDescriptor.getEndpointSnitch();
             String dc = snitch.getDatacenter(ep);
             String rack = snitch.getRack(ep);
             Pair<String, String> current = currentLocations.get(ep);
@@ -1233,7 +1241,6 @@ public class TokenMetadata
 
         void updateEndpoint(InetAddress ep)
         {
-            IEndpointSnitch snitch = DatabaseDescriptor.getEndpointSnitch();
             if (snitch == null || !currentLocations.containsKey(ep))
                 return;
 
@@ -1242,7 +1249,6 @@ public class TokenMetadata
 
         void updateEndpoints()
         {
-            IEndpointSnitch snitch = DatabaseDescriptor.getEndpointSnitch();
             if (snitch == null)
                 return;
 
