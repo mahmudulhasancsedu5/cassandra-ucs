@@ -26,12 +26,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import junit.framework.Assert;
-import org.apache.cassandra.config.DatabaseDescriptor;
+
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.OrderPreservingPartitioner.StringToken;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.locator.PropertyFileSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
@@ -43,10 +42,9 @@ import org.apache.cassandra.service.StorageService;
 public class MaterializedViewUtilsTest
 {
     @BeforeClass
-    public static void setUp() throws ConfigurationException
+    public static void setUp() throws ConfigurationException, ClassNotFoundException
     {
-        IEndpointSnitch snitch = new PropertyFileSnitch();
-        DatabaseDescriptor.setEndpointSnitch(snitch);
+        StorageService.instance.updateSnitch(PropertyFileSnitch.class.getName(), false, null, null, null);
         Keyspace.setInitialized();
     }
 

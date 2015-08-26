@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
-import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
@@ -161,7 +160,7 @@ public class TokenAllocation
     static StrategyAdapter getStrategy(final TokenMetadata tokenMetadata, final AbstractReplicationStrategy rs, final InetAddress endpoint)
     {
         if (rs instanceof NetworkTopologyStrategy)
-            return getStrategy(tokenMetadata, (NetworkTopologyStrategy) rs, rs.snitch, endpoint);
+            return getStrategy(tokenMetadata, (NetworkTopologyStrategy) rs, endpoint);
         if (rs instanceof SimpleStrategy)
             return getStrategy(tokenMetadata, (SimpleStrategy) rs, endpoint);
         throw new ConfigurationException("Token allocation does not support replication strategy " + rs.getClass().getSimpleName());
@@ -193,12 +192,12 @@ public class TokenAllocation
         };
     }
 
-    static StrategyAdapter getStrategy(final TokenMetadata tokenMetadata, final NetworkTopologyStrategy rs, final IEndpointSnitch snitch, final InetAddress endpoint)
+    static StrategyAdapter getStrategy(final TokenMetadata tokenMetadata, final NetworkTopologyStrategy rs, final InetAddress endpoint)
     {
-        final String dc = snitch.getDatacenter(endpoint);
+        Topology topology = tokenMetadata.getTopology();
+        final String dc = topology.getDatacenter(endpoint);
         final int replicas = rs.getReplicationFactor(dc);
 
-        Topology topology = tokenMetadata.getTopology();
         int racks = topology.getDatacenterRacks().get(dc).size();
 
         if (replicas >= racks)
@@ -214,13 +213,13 @@ public class TokenAllocation
                 @Override
                 public Object getGroup(InetAddress unit)
                 {
-                    return snitch.getRack(unit);
+                    return topology.getRack(unit);
                 }
 
                 @Override
                 public boolean inAllocationRing(InetAddress other)
                 {
-                    return dc.equals(snitch.getDatacenter(other));
+                    return dc.equals(topology.getDatacenter(other));
                 }
             };
         }
@@ -244,7 +243,7 @@ public class TokenAllocation
                 @Override
                 public boolean inAllocationRing(InetAddress other)
                 {
-                    return dc.equals(snitch.getDatacenter(other));
+                    return dc.equals(topology.getDatacenter(other));
                 }
             };
         }

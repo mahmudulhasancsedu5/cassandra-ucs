@@ -44,6 +44,9 @@ public class OldNetworkTopologyStrategy extends AbstractReplicationStrategy
 
     public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)
     {
+        // Take local copy of snitch so it doesn't change during the operation.
+        IEndpointSnitch snitch = this.snitch;
+
         int replicas = getReplicationFactor();
         List<InetAddress> endpoints = new ArrayList<InetAddress>(replicas);
         ArrayList<Token> tokens = metadata.sortedTokens();

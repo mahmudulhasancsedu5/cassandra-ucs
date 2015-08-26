@@ -28,6 +28,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.TokenMetadata.Topology;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.Pair;
 
 import com.google.common.collect.Multimap;
 
@@ -48,14 +49,12 @@ import com.google.common.collect.Multimap;
  */
 public class NetworkTopologyStrategy extends AbstractReplicationStrategy
 {
-    private final IEndpointSnitch snitch;
     private final Map<String, Integer> datacenters;
     private static final Logger logger = LoggerFactory.getLogger(NetworkTopologyStrategy.class);
 
     public NetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions) throws ConfigurationException
     {
         super(keyspaceName, tokenMetadata, snitch, configOptions);
-        this.snitch = snitch;
 
         Map<String, Integer> newDatacenters = new HashMap<String, Integer>();
         if (configOptions != null)
@@ -77,20 +76,21 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
     /**
      * Endpoint adder applying the replication rules for a given DC.
      */
-    final class EndpointAdder
+    private static final class EndpointAdder
     {
         /** List accepted endpoints get pushed into. */
         Set<InetAddress> endpoints;
         /** Racks encountered so far. Replicas are put into separate racks while possible. */
-        Set<String> racks = new HashSet<>();
+        Set<Pair<String, String>> racks;
 
         /** Number of replicas left to fill from this DC. */
         int rfLeft;
         int acceptableRackRepeats;
 
-        EndpointAdder(int rf, int rackCount, int nodeCount, Set<InetAddress> endpoints)
+        EndpointAdder(int rf, int rackCount, int nodeCount, Set<InetAddress> endpoints, Set<Pair<String, String>> racks)
         {
             this.endpoints = endpoints;
+            this.racks = racks;
             // If there aren't enough nodes in this DC to fill the RF, the number of nodes is the effective RF.
             this.rfLeft = Math.min(rf, nodeCount);
             // If there aren't enough racks in this DC to fill the RF, we'll still use at least one node from each rack,
@@ -102,13 +102,12 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
          * Attempts to add an endpoint to the replicas for this datacenter, adding to the endpoints set if successful.
          * Returns true if the endpoint was added, and this datacenter does not require further replicas.
          */
-        boolean addEndpointAndCheckIfDone(InetAddress ep)
+        boolean addEndpointAndCheckIfDone(InetAddress ep, Pair<String,String> location)
         {
             if (done())
                 return false;
 
-            String rack = snitch.getRack(ep);
-            if (racks.add(rack))
+            if (racks.add(location))
             {
                 // New rack.
                 --rfLeft;
@@ -142,6 +141,7 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
     {
         // we want to preserve insertion order so that the first added endpoint becomes primary
         Set<InetAddress> replicas = new LinkedHashSet<>();
+        Set<Pair<String, String>> seenRacks = new HashSet<>();
 
         Topology topology = tokenMetadata.getTopology();
         // all endpoints in each DC, so we can check when we have exhausted all the members of a DC
@@ -161,10 +161,10 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
             int nodeCount = sizeOrZero(allEndpoints.get(dc));
 
             // DC could be starting with 0 RF or nodes, count as finished if so.
-            if (rf <= 0 && nodeCount <= 0)
+            if (rf <= 0 || nodeCount <= 0)
                 continue;
 
-            EndpointAdder adder = new EndpointAdder(rf, sizeOrZero(racks.get(dc)), nodeCount, replicas);
+            EndpointAdder adder = new EndpointAdder(rf, sizeOrZero(racks.get(dc)), nodeCount, replicas, seenRacks);
             dcs.put(dc, adder);
             ++dcsToFill;
         }
@@ -174,8 +174,9 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
         {
             Token next = tokenIter.next();
             InetAddress ep = tokenMetadata.getEndpoint(next);
-            EndpointAdder adder = dcs.get(snitch.getDatacenter(ep));
-            if (adder.addEndpointAndCheckIfDone(ep))
+            Pair<String, String> location = topology.getLocation(ep);
+            EndpointAdder adder = dcs.get(location.left);
+            if (adder != null && adder.addEndpointAndCheckIfDone(ep, location))
                 --dcsToFill;
         }
         return new ArrayList<InetAddress>(replicas);

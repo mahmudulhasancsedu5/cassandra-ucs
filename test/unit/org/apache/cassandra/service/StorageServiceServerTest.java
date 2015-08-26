@@ -28,6 +28,7 @@ import java.util.*;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,7 +46,6 @@ import org.apache.cassandra.dht.OrderPreservingPartitioner.StringToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.PropertyFileSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.schema.KeyspaceParams;
@@ -61,10 +61,9 @@ import static org.junit.Assume.assumeTrue;
 public class StorageServiceServerTest
 {
     @BeforeClass
-    public static void setUp() throws ConfigurationException
+    public static void setUp() throws ConfigurationException, ClassNotFoundException
     {
-        IEndpointSnitch snitch = new PropertyFileSnitch();
-        DatabaseDescriptor.setEndpointSnitch(snitch);
+        StorageService.instance.updateSnitch(PropertyFileSnitch.class.getName(), false, null, null, null);
         Keyspace.setInitialized();
     }
 

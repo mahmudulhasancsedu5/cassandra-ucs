@@ -23,10 +23,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
-import com.google.common.base.Functions;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
@@ -37,7 +34,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.OrderPreservingPartitioner.StringToken;
 import org.apache.cassandra.dht.Token;
@@ -53,8 +50,7 @@ public class NetworkTopologyStrategyTest
     public void testProperties() throws IOException, ConfigurationException
     {
         IEndpointSnitch snitch = new PropertyFileSnitch();
-        DatabaseDescriptor.setEndpointSnitch(snitch);
-        TokenMetadata metadata = new TokenMetadata();
+        TokenMetadata metadata = new TokenMetadata(snitch, ByteOrderedPartitioner.instance);
         createDummyTokens(metadata, true);
 
         Map<String, String> configOptions = new HashMap<String, String>();
@@ -77,8 +73,7 @@ public class NetworkTopologyStrategyTest
     public void testPropertiesWithEmptyDC() throws IOException, ConfigurationException
     {
         IEndpointSnitch snitch = new PropertyFileSnitch();
-        DatabaseDescriptor.setEndpointSnitch(snitch);
-        TokenMetadata metadata = new TokenMetadata();
+        TokenMetadata metadata = new TokenMetadata(snitch, ByteOrderedPartitioner.instance);
         createDummyTokens(metadata, false);
 
         Map<String, String> configOptions = new HashMap<String, String>();
@@ -105,8 +100,7 @@ public class NetworkTopologyStrategyTest
         int[] dcReplication = new int[]{2, 6, 6};
 
         IEndpointSnitch snitch = new RackInferringSnitch();
-        DatabaseDescriptor.setEndpointSnitch(snitch);
-        TokenMetadata metadata = new TokenMetadata();
+        TokenMetadata metadata = new TokenMetadata(snitch, ByteOrderedPartitioner.instance);
         Map<String, String> configOptions = new HashMap<String, String>();
         Multimap<InetAddress, Token> tokens = HashMultimap.create();
 

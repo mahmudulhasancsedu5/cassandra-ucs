@@ -28,6 +28,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,7 +94,7 @@ public class TokenMetadata
     private final ReadWriteLock lock = new ReentrantReadWriteLock(true);
     private volatile ArrayList<Token> sortedTokens;
 
-    private final Topology topology;
+    private Topology topology;
     public final IPartitioner partitioner;
 
     private static final Comparator<InetAddress> inetaddressCmp = new Comparator<InetAddress>()
@@ -137,6 +138,11 @@ public class TokenMetadata
     public TokenMetadata cloneWithNewPartitioner(IPartitioner newPartitioner)
     {
         return new TokenMetadata(tokenToEndpointMap, endpointToHostIdMap, topology, newPartitioner);
+    }
+
+    public TokenMetadata withNewSnitch(IEndpointSnitch snitch)
+    {
+        return new TokenMetadata(tokenToEndpointMap, endpointToHostIdMap, topology.withNewSnitch(snitch), partitioner);
     }
 
     private ArrayList<Token> sortTokens()
@@ -832,20 +838,20 @@ public class TokenMetadata
 
     public Token getPredecessor(Token token)
     {
-        List tokens = sortedTokens();
+        List<Token> tokens = sortedTokens();
         int index = Collections.binarySearch(tokens, token);
 //        assert index >= 0 : token + " not found in " + StringUtils.join(tokenToEndpointMap.keySet(), ", ");
         if (index < 0) index = -index-1;
-        return (Token) (index == 0 ? tokens.get(tokens.size() - 1) : tokens.get(index - 1));
+        return index == 0 ? tokens.get(tokens.size() - 1) : tokens.get(index - 1);
     }
 
     public Token getSuccessor(Token token)
     {
-        List tokens = sortedTokens();
+        List<Token> tokens = sortedTokens();
         int index = Collections.binarySearch(tokens, token);
 //        assert index >= 0 : token + " not found in " + StringUtils.join(tokenToEndpointMap.keySet(), ", ");
         if (index < 0) return (Token) tokens.get(-index-1);
-        return (Token) ((index == (tokens.size() - 1)) ? tokens.get(0) : tokens.get(index + 1));
+        return (index == (tokens.size() - 1)) ? tokens.get(0) : tokens.get(index + 1);
     }
 
     /** @return a copy of the bootstrapping tokens map */
@@ -906,7 +912,7 @@ public class TokenMetadata
         }
     }
 
-    public static int firstTokenIndex(final ArrayList ring, Token start, boolean insertMin)
+    public static int firstTokenIndex(final ArrayList<Token> ring, Token start, boolean insertMin)
     {
         assert ring.size() > 0;
         // insert the minimum token (at index == -1) if we were asked to include it and it isn't a member of the ring
@@ -934,7 +940,7 @@ public class TokenMetadata
     {
         if (ring.isEmpty())
             return includeMin ? Iterators.singletonIterator(start.getPartitioner().getMinimumToken())
-                              : Iterators.<Token>emptyIterator();
+                              : Collections.emptyIterator();
 
         final boolean insertMin = includeMin && !ring.get(0).isMinimum();
         final int startIndex = firstTokenIndex(ring, start, insertMin);
@@ -1164,7 +1170,7 @@ public class TokenMetadata
         /** reverse-lookup map for endpoint to current known dc/rack assignment */
         private final Map<InetAddress, Pair<String, String>> currentLocations;
 
-        IEndpointSnitch snitch;
+        public final IEndpointSnitch snitch;
 
         protected Topology(IEndpointSnitch snitch)
         {
@@ -1172,6 +1178,14 @@ public class TokenMetadata
             dcEndpoints = HashMultimap.create();
             dcRacks = new HashMap<>();
             currentLocations = new HashMap<>();
+        }
+
+        public Topology withNewSnitch(IEndpointSnitch newSnitch)
+        {
+            Topology copy = new Topology(newSnitch);
+            for (InetAddress ep : currentLocations.keySet())
+                copy.addEndpoint(ep);
+            return copy;
         }
 
         void clear()
@@ -1191,6 +1205,7 @@ public class TokenMetadata
             for (String dc : other.dcRacks.keySet())
                 dcRacks.put(dc, HashMultimap.create(other.dcRacks.get(dc)));
             currentLocations = new HashMap<>(other.currentLocations);
+            snitch = other.snitch;
         }
 
         /**
@@ -1282,6 +1297,24 @@ public class TokenMetadata
         public Map<String, Multimap<String, InetAddress>> getDatacenterRacks()
         {
             return dcRacks;
+        }
+
+        /**
+         * @return The DC and rack of the given endpoint.
+         */
+        public Pair<String, String> getLocation(InetAddress addr)
+        {
+            return currentLocations.get(addr);
+        }
+
+        public String getRack(InetAddress addr)
+        {
+            return snitch.getRack(addr);
+        }
+
+        public String getDatacenter(InetAddress addr)
+        {
+            return snitch.getDatacenter(addr);
         }
     }
 }
