@@ -76,18 +76,22 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
     /**
      * Endpoint adder applying the replication rules for a given DC.
      */
-    private static final class EndpointAdder
+    private static final class DatacenterEndpoints
     {
         /** List accepted endpoints get pushed into. */
         Set<InetAddress> endpoints;
-        /** Racks encountered so far. Replicas are put into separate racks while possible. */
+        /**
+         * Racks encountered so far. Replicas are put into separate racks while possible.
+         * For efficiency the set is shared between the instances, using the location pair (dc, rack) to make sure
+         * clashing names aren't a problem.
+         */
         Set<Pair<String, String>> racks;
 
         /** Number of replicas left to fill from this DC. */
         int rfLeft;
         int acceptableRackRepeats;
 
-        EndpointAdder(int rf, int rackCount, int nodeCount, Set<InetAddress> endpoints, Set<Pair<String, String>> racks)
+        DatacenterEndpoints(int rf, int rackCount, int nodeCount, Set<InetAddress> endpoints, Set<Pair<String, String>> racks)
         {
             this.endpoints = endpoints;
             this.racks = racks;
@@ -151,21 +155,20 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
         assert !allEndpoints.isEmpty() && !racks.isEmpty() : "not aware of any cluster members";
 
         int dcsToFill = 0;
-        Map<String, EndpointAdder> dcs = new HashMap<>(datacenters.size() * 2);
+        Map<String, DatacenterEndpoints> dcs = new HashMap<>(datacenters.size() * 2);
 
-        // Create an adder for each non-empty DC.
+        // Create a DatacenterEndpoints object for each non-empty DC.
         for (Map.Entry<String, Integer> en : datacenters.entrySet())
         {
             String dc = en.getKey();
             int rf = en.getValue();
             int nodeCount = sizeOrZero(allEndpoints.get(dc));
 
-            // DC could be starting with 0 RF or nodes, count as finished if so.
             if (rf <= 0 || nodeCount <= 0)
                 continue;
 
-            EndpointAdder adder = new EndpointAdder(rf, sizeOrZero(racks.get(dc)), nodeCount, replicas, seenRacks);
-            dcs.put(dc, adder);
+            DatacenterEndpoints dcEndpoints = new DatacenterEndpoints(rf, sizeOrZero(racks.get(dc)), nodeCount, replicas, seenRacks);
+            dcs.put(dc, dcEndpoints);
             ++dcsToFill;
         }
 
@@ -175,8 +178,8 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
             Token next = tokenIter.next();
             InetAddress ep = tokenMetadata.getEndpoint(next);
             Pair<String, String> location = topology.getLocation(ep);
-            EndpointAdder adder = dcs.get(location.left);
-            if (adder != null && adder.addEndpointAndCheckIfDone(ep, location))
+            DatacenterEndpoints dcEndpoints = dcs.get(location.left);
+            if (dcEndpoints != null && dcEndpoints.addEndpointAndCheckIfDone(ep, location))
                 --dcsToFill;
         }
         return new ArrayList<InetAddress>(replicas);
