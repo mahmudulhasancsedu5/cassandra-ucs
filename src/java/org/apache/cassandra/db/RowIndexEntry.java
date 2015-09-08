@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,7 +27,6 @@ import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cache.IMeasurableMemory;
-import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -36,7 +34,7 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.ObjectSizes;
 
-public class RowIndexEntry<T> implements IMeasurableMemory
+public class RowIndexEntry implements IMeasurableMemory
 {
     private static final long EMPTY_SIZE = ObjectSizes.measure(new RowIndexEntry(0));
 
@@ -52,7 +50,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
         return 0;
     }
 
-    public static RowIndexEntry<IndexHelper.IndexInfo> create(long position, DeletionTime deletionTime, ColumnIndex index)
+    public static RowIndexEntry create(long position, DeletionTime deletionTime, ColumnIndex index)
     {
         assert index != null;
         assert deletionTime != null;
@@ -63,7 +61,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
         if (index.columnsIndex.size() > 1)
             return new IndexedEntry(position, deletionTime, index.partitionHeaderLength, index.columnsIndex);
         else
-            return new RowIndexEntry<>(position);
+            return new RowIndexEntry(position);
     }
 
     /**
@@ -99,7 +97,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
         throw new UnsupportedOperationException();
     }
 
-    public List<T> columnsIndex()
+    public List<IndexHelper.IndexInfo> columnsIndex()
     {
         return Collections.emptyList();
     }
@@ -109,14 +107,14 @@ public class RowIndexEntry<T> implements IMeasurableMemory
         return EMPTY_SIZE;
     }
 
-    public static interface IndexSerializer<T>
+    public static interface IndexSerializer
     {
-        void serialize(RowIndexEntry<T> rie, DataOutputPlus out) throws IOException;
-        RowIndexEntry<T> deserialize(DataInputPlus in) throws IOException;
-        public int serializedSize(RowIndexEntry<T> rie);
+        void serialize(RowIndexEntry rie, DataOutputPlus out) throws IOException;
+        RowIndexEntry deserialize(DataInputPlus in) throws IOException;
+        public int serializedSize(RowIndexEntry rie);
     }
 
-    public static class Serializer implements IndexSerializer<IndexHelper.IndexInfo>
+    public static class Serializer implements IndexSerializer
     {
         private final IndexHelper.IndexInfo.Serializer idxSerializer;
         private final Version version;
@@ -127,7 +125,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
             this.version = version;
         }
 
-        public void serialize(RowIndexEntry<IndexHelper.IndexInfo> rie, DataOutputPlus out) throws IOException
+        public void serialize(RowIndexEntry rie, DataOutputPlus out) throws IOException
         {
             assert version.storeRows() : "We read old index files but we should never write them";
 
@@ -144,7 +142,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
             }
         }
 
-        public RowIndexEntry<IndexHelper.IndexInfo> deserialize(DataInputPlus in) throws IOException
+        public RowIndexEntry deserialize(DataInputPlus in) throws IOException
         {
             if (!version.storeRows())
             {
@@ -176,7 +174,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
                 }
                 else
                 {
-                    return new RowIndexEntry<>(position);
+                    return new RowIndexEntry(position);
                 }
             }
 
@@ -196,7 +194,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
             }
             else
             {
-                return new RowIndexEntry<>(position);
+                return new RowIndexEntry(position);
             }
         }
 
@@ -223,7 +221,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
             FileUtils.skipBytesFully(in, size);
         }
 
-        public int serializedSize(RowIndexEntry<IndexHelper.IndexInfo> rie)
+        public int serializedSize(RowIndexEntry rie)
         {
             assert version.storeRows() : "We read old index files but we should never write them";
 
@@ -247,7 +245,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
     /**
      * An entry in the row index for a row whose columns are indexed.
      */
-    private static class IndexedEntry extends RowIndexEntry<IndexHelper.IndexInfo>
+    private static class IndexedEntry extends RowIndexEntry
     {
         private final DeletionTime deletionTime;
 

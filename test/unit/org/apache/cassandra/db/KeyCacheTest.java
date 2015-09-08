@@ -17,14 +17,10 @@
  */
 package org.apache.cassandra.db;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
-import com.google.common.util.concurrent.Uninterruptibles;
+import com.google.common.collect.ImmutableList;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -32,10 +28,9 @@ import org.junit.Test;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.cache.KeyCacheKey;
-import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -50,6 +45,7 @@ public class KeyCacheTest
     private static final String KEYSPACE1 = "KeyCacheTest1";
     private static final String COLUMN_FAMILY1 = "Standard1";
     private static final String COLUMN_FAMILY2 = "Standard2";
+    private static final String COLUMN_FAMILY3 = "Standard3";
 
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
@@ -58,7 +54,8 @@ public class KeyCacheTest
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, COLUMN_FAMILY1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, COLUMN_FAMILY2));
+                                    SchemaLoader.standardCFMD(KEYSPACE1, COLUMN_FAMILY2),
+                                    SchemaLoader.standardCFMD(KEYSPACE1, COLUMN_FAMILY3));
     }
 
     @AfterClass
@@ -83,7 +80,7 @@ public class KeyCacheTest
         store.forceBlockingFlush();
 
         // populate the cache
-        readData(KEYSPACE1, COLUMN_FAMILY2, 100);
+        readData(KEYSPACE1, COLUMN_FAMILY2, 0, 100);
         assertKeyCacheSize(100, KEYSPACE1, COLUMN_FAMILY2);
 
         // really? our caches don't implement the map interface? (hence no .addAll)
@@ -120,6 +117,56 @@ public class KeyCacheTest
     }
 
     @Test
+    public void testKeyCacheLoadWithLostTable() throws Exception
+    {
+        CompactionManager.instance.disableAutoCompaction();
+
+        ColumnFamilyStore store = Keyspace.open(KEYSPACE1).getColumnFamilyStore(COLUMN_FAMILY3);
+
+        // empty the cache
+        CacheService.instance.invalidateKeyCache();
+        assertKeyCacheSize(0, KEYSPACE1, COLUMN_FAMILY3);
+
+        // insert data and force to disk
+        SchemaLoader.insertData(KEYSPACE1, COLUMN_FAMILY3, 0, 100);
+        store.forceBlockingFlush();
+
+        Collection<SSTableReader> firstFlushTables = ImmutableList.copyOf(store.getLiveSSTables());
+
+        // populate the cache
+        readData(KEYSPACE1, COLUMN_FAMILY3, 0, 100);
+        assertKeyCacheSize(100, KEYSPACE1, COLUMN_FAMILY3);
+
+        // insert some new data and force to disk
+        SchemaLoader.insertData(KEYSPACE1, COLUMN_FAMILY3, 100, 50);
+        store.forceBlockingFlush();
+
+        // check that it's fine
+        readData(KEYSPACE1, COLUMN_FAMILY3, 100, 50);
+        assertKeyCacheSize(150, KEYSPACE1, COLUMN_FAMILY3);
+
+        // force the cache to disk
+        CacheService.instance.keyCache.submitWrite(Integer.MAX_VALUE).get();
+
+        CacheService.instance.invalidateKeyCache();
+        assertKeyCacheSize(0, KEYSPACE1, COLUMN_FAMILY3);
+
+        // check that the content is written correctly
+        CacheService.instance.keyCache.loadSaved(store);
+        assertKeyCacheSize(150, KEYSPACE1, COLUMN_FAMILY3);
+
+        CacheService.instance.invalidateKeyCache();
+        assertKeyCacheSize(0, KEYSPACE1, COLUMN_FAMILY3);
+
+        // now remove the first sstable from the store to simulate losing the file
+        store.markObsolete(firstFlushTables, OperationType.UNKNOWN);
+
+        // check that reading now correctly skips over lost table and reads the rest (CASSANDRA-10219)
+        CacheService.instance.keyCache.loadSaved(store);
+        assertKeyCacheSize(50, KEYSPACE1, COLUMN_FAMILY3);
+    }
+
+    @Test
     public void testKeyCache() throws ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
@@ -132,8 +179,6 @@ public class KeyCacheTest
 
         // KeyCache should start at size 0 if we're caching X% of zero data.
         assertKeyCacheSize(0, KEYSPACE1, COLUMN_FAMILY1);
-
-        Mutation rm;
 
         // inserts
         new RowUpdateBuilder(cfs.metadata, 0, "key1").clustering("1").build().applyUnsafe();
@@ -175,13 +220,12 @@ public class KeyCacheTest
         assertKeyCacheSize(noEarlyOpen ? 4 : 2, KEYSPACE1, COLUMN_FAMILY1);
     }
 
-    private static void readData(String keyspace, String columnFamily, int numberOfRows)
+    private static void readData(String keyspace, String columnFamily, int startRow, int numberOfRows)
     {
         ColumnFamilyStore store = Keyspace.open(keyspace).getColumnFamilyStore(columnFamily);
-        CFMetaData cfm = Schema.instance.getCFMetaData(keyspace, columnFamily);
 
         for (int i = 0; i < numberOfRows; i++)
-            Util.getAll(Util.cmd(store, "key" + i).includeRow("col" + i).build());
+            Util.getAll(Util.cmd(store, "key" + (i + startRow)).includeRow("col" + (i + startRow)).build());
     }
 
 
