@@ -47,7 +47,6 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.filter.QueryFilter;
-import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -492,7 +491,7 @@ public class CacheService implements CacheServiceMBean
             input.readBoolean(); // backwards compatibility for "promoted indexes" boolean
             if (reader == null)
             {
-                RowIndexEntry.Serializer.skipPromotedIndex(input);
+                RowIndexEntry.Serializer.skip(input);
                 return null;
             }
             RowIndexEntry entry = reader.metadata.comparator.rowIndexEntrySerializer().deserialize(input, reader.descriptor.version);
