@@ -234,7 +234,7 @@ public class CommitLogSegmentManager
                 else
                     prepared.cancel();
             }
-            while (availableSegment == null);
+            while (availableSegment == null && allocatingFrom == old);
         }
 
         LockSupport.unpark(managerThread);
