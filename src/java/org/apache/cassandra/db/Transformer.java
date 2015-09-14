@@ -162,9 +162,6 @@ public class Transformer
      */
     public static PartitionIterator apply(PartitionIterator iterator, Function function)
     {
-        if (EmptyIterators.isEmpty(iterator))
-            return iterator;
-
         assert !(function instanceof BasePartitionFunction) || function instanceof PartitionFunction;
 
         if (iterator instanceof Partitions) // already being transformed, so just add our function
@@ -177,10 +174,6 @@ public class Transformer
      */
     public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Function function)
     {
-        // we don't call .isEmpty() so that we minimize number of iteration steps performed outside of outer loop
-        if (EmptyIterators.isEmpty(iterator))
-            return iterator;
-
         if (iterator instanceof UnfilteredRows) // already being transformed, so just add our function
             return new UnfilteredRows(function, (UnfilteredRows) iterator);
         return new UnfilteredRows(iterator, function);
@@ -191,10 +184,6 @@ public class Transformer
      */
     public static RowIterator apply(RowIterator iterator, Function function)
     {
-        // we don't call .isEmpty() so that we minimize number of iteration steps performed outside of outer loop
-        if (EmptyIterators.isEmpty(iterator))
-            return iterator;
-
         if (iterator instanceof FilteredRows) // already being transformed, so just add our function
             return new FilteredRows(function, (FilteredRows) iterator);
         return new FilteredRows(iterator, function);
@@ -207,9 +196,6 @@ public class Transformer
      */
     public static PartitionIterator filter(UnfilteredPartitionIterator iterator, int nowInSecs)
     {
-        if (EmptyIterators.isEmpty(iterator))
-            return EmptyIterators.partition();
-
         Filter filter = new Filter(nowInSecs);
         if (iterator instanceof UnfilteredPartitions)
             return new Partitions(filter, (UnfilteredPartitions) iterator);
@@ -221,10 +207,6 @@ public class Transformer
      */
     public static RowIterator filter(UnfilteredRowIterator iterator, int nowInSecs)
     {
-        // we don't call .isEmpty() so that we minimize number of iteration steps performed outside of outer loop
-        if (EmptyIterators.isEmpty(iterator))
-            return EmptyIterators.row(iterator.metadata(), iterator.partitionKey(), iterator.isReverseOrder());
-
         Filter filter = new Filter(nowInSecs);
         if (iterator instanceof UnfilteredRows)
             return new FilteredRows(filter, (UnfilteredRows) iterator);
@@ -439,7 +421,7 @@ public class Transformer
 
         public boolean isForThrift()
         {
-            return input.isForThrift();
+            return isForThrift;
         }
 
         public CFMetaData metadata()
