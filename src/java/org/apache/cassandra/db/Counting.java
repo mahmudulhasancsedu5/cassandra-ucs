@@ -30,11 +30,9 @@ public class Counting
         {
             super(counter);
         }
-
         public RowIterator applyToPartition(RowIterator partition)
         {
-            counter.newPartition(partition.partitionKey(), partition.staticRow());
-            return Transformer.apply(partition, rowCounter);
+            return count(partition, rowCounter);
         }
     }
 
@@ -44,11 +42,9 @@ public class Counting
         {
             super(counter);
         }
-
         public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
         {
-            counter.newPartition(partition.partitionKey(), partition.staticRow());
-            return Transformer.apply(partition, rowCounter);
+            return count(partition, rowCounter);
         }
     }
 
@@ -123,23 +119,35 @@ public class Counting
         return count(iter, limits.newCounter(nowInSecs, false));
     }
 
-    public static RowIterator count(RowIterator iter, DataLimits.Counter counter)
+    public static RowIterator count(RowIterator iter, DataLimits limits, int nowInSecs)
     {
-        return Transformer.apply(iter, new RowCounter(counter));
+        return count(iter, limits.newCounter(nowInSecs, false));
     }
 
-    public static RowIterator count(RowIterator iter, DataLimits limits, int nowInSecs)
+    public static RowIterator count(RowIterator iter, DataLimits.Counter counter)
+    {
+        return count(iter, new RowCounter(counter));
+    }
+
+    public static RowIterator count(RowIterator iter, RowCounter counter)
+    {
+        counter.counter.newPartition(iter.partitionKey(), iter.staticRow());
+        return Transformer.apply(iter, counter);
+    }
+
+    public static UnfilteredRowIterator count(UnfilteredRowIterator iter, DataLimits limits, int nowInSecs)
     {
         return count(iter, limits.newCounter(nowInSecs, false));
     }
 
     public static UnfilteredRowIterator count(UnfilteredRowIterator iter, DataLimits.Counter counter)
     {
-        return Transformer.apply(iter, new RowCounter(counter));
+        return count(iter, new RowCounter(counter));
     }
 
-    public static UnfilteredRowIterator count(UnfilteredRowIterator iter, DataLimits limits, int nowInSecs)
+    public static UnfilteredRowIterator count(UnfilteredRowIterator iter, RowCounter counter)
     {
-        return count(iter, limits.newCounter(nowInSecs, false));
+        counter.counter.newPartition(iter.partitionKey(), iter.staticRow());
+        return Transformer.apply(iter, counter);
     }
 }

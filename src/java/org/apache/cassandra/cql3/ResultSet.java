@@ -20,6 +20,9 @@ package org.apache.cassandra.cql3;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.cassandra.transport.*;
@@ -35,6 +38,7 @@ import org.apache.cassandra.service.pager.PagingState;
 
 public class ResultSet
 {
+
     public static final Codec codec = new Codec();
 
     public final ResultMetadata metadata;

@@ -77,12 +77,13 @@ abstract class AbstractQueryPager implements QueryPager
     }
 
     private class Pager implements Transformer.PartitionFunction,
-                                   Transformer.RunOnClose,
-                                   Transformer.RowFunction
+                                   Transformer.RunOnClose
     {
         private final DataLimits pageLimits;
         private final DataLimits.Counter counter;
         private Row lastRow;
+        private boolean isFirstPartition = true;
+        private final LastRowUpdater lastRowUpdater = new LastRowUpdater();
 
         private Pager(DataLimits pageLimits, int nowInSec)
         {
@@ -95,20 +96,24 @@ abstract class AbstractQueryPager implements QueryPager
             DecoratedKey key = partition.partitionKey();
             if (lastKey == null || !lastKey.equals(key))
                 remainingInPartition = limits.perPartitionCount();
+            lastKey = key;
 
             // If this is the first partition of this page, this could be the continuation of a partition we've started
             // on the previous page. In which case, we could have the problem that the partition has no more "regular"
             // rows (but the page size is such we didn't knew before) but it does has a static row. We should then skip
             // the partition as returning it would means to the upper layer that the partition has "only" static columns,
             // which is not the case (and we know the static results have been sent on the previous page).
-            if (lastKey == null && isPreviouslyReturnedPartition(key) && !partition.hasNext())
+            if (isFirstPartition)
             {
-                partition.close();
-                return null;
+                isFirstPartition = false;
+                if (isPreviouslyReturnedPartition(key) && !partition.hasNext())
+                {
+                    partition.close();
+                    return null;
+                }
             }
 
-            lastKey = key;
-            return Transformer.apply(Counting.count(partition, counter), this);
+            return Transformer.apply(Counting.count(partition, counter), lastRowUpdater);
         }
 
         @Override
@@ -122,9 +127,13 @@ abstract class AbstractQueryPager implements QueryPager
             exhausted = counted < pageLimits.count();
         }
 
-        public Row applyToRow(Row row)
+        private final class LastRowUpdater implements Transformer.RowFunction
         {
-            return lastRow = row;
+            public Row applyToRow(Row row)
+            {
+                lastRow = row;
+                return row;
+            }
         }
     }
 
