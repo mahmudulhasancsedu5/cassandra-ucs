@@ -90,8 +90,11 @@ public class Schema
      */
     public Schema()
     {
-        load(SchemaKeyspace.metadata());
-        load(SystemKeyspace.metadata());
+        if (!Config.isClientMode())
+        {
+            load(SchemaKeyspace.metadata());
+            load(SystemKeyspace.metadata());
+        }
     }
 
     /**
