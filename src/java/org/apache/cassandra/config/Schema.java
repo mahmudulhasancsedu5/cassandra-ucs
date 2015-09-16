@@ -494,7 +494,7 @@ public class Schema
         Keyspace.clear(ksm.name);
         clearKeyspaceMetadata(ksm);
 
-        keyspace.writeOrder.awaitNewBarrier();
+        Keyspace.writeOrder.awaitNewBarrier();
 
         // force a new segment in the CL
         CommitLog.instance.forceRecycleAllSegments(droppedCfs);
