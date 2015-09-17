@@ -102,7 +102,10 @@ public class TokenMetadataTest
         final String RACK1 = "rack1";
         final String RACK2 = "rack2";
 
-        DatabaseDescriptor.setEndpointSnitch(new AbstractEndpointSnitch()
+        TokenMetadata tokenMetadata = tmd.cloneOnlyTokenMap();
+        assertNotNull(tokenMetadata);
+
+        tokenMetadata.updateSnitch(new AbstractEndpointSnitch()
         {
             @Override
             public String getRack(InetAddress endpoint)
@@ -123,11 +126,8 @@ public class TokenMetadataTest
             }
         });
 
-        tmd.updateNormalToken(token(ONE), first);
-        tmd.updateNormalToken(token(SIX), second);
-
-        TokenMetadata tokenMetadata = tmd.cloneOnlyTokenMap();
-        assertNotNull(tokenMetadata);
+        tokenMetadata.updateNormalToken(token(ONE), first);
+        tokenMetadata.updateNormalToken(token(SIX), second);
 
         TokenMetadata.Topology topology = tokenMetadata.getTopology();
         assertNotNull(topology);
@@ -149,7 +149,7 @@ public class TokenMetadataTest
         assertTrue(racks.get(DATA_CENTER).get(RACK1).contains(first));
         assertTrue(racks.get(DATA_CENTER).get(RACK2).contains(second));
 
-        DatabaseDescriptor.setEndpointSnitch(new AbstractEndpointSnitch()
+        tokenMetadata.updateSnitch(new AbstractEndpointSnitch()
         {
             @Override
             public String getRack(InetAddress endpoint)
@@ -169,9 +169,6 @@ public class TokenMetadataTest
                 return 0;
             }
         });
-
-        tokenMetadata.updateTopology(first);
-        tokenMetadata.updateTopology(second);
 
         allEndpoints = topology.getDatacenterEndpoints();
         assertNotNull(allEndpoints);
@@ -200,7 +197,10 @@ public class TokenMetadataTest
         final String RACK1 = "rack1";
         final String RACK2 = "rack2";
 
-        DatabaseDescriptor.setEndpointSnitch(new AbstractEndpointSnitch()
+        TokenMetadata tokenMetadata = tmd.cloneOnlyTokenMap();
+        assertNotNull(tokenMetadata);
+
+        tokenMetadata.updateSnitch(new AbstractEndpointSnitch()
         {
             @Override
             public String getRack(InetAddress endpoint)
@@ -221,11 +221,8 @@ public class TokenMetadataTest
             }
         });
 
-        tmd.updateNormalToken(token(ONE), first);
-        tmd.updateNormalToken(token(SIX), second);
-
-        TokenMetadata tokenMetadata = tmd.cloneOnlyTokenMap();
-        assertNotNull(tokenMetadata);
+        tokenMetadata.updateNormalToken(token(ONE), first);
+        tokenMetadata.updateNormalToken(token(SIX), second);
 
         TokenMetadata.Topology topology = tokenMetadata.getTopology();
         assertNotNull(topology);
@@ -247,7 +244,7 @@ public class TokenMetadataTest
         assertTrue(racks.get(DATA_CENTER).get(RACK1).contains(first));
         assertTrue(racks.get(DATA_CENTER).get(RACK1).contains(second));
 
-        DatabaseDescriptor.setEndpointSnitch(new AbstractEndpointSnitch()
+        tokenMetadata.updateSnitch(new AbstractEndpointSnitch()
         {
             @Override
             public String getRack(InetAddress endpoint)
@@ -267,8 +264,6 @@ public class TokenMetadataTest
                 return 0;
             }
         });
-
-        tokenMetadata.updateTopology();
 
         allEndpoints = topology.getDatacenterEndpoints();
         assertNotNull(allEndpoints);

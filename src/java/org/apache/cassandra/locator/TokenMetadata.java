@@ -28,7 +28,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,7 +93,7 @@ public class TokenMetadata
     private final ReadWriteLock lock = new ReentrantReadWriteLock(true);
     private volatile ArrayList<Token> sortedTokens;
 
-    private Topology topology;
+    private final Topology topology;
     public final IPartitioner partitioner;
 
     private static final Comparator<InetAddress> inetaddressCmp = new Comparator<InetAddress>()
@@ -138,11 +137,6 @@ public class TokenMetadata
     public TokenMetadata cloneWithNewPartitioner(IPartitioner newPartitioner)
     {
         return new TokenMetadata(tokenToEndpointMap, endpointToHostIdMap, topology, newPartitioner);
-    }
-
-    public TokenMetadata withNewSnitch(IEndpointSnitch snitch)
-    {
-        return new TokenMetadata(tokenToEndpointMap, endpointToHostIdMap, topology.withNewSnitch(snitch), partitioner);
     }
 
     private ArrayList<Token> sortTokens()
@@ -439,6 +433,7 @@ public class TokenMetadata
         {
             logger.info("Updating topology for {}", endpoint);
             topology.updateEndpoint(endpoint);
+            invalidateCachedRings();
         }
         finally
         {
@@ -457,6 +452,22 @@ public class TokenMetadata
         {
             logger.info("Updating topology for all endpoints that have changed");
             topology.updateEndpoints();
+            invalidateCachedRings();
+        }
+        finally
+        {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void updateSnitch(IEndpointSnitch newSnitch)
+    {
+        lock.writeLock().lock();
+        try
+        {
+            logger.info("Updating topology for all endpoints that have changed with new snitch");
+            topology.updateSnitch(newSnitch);
+            invalidateCachedRings();
         }
         finally
         {
@@ -1170,7 +1181,7 @@ public class TokenMetadata
         /** reverse-lookup map for endpoint to current known dc/rack assignment */
         private final Map<InetAddress, Pair<String, String>> currentLocations;
 
-        public final IEndpointSnitch snitch;
+        IEndpointSnitch snitch;
 
         protected Topology(IEndpointSnitch snitch)
         {
@@ -1178,14 +1189,6 @@ public class TokenMetadata
             dcEndpoints = HashMultimap.create();
             dcRacks = new HashMap<>();
             currentLocations = new HashMap<>();
-        }
-
-        public Topology withNewSnitch(IEndpointSnitch newSnitch)
-        {
-            Topology copy = new Topology(newSnitch);
-            for (InetAddress ep : currentLocations.keySet())
-                copy.addEndpoint(ep);
-            return copy;
         }
 
         void clear()
@@ -1252,6 +1255,7 @@ public class TokenMetadata
         {
             dcRacks.get(current.left).remove(current.right, ep);
             dcEndpoints.remove(current.left, ep);
+            currentLocations.remove(ep);
         }
 
         void updateEndpoint(InetAddress ep)
@@ -1271,15 +1275,23 @@ public class TokenMetadata
                 updateEndpoint(ep, snitch);
         }
 
+        void updateSnitch(IEndpointSnitch newSnitch)
+        {
+            assert newSnitch != null;
+            this.snitch = newSnitch;
+            updateEndpoints();
+        }
+
         private void updateEndpoint(InetAddress ep, IEndpointSnitch snitch)
         {
             Pair<String, String> current = currentLocations.get(ep);
             String dc = snitch.getDatacenter(ep);
             String rack = snitch.getRack(ep);
-            if (dc.equals(current.left) && rack.equals(current.right))
+            if (current != null && dc.equals(current.left) && rack.equals(current.right))
                 return;
 
-            doRemoveEndpoint(ep, current);
+            if (current != null)
+                doRemoveEndpoint(ep, current);
             doAddEndpoint(ep, dc, rack);
         }
 

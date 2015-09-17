@@ -59,7 +59,7 @@ public class NetworkTopologyStrategyTest
         configOptions.put("DC3", "1");
 
         // Set the localhost to the tokenmetadata. Embedded cassandra way?
-        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, snitch, configOptions);
+        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, configOptions);
         assert strategy.getReplicationFactor("DC1") == 3;
         assert strategy.getReplicationFactor("DC2") == 2;
         assert strategy.getReplicationFactor("DC3") == 1;
@@ -82,7 +82,7 @@ public class NetworkTopologyStrategyTest
         configOptions.put("DC3", "0");
 
         // Set the localhost to the tokenmetadata. Embedded cassandra way?
-        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, snitch, configOptions);
+        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, configOptions);
         assert strategy.getReplicationFactor("DC1") == 3;
         assert strategy.getReplicationFactor("DC2") == 3;
         assert strategy.getReplicationFactor("DC3") == 0;
@@ -123,7 +123,7 @@ public class NetworkTopologyStrategyTest
         }
         metadata.updateNormalTokens(tokens);
 
-        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, snitch, configOptions);
+        NetworkTopologyStrategy strategy = new NetworkTopologyStrategy(keyspaceName, metadata, configOptions);
 
         for (String testToken : new String[]{"123456", "200000", "000402", "ffffff", "400200"})
         {
@@ -184,19 +184,19 @@ public class NetworkTopologyStrategyTest
             for (int i=0; i<NODES; ++i)  // Nodes
                 for (int j=0; j<VNODES; ++j) // tokens/vnodes per node
                     meta.updateNormalToken(Murmur3Partitioner.instance.getRandomToken(rand), nodes.get(i));
-            testEquivalence(meta, snitch, datacenters, rand);
+            testEquivalence(meta, datacenters, rand);
         }
     }
 
-    void testEquivalence(TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, Integer> datacenters, Random rand)
+    void testEquivalence(TokenMetadata tokenMetadata, Map<String, Integer> datacenters, Random rand)
     {
-        NetworkTopologyStrategy nts = new NetworkTopologyStrategy("ks", tokenMetadata, snitch,
+        NetworkTopologyStrategy nts = new NetworkTopologyStrategy("ks", tokenMetadata,
                                                                   datacenters.entrySet().stream().
                                                                       collect(Collectors.toMap(x -> x.getKey(), x -> Integer.toString(x.getValue()))));
         for (int i=0; i<1000; ++i)
         {
             Token token = Murmur3Partitioner.instance.getRandomToken(rand);
-            List<InetAddress> expected = calculateNaturalEndpoints(token, tokenMetadata, datacenters, snitch);
+            List<InetAddress> expected = calculateNaturalEndpoints(token, tokenMetadata, datacenters, tokenMetadata.getTopology().snitch);
             List<InetAddress> actual = nts.calculateNaturalEndpoints(token, tokenMetadata);
             if (endpointsDiffer(expected, actual))
             {

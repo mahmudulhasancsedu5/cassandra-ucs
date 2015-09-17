@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.locator.TokenMetadata.Topology;
 import org.apache.cassandra.dht.Token;
 
 /**
@@ -37,15 +38,14 @@ import org.apache.cassandra.dht.Token;
  */
 public class OldNetworkTopologyStrategy extends AbstractReplicationStrategy
 {
-    public OldNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions)
+    public OldNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions)
     {
-        super(keyspaceName, tokenMetadata, snitch, configOptions);
+        super(keyspaceName, tokenMetadata, configOptions);
     }
 
     public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)
     {
-        // Take local copy of snitch so it doesn't change during the operation.
-        IEndpointSnitch snitch = this.snitch;
+        Topology topology = metadata.getTopology();
 
         int replicas = getReplicationFactor();
         List<InetAddress> endpoints = new ArrayList<InetAddress>(replicas);
@@ -64,7 +64,7 @@ public class OldNetworkTopologyStrategy extends AbstractReplicationStrategy
         {
             // First try to find one in a different data center
             Token t = iter.next();
-            if (!snitch.getDatacenter(metadata.getEndpoint(primaryToken)).equals(snitch.getDatacenter(metadata.getEndpoint(t))))
+            if (!topology.getDatacenter(metadata.getEndpoint(primaryToken)).equals(topology.getDatacenter(metadata.getEndpoint(t))))
             {
                 // If we have already found something in a diff datacenter no need to find another
                 if (!bDataCenter)
@@ -75,8 +75,8 @@ public class OldNetworkTopologyStrategy extends AbstractReplicationStrategy
                 continue;
             }
             // Now  try to find one on a different rack
-            if (!snitch.getRack(metadata.getEndpoint(primaryToken)).equals(snitch.getRack(metadata.getEndpoint(t))) &&
-                snitch.getDatacenter(metadata.getEndpoint(primaryToken)).equals(snitch.getDatacenter(metadata.getEndpoint(t))))
+            if (!topology.getRack(metadata.getEndpoint(primaryToken)).equals(topology.getRack(metadata.getEndpoint(t))) &&
+                topology.getDatacenter(metadata.getEndpoint(primaryToken)).equals(topology.getDatacenter(metadata.getEndpoint(t))))
             {
                 // If we have already found something in a diff rack no need to find another
                 if (!bOtherRack)

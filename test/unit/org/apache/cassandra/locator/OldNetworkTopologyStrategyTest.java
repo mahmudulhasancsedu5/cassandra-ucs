@@ -31,6 +31,7 @@ import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner.BigIntegerToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -49,7 +50,8 @@ public class OldNetworkTopologyStrategyTest
     public void init()
     {
         keyTokens = new ArrayList<Token>();
-        tmd = new TokenMetadata();
+        RackInferringSnitch endpointSnitch = new RackInferringSnitch();
+        tmd = new TokenMetadata(endpointSnitch, RandomPartitioner.instance);
         expectedResults = new HashMap<String, ArrayList<InetAddress>>();
     }
 
@@ -61,9 +63,7 @@ public class OldNetworkTopologyStrategyTest
     @Test
     public void testBigIntegerEndpointsA() throws UnknownHostException
     {
-        RackInferringSnitch endpointSnitch = new RackInferringSnitch();
-
-        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, endpointSnitch, optsWithRF(1));
+        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, optsWithRF(1));
         addEndpoint("0", "5", "254.0.0.1");
         addEndpoint("10", "15", "254.0.0.2");
         addEndpoint("20", "25", "254.0.0.3");
@@ -86,9 +86,7 @@ public class OldNetworkTopologyStrategyTest
     @Test
     public void testBigIntegerEndpointsB() throws UnknownHostException
     {
-        RackInferringSnitch endpointSnitch = new RackInferringSnitch();
-
-        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, endpointSnitch, optsWithRF(1));
+        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, optsWithRF(1));
         addEndpoint("0", "5", "254.0.0.1");
         addEndpoint("10", "15", "254.0.0.2");
         addEndpoint("20", "25", "254.1.0.3");
@@ -112,9 +110,7 @@ public class OldNetworkTopologyStrategyTest
     @Test
     public void testBigIntegerEndpointsC() throws UnknownHostException
     {
-        RackInferringSnitch endpointSnitch = new RackInferringSnitch();
-
-        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, endpointSnitch, optsWithRF(1));
+        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tmd, optsWithRF(1));
         addEndpoint("0", "5", "254.0.0.1");
         addEndpoint("10", "15", "254.0.0.2");
         addEndpoint("20", "25", "254.0.1.3");
@@ -350,14 +346,12 @@ public class OldNetworkTopologyStrategyTest
 
     private Pair<Set<Range<Token>>, Set<Range<Token>>> calculateStreamAndFetchRanges(BigIntegerToken[] tokens, BigIntegerToken[] tokensAfterMove, int movingNodeIdx) throws UnknownHostException
     {
-        RackInferringSnitch endpointSnitch = new RackInferringSnitch();
-
         InetAddress movingNode = InetAddress.getByName("254.0.0." + Integer.toString(movingNodeIdx + 1));
 
 
         TokenMetadata tokenMetadataCurrent = initTokenMetadata(tokens);
         TokenMetadata tokenMetadataAfterMove = initTokenMetadata(tokensAfterMove);
-        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tokenMetadataCurrent, endpointSnitch, optsWithRF(2));
+        AbstractReplicationStrategy strategy = new OldNetworkTopologyStrategy("Keyspace1", tokenMetadataCurrent, optsWithRF(2));
 
         Collection<Range<Token>> currentRanges = strategy.getAddressRanges().get(movingNode);
         Collection<Range<Token>> updatedRanges = strategy.getPendingAddressRanges(tokenMetadataAfterMove, tokensAfterMove[movingNodeIdx], movingNode);

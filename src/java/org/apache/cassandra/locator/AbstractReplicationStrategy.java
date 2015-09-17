@@ -58,12 +58,17 @@ public abstract class AbstractReplicationStrategy
     // track when the token range changes, signaling we need to invalidate our endpoint cache
     private volatile long lastInvalidatedVersion = 0;
 
+    @Deprecated // Use tokenMetadata.topology and/or the snitch there
     public IEndpointSnitch snitch;
+
+    AbstractReplicationStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions)
+    {
+        this(keyspaceName, tokenMetadata, null, configOptions);
+    }
 
     AbstractReplicationStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions)
     {
         assert keyspaceName != null;
-        assert snitch != null;
         assert tokenMetadata != null;
         this.tokenMetadata = tokenMetadata;
         this.snitch = snitch;
@@ -237,11 +242,21 @@ public abstract class AbstractReplicationStrategy
         throws ConfigurationException
     {
         AbstractReplicationStrategy strategy;
-        Class [] parameterTypes = new Class[] {String.class, TokenMetadata.class, IEndpointSnitch.class, Map.class};
         try
         {
-            Constructor<? extends AbstractReplicationStrategy> constructor = strategyClass.getConstructor(parameterTypes);
-            strategy = constructor.newInstance(keyspaceName, tokenMetadata, snitch, strategyOptions);
+            Constructor<? extends AbstractReplicationStrategy> constructor;
+            try
+            {
+                Class<?> [] parameterTypes = new Class[] {String.class, TokenMetadata.class, Map.class};
+                constructor = strategyClass.getConstructor(parameterTypes);
+                strategy = constructor.newInstance(keyspaceName, tokenMetadata, strategyOptions);
+            }
+            catch (NoSuchMethodException e)
+            {
+                Class<?> [] parameterTypes = new Class[] {String.class, TokenMetadata.class, IEndpointSnitch.class, Map.class};
+                constructor = strategyClass.getConstructor(parameterTypes);
+                strategy = constructor.newInstance(keyspaceName, tokenMetadata, snitch, strategyOptions);
+            }
         }
         catch (InvocationTargetException e)
         {

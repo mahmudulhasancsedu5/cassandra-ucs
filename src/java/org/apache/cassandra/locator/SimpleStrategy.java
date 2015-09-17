@@ -37,9 +37,9 @@ import org.apache.cassandra.dht.Token;
  */
 public class SimpleStrategy extends AbstractReplicationStrategy
 {
-    public SimpleStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions)
+    public SimpleStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions)
     {
-        super(keyspaceName, tokenMetadata, snitch, configOptions);
+        super(keyspaceName, tokenMetadata, configOptions);
     }
 
     public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)

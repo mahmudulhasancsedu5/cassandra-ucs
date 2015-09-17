@@ -125,9 +125,9 @@ public class ReplicationStrategyEndpointCacheTest
     {
         private boolean called = false;
 
-        public FakeSimpleStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions)
+        public FakeSimpleStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions)
         {
-            super(keyspaceName, tokenMetadata, snitch, configOptions);
+            super(keyspaceName, tokenMetadata, configOptions);
         }
 
         public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)
@@ -142,9 +142,9 @@ public class ReplicationStrategyEndpointCacheTest
     {
         private boolean called = false;
 
-        public FakeOldNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions)
+        public FakeOldNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions)
         {
-            super(keyspaceName, tokenMetadata, snitch, configOptions);
+            super(keyspaceName, tokenMetadata, configOptions);
         }
 
         public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)
@@ -159,9 +159,9 @@ public class ReplicationStrategyEndpointCacheTest
     {
         private boolean called = false;
 
-        public FakeNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions) throws ConfigurationException
+        public FakeNetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, Map<String, String> configOptions) throws ConfigurationException
         {
-            super(keyspaceName, tokenMetadata, snitch, configOptions);
+            super(keyspaceName, tokenMetadata, configOptions);
         }
 
         public List<InetAddress> calculateNaturalEndpoints(Token token, TokenMetadata metadata)

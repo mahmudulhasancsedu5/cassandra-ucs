@@ -154,7 +154,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import static java.util.stream.Collectors.toList;
-
 import static org.apache.cassandra.index.SecondaryIndexManager.getIndexName;
 import static org.apache.cassandra.index.SecondaryIndexManager.isIndexColumnFamily;
 import static java.util.Arrays.asList;
@@ -4080,6 +4079,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return Collections.unmodifiableList(keyspaceNamesList);
     }
 
+    @SuppressWarnings("deprecation")
     public void updateSnitch(String epSnitchClassName, Boolean dynamic, Integer dynamicUpdateInterval, Integer dynamicResetInterval, Double dynamicBadnessThreshold) throws ClassNotFoundException
     {
         IEndpointSnitch oldSnitch = DatabaseDescriptor.getEndpointSnitch();
@@ -4104,7 +4104,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
         // point snitch references to the new instance
         DatabaseDescriptor.setEndpointSnitch(newSnitch);
-        tokenMetadata = tokenMetadata.withNewSnitch(newSnitch);
+        tokenMetadata.updateSnitch(newSnitch);
         for (String ks : Schema.instance.getKeyspaces())
         {
             Keyspace.open(ks).getReplicationStrategy().snitch = newSnitch;
