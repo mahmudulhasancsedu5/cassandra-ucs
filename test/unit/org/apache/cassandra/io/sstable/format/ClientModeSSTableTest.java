@@ -15,26 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.io.sstable;
+package org.apache.cassandra.io.sstable.format;
 
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
 import java.io.File;
 import java.nio.ByteBuffer;
-import java.util.HashSet;
-import java.util.Set;
 
+import com.google.common.util.concurrent.Runnables;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Config;
-import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.rows.SliceableUnfilteredRowIterator;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.Version;
@@ -121,8 +121,14 @@ public class ClientModeSSTableTest
         {
             if (reader != null)
             {
+                int globalTidyCount = SSTableReader.GlobalTidy.lookup.size();
                 reader.selfRef().release();
                 assert reader.selfRef().globalCount() == 0;
+
+                // await clean-up to complete if started.
+                ScheduledExecutors.nonPeriodicTasks.submit(Runnables.doNothing()).get();
+                // Ensure clean-up completed.
+                assert SSTableReader.GlobalTidy.lookup.size() < globalTidyCount;
             }
         }
     }
