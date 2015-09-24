@@ -18,19 +18,20 @@
 */
 package org.apache.cassandra.db;
 
-import java.lang.reflect.Array;
-import java.util.Collections;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.stream.Stream;
+import java.util.function.Supplier;
 
-import net.nicoulaj.compilecommand.annotations.DontInline;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterators;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.partitions.BasePartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.rows.*;
-import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.CloseableIterator;
+import org.apache.cassandra.utils.CloseableIterator.Closer;
 import org.apache.cassandra.utils.Throwables;
 
 /**
@@ -123,25 +124,6 @@ public class Transformer
         void runOnClose();
     }
 
-    private static interface Refill<I> extends Function
-    {
-        /**
-         * @return null if there are no more contents to produce; otherwise an iterator
-         * of the same type as the function is applied to.
-         */
-        I newContents();
-    }
-
-    // TODO: currently it isn't compile-time guaranteed that the right type of refill is provided for a given
-    // stage in the pipeline (or even rows vs partitions). Not sure if it's worth the added ugliness.
-    public static interface RefillPartitions extends Refill<BasePartitionIterator<?>>
-    {
-    }
-
-    public static interface RefillRows extends Refill<BaseRowIterator<?>>
-    {
-    }
-
     /** STATIC TRANSFORMATION ACCESSORS **/
 
     /**
@@ -152,8 +134,6 @@ public class Transformer
         if (EmptyIterators.isEmpty(iterator))
             return iterator;
 
-        if (iterator instanceof UnfilteredPartitions) // already being transformed, so just add our function
-            return new UnfilteredPartitions(function, (UnfilteredPartitions) iterator);
         return new UnfilteredPartitions(iterator, function);
     }
 
@@ -164,8 +144,6 @@ public class Transformer
     {
         assert !(function instanceof BasePartitionFunction) || function instanceof PartitionFunction;
 
-        if (iterator instanceof Partitions) // already being transformed, so just add our function
-            return new Partitions(function, (Partitions) iterator);
         return new Partitions(iterator, function);
     }
 
@@ -174,9 +152,15 @@ public class Transformer
      */
     public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Function function)
     {
-        if (iterator instanceof UnfilteredRows) // already being transformed, so just add our function
-            return new UnfilteredRows(function, (UnfilteredRows) iterator);
         return new UnfilteredRows(iterator, function);
+    }
+
+    /**
+     * Apply a function to this UnfilteredRowIterator
+     */
+    public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Supplier<Unfiltered> supplier)
+    {
+        return new UnfilteredRows(iterator, supplier);
     }
 
     /**
@@ -184,8 +168,6 @@ public class Transformer
      */
     public static RowIterator apply(RowIterator iterator, Function function)
     {
-        if (iterator instanceof FilteredRows) // already being transformed, so just add our function
-            return new FilteredRows(function, (FilteredRows) iterator);
         return new FilteredRows(iterator, function);
     }
 
@@ -196,10 +178,20 @@ public class Transformer
      */
     public static PartitionIterator filter(UnfilteredPartitionIterator iterator, int nowInSecs)
     {
-        Filter filter = new Filter(nowInSecs);
-        if (iterator instanceof UnfilteredPartitions)
-            return new Partitions(filter, (UnfilteredPartitions) iterator);
-        return new Partitions(iterator, filter);
+        Supplier<UnfilteredRowIterator> supplier = iterator.supplier();
+        return new Partitions(iterator, () ->
+        {
+            while (true)
+            {
+                UnfilteredRowIterator u = supplier.get();
+                if (u == null)
+                    return null;
+                RowIterator p = filter(u, nowInSecs);
+                if (iterator.isForThrift() || !p.isEmpty())
+                    return p;
+                p.close();
+            }
+        }, iterator.closer());
     }
 
     /**
@@ -207,50 +199,112 @@ public class Transformer
      */
     public static RowIterator filter(UnfilteredRowIterator iterator, int nowInSecs)
     {
-        Filter filter = new Filter(nowInSecs);
-        if (iterator instanceof UnfilteredRows)
-            return new FilteredRows(filter, (UnfilteredRows) iterator);
-        return new FilteredRows(iterator, filter);
+        Supplier<Unfiltered> supplier = iterator.supplier();
+        return new FilteredRows(iterator, () ->
+            {
+                while (true)
+                {
+                    Unfiltered u = supplier.get();
+                    if (u == null)
+                        return null;
+                    if (u instanceof Row)
+                    {
+                        Row r = ((Row) u).purge(DeletionPurger.PURGE_ALL, nowInSecs);
+                        if (r != null)
+                            return r;
+                    }
+                }
+            });
     }
-
-    /**
-     * Simple function that filters out range tombstone markers, and purges tombstones
-     */
-    private static final class Filter implements BasePartitionFunction<UnfilteredRowIterator, RowIterator>,
-                                                 StaticRowFunction, RowFunction, MarkerFunction
+    
+    public static PartitionIterator concat(PartitionIterator head, PartitionIterator tail)
     {
-        private final int nowInSec;
-        public Filter(int nowInSec)
-        {
-            this.nowInSec = nowInSec;
-        }
-
-        public RowIterator applyToPartition(UnfilteredRowIterator partition)
-        {
-            return Transformer.filter(partition, nowInSec);
-        }
-
-        public Row applyToStatic(Row row)
-        {
-            if (row.isEmpty())
-                return Rows.EMPTY_STATIC_ROW;
-
-            row = row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-            return row == null ? Rows.EMPTY_STATIC_ROW : row;
-        }
-
-        public Row applyToRow(Row row)
-        {
-            return row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-        }
-
-        public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-        {
-            return null;
-        }
+        return new Partitions(head, concat(head.supplier(), tail.supplier()), concat(head.closer(), tail.closer()));
     }
 
-     /* ROWS IMPLEMENTATION */
+    public static PartitionIterator concat(Iterable<PartitionIterator> iterators)
+    {
+        Iterator<PartitionIterator> it = iterators.iterator();
+        if (!it.hasNext())
+            return null;
+
+        return concat(it.next(), it, concatClosers(iterators));
+    }
+
+    private static Closer concatClosers(Iterable<? extends CloseableIterator<?>> iterators)
+    {
+        return () -> Throwables.maybeFail(Throwables.close(null, iterators));
+    }
+
+    public static PartitionIterator concat(PartitionIterator head, Iterator<PartitionIterator> tail, Closer closer)
+    {
+        return new Partitions(head, concat(head.supplier(), Iterators.transform(tail, x -> x.supplier())), closer);
+    }
+
+    public static UnfilteredRowIterator concat(UnfilteredRowIterator head, UnfilteredRowIterator tail)
+    {
+        return new UnfilteredRows(head, concat(head.supplier(), tail.supplier()));
+    }
+
+    static <T> Supplier<T> concat(Supplier<T> headSupplier, Supplier<T> tailSupplier)
+    {
+        return new Supplier<T>() {
+            Supplier<T> supplier = headSupplier;
+            Supplier<T> continuation = tailSupplier;
+
+            public T get()
+            {
+                T next = supplier.get();
+                if (next != null)
+                    return next;
+
+                supplier = continuation;
+                continuation = null;
+                if (supplier != null)
+                    return supplier.get();
+                return null;
+            }
+        };
+    }
+
+    static Closer concat(Closer inner, Closer outer)
+    {
+        return () ->
+        {
+            try
+            {
+                outer.close();
+            }
+            finally
+            {
+                inner.close();
+            }
+        };
+    }
+
+    static <T> Supplier<T> concat(Supplier<T> head, Iterator<Supplier<T>> tail)
+    {
+        return new Supplier<T>() {
+            Iterator<Supplier<T>> it = tail;
+            Supplier<T> supplier = head;
+
+            public T get()
+            {
+                while (true)
+                {
+                    T next = supplier.get();
+                    if (next != null)
+                        return next;
+                    if (!it.hasNext())
+                        return null;
+
+                    supplier = it.next();
+                }
+            }
+        };
+    }
+
+    /* ROWS IMPLEMENTATION */
 
     private static final class UnfilteredRows extends BaseRows<Unfiltered, UnfilteredRowIterator> implements UnfilteredRowIterator
     {
@@ -258,14 +312,73 @@ public class Transformer
 
         public UnfilteredRows(UnfilteredRowIterator input, Function apply)
         {
-            super(input, apply);
+            super(input, apply, combine(input.supplier(), apply));
             partitionLevelDeletion = applyToPartitionDeletion(input.partitionLevelDeletion(), apply);
         }
 
-        public UnfilteredRows(Function apply, UnfilteredRows copyFrom)
+        UnfilteredRows(UnfilteredRowIterator input, Supplier<Unfiltered> supplier)
         {
-            super(apply, copyFrom);
-            partitionLevelDeletion = applyToPartitionDeletion(copyFrom.partitionLevelDeletion, apply);
+            super(input, supplier, input.closer());
+            partitionLevelDeletion = input.partitionLevelDeletion();
+        }
+
+        private static Supplier<Unfiltered> combine(Supplier<Unfiltered> supplier, Function apply)
+        {
+            if (apply instanceof RowFunction)
+            {
+                RowFunction rf = (RowFunction) apply;
+                if (apply instanceof MarkerFunction)
+                {
+                    MarkerFunction mf = (MarkerFunction) apply;
+                    return () -> {
+                        for (;;)
+                        {
+                            Unfiltered next = supplier.get();
+                            if (next == null)
+                                return next;
+                            if (next.kind() == Unfiltered.Kind.ROW)
+                                next = rf.applyToRow((Row) next);
+                            else
+                                next = mf.applyToMarker((RangeTombstoneMarker) next);
+                            if (next != null)
+                                return next;
+                        }
+                    };
+                }
+                else
+                {
+                    return () -> {
+                        for (;;)
+                        {
+                            Unfiltered next = supplier.get();
+                            if (next == null)
+                                return next;
+                            if (next.kind() == Unfiltered.Kind.ROW)
+                                next = rf.applyToRow((Row) next);
+                            if (next != null)
+                                return next;
+                        }
+                    };
+                }
+            }
+            else if (apply instanceof MarkerFunction)
+            {
+                MarkerFunction mf = (MarkerFunction) apply;
+                return () -> {
+                    for (;;)
+                    {
+                        Unfiltered next = supplier.get();
+                        if (next == null)
+                            return next;
+                        if (next.kind() != Unfiltered.Kind.ROW)
+                            next = mf.applyToMarker((RangeTombstoneMarker) next);
+                        if (next != null)
+                            return next;
+                    }
+                };
+            }
+            
+            return supplier;
         }
 
         private static DeletionTime applyToPartitionDeletion(DeletionTime dt, Function apply)
@@ -295,44 +408,79 @@ public class Transformer
     {
         FilteredRows(RowIterator input, Function apply)
         {
-            super(input, apply);
+            super(input, apply, combine(input.supplier(), apply));
             assert !(apply instanceof MarkerFunction);
         }
 
-        FilteredRows(BaseRowIterator<?> input, Filter apply)
+        FilteredRows(BaseRowIterator<?> input, Supplier<Row> supplier)
         {
-            super(input, apply);
-        }
-
-        FilteredRows(Function apply, BaseRows<?, ? extends BaseRowIterator<?>> copyFrom)
-        {
-            super(apply, copyFrom);
-            assert !(apply instanceof MarkerFunction) || apply instanceof Filter;
+            super(input, supplier, input.closer());
         }
 
         public boolean isEmpty()
         {
             return staticRow().isEmpty() && !hasNext();
         }
+        
+        private static
+        Supplier<Row> combine(Supplier<Row> supplier, Function apply)
+        {
+            if (apply instanceof RowFunction)
+                return combine(supplier, (RowFunction) apply);
+            else
+                return supplier;
+        }
+        
+//        private static filteredSupplier(Supplier<Unfiltered> src, Filter filter)
+//        {
+//            return () -> {
+//                for (;;)
+//                {
+//                    Row next = supplier.get();
+//                    if (next == null)
+//                        return next; // includes null
+//                    Row transformed = rf.applyToRow(next);
+//                    if (transformed != null)
+//                        return transformed;
+//                }
+//            };
+//        }
+
+        private static
+        Supplier<Row> combine(Supplier<Row> supplier, RowFunction rf)
+        {
+            return () -> {
+                for (;;)
+                {
+                    Row next = supplier.get();
+                    if (next == null)
+                        return next; // includes null
+                    Row transformed = rf.applyToRow(next);
+                    if (transformed != null)
+                        return transformed;
+                }
+            };
+        }
+
     }
 
     private static abstract class BaseRows<R extends Unfiltered, I extends BaseRowIterator<? extends Unfiltered>> extends Abstract<Unfiltered, I, R> implements BaseRowIterator<R>
     {
         private Row staticRow;
 
-        public BaseRows(I input, Function apply)
+        public BaseRows(I input, Supplier<R> supplier, Closer closer)
         {
-            super(input, apply);
-            staticRow = applyToStatic(input.staticRow(), apply);
+            super(input, supplier, closer);
+            staticRow = input.staticRow();
         }
-
-        // swap parameter order to avoid casting errors
-        BaseRows(Function apply, BaseRows<?, ? extends I> copyFrom)
+        
+        public BaseRows(I input, Function apply, Supplier<R> supplier)
         {
-            super(apply, copyFrom);
-            staticRow = applyToStatic(copyFrom.staticRow, apply);
-            if (copyFrom.next != null)
-                next = applyToExisting(copyFrom.next, apply);
+            super(input, apply,
+                  apply instanceof EarlyTermination ?
+                          combineEarlyTermination(supplier, (EarlyTermination) apply) :
+                          supplier);
+            staticRow = applyToStatic(input.staticRow(), apply);
         }
 
         public CFMetaData metadata()
@@ -360,49 +508,12 @@ public class Transformer
             return staticRow;
         }
 
-
-
-        // *********** /Begin Core Debug Point
-
-
-
         private static Row applyToStatic(Row row, Function apply)
         {
             if (apply instanceof StaticRowFunction)
                 row = ((StaticRowFunction) apply).applyToStatic(row);
             return row;
         }
-
-        private static Unfiltered applyToExisting(Unfiltered unfiltered, Function apply)
-        {
-            return unfiltered.isRow() ? (apply instanceof RowFunction ? ((RowFunction) apply).applyToRow((Row) unfiltered) : unfiltered)
-                                      : (apply instanceof MarkerFunction ? ((MarkerFunction) apply).applyToMarker((RangeTombstoneMarker) unfiltered) : unfiltered);
-        }
-
-        protected Unfiltered applyTo(Unfiltered next)
-        {
-            if (next.isRow())
-            {
-                Row row = (Row) next;
-                RowFunction[] fs = applyToRow;
-                for (int i = 0 ; row != null && i < fs.length ; i++)
-                    row = fs[i].applyToRow(row);
-                return row;
-            }
-            else
-            {
-                RangeTombstoneMarker rtm = (RangeTombstoneMarker) next;
-                MarkerFunction[] fs = applyToMarker;
-                for (int i = 0 ; rtm != null && i < fs.length ; i++)
-                    rtm = fs[i].applyToMarker(rtm);
-                return rtm;
-            }
-        }
-
-
-
-        // *********** /End Core Debug Point
-
     }
 
     /* PARTITIONS IMPLEMENTATION */
@@ -414,14 +525,9 @@ public class Transformer
             super(input, apply, input.isForThrift());
         }
 
-        public UnfilteredPartitions(Function apply, UnfilteredPartitions copyFrom)
-        {
-            super(apply, copyFrom);
-        }
-
         public boolean isForThrift()
         {
-            return isForThrift;
+            return input.isForThrift();
         }
 
         public CFMetaData metadata()
@@ -437,14 +543,9 @@ public class Transformer
             super(input, apply, false);
         }
 
-        Partitions(UnfilteredPartitionIterator input, Filter apply)
+        Partitions(BasePartitionIterator<?> input, Supplier<RowIterator> supplier, Closer closer)
         {
-            super(input, apply, input.isForThrift());
-        }
-
-        Partitions(Function apply, BasePartitions<?, ? extends BasePartitionIterator<?>> copyFrom)
-        {
-            super(apply, copyFrom);
+            super(input, supplier, closer);
         }
     }
 
@@ -453,52 +554,78 @@ public class Transformer
     extends Abstract<BaseRowIterator<?>, I, R>
     implements BasePartitionIterator<R>
     {
-        final boolean isForThrift;
         public BasePartitions(I input, Function apply, boolean isForThrift)
         {
-            super(input, apply);
-            this.isForThrift = isForThrift;
+            super(input, apply, combine(input.supplier(), apply, isForThrift));
+        }
+        
+        public BasePartitions(I input, Supplier<R> supplier)
+        {
+            super(input, supplier, input.closer());
         }
 
+        public BasePartitions(I input, Supplier<R> supplier, Closer closer)
+        {
+            super(input, supplier, closer);
+        }
 
 
         // *********** /Begin Core Debug Point
 
 
-
-        BasePartitions(Function apply, BasePartitions<?, ? extends I> copyFrom)
+        private static <O extends BaseRowIterator<?>, I extends BaseRowIterator<? extends Unfiltered>>
+        Supplier<O> combinePartitionFunction(Supplier<I> supplier, BasePartitionFunction<I, O> apply, boolean isForThrift)
         {
-            super(apply, copyFrom);
-            isForThrift = copyFrom.isForThrift;
-            if (copyFrom.next != null)
-            {
-                next = (R) ((apply instanceof BasePartitionFunction)
-                            ? ((BasePartitionFunction) apply).applyToPartition(copyFrom.next)
-                            : copyFrom.next);
-            }
+            return () -> {
+                for (;;)
+                {
+                    I next = supplier.get();
+                    if (next == null)
+                        return null;
+                    O transformed = apply.applyToPartition(next);
+                    if (transformed != null && (isForThrift || !transformed.isEmpty()))
+                        return transformed;
+                    next.close();
+                }
+            };
+        }
+        
+
+        private static <O extends BaseRowIterator<?>, I extends BaseRowIterator<? extends Unfiltered>>
+        Supplier<O> combine(Supplier<I> src, Function apply, boolean isForThrift)
+        {
+            Supplier<O> supplier;
+            if (apply instanceof BasePartitionFunction)
+                supplier = combinePartitionFunction(src, (BasePartitionFunction<I, O>) apply, isForThrift);
+            else
+                supplier = (Supplier<O>) src;
+            if (apply instanceof EarlyTermination)
+                supplier = combineEarlyTermination(supplier, (EarlyTermination) apply);
+            // TODO: single-step if both
+            return supplier;
         }
 
-        protected BaseRowIterator<?> applyTo(BaseRowIterator<?> next)
-        {
-            try
-            {
-                BasePartitionFunction[] fs = applyToPartition;
-                for (int i = 0 ; next != null & i < fs.length ; i++)
-                    next = fs[i].applyToPartition(next);
-
-                if (next != null && (isForThrift || !next.isEmpty()))
-                    return next;
-            }
-            catch (Throwable t)
-            {
-                Throwables.close(t, Collections.singleton(next));
-                throw t;
-            }
-
-            if (next != null)
-                next.close();
-            return null;
-        }
+//        protected BaseRowIterator<?> applyTo(BaseRowIterator<?> next)
+//        {
+//            try
+//            {
+//                BasePartitionFunction[] fs = applyToPartition;
+//                for (int i = 0 ; next != null & i < fs.length ; i++)
+//                    next = fs[i].applyToPartition(next);
+//
+//                if (next != null && (isForThrift || !next.isEmpty()))
+//                    return next;
+//            }
+//            catch (Throwable t)
+//            {
+//                Throwables.close(t, Collections.singleton(next));
+//                throw t;
+//            }
+//
+//            if (next != null)
+//                next.close();
+//            return null;
+//        }
 
 
 
@@ -507,57 +634,82 @@ public class Transformer
 
     /** SHARED IMPLEMENTATION **/
 
-    private abstract static class Abstract<V, I extends CloseableIterator<? extends V>, O extends V> extends Stack implements AutoCloseable
+    private abstract static class Abstract<V, I extends CloseableIterator<? extends V>, O extends V> implements CloseableIterator<O>
     {
         I input;
-        V next;
+        V next = null;
+        Supplier<O> supplier;
+        Supplier<O> iterationSource;
+        Closer closer;
 
         // responsibility for initialising next lies with the subclass
-        private Abstract(Function apply, Abstract<?, ? extends I, ?> copyFrom)
+        private Abstract(I input, Supplier<O> supplier, Closer closer)
         {
-            super(copyFrom, apply);
-            this.input = copyFrom.input;
+            this.input = input instanceof Abstract ? ((Abstract<V, I, O>) input).input : input;
+            this.supplier = supplier;
+            this.closer = closer;
+        }
+        
+        static Closer combine(Closer inner, RunOnClose outer)
+        {
+            return () ->
+            {
+                try
+                {
+                    outer.runOnClose();
+                }
+                finally
+                {
+                    inner.close();
+                }
+            };
+        }
+        
+        static <T> Supplier<T> combineEarlyTermination(Supplier<T> src, EarlyTermination apply)
+        {
+            return () -> apply.terminate() ? null : src.get();
         }
 
-        private Abstract(I input, Function apply)
+        static Closer combine(Closer first, Function apply)
         {
-            super(EMPTY, apply);
-            this.input = input;
+            return apply instanceof RunOnClose ?
+                combine(first, (RunOnClose) apply) :
+                first;
+        }
+
+        private Abstract(I input, Function apply, Supplier<O> supplier)
+        {
+            this(input, supplier, combine(input.closer(), apply));
+        }
+        
+        public Closer closer()
+        {
+            return closer;
         }
 
         public void close()
         {
-            Throwables.perform(Stream.of(runOnClose).map((f) -> f::runOnClose),
-                               () -> { if (next instanceof CloseableIterator) ((CloseableIterator) next).close(); },
-                               input::close);
+            closer().close();
         }
 
-        protected abstract V applyTo(V next);
-
-
-
-        // *********** /Begin Core Debug Point
-
-
-
-        protected boolean isDone()
+        public Supplier<O> supplier()
         {
-            for (EarlyTermination et : earlyTermination)
-                if (et.terminate())
-                    return true;
-            return false;
+            Supplier<O> toReturn = supplier;
+            supplier = null;
+            if (toReturn == null && iterationSource != null)
+                return () -> hasNext() ? Preconditions.checkNotNull(next()) : null;
+            return toReturn;
         }
 
         public final boolean hasNext()
         {
-            while (   next == null
-                   && !isDone()
-                   && (input.hasNext()
-                       || (refill.length > 0 && refill())))
+            if (iterationSource == null)
             {
-                V next = input.next();
-                this.next = applyTo(next);
+                iterationSource = supplier;
+                supplier = null;
             }
+            if (next == null)
+                next = iterationSource.get();
             return next != null;
         }
 
@@ -570,165 +722,5 @@ public class Transformer
             this.next = null;
             return next;
         }
-
-
-
-        // *********** /End Core Debug Point
-
-
-
-        @DontInline
-        protected boolean refill()
-        {
-            for (RefillSnapshot snap : refill)
-            {
-                while (true)
-                {
-                    I next = (I) snap.function.newContents();
-                    if (next == null)
-                        break;
-
-                    input.close();
-                    input = next;
-                    Stack prefix = EMPTY;
-                    if (next instanceof Abstract)
-                    {
-                        Abstract abstr = (Abstract) next;
-                        input = (I) abstr.input;
-                        prefix = abstr;
-                    }
-
-                    // since we're truncating our function stack to only those occurring after the extend function
-                    // we have to run any prior runOnClose methods
-                    for (int j = 0; j < snap.runOnClose; j++)
-                        runOnClose[j].runOnClose();
-
-                    resetRefills(prefix, snap);
-
-                    if (input.hasNext())
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        // reinitialise the refill states after a refill
-        private void resetRefills(Stack prefix, RefillSnapshot snap)
-        {
-            // save the current snapshot position (same as snap)
-            RefillSnapshot delta = new RefillSnapshot(null, this);
-
-            // drop the functions that were present when the Refill method was attached,
-            // and prefix any functions in the new contents (if it's a transformer)
-            applyToPartition = splice(prefix.applyToPartition, applyToPartition, snap.applyToPartition);
-            applyToRow = splice(prefix.applyToRow, applyToRow, snap.applyToRow);
-            applyToMarker = splice(prefix.applyToMarker, applyToMarker, snap.applyToMarker);
-            earlyTermination = splice(prefix.earlyTermination, earlyTermination, snap.earlyTermination);
-            runOnClose = splice(prefix.runOnClose, runOnClose, snap.runOnClose);
-            refill = splice(prefix.refill, refill, snap.refill);
-
-            // reset the position of the refill method we're using
-            snap.init(prefix);
-            // then calculate the delta from our original positions, and apply this delta to each of the remaining refills
-            delta.subtract(snap);
-            for (int i = 1 ; i < refill.length ; i++)
-                refill[i].subtract(delta);
-        }
-    }
-
-    /**
-     * a collection of function stacks
-     *
-     * for simplicity/legibility, we share this between partition and row transformers; this doesn't lead to an appreciable
-     * amount of waste, but prevents a lot of unnecessary and duplicated boilerplate
-     */
-    private static class Stack
-    {
-        static final Stack EMPTY = new Stack();
-
-        BasePartitionFunction[] applyToPartition;
-        RowFunction[] applyToRow;
-        MarkerFunction[] applyToMarker;
-        EarlyTermination[] earlyTermination;
-        RunOnClose[] runOnClose;
-        RefillSnapshot[] refill;
-
-        private Stack()
-        {
-            applyToPartition = new BasePartitionFunction[0];
-            applyToRow = new RowFunction[0];
-            applyToMarker = new MarkerFunction[0];
-            earlyTermination = new EarlyTermination[0];
-            runOnClose = new RunOnClose[0];
-            refill = new RefillSnapshot[0];
-        }
-
-        // push the provided function onto any matching stack types
-        private Stack(Stack copyFrom, Function add)
-        {
-            this.applyToPartition = maybeAppend(BasePartitionFunction.class, copyFrom.applyToPartition, add);
-            this.applyToRow = maybeAppend(RowFunction.class, copyFrom.applyToRow, add);
-            this.applyToMarker = maybeAppend(MarkerFunction.class, copyFrom.applyToMarker, add);
-            this.earlyTermination = maybeAppend(EarlyTermination.class, copyFrom.earlyTermination, add);
-            this.runOnClose = maybeAppend(RunOnClose.class, copyFrom.runOnClose, add);
-            this.refill = add instanceof Refill
-            ? maybeAppend(RefillSnapshot.class, copyFrom.refill, new RefillSnapshot((Refill) add, copyFrom))
-            : copyFrom.refill;
-        }
-
-        // saves the position of the function stack at the time the Refill method was attached.
-        static class RefillSnapshot
-        {
-            final Refill function;
-            int applyToPartition, applyToRow, applyToMarker, earlyTermination, runOnClose, refill;
-
-            RefillSnapshot(Refill function, Stack truncate)
-            {
-                this.function = function;
-                init(truncate);
-            }
-
-            void init(Stack truncate)
-            {
-                applyToPartition = truncate.applyToPartition.length;
-                applyToRow = truncate.applyToRow.length;
-                applyToMarker = truncate.applyToMarker.length;
-                earlyTermination = truncate.earlyTermination.length;
-                runOnClose = truncate.runOnClose.length;
-                refill = truncate.refill.length;
-            }
-
-            void subtract(RefillSnapshot from)
-            {
-                applyToPartition -= from.applyToPartition;
-                applyToRow -= from.applyToRow;
-                applyToMarker -= from.applyToMarker;
-                earlyTermination -= from.earlyTermination;
-                runOnClose -= from.runOnClose;
-                refill -= from.refill;
-            }
-        }
-   }
-
-    private static <E> E[] splice(E[] prefix, E[] suffix, int suffixFrom)
-    {
-        int newLen = prefix.length + suffix.length - suffixFrom;
-        E[] result = (E[]) Array.newInstance(prefix.getClass().getComponentType(), newLen);
-        System.arraycopy(prefix, 0, result, 0, prefix.length);
-        System.arraycopy(suffix, suffixFrom, result, prefix.length, newLen - prefix.length);
-        return result;
-    }
-
-    private static <E> E[] maybeAppend(Class<E> clazz, E[] array, Object value)
-    {
-        if (clazz.isInstance(value))
-        {
-            int oldLen = array.length;
-            E[] newArray = (E[]) Array.newInstance(clazz, oldLen + 1);
-            System.arraycopy(array, 0, newArray, 0, oldLen);
-            newArray[oldLen] = (E) value;
-            array = newArray;
-        }
-        return array;
     }
 }

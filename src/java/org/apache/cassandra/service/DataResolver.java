@@ -20,6 +20,7 @@ package org.apache.cassandra.service;
 import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
@@ -27,6 +28,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.Counting.UnfilteredPartitionCounter;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.partitions.*;
@@ -297,20 +299,23 @@ public class DataResolver extends ResponseResolver
         @Override
         public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
         {
-            return Transformer.apply(super.applyToPartition(partition),
-                                     new ShortReadRowProtection(partition.metadata(), partition.partitionKey()));
+            partition = super.applyToPartition(partition);
+            return Transformer.apply(partition,
+                                     new ShortReadRowProtection(partition.metadata(), partition.partitionKey(), partition.supplier()));
         }
 
-        private class ShortReadRowProtection implements Transformer.RowFunction, Transformer.RefillRows
+        private class ShortReadRowProtection implements Supplier<Unfiltered>
         {
             final CFMetaData metadata;
             final DecoratedKey partitionKey;
             private Clustering lastClustering;
+            private Supplier<Unfiltered> input;
 
-            private ShortReadRowProtection(CFMetaData metadata, DecoratedKey partitionKey)
+            private ShortReadRowProtection(CFMetaData metadata, DecoratedKey partitionKey, Supplier<Unfiltered> input)
             {
                 this.metadata = metadata;
                 this.partitionKey = partitionKey;
+                this.input = input;
             }
 
             public Row applyToRow(Row row)
@@ -319,8 +324,12 @@ public class DataResolver extends ResponseResolver
                 return row;
             }
 
-            public UnfilteredRowIterator newContents()
+            public Unfiltered get()
             {
+                Unfiltered next = input.get();
+                if (next != null)
+                    return next;
+
                 // We have a short read if the node this is the result of has returned the requested number of
                 // rows for that partition (i.e. it has stopped returning results due to the limit), but some of
                 // those results haven't made it in the final result post-reconciliation due to other nodes
@@ -361,7 +370,8 @@ public class DataResolver extends ResponseResolver
                                                                                       partitionKey,
                                                                                       retryFilter);
 
-                return doShortReadRetry(cmd);
+                input = doShortReadRetry(cmd).supplier();
+                return input.get();
             }
 
             private UnfilteredRowIterator doShortReadRetry(SinglePartitionReadCommand<?> retryCommand)

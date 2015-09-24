@@ -22,11 +22,13 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import com.google.common.collect.Lists;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.cql3.Operator;
+import org.apache.cassandra.db.Transformer.EarlyTermination;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.monitoring.MonitorableImpl;
 import org.apache.cassandra.db.partitions.*;
@@ -473,20 +475,13 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
 
     protected UnfilteredPartitionIterator withStateTracking(UnfilteredPartitionIterator iter)
     {
-        return new WrappingUnfilteredPartitionIterator(iter)
+        return Transformer.apply(iter, (EarlyTermination) () ->
         {
-            @Override
-            public UnfilteredRowIterator computeNext(UnfilteredRowIterator iter)
-            {
-                if (isAborted())
-                    return null;
-
-                if (TEST_ITERATION_DELAY_MILLIS > 0)
+            if (TEST_ITERATION_DELAY_MILLIS > 0)
                     maybeDelayForTesting();
 
-                return iter;
-            }
-        };
+            return false;
+        });
     }
 
     protected UnfilteredRowIterator withStateTracking(UnfilteredRowIterator iter)

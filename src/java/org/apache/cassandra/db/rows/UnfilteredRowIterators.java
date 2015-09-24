@@ -197,19 +197,7 @@ public abstract class UnfilteredRowIterators
             && iter1.columns().equals(iter2.columns())
             && iter1.staticRow().equals(iter2.staticRow());
 
-        class Extend implements Transformer.RefillRows
-        {
-            boolean returned = false;
-            public UnfilteredRowIterator newContents()
-            {
-                if (returned)
-                    return null;
-                returned = true;
-                return iter2;
-            }
-        }
-
-        return Transformer.apply(iter1, new Extend());
+        return Transformer.concat(iter1, iter2);
     }
 
     public static UnfilteredRowIterator cloningIterator(UnfilteredRowIterator iterator, final AbstractAllocator allocator)

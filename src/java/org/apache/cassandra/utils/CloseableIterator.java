@@ -19,9 +19,32 @@ package org.apache.cassandra.utils;
 
 import java.io.Closeable;
 import java.util.Iterator;
+import java.util.function.Supplier;
+
+import com.google.common.base.Preconditions;
 
 // so we can instantiate anonymous classes implementing both interfaces
 public interface CloseableIterator<T> extends Iterator<T>, AutoCloseable
 {
     public void close();
+    
+    public static interface Closer
+    {
+        void close();
+    }
+
+    public default Closer closer()
+    {
+        return this::close;
+    }
+
+    /**
+     * Turns iteration into a next supplier, which allows for easy transformation.
+     * Note: Can only get supplier once, and cannot use iteration after supplier is passed.
+     * Supplier _can_ be used after hasNext / isEmpty.
+     */
+    public default Supplier<T> supplier()
+    {
+        return () -> hasNext() ? Preconditions.checkNotNull(next()) : null;
+    }
 }

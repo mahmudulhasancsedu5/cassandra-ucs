@@ -58,18 +58,7 @@ public abstract class PartitionIterators
     {
         if (iterators.size() == 1)
             return iterators.get(0);
-
-        class Extend implements Transformer.RefillPartitions
-        {
-            int i = 1;
-            public PartitionIterator newContents()
-            {
-                if (i >= iterators.size())
-                    return null;
-                return iterators.get(i++);
-            }
-        }
-        return Transformer.apply(iterators.get(0), new Extend());
+        return Transformer.concat(iterators);
     }
 
     public static void digest(PartitionIterator iterator, MessageDigest digest)

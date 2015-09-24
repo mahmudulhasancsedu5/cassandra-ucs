@@ -18,10 +18,14 @@
 */
 package org.apache.cassandra.db.rows;
 
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionColumns;
 import org.apache.cassandra.utils.CloseableIterator;
+import org.apache.cassandra.utils.Throwables;
 
 /**
  * A common interface for Row and Unfiltered, that permits sharing of the (majority) common

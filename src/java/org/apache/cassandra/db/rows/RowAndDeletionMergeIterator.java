@@ -116,7 +116,7 @@ public class RowAndDeletionMergeIterator extends AbstractUnfilteredRowIterator
     {
         if (nextRow == null && rows.hasNext())
             nextRow = rows.next();
-    }
+   }
 
     private void updateNextRange()
     {
