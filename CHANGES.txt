@@ -1,3 +1,5 @@
+ * Merge range tombstones during compaction (CASSANDRA-7953)
+
 2.0.17
  * Fix rare race where older gossip states can be shadowed (CASSANDRA-10366)
  * Fix consolidating racks violating the RF contract (CASSANDRA-10238)
