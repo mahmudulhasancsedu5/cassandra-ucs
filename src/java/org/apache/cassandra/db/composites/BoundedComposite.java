@@ -101,4 +101,10 @@ public class BoundedComposite extends AbstractComposite
     {
         return new BoundedComposite(wrapped.copy(cfm, allocator), isStart);
     }
+
+    @Override
+    public String toString()
+    {
+        return wrapped + (isStart ? "S" : "E");
+    }
 }
