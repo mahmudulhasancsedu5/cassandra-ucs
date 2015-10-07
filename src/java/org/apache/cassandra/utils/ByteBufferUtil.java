@@ -454,22 +454,6 @@ public class ByteBufferUtil
         return Hex.wrapCharArray(c);
     }
 
-    public static String stringAndHex(ByteBuffer bytes)
-    {
-        if (bytes == null)
-            return "null";
-        String str = bytesToHex(bytes);
-        try
-        {
-            str += '"' + string(bytes) + '"';
-        }
-        catch (CharacterCodingException e)
-        {
-            // non-decodable, that's ok
-        }
-        return str;
-    }
-
     public static ByteBuffer hexToBytes(String str)
     {
         return ByteBuffer.wrap(Hex.hexToBytes(str));

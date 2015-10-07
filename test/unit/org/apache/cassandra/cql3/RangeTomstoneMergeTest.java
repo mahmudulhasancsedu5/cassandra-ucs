@@ -101,38 +101,6 @@ public class RangeTomstoneMergeTest extends CQLTester
         assertEquals(1, countTombstones(reader));           // See CASSANDRA-7953.
     }
 
-    @Test
-    public void testRangeIntersecting() throws Throwable
-    {
-        execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", "1", "2", "2", "2");
-        execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", "1", "3", "3", "3");
-        ColumnFamily cf = ArrayBackedSortedColumns.factory.create(currentTableMetadata());
-        Composite start = cf.getComparator().builder().add("2").build().withEOC(EOC.START);
-        Composite end = cf.getComparator().builder().add("3").build().withEOC(EOC.END);
-        RangeTombstone rt = new RangeTombstone(start, end, System.currentTimeMillis() * 1000, (int) System.currentTimeMillis() / 1000);
-        cf.delete(new DeletionInfo(rt, cf.getComparator()));
-        Mutation mutation = new Mutation(KEYSPACE, ByteBufferUtil.bytes("1"), cf);
-        Keyspace.open(KEYSPACE).apply(mutation, false, false);
-
-        flush();
-        compact();
-        assertOneTombstone();
-
-        execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", "1", "3", "2", "2");
-        execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", "1", "4", "3", "3");
-        cf = ArrayBackedSortedColumns.factory.create(currentTableMetadata());
-        start = cf.getComparator().builder().add("3").build().withEOC(EOC.START);
-        end = cf.getComparator().builder().add("4").build().withEOC(EOC.END);
-        rt = new RangeTombstone(start, end, System.currentTimeMillis() * 1000, (int) System.currentTimeMillis() / 1000);
-        cf.delete(new DeletionInfo(rt, cf.getComparator()));
-        mutation = new Mutation(KEYSPACE, ByteBufferUtil.bytes("1"), cf);
-        Keyspace.open(KEYSPACE).apply(mutation, false, false);
-
-        flush();
-        compact();
-        assertOneTombstone();
-    }
-
     void addRemoveAndFlush() throws Throwable
     {
         execute("INSERT INTO %s (key, column, data) VALUES (?, ?, ?)", "1", "2", "2");
