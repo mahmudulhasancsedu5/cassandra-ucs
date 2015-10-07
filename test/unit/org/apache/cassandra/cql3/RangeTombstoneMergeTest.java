@@ -21,8 +21,6 @@ package org.apache.cassandra.cql3;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.google.common.collect.Iterables;
 
 import org.junit.Before;
@@ -30,10 +28,12 @@ import org.junit.Test;
 
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.ISSTableScanner;
 
-public class RangeTomstoneMergeTest extends CQLTester
+public class RangeTombstoneMergeTest extends CQLTester
 {
     @Before
     public void before() throws Throwable
@@ -108,15 +108,18 @@ public class RangeTomstoneMergeTest extends CQLTester
 
     int countTombstones(SSTableReader reader)
     {
-        AtomicInteger tombstones = new AtomicInteger();
-        reader.getScanner().forEachRemaining(iter -> 
+        int tombstones = 0;
+        ISSTableScanner partitions = reader.getScanner();
+        while (partitions.hasNext())
         {
-            iter.forEachRemaining(atom ->
+            OnDiskAtomIterator iter = partitions.next();
+            while (iter.hasNext())
             {
+                OnDiskAtom atom = iter.next();
                 if (atom instanceof RangeTombstone)
-                    tombstones.incrementAndGet();
-            });
-        });
-        return tombstones.get();
+                    ++tombstones;
+            }
+        }
+        return tombstones;
     }
 }

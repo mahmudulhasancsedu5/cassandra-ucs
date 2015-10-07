@@ -185,11 +185,11 @@ public class RangeTombstone extends Interval<Composite, DeletionTime> implements
         private long writeTombstone(RangeTombstone rt, DataOutputPlus out, OnDiskAtom.Serializer atomSerializer)
                 throws IOException
         {
-            long szAdd = atomSerializer.serializedSizeForSSTable(rt);
+            long size = atomSerializer.serializedSizeForSSTable(rt);
             atomCount++;
             if (out != null)
                 atomSerializer.serializeForSSTable(rt, out);
-            return szAdd;
+            return size;
         }
 
         /**
