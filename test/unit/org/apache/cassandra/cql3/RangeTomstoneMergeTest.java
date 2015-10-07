@@ -31,9 +31,7 @@ import org.junit.Test;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
-import org.apache.cassandra.db.composites.Composite.EOC;
-import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 
 public class RangeTomstoneMergeTest extends CQLTester
 {
