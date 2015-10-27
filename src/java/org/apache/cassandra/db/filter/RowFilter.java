@@ -231,6 +231,7 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
                     return Transformation.apply(partition, this);
                 }
 
+                @Override
                 public Row applyToRow(Row row)
                 {
                     Row purged = row.purge(DeletionPurger.PURGE_ALL, nowInSec);

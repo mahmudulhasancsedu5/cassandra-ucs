@@ -136,6 +136,7 @@ abstract class AbstractQueryPager implements QueryPager
             exhausted = counted < pageLimits.count();
         }
 
+        @Override
         public Row applyToStatic(Row row)
         {
             if (!row.isEmpty())

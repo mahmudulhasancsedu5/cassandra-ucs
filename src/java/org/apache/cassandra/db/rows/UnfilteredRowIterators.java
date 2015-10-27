@@ -142,9 +142,11 @@ public abstract class UnfilteredRowIterators
             && iter1.columns().equals(iter2.columns())
             && iter1.staticRow().equals(iter2.staticRow());
 
-        class Extend implements MoreRows<UnfilteredRowIterator>
+        class Extend extends MoreRows<UnfilteredRowIterator>
         {
             boolean returned = false;
+
+            @Override
             public UnfilteredRowIterator moreContents()
             {
                 if (returned)
@@ -163,6 +165,7 @@ public abstract class UnfilteredRowIterators
         {
             private final Row.Builder builder = allocator.cloningBTreeRowBuilder();
 
+            @Override
             public Row applyToStatic(Row row)
             {
                 return Rows.copy(row, builder).build();

@@ -308,7 +308,7 @@ public class DataResolver extends ResponseResolver
             return partition;
         }
 
-        private class ShortReadRowProtection extends Transformation implements MoreRows<UnfilteredRowIterator>
+        private class ShortReadRowProtection extends MoreRows<UnfilteredRowIterator>
         {
             final CFMetaData metadata;
             final DecoratedKey partitionKey;

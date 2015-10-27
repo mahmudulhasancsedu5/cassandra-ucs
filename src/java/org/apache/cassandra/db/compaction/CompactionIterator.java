@@ -296,6 +296,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
          * containing `currentKey` outside of the set of sstables involved in this compaction. This is computed lazily
          * on demand as we only need this if there is tombstones and this a bit expensive (see #8914).
          */
+        @Override
         protected long getMaxPurgeableTimestamp()
         {
             if (!hasCalculatedMaxPurgeableTimestamp)

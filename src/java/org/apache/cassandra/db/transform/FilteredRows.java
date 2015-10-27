@@ -7,21 +7,14 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 
 public final class FilteredRows extends BaseRows<Row, BaseRowIterator<?>> implements RowIterator
 {
-    FilteredRows(RowIterator input)
+    FilteredRows(RowIterator input, Transformation trans)
     {
-        super(input);
+        super(input, trans);
     }
 
     FilteredRows(UnfilteredRowIterator input, Filter filter)
     {
-        super(input);
-        add(filter);
-    }
-
-    FilteredRows(Filter filter, UnfilteredRows input)
-    {
-        super(input);
-        add(filter);
+        super(input, filter);
     }
 
     @Override

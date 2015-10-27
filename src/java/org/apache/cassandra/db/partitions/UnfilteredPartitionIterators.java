@@ -65,6 +65,7 @@ public abstract class UnfilteredPartitionIterators
         // close the whole UnfilteredPartitionIterator.
         class Close extends Transformation
         {
+            @Override
             public void onPartitionClose()
             {
                 // asserting this only now because it bothers Serializer if hasNext() is called before

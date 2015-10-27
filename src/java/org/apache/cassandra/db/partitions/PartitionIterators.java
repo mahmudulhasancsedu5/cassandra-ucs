@@ -24,7 +24,6 @@ import org.apache.cassandra.db.EmptyIterators;
 import org.apache.cassandra.db.transform.MorePartitions;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.utils.AbstractIterator;
-
 import org.apache.cassandra.db.SinglePartitionReadCommand;
 import org.apache.cassandra.db.rows.*;
 
@@ -47,6 +46,7 @@ public abstract class PartitionIterators
         // close the whole PartitionIterator.
         class Close extends Transformation
         {
+            @Override
             public void onPartitionClose()
             {
                 // asserting this only now because it bothers UnfilteredPartitionIterators.Serializer (which might be used
@@ -65,9 +65,11 @@ public abstract class PartitionIterators
         if (iterators.size() == 1)
             return iterators.get(0);
 
-        class Extend implements MorePartitions<PartitionIterator>
+        class Extend extends MorePartitions<PartitionIterator, RowIterator>
         {
             int i = 1;
+
+            @Override
             public PartitionIterator moreContents()
             {
                 if (i >= iterators.size())

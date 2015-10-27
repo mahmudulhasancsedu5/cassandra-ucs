@@ -9,17 +9,10 @@ final class UnfilteredRows extends BaseRows<Unfiltered, UnfilteredRowIterator> i
 {
     private DeletionTime partitionLevelDeletion;
 
-    public UnfilteredRows(UnfilteredRowIterator input)
+    public UnfilteredRows(UnfilteredRowIterator input, Transformation trans)
     {
-        super(input);
-        partitionLevelDeletion = input.partitionLevelDeletion();
-    }
-
-    @Override
-    void add(Transformation add)
-    {
-        super.add(add);
-        partitionLevelDeletion = add.applyToDeletion(partitionLevelDeletion);
+        super(input, trans);
+        partitionLevelDeletion = trans.applyToDeletion(input.partitionLevelDeletion());
     }
 
     public DeletionTime partitionLevelDeletion()

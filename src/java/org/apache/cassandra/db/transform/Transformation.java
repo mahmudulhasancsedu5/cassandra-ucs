@@ -16,8 +16,8 @@ import org.apache.cassandra.db.rows.*;
 public abstract class Transformation<I extends BaseRowIterator<?>>
 {
     // internal methods for StoppableTransformation only
-    void attachTo(BasePartitions partitions) { }
-    void attachTo(BaseRows rows) { }
+    void attachTo(BasePartitions<?, ?> partitions) { }
+    void attachTo(BaseRows<?, ?> rows) { }
 
     /**
      * Run on the close of any (logical) partitions iterator this function was applied to
@@ -91,55 +91,18 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
 
     public static UnfilteredPartitionIterator apply(UnfilteredPartitionIterator iterator, Transformation<? super UnfilteredRowIterator> transformation)
     {
-        return add(mutable(iterator), transformation);
+        return new UnfilteredPartitions(iterator, transformation);
     }
     public static PartitionIterator apply(PartitionIterator iterator, Transformation<? super RowIterator> transformation)
     {
-        return add(mutable(iterator), transformation);
+        return new FilteredPartitions(iterator, transformation);
     }
     public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Transformation<?> transformation)
     {
-        return add(mutable(iterator), transformation);
+        return new UnfilteredRows(iterator, transformation);
     }
     public static RowIterator apply(RowIterator iterator, Transformation<?> transformation)
     {
-        return add(mutable(iterator), transformation);
+        return new FilteredRows(iterator, transformation);
     }
-
-    static UnfilteredPartitions mutable(UnfilteredPartitionIterator iterator)
-    {
-        return iterator instanceof UnfilteredPartitions
-               ? (UnfilteredPartitions) iterator
-               : new UnfilteredPartitions(iterator);
-    }
-    static FilteredPartitions mutable(PartitionIterator iterator)
-    {
-        return iterator instanceof FilteredPartitions
-               ? (FilteredPartitions) iterator
-               : new FilteredPartitions(iterator);
-    }
-    static UnfilteredRows mutable(UnfilteredRowIterator iterator)
-    {
-        return iterator instanceof UnfilteredRows
-               ? (UnfilteredRows) iterator
-               : new UnfilteredRows(iterator);
-    }
-    static FilteredRows mutable(RowIterator iterator)
-    {
-        return iterator instanceof FilteredRows
-               ? (FilteredRows) iterator
-               : new FilteredRows(iterator);
-    }
-
-    static <E extends BaseIterator> E add(E to, Transformation add)
-    {
-        to.add(add);
-        return to;
-    }
-    static <E extends BaseIterator> E add(E to, MoreContents add)
-    {
-        to.add(add);
-        return to;
-    }
-
 }

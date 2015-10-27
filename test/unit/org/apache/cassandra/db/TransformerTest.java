@@ -24,6 +24,7 @@ import java.util.List;
 import org.junit.Test;
 
 import junit.framework.Assert;
+
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -157,7 +158,7 @@ public class TransformerTest
         return expect;
     }
 
-    abstract static class Check extends Transformation
+    abstract static class Check extends MoreRows<BaseRowIterator<?>>
     {
         public abstract void check();
     }
@@ -175,12 +176,14 @@ public class TransformerTest
             this.cur = from;
         }
 
+        @Override
         public Row applyToRow(Row row)
         {
             Assert.assertEquals(cur++, ByteBufferUtil.toInt(row.clustering().get(0)));
             return row;
         }
 
+        @Override
         public void onPartitionClose()
         {
             Assert.assertEquals(to, cur);
@@ -190,6 +193,12 @@ public class TransformerTest
         public void check()
         {
             Assert.assertTrue(closed);
+        }
+
+        @Override
+        public BaseRowIterator<?> moreContents()
+        {
+            return null;
         }
     }
 
@@ -234,7 +243,7 @@ public class TransformerTest
 
     private static BaseRowIterator<?> extendingIterator(int count, Filter filter, List<Check> checks)
     {
-        class RefillNested extends Expect implements MoreRows<BaseRowIterator<?>>
+        class RefillNested extends Expect
         {
             boolean returnedEmpty, returnedSingleton, returnedNested;
             RefillNested(int from)
@@ -279,9 +288,9 @@ public class TransformerTest
             BaseRowIterator<?> applyTo(BaseRowIterator<?> iter)
             {
                 if (iter instanceof UnfilteredRowIterator)
-                    return Transformation.apply(MoreRows.extend((UnfilteredRowIterator) iter, this), this);
+                    return MoreRows.extend((UnfilteredRowIterator) iter, this);
                 else
-                    return Transformation.apply(MoreRows.extend((RowIterator) iter, this), this);
+                    return MoreRows.extend((RowIterator) iter, this);
             }
         }
 

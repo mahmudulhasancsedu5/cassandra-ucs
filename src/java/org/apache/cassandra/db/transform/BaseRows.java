@@ -7,24 +7,22 @@ import org.apache.cassandra.db.rows.*;
 
 import static org.apache.cassandra.utils.Throwables.merge;
 
-public abstract class BaseRows<R extends Unfiltered, I extends BaseRowIterator<? extends Unfiltered>>
-extends BaseIterator<Unfiltered, I, R>
-implements BaseRowIterator<R>
+public abstract class BaseRows<OUT extends Unfiltered, I extends BaseRowIterator<? extends Unfiltered>>
+extends BaseIterator<Unfiltered, I, OUT>
+implements BaseRowIterator<OUT>
 {
 
     private Row staticRow;
 
-    public BaseRows(I input)
+    public BaseRows(I input, Transformation transformation)
     {
-        super(input);
-        staticRow = input.staticRow();
-    }
+        super(input, transformation);
+        transformation.attachTo(this);
+        staticRow = transformation.applyToStatic(input.staticRow());
 
-    // swap parameter order to avoid casting errors
-    BaseRows(BaseRows<?, ? extends I> copyFrom)
-    {
-        super(copyFrom);
-        staticRow = copyFrom.staticRow;
+        // Clean up
+        if (input instanceof BaseRows)
+            ((BaseRows<?, ?>) input).staticRow = null;
     }
 
     public CFMetaData metadata()
@@ -57,83 +55,29 @@ implements BaseRowIterator<R>
 
 
     @Override
-    protected Throwable runOnClose(int length)
+    protected Throwable runOnClose()
     {
-        Throwable fail = null;
-        Transformation[] fs = stack;
-        for (int i = 0 ; i < length ; i++)
+        Throwable fail = prev != null ? prev.runOnClose() : null;
+        try
         {
-            try
-            {
-                fs[i].onPartitionClose();
-            }
-            catch (Throwable t)
-            {
-                fail = merge(fail, t);
-            }
+            transformation.onPartitionClose();
+        }
+        catch (Throwable t)
+        {
+            fail = merge(fail, t);
         }
         return fail;
     }
 
     @Override
-    void add(Transformation transformation)
+    protected Consumer<Unfiltered> apply(Consumer<OUT> nextConsumer)
     {
-        transformation.attachTo(this);
-        super.add(transformation);
-
-        // transform any existing data
-        staticRow = transformation.applyToStatic(staticRow);
-        next = applyOne(next, transformation);
-    }
-
-    @Override
-    protected Unfiltered applyOne(Unfiltered value, Transformation transformation)
-    {
-        return value == null
-               ? null
-               : value instanceof Row
-                 ? transformation.applyToRow((Row) value)
-                 : transformation.applyToMarker((RangeTombstoneMarker) value);
-    }
-
-    @Override
-    public final boolean hasNext()
-    {
-        Stop stop = this.stop;
-        while (this.next == null)
-        {
-            Transformation[] fs = stack;
-            int len = length;
-
-            while (!stop.isSignalled && input.hasNext())
-            {
-                Unfiltered next = input.next();
-
-                if (next.isRow())
-                {
-                    Row row = (Row) next;
-                    for (int i = 0 ; row != null && i < len ; i++)
-                        row = fs[i].applyToRow(row);
-                    next = row;
-                }
-                else
-                {
-                    RangeTombstoneMarker rtm = (RangeTombstoneMarker) next;
-                    for (int i = 0 ; rtm != null && i < len ; i++)
-                        rtm = fs[i].applyToMarker(rtm);
-                    next = rtm;
-                }
-
-                if (next != null)
-                {
-                    this.next = next;
-                    return true;
-                }
-            }
-
-            if (stop.isSignalled || !hasMoreContents())
-                return false;
-        }
-        return true;
+        return value -> {
+            @SuppressWarnings("unchecked")
+            OUT transformed = (OUT) (value instanceof Row
+                ? transformation.applyToRow((Row) value)
+                : transformation.applyToMarker((RangeTombstoneMarker) value));
+            return transformed == null || nextConsumer.accept(transformed);
+        };
     }
 }

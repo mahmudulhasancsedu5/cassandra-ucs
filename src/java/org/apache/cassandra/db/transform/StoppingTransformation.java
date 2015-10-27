@@ -33,14 +33,14 @@ public abstract class StoppingTransformation<I extends BaseRowIterator<?>> exten
     }
 
     @Override
-    protected void attachTo(BasePartitions partitions)
+    protected void attachTo(BasePartitions<?, ?> partitions)
     {
         assert this.stop == null;
         this.stop = partitions.stop;
     }
 
     @Override
-    protected void attachTo(BaseRows rows)
+    protected void attachTo(BaseRows<?, ?> rows)
     {
         assert this.stopInPartition == null;
         this.stopInPartition = rows.stop;

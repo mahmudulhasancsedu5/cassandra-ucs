@@ -8,23 +8,15 @@ import org.apache.cassandra.db.rows.RowIterator;
 public final class FilteredPartitions extends BasePartitions<RowIterator, BasePartitionIterator<?>> implements PartitionIterator
 {
     // wrap basic iterator for transformation
-    FilteredPartitions(PartitionIterator input)
+    FilteredPartitions(PartitionIterator input, Transformation trans)
     {
-        super(input);
+        super(input, trans);
     }
 
     // wrap basic unfiltered iterator for transformation, applying filter as first transformation
     FilteredPartitions(UnfilteredPartitionIterator input, Filter filter)
     {
-        super(input);
-        add(filter);
-    }
-
-    // copy from an UnfilteredPartitions, applying a filter to convert it
-    FilteredPartitions(Filter filter, UnfilteredPartitions copyFrom)
-    {
-        super(copyFrom);
-        add(filter);
+        super(input, filter);
     }
 
     /**
@@ -33,8 +25,6 @@ public final class FilteredPartitions extends BasePartitions<RowIterator, BasePa
     public static PartitionIterator filter(UnfilteredPartitionIterator iterator, int nowInSecs)
     {
         Filter filter = new Filter(!iterator.isForThrift(), nowInSecs);
-        if (iterator instanceof UnfilteredPartitions)
-            return new FilteredPartitions(filter, (UnfilteredPartitions) iterator);
         return new FilteredPartitions(iterator, filter);
     }
 }

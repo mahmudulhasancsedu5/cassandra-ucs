@@ -470,12 +470,14 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
 
     protected class CheckForAbort extends StoppingTransformation<BaseRowIterator<?>>
     {
+        @Override
         protected BaseRowIterator<?> applyToPartition(BaseRowIterator partition)
         {
             maybeAbort();
             return partition;
         }
 
+        @Override
         protected Row applyToRow(Row row)
         {
             maybeAbort();
@@ -528,6 +530,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                 super(isForThrift, cfs.gcBefore(nowInSec()), oldestUnrepairedTombstone(), cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones());
             }
 
+            @Override
             protected long getMaxPurgeableTimestamp()
             {
                 return Long.MAX_VALUE;

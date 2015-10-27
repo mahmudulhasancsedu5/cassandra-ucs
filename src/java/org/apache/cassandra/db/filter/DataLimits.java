@@ -195,8 +195,10 @@ public abstract class DataLimits
         @Override
         protected BaseRowIterator<?> applyToPartition(BaseRowIterator<?> partition)
         {
-            return partition instanceof UnfilteredRowIterator ? Transformation.apply((UnfilteredRowIterator) partition, this)
-                                                              : Transformation.apply((RowIterator) partition, this);
+            partition = partition instanceof UnfilteredRowIterator ? Transformation.apply((UnfilteredRowIterator) partition, this)
+                                                                   : Transformation.apply((RowIterator) partition, this);
+            applyToPartition(partition.partitionKey(), partition.staticRow());
+            return partition;
         }
 
         // called before we process a given partition
@@ -216,7 +218,6 @@ public abstract class DataLimits
         {
             if (enforceLimits)
                 super.attachTo(rows);
-            applyToPartition(rows.partitionKey(), rows.staticRow());
             if (isDoneForPartition())
                 stopInPartition();
         }

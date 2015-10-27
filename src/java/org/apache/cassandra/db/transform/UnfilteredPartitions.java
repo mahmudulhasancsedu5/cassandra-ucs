@@ -9,9 +9,9 @@ final class UnfilteredPartitions extends BasePartitions<UnfilteredRowIterator, U
     final boolean isForThrift;
 
     // wrap an iterator for transformation
-    public UnfilteredPartitions(UnfilteredPartitionIterator input)
+    public UnfilteredPartitions(UnfilteredPartitionIterator input, Transformation trans)
     {
-        super(input);
+        super(input, trans);
         this.isForThrift = input.isForThrift();
     }
 

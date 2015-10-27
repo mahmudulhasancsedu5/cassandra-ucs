@@ -3,17 +3,19 @@ package org.apache.cassandra.db.transform;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-import net.nicoulaj.compilecommand.annotations.DontInline;
 import org.apache.cassandra.utils.CloseableIterator;
 
 import static org.apache.cassandra.utils.Throwables.maybeFail;
 import static org.apache.cassandra.utils.Throwables.merge;
 
-abstract class BaseIterator<V, I extends CloseableIterator<? extends V>, O extends V> extends Stack implements AutoCloseable, Iterator<O>
+abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OUT extends IN> implements AutoCloseable, Iterator<OUT>, Consumer.Provider<IN, OUT>
 {
-    I input;
-    V next;
-    Stop stop; // applies at the end of the current next()
+    ITER input;
+    BaseIterator<IN, ITER, IN> prev;
+    final Stop stop; // applies at the end of the current next()
+    final Transformation transformation;
+    OUT next;
+    Consumer<IN> consumer;
 
     static class Stop
     {
@@ -22,19 +24,23 @@ abstract class BaseIterator<V, I extends CloseableIterator<? extends V>, O exten
         boolean isSignalled;
     }
 
-    // responsibility for initialising next lies with the subclass
-    BaseIterator(BaseIterator<? extends V, ? extends I, ?> copyFrom)
+    BaseIterator(ITER input, Transformation transformation)
     {
-        super(copyFrom);
-        this.input = copyFrom.input;
-        this.next = copyFrom.next;
-        this.stop = copyFrom.stop;
-    }
-
-    BaseIterator(I input)
-    {
-        this.input = input;
-        this.stop = new Stop();
+        if (input instanceof BaseIterator)
+        {
+            @SuppressWarnings("unchecked")
+            BaseIterator<IN, ITER, IN> prev = ((BaseIterator<IN, ITER, IN>) input);
+            this.input = prev.input;
+            this.stop = prev.stop;
+            this.prev = prev;
+        }
+        else
+        {
+            this.input = input;
+            this.stop = new Stop();
+            this.prev = null;
+        }
+        this.transformation = transformation;
     }
 
     /**
@@ -42,18 +48,13 @@ abstract class BaseIterator<V, I extends CloseableIterator<? extends V>, O exten
      *
      * used in hasMoreContents to close the methods preceding the MoreContents
      */
-    protected abstract Throwable runOnClose(int length);
+    protected abstract Throwable runOnClose();
 
-    /**
-     * apply the relevant method from the transformation to the value.
-     *
-     * used in hasMoreContents to apply the functions that follow the MoreContents
-     */
-    protected abstract V applyOne(V value, Transformation transformation);
+    protected abstract Consumer<IN> apply(Consumer<OUT> nextConsumer);
 
     public final void close()
     {
-        Throwable fail = runOnClose(length);
+        Throwable fail = runOnClose();
         if (next instanceof AutoCloseable)
         {
             try { ((AutoCloseable) next).close(); }
@@ -64,66 +65,105 @@ abstract class BaseIterator<V, I extends CloseableIterator<? extends V>, O exten
         maybeFail(fail);
     }
 
-    public final O next()
+    // this could call the consumer. only once!
+    public Consumer<IN> consumer(Consumer<OUT> nextConsumer)
+    {
+        if (next != null)
+            if (!nextConsumer.accept(clearNext()))
+                stop.isSignalled = true;
+
+        Consumer<IN> ourConsumer = apply(nextConsumer);
+
+        return prev != null ? prev.consumer(ourConsumer) : ourConsumer;
+    }
+
+    private Consumer<IN> initConsumer()
+    {
+        if (consumer == null)
+            consumer = consumer(this::acceptNext);
+        return consumer;
+    }
+
+    private boolean acceptNext(OUT next)
+    {
+        assert this.next == null;
+        this.next = next;
+        return true;
+    }
+
+    private OUT clearNext()
+    {
+        OUT toReturn = next;
+        next = null;
+        return toReturn;
+    }
+
+    public final boolean hasNext()
+    {
+        initConsumer();
+        while (next == null && !stop.isSignalled)
+        {
+            if (input.hasNext())
+            {
+                if (!consumer.accept(input.next()))
+                    break;
+            }
+            else
+            {
+                if (!tryGetMoreContents())
+                    break;
+            }
+        }
+
+        return next != null;
+    }
+
+    public final OUT next()
     {
         if (next == null && !hasNext())
             throw new NoSuchElementException();
 
-        O next = (O) this.next;
-        this.next = null;
-        return next;
+        return clearNext();
     }
 
-    // may set next != null if the next contents are a transforming iterator that already has data to return,
-    // in which case we immediately have more contents to yield
-    protected final boolean hasMoreContents()
+    public final ITER getMoreContents()
     {
-        return moreContents.length > 0 && tryGetMoreContents();
-    }
+        // We don't switch input as we are not going to use it.
+        ITER iter = prev != null ? prev.getMoreContents() : null;
+        if (iter != null)
+            return iter; // Switch already done.
 
-    @DontInline
-    private boolean tryGetMoreContents()
-    {
-        for (int i = 0 ; i < moreContents.length ; i++)
+        if (transformation instanceof MoreContents)
+            iter = ((MoreContents<ITER, ?>) transformation).moreContents();
+        if (iter == null)
+            return null;
+
+        prev.close();
+
+        // Switch consumer chains.
+        if (iter instanceof BaseIterator)
         {
-            MoreContentsHolder holder = moreContents[i];
-            MoreContents provider = holder.moreContents;
-            I newContents = (I) provider.moreContents();
-            if (newContents == null)
-                continue;
-
-            input.close();
-            input = newContents;
-            Stack prefix = EMPTY;
-            if (newContents instanceof BaseIterator)
-            {
-                // we're refilling with transformed contents, so swap in its internals directly
-                // TODO: ensure that top-level data is consistent. i.e. staticRow, partitionlevelDeletion etc are same?
-                BaseIterator abstr = (BaseIterator) newContents;
-                prefix = abstr;
-                input = (I) abstr.input;
-                next = apply((V) abstr.next, holder.length); // must apply all remaining functions to the next, if any
-            }
-
-            // since we're truncating our transformation stack to only those occurring after the extend transformation
-            // we have to run any prior runOnClose methods
-            maybeFail(runOnClose(holder.length));
-            refill(prefix, holder, i);
-
-            if (next != null || input.hasNext())
-                return true;
-
-            i = -1;
+            @SuppressWarnings("unchecked")
+            BaseIterator<IN, ITER, IN> base = (BaseIterator<IN, ITER, IN>) iter;
+            prev = base;
+            return base.input;
         }
-        return false;
+        else
+        {
+            prev = null;
+            return iter;
+        }
     }
 
-    // apply the functions [from..length)
-    private V apply(V next, int from)
+    public boolean tryGetMoreContents()
     {
-        while (next != null & from < length)
-            next = applyOne(next, stack[from++]);
-        return next;
+        ITER newInput = getMoreContents();
+        if (newInput == null)
+            return false;
+        input = newInput;
+        consumer = null;
+        initConsumer();
+        return true;
     }
 }
 
