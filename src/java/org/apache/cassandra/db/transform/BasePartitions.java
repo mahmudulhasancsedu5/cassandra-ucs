@@ -14,7 +14,6 @@ implements BasePartitionIterator<OUT>
     public BasePartitions(ITER input, Transformation trans)
     {
         super(input, trans);
-        transformation.attachTo(this);
     }
 
     // *********************************
@@ -42,7 +41,7 @@ implements BasePartitionIterator<OUT>
         return value -> {
             @SuppressWarnings("unchecked")
             OUT transformed = (OUT) transformation.applyToPartition(value);
-            return transformed == null || nextConsumer.accept(transformed);
+            return (transformed == null || nextConsumer.accept(transformed)) && !transformation.isDone();
         };
     }
 }

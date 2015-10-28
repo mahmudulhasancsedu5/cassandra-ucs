@@ -31,7 +31,6 @@ import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.monitoring.MonitorableImpl;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.*;
-import org.apache.cassandra.db.transform.StoppingTransformation;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.index.Index;
@@ -468,29 +467,29 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
         return Transformation.apply(iter, new MetricRecording());
     }
 
-    protected class CheckForAbort extends StoppingTransformation<BaseRowIterator<?>>
+    protected class CheckForAbort extends Transformation<BaseRowIterator<?>>
     {
         @Override
-        protected BaseRowIterator<?> applyToPartition(BaseRowIterator partition)
+        protected boolean isDoneForPartition()
         {
-            maybeAbort();
-            return partition;
+            return maybeAbort();
         }
 
         @Override
-        protected Row applyToRow(Row row)
+        protected boolean isDone()
         {
-            maybeAbort();
-            return row;
+            return maybeAbort();
         }
 
-        private void maybeAbort()
+        private boolean maybeAbort()
         {
             if (isAborted())
-                stop();
+                return true;
 
             if (TEST_ITERATION_DELAY_MILLIS > 0)
                 maybeDelayForTesting();
+
+            return false;
         }
     }
 

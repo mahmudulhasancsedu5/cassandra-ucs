@@ -23,9 +23,6 @@ import java.nio.ByteBuffer;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.*;
-import org.apache.cassandra.db.transform.BasePartitions;
-import org.apache.cassandra.db.transform.BaseRows;
-import org.apache.cassandra.db.transform.StoppingTransformation;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -129,17 +126,20 @@ public abstract class DataLimits
 
     public UnfilteredPartitionIterator filter(UnfilteredPartitionIterator iter, int nowInSec)
     {
-        return this.newCounter(nowInSec, false).applyTo(iter);
+        Counter c = this.newCounter(nowInSec, false);
+        return c.isDone() ? EmptyIterators.unfilteredPartition(iter.metadata(), iter.isForThrift()) : c.applyTo(iter);
     }
 
     public UnfilteredRowIterator filter(UnfilteredRowIterator iter, int nowInSec)
     {
-        return this.newCounter(nowInSec, false).applyTo(iter);
+        Counter c = this.newCounter(nowInSec, false);
+        return c.isDone() ? EmptyIterators.unfilteredRow(iter.metadata(), iter.partitionKey(), iter.isReverseOrder(), iter.staticRow(), iter.partitionLevelDeletion()) : c.applyTo(iter);
     }
 
     public PartitionIterator filter(PartitionIterator iter, int nowInSec)
     {
-        return this.newCounter(nowInSec, true).applyTo(iter);
+        Counter c = this.newCounter(nowInSec, true);
+        return c.isDone() ? EmptyIterators.partition() : c.applyTo(iter);
     }
 
     /**
@@ -148,10 +148,10 @@ public abstract class DataLimits
      */
     public abstract float estimateTotalResults(ColumnFamilyStore cfs);
 
-    public static abstract class Counter extends StoppingTransformation<BaseRowIterator<?>>
+    public static abstract class Counter extends Transformation<BaseRowIterator<?>>
     {
         // false means we do not propagate our stop signals onto the iterator, we only count
-        private boolean enforceLimits = true;
+        protected boolean enforceLimits = true;
 
         public Counter onlyCount()
         {
@@ -189,7 +189,9 @@ public abstract class DataLimits
         public abstract int counted();
         public abstract int countedInCurrentPartition();
 
+        @Override
         public abstract boolean isDone();
+        @Override
         public abstract boolean isDoneForPartition();
 
         @Override
@@ -203,24 +205,6 @@ public abstract class DataLimits
 
         // called before we process a given partition
         protected abstract void applyToPartition(DecoratedKey partitionKey, Row staticRow);
-
-        @Override
-        protected void attachTo(BasePartitions partitions)
-        {
-            if (enforceLimits)
-                super.attachTo(partitions);
-            if (isDone())
-                stop();
-        }
-
-        @Override
-        protected void attachTo(BaseRows rows)
-        {
-            if (enforceLimits)
-                super.attachTo(rows);
-            if (isDoneForPartition())
-                stopInPartition();
-        }
     }
 
     /**
@@ -379,10 +363,8 @@ public abstract class DataLimits
 
             private void incrementRowCount()
             {
-                if (++rowCounted >= rowLimit)
-                    stop();
-                if (++rowInCurrentPartition >= perPartitionLimit)
-                    stopInPartition();
+                ++rowCounted;
+                ++rowInCurrentPartition;
             }
 
             public int counted()
@@ -397,12 +379,12 @@ public abstract class DataLimits
 
             public boolean isDone()
             {
-                return rowCounted >= rowLimit;
+                return enforceLimits && rowCounted >= rowLimit;
             }
 
             public boolean isDoneForPartition()
             {
-                return isDone() || rowInCurrentPartition >= perPartitionLimit;
+                return enforceLimits && (isDone() || rowInCurrentPartition >= perPartitionLimit);
             }
         }
 
@@ -612,19 +594,10 @@ public abstract class DataLimits
                     if (assumeLiveData || cell.isLive(nowInSec))
                     {
                         ++cellsCounted;
-                        if (++cellsInCurrentPartition >= cellPerPartitionLimit)
-                            stopInPartition();
+                        ++cellsInCurrentPartition;
                     }
                 }
                 return row;
-            }
-
-            @Override
-            public void onPartitionClose()
-            {
-                if (++partitionsCounted >= partitionLimit)
-                    stop();
-                super.onPartitionClose();
             }
 
             public int counted()
@@ -639,12 +612,12 @@ public abstract class DataLimits
 
             public boolean isDone()
             {
-                return partitionsCounted >= partitionLimit;
+                return enforceLimits && partitionsCounted >= partitionLimit;
             }
 
             public boolean isDoneForPartition()
             {
-                return isDone() || cellsInCurrentPartition >= cellPerPartitionLimit;
+                return enforceLimits && (isDone() || cellsInCurrentPartition >= cellPerPartitionLimit);
             }
         }
 
@@ -707,8 +680,7 @@ public abstract class DataLimits
                 if (assumeLiveData || row.hasLiveData(nowInSec))
                 {
                     ++cellsCounted;
-                    if (++cellsInCurrentPartition >= cellPerPartitionLimit)
-                        stopInPartition();
+                    ++cellsInCurrentPartition;
                 }
                 return row;
             }

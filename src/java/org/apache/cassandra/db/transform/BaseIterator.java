@@ -12,10 +12,10 @@ abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OU
 {
     ITER input;
     BaseIterator<IN, ITER, IN> prev;
-    final Stop stop; // applies at the end of the current next()
     final Transformation transformation;
     OUT next;
     Consumer<IN> consumer;
+    boolean terminated = false;
 
     static class Stop
     {
@@ -31,13 +31,11 @@ abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OU
             @SuppressWarnings("unchecked")
             BaseIterator<IN, ITER, IN> prev = ((BaseIterator<IN, ITER, IN>) input);
             this.input = prev.input;
-            this.stop = prev.stop;
             this.prev = prev;
         }
         else
         {
             this.input = input;
-            this.stop = new Stop();
             this.prev = null;
         }
         this.transformation = transformation;
@@ -70,18 +68,23 @@ abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OU
     {
         if (next != null)
             if (!nextConsumer.accept(clearNext()))
-                stop.isSignalled = true;
+                return null;
+        if (terminated)
+            return null;
 
         Consumer<IN> ourConsumer = apply(nextConsumer);
 
         return prev != null ? prev.consumer(ourConsumer) : ourConsumer;
     }
 
-    private Consumer<IN> initConsumer()
+    private void initConsumer()
     {
         if (consumer == null)
+        {
             consumer = consumer(this::acceptNext);
-        return consumer;
+            if (consumer == null)
+                terminated = true;
+        }
     }
 
     private boolean acceptNext(OUT next)
@@ -101,12 +104,15 @@ abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OU
     public final boolean hasNext()
     {
         initConsumer();
-        while (next == null && !stop.isSignalled)
+        while (next == null && !terminated)
         {
             if (input.hasNext())
             {
                 if (!consumer.accept(input.next()))
+                {
+                    terminated = true;
                     break;
+                }
             }
             else
             {

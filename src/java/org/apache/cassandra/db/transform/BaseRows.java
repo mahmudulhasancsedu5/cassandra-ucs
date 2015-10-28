@@ -17,7 +17,6 @@ implements BaseRowIterator<OUT>
     public BaseRows(I input, Transformation transformation)
     {
         super(input, transformation);
-        transformation.attachTo(this);
         staticRow = transformation.applyToStatic(input.staticRow());
 
         // Clean up
@@ -77,7 +76,7 @@ implements BaseRowIterator<OUT>
             OUT transformed = (OUT) (value instanceof Row
                 ? transformation.applyToRow((Row) value)
                 : transformation.applyToMarker((RangeTombstoneMarker) value));
-            return transformed == null || nextConsumer.accept(transformed);
+            return (transformed == null || nextConsumer.accept(transformed)) && !transformation.isDoneForPartition();
         };
     }
 }
