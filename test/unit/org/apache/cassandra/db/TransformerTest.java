@@ -30,6 +30,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.FilteredRows;
 import org.apache.cassandra.db.transform.MoreRows;
 import org.apache.cassandra.db.transform.Transformation;
@@ -158,12 +159,12 @@ public class TransformerTest
         return expect;
     }
 
-    abstract static class Check extends MoreRows<BaseRowIterator<?>>
+    abstract static class Check<R extends Unfiltered> extends MoreRows<R, BaseRowIterator<R>>
     {
         public abstract void check();
     }
 
-    static class Expect extends Check
+    static class Expect<R extends Unfiltered> extends Check<R>
     {
         final int from, to;
         int cur;
@@ -177,10 +178,13 @@ public class TransformerTest
         }
 
         @Override
-        public Row applyToRow(Row row)
+        public Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
         {
-            Assert.assertEquals(cur++, ByteBufferUtil.toInt(row.clustering().get(0)));
-            return row;
+            return row ->
+            {
+                Assert.assertEquals(cur++, ByteBufferUtil.toInt(row.clustering().get(0)));
+                return nextConsumer.accept(row);
+            };
         }
 
         @Override
@@ -196,7 +200,7 @@ public class TransformerTest
         }
 
         @Override
-        public BaseRowIterator<?> moreContents()
+        public BaseRowIterator<R> moreContents()
         {
             return null;
         }

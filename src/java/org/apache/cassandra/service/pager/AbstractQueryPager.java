@@ -77,10 +77,10 @@ abstract class AbstractQueryPager implements QueryPager
         return Transformation.apply(nextPageReadCommand(pageSize).executeInternal(executionController), pager);
     }
 
-    private class Pager extends Transformation<RowIterator>
+    private class Pager extends Transformation<Row, RowIterator>
     {
         private final DataLimits pageLimits;
-        private final DataLimits.Counter counter;
+        private final DataLimits.Counter<Row, RowIterator> counter;
         private Row lastRow;
         private boolean isFirstPartition = true;
 
@@ -113,7 +113,7 @@ abstract class AbstractQueryPager implements QueryPager
                 }
             }
 
-            return Transformation.apply(counter.applyTo(partition), this);
+            return Transformation.apply(counter.applyToPartition(partition), this);
         }
 
         @Override

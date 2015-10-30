@@ -21,6 +21,7 @@ import java.util.*;
 import java.security.MessageDigest;
 
 import org.apache.cassandra.db.EmptyIterators;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.MorePartitions;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.utils.AbstractIterator;
@@ -44,7 +45,7 @@ public abstract class PartitionIterators
 
         // Note that in general, we should wrap the result so that it's close method actually
         // close the whole PartitionIterator.
-        class Close extends Transformation
+        class Close extends Transformation<Row, RowIterator>
         {
             @Override
             public void onPartitionClose()
@@ -65,7 +66,7 @@ public abstract class PartitionIterators
         if (iterators.size() == 1)
             return iterators.get(0);
 
-        class Extend extends MorePartitions<PartitionIterator, RowIterator>
+        class Extend extends MorePartitions<PartitionIterator, Row, RowIterator>
         {
             int i = 1;
 
@@ -117,11 +118,12 @@ public abstract class PartitionIterators
     @SuppressWarnings("resource") // The created resources are returned right away
     public static PartitionIterator loggingIterator(PartitionIterator iterator, final String id)
     {
-        class Logger extends Transformation<RowIterator>
+        class Logger extends Transformation<Row, RowIterator>
         {
-            public RowIterator applyToPartition(RowIterator partition)
+            @Override
+            public Consumer<RowIterator> applyAsPartitionConsumer(Consumer<RowIterator> nextConsumer)
             {
-                return RowIterators.loggingIterator(partition, id);
+                return partition -> nextConsumer.accept(RowIterators.loggingIterator(partition, id));
             }
         }
         return Transformation.apply(iterator, new Logger());

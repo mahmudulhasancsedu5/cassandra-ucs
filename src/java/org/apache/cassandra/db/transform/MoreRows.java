@@ -1,8 +1,6 @@
 package org.apache.cassandra.db.transform;
 
-import org.apache.cassandra.db.rows.BaseRowIterator;
-import org.apache.cassandra.db.rows.RowIterator;
-import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.db.rows.*;
 
 /**
  * An interface for providing new row contents for a partition.
@@ -16,15 +14,15 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
  * If the new source is itself a product of any transformations, the two transforming iterators are merged
  * so that control flow always occurs at the outermost point
  */
-public abstract class MoreRows<I extends BaseRowIterator<?>> extends MoreContents<I, I>
+public abstract class MoreRows<R extends Unfiltered, I extends BaseRowIterator<R>> extends MoreContents<I, R, I>
 {
 
-    public static UnfilteredRowIterator extend(UnfilteredRowIterator iterator, MoreRows<? super UnfilteredRowIterator> more)
+    public static UnfilteredRowIterator extend(UnfilteredRowIterator iterator, MoreRows<Unfiltered, ? super UnfilteredRowIterator> more)
     {
         return new UnfilteredRows(iterator, more);
     }
 
-    public static RowIterator extend(RowIterator iterator, MoreRows<? super RowIterator> more)
+    public static RowIterator extend(RowIterator iterator, MoreRows<Row, ? super RowIterator> more)
     {
         return new FilteredRows(iterator, more);
     }

@@ -30,6 +30,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -222,26 +223,37 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
             if (expressions.isEmpty())
                 return iter;
 
-            class IsSatisfiedFilter extends Transformation<UnfilteredRowIterator>
+            class IsSatisfiedFilter extends Transformation<Unfiltered, UnfilteredRowIterator>
             {
                 DecoratedKey pk;
-                public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+
+                @Override
+                public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
                 {
-                    pk = partition.partitionKey();
-                    return Transformation.apply(partition, this);
+                    return partition ->
+                    {
+                        pk = partition.partitionKey();
+                        return nextConsumer.accept(Transformation.apply(partition, this));
+                    };
                 }
 
                 @Override
-                public Row applyToRow(Row row)
+                public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
                 {
-                    Row purged = row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-                    if (purged == null)
-                        return null;
+                    return value ->
+                    {
+                        if (value instanceof Row)
+                        {
+                            Row purged = ((Row) value).purge(DeletionPurger.PURGE_ALL, nowInSec);
+                            if (purged == null)
+                                return true;    // skip value
 
-                    for (Expression e : expressions)
-                        if (!e.isSatisfiedBy(pk, purged))
-                            return null;
-                    return row;
+                            for (Expression e : expressions)
+                                if (!e.isSatisfiedBy(pk, purged))
+                                    return true;
+                        }
+                        return nextConsumer.accept(value);
+                    };
                 }
             }
 
@@ -266,28 +278,31 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
             if (expressions.isEmpty())
                 return iter;
 
-            class IsSatisfiedThriftFilter extends Transformation<UnfilteredRowIterator>
+            class IsSatisfiedThriftFilter extends Transformation<Unfiltered, UnfilteredRowIterator>
             {
                 @Override
-                public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator iter)
+                public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
                 {
-                    // Thrift does not filter rows, it filters entire partition if any of the expression is not
-                    // satisfied, which forces us to materialize the result (in theory we could materialize only
-                    // what we need which might or might not be everything, but we keep it simple since in practice
-                    // it's not worth that it has ever been).
-                    ImmutableBTreePartition result = ImmutableBTreePartition.create(iter);
-                    iter.close();
-
-                    // The partition needs to have a row for every expression, and the expression needs to be valid.
-                    for (Expression expr : expressions)
+                    return it ->
                     {
-                        assert expr instanceof ThriftExpression;
-                        Row row = result.getRow(makeCompactClustering(iter.metadata(), expr.column().name.bytes));
-                        if (row == null || !expr.isSatisfiedBy(iter.partitionKey(), row))
-                            return null;
-                    }
-                    // If we get there, it means all expressions where satisfied, so return the original result
-                    return result.unfilteredIterator();
+                        // Thrift does not filter rows, it filters entire partition if any of the expression is not
+                        // satisfied, which forces us to materialize the result (in theory we could materialize only
+                        // what we need which might or might not be everything, but we keep it simple since in practice
+                        // it's not worth that it has ever been).
+                        ImmutableBTreePartition result = ImmutableBTreePartition.create(it);
+                        it.close();
+    
+                        // The partition needs to have a row for every expression, and the expression needs to be valid.
+                        for (Expression expr : expressions)
+                        {
+                            assert expr instanceof ThriftExpression;
+                            Row row = result.getRow(makeCompactClustering(it.metadata(), expr.column().name.bytes));
+                            if (row == null || !expr.isSatisfiedBy(it.partitionKey(), row))
+                                return true; // skip partition
+                        }
+                        // If we get there, it means all expressions where satisfied, so return the original result
+                        return nextConsumer.accept(result.unfilteredIterator());
+                    };
                 }
             }
             return Transformation.apply(iter, new IsSatisfiedThriftFilter());

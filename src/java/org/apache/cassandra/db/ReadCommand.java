@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import com.google.common.collect.Lists;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +32,7 @@ import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.monitoring.MonitorableImpl;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.index.Index;
@@ -387,7 +389,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
      */
     private UnfilteredPartitionIterator withMetricsRecording(UnfilteredPartitionIterator iter, final TableMetrics metric, final long startTimeNanos)
     {
-        class MetricRecording extends Transformation<UnfilteredRowIterator>
+        class MetricRecording extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             private final int failureThreshold = DatabaseDescriptor.getTombstoneFailureThreshold();
             private final int warningThreshold = DatabaseDescriptor.getTombstoneWarnThreshold();
@@ -467,18 +469,23 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
         return Transformation.apply(iter, new MetricRecording());
     }
 
-    protected class CheckForAbort extends Transformation<BaseRowIterator<?>>
+    protected class CheckForAbort<R extends Unfiltered, P extends BaseRowIterator<R>> extends Transformation<R, P>
     {
         @Override
-        protected boolean isDoneForPartition()
+        public Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
         {
-            return maybeAbort();
+            return getConsumer(nextConsumer);
         }
 
         @Override
-        protected boolean isDone()
+        protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
         {
-            return maybeAbort();
+            return getConsumer(nextConsumer);
+        }
+
+        public<T> Consumer<T> getConsumer(Consumer<T> nextConsumer)
+        {
+            return value -> nextConsumer.accept(value) && !maybeAbort();
         }
 
         private boolean maybeAbort()
@@ -495,12 +502,12 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
 
     protected UnfilteredPartitionIterator withStateTracking(UnfilteredPartitionIterator iter)
     {
-        return Transformation.apply(iter, new CheckForAbort());
+        return Transformation.apply(iter, new CheckForAbort<>());
     }
 
     protected UnfilteredRowIterator withStateTracking(UnfilteredRowIterator iter)
     {
-        return Transformation.apply(iter, new CheckForAbort());
+        return Transformation.apply(iter, new CheckForAbort<>());
     }
 
     private void maybeDelayForTesting()

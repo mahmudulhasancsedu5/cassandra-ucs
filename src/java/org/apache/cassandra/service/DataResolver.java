@@ -31,6 +31,7 @@ import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.MoreRows;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
@@ -284,7 +285,7 @@ public class DataResolver extends ResponseResolver
         }
     }
 
-    private class ShortReadProtection extends Transformation<UnfilteredRowIterator>
+    private class ShortReadProtection extends Transformation<Unfiltered, UnfilteredRowIterator>
     {
         private final InetAddress source;
         private final DataLimits.Counter counter;
@@ -308,7 +309,7 @@ public class DataResolver extends ResponseResolver
             return partition;
         }
 
-        private class ShortReadRowProtection extends MoreRows<UnfilteredRowIterator>
+        private class ShortReadRowProtection extends MoreRows<Unfiltered, UnfilteredRowIterator>
         {
             final CFMetaData metadata;
             final DecoratedKey partitionKey;
@@ -322,10 +323,14 @@ public class DataResolver extends ResponseResolver
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                lastClustering = row.clustering();
-                return row;
+                return value ->
+                {
+                    if (value instanceof Row)
+                        lastClustering = ((Row) value).clustering();
+                    return nextConsumer.accept(value);
+                };
             }
 
             @Override

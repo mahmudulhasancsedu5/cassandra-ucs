@@ -49,14 +49,10 @@ implements BaseRowIterator<OUT>
         return staticRow;
     }
 
-
-    // **************************
-
-
     @Override
     protected Throwable runOnClose()
     {
-        Throwable fail = prev != null ? prev.runOnClose() : null;
+        Throwable fail = prevTransformation != null ? prevTransformation.runOnClose() : null;
         try
         {
             transformation.onPartitionClose();
@@ -71,12 +67,6 @@ implements BaseRowIterator<OUT>
     @Override
     protected Consumer<Unfiltered> apply(Consumer<OUT> nextConsumer)
     {
-        return value -> {
-            @SuppressWarnings("unchecked")
-            OUT transformed = (OUT) (value instanceof Row
-                ? transformation.applyToRow((Row) value)
-                : transformation.applyToMarker((RangeTombstoneMarker) value));
-            return (transformed == null || nextConsumer.accept(transformed)) && !transformation.isDoneForPartition();
-        };
+        return transformation.applyAsRowConsumer(nextConsumer);
     }
 }

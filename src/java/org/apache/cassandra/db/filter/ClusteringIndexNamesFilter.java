@@ -108,7 +108,7 @@ public class ClusteringIndexNamesFilter extends AbstractClusteringIndexFilter
     {
         // Note that we don't filter markers because that's a bit trickier (we don't know in advance until when
         // the range extend) and it's harmless to left them.
-        class FilterNotIndexed extends Transformation
+        class FilterNotIndexed extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             @Override
             public Row applyToStatic(Row row)

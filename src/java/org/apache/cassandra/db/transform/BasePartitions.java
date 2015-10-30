@@ -23,7 +23,7 @@ implements BasePartitionIterator<OUT>
     @Override
     protected Throwable runOnClose()
     {
-        Throwable fail = prev != null ? prev.runOnClose() : null;
+        Throwable fail = prevTransformation != null ? prevTransformation.runOnClose() : null;
         try
         {
             transformation.onClose();
@@ -38,11 +38,7 @@ implements BasePartitionIterator<OUT>
     @Override
     protected Consumer<BaseRowIterator<?>> apply(Consumer<OUT> nextConsumer)
     {
-        return value -> {
-            @SuppressWarnings("unchecked")
-            OUT transformed = (OUT) transformation.applyToPartition(value);
-            return (transformed == null || nextConsumer.accept(transformed)) && !transformation.isDone();
-        };
+        return transformation.applyAsPartitionConsumer(nextConsumer);
     }
 }
 

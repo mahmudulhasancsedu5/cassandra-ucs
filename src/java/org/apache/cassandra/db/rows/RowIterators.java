@@ -64,7 +64,7 @@ public abstract class RowIterators
                     metadata.getKeyValidator().getString(iterator.partitionKey().getKey()),
                     iterator.isReverseOrder());
 
-        class Log extends Transformation
+        class Log extends Transformation<Row, RowIterator>
         {
             @Override
             public Row applyToStatic(Row row)

@@ -60,7 +60,7 @@ import org.apache.cassandra.db.partitions.*;
  *                 "c5": { value : 4 }
  *                 "c7": { value : 1 }
  */
-public class ThriftResultsMerger extends Transformation<UnfilteredRowIterator>
+public class ThriftResultsMerger extends Transformation<Unfiltered, UnfilteredRowIterator>
 {
     private final int nowInSec;
 

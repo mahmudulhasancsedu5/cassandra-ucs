@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -110,7 +111,7 @@ public abstract class DataLimits
      * {@code RowIterator} (since it only returns live rows), false otherwise.
      * @return a new {@code Counter} for this limits.
      */
-    public abstract Counter newCounter(int nowInSec, boolean assumeLiveData);
+    public abstract <R extends Unfiltered, P extends BaseRowIterator<R>> Counter<R, P> newCounter(int nowInSec, boolean assumeLiveData);
 
     /**
      * The max number of results this limits enforces.
@@ -126,20 +127,17 @@ public abstract class DataLimits
 
     public UnfilteredPartitionIterator filter(UnfilteredPartitionIterator iter, int nowInSec)
     {
-        Counter c = this.newCounter(nowInSec, false);
-        return c.isDone() ? EmptyIterators.unfilteredPartition(iter.metadata(), iter.isForThrift()) : c.applyTo(iter);
+        return this.newCounter(nowInSec, false).applyTo(iter);
     }
 
     public UnfilteredRowIterator filter(UnfilteredRowIterator iter, int nowInSec)
     {
-        Counter c = this.newCounter(nowInSec, false);
-        return c.isDone() ? EmptyIterators.unfilteredRow(iter.metadata(), iter.partitionKey(), iter.isReverseOrder(), iter.staticRow(), iter.partitionLevelDeletion()) : c.applyTo(iter);
+        return (UnfilteredRowIterator) this.newCounter(nowInSec, false).applyToPartition(iter);
     }
 
     public PartitionIterator filter(PartitionIterator iter, int nowInSec)
     {
-        Counter c = this.newCounter(nowInSec, true);
-        return c.isDone() ? EmptyIterators.partition() : c.applyTo(iter);
+        return this.newCounter(nowInSec, true).applyTo(iter);
     }
 
     /**
@@ -148,12 +146,12 @@ public abstract class DataLimits
      */
     public abstract float estimateTotalResults(ColumnFamilyStore cfs);
 
-    public static abstract class Counter extends Transformation<BaseRowIterator<?>>
+    public static abstract class Counter<R extends Unfiltered, P extends BaseRowIterator<R>> extends Transformation<R, P>
     {
         // false means we do not propagate our stop signals onto the iterator, we only count
         protected boolean enforceLimits = true;
 
-        public Counter onlyCount()
+        public Counter<R, P> onlyCount()
         {
             this.enforceLimits = false;
             return this;
@@ -161,22 +159,12 @@ public abstract class DataLimits
 
         public PartitionIterator applyTo(PartitionIterator partitions)
         {
-            return Transformation.apply(partitions, this);
+            return Transformation.apply(partitions, (Counter<Row, RowIterator>) this);
         }
 
         public UnfilteredPartitionIterator applyTo(UnfilteredPartitionIterator partitions)
         {
-            return Transformation.apply(partitions, this);
-        }
-
-        public UnfilteredRowIterator applyTo(UnfilteredRowIterator partition)
-        {
-            return (UnfilteredRowIterator) applyToPartition(partition);
-        }
-
-        public RowIterator applyTo(RowIterator partition)
-        {
-            return (RowIterator) applyToPartition(partition);
+            return Transformation.apply(partitions, (Counter<Unfiltered, UnfilteredRowIterator>) this);
         }
 
         /**
@@ -195,12 +183,32 @@ public abstract class DataLimits
         public abstract boolean isDoneForPartition();
 
         @Override
-        protected BaseRowIterator<?> applyToPartition(BaseRowIterator<?> partition)
+        public P applyToPartition(P partition)
         {
-            partition = partition instanceof UnfilteredRowIterator ? Transformation.apply((UnfilteredRowIterator) partition, this)
-                                                                   : Transformation.apply((RowIterator) partition, this);
+            partition = partition instanceof UnfilteredRowIterator ? (P) Transformation.apply((UnfilteredRowIterator) partition, (Counter<Unfiltered, UnfilteredRowIterator>) this)
+                                                                   : (P) Transformation.apply((RowIterator) partition, (Counter<Row, RowIterator>) this);
             applyToPartition(partition.partitionKey(), partition.staticRow());
             return partition;
+        }
+
+        @Override
+        public Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
+        {
+            return partition ->
+                !isDone() && nextConsumer.accept(applyToPartition(partition)) && !isDone();
+        }
+
+        @Override
+        protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
+        {
+            return row ->
+            {
+                if (isDoneForPartition())
+                    return false;
+                if (row instanceof Row)
+                    applyToRow((Row) row);
+                return nextConsumer.accept(row) && !isDoneForPartition();
+            };
         }
 
         // called before we process a given partition
@@ -284,9 +292,9 @@ public abstract class DataLimits
 
             // Otherwise, we need to re-count
 
-            DataLimits.Counter counter = newCounter(nowInSec, false);
+            DataLimits.Counter<Unfiltered, UnfilteredRowIterator> counter = newCounter(nowInSec, false);
             try (UnfilteredRowIterator cacheIter = cached.unfilteredIterator(ColumnFilter.selection(cached.columns()), Slices.ALL, false);
-                 UnfilteredRowIterator iter = counter.applyTo(cacheIter))
+                 UnfilteredRowIterator iter = counter.applyToPartition(cacheIter))
             {
                 // Consume the iterator until we've counted enough
                 while (iter.hasNext())
@@ -295,7 +303,7 @@ public abstract class DataLimits
             }
         }
 
-        public Counter newCounter(int nowInSec, boolean assumeLiveData)
+        public Counter<Unfiltered, UnfilteredRowIterator> newCounter(int nowInSec, boolean assumeLiveData)
         {
             return new CQLCounter(nowInSec, assumeLiveData);
         }
@@ -318,7 +326,7 @@ public abstract class DataLimits
             return rowsPerPartition * (cfs.estimateKeys());
         }
 
-        protected class CQLCounter extends Counter
+        protected class CQLCounter extends Counter<Unfiltered, UnfilteredRowIterator>
         {
             protected final int nowInSec;
             protected final boolean assumeLiveData;
@@ -530,9 +538,9 @@ public abstract class DataLimits
                 return false;
 
             // Otherwise, we need to re-count
-            DataLimits.Counter counter = newCounter(nowInSec, false);
+            DataLimits.Counter<Unfiltered, UnfilteredRowIterator> counter = newCounter(nowInSec, false);
             try (UnfilteredRowIterator cacheIter = cached.unfilteredIterator(ColumnFilter.selection(cached.columns()), Slices.ALL, false);
-                 UnfilteredRowIterator iter = counter.applyTo(cacheIter))
+                 UnfilteredRowIterator iter = counter.applyToPartition(cacheIter))
             {
                 // Consume the iterator until we've counted enough
                 while (iter.hasNext())

@@ -13,7 +13,7 @@ import org.apache.cassandra.db.rows.*;
  * Only the necessary methods need be overridden. Early termination is provided by invoking the method's stop or stopInPartition
  * methods, rather than having their own abstract method to invoke, as this is both more efficient and simpler to reason about.
  */
-public abstract class Transformation<I extends BaseRowIterator<?>>
+public abstract class Transformation<R extends Unfiltered, P extends BaseRowIterator<R>>
 {
     /**
      * Run on the close of any (logical) partitions iterator this function was applied to
@@ -34,15 +34,47 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
     protected void onPartitionClose() { }
 
     /**
-     * Applied to any rows iterator (partition) we encounter in a partitions iterator
+     * Applied to any rows iterator (partition) we encounter in a partitions iterator.
+     *
+     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
      */
-    protected I applyToPartition(I partition)
+    protected P applyToPartition(P partition)
     {
         return partition;
     }
 
     /**
+     * Called after processing each partition to check if it should be the last value in the iteration.
+     */
+    protected boolean isDone()
+    {
+        return false;
+    }
+
+    /**
+     * Construct a partition consumer suitable for the transformation. The default version applies
+     * applyToPartition and isDone, but can be overridden for better control or performance.
+     *
+     * The method takes as parameter the next consumer in the chain and returns a consumer which takes
+     * values as arguments and returns whether iteration should continue.
+     *
+     * Typically it would process the input and return the result of calling the next consumer, but it may also:
+     *  - decide to throw away a value by not passing it on to the next consumer and returning true.
+     *  - decide to terminate iteration by returning false; if done after passing the result to the next consumer
+     *    iteration will terminate after that value is consumed, otherwise the value will not be part of the iteration.
+     */
+    protected Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
+    {
+        return value -> {
+            P transformed = applyToPartition(value);
+            return (transformed == null || nextConsumer.accept(transformed)) && !isDone();
+        };
+    }
+
+    /**
      * Applied to any row we encounter in a rows iterator
+     *
+     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
      */
     protected Row applyToRow(Row row)
     {
@@ -51,6 +83,8 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
 
     /**
      * Applied to any RTM we encounter in a rows/unfiltered iterator
+     *
+     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
      */
     protected RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
     {
@@ -79,35 +113,55 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
         return deletionTime;
     }
 
+    /**
+     * Called after processing each row/Unfiltered to check if it should be the last value in the iteration.
+     */
     protected boolean isDoneForPartition()
     {
         return false;
     }
 
-    protected boolean isDone()
+    /**
+     * Construct a partition consumer suitable for the transformation. The default version applies
+     * applyToRow, applyToMarker and isDoneForPartition, but can be overridden for better control or performance.
+     *
+     * The method takes as parameter the next consumer in the chain and returns a consumer which takes
+     * values as arguments and returns whether iteration should continue.
+     *
+     * Typically it would process the input and return the result of calling the next consumer, but it may also:
+     *  - decide to throw away a value by not passing it on to the next consumer and returning true.
+     *  - decide to terminate iteration by returning false; if done after passing the result to the next consumer
+     *    iteration will terminate after that value is consumed, otherwise the value will not be part of the iteration.
+     */
+    protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
     {
-        return false;
+        return value -> {
+            @SuppressWarnings("unchecked")
+            R transformed = (R) (value instanceof Row
+                ? applyToRow((Row) value)
+                : applyToMarker((RangeTombstoneMarker) value));
+            return (transformed == null || nextConsumer.accept(transformed)) && !isDoneForPartition();
+        };
     }
-
 
     //******************************************************
     //          Static Application Methods
     //******************************************************
 
 
-    public static UnfilteredPartitionIterator apply(UnfilteredPartitionIterator iterator, Transformation<? super UnfilteredRowIterator> transformation)
+    public static UnfilteredPartitionIterator apply(UnfilteredPartitionIterator iterator, Transformation<Unfiltered, ? super UnfilteredRowIterator> transformation)
     {
         return new UnfilteredPartitions(iterator, transformation);
     }
-    public static PartitionIterator apply(PartitionIterator iterator, Transformation<? super RowIterator> transformation)
+    public static PartitionIterator apply(PartitionIterator iterator, Transformation<Row, ? super RowIterator> transformation)
     {
         return new FilteredPartitions(iterator, transformation);
     }
-    public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Transformation<?> transformation)
+    public static UnfilteredRowIterator apply(UnfilteredRowIterator iterator, Transformation<Unfiltered, ?> transformation)
     {
         return new UnfilteredRows(iterator, transformation);
     }
-    public static RowIterator apply(RowIterator iterator, Transformation<?> transformation)
+    public static RowIterator apply(RowIterator iterator, Transformation<Row, ?> transformation)
     {
         return new FilteredRows(iterator, transformation);
     }

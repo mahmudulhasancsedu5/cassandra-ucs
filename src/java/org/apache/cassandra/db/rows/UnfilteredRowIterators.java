@@ -142,7 +142,7 @@ public abstract class UnfilteredRowIterators
             && iter1.columns().equals(iter2.columns())
             && iter1.staticRow().equals(iter2.staticRow());
 
-        class Extend extends MoreRows<UnfilteredRowIterator>
+        class Extend extends MoreRows<Unfiltered, UnfilteredRowIterator>
         {
             boolean returned = false;
 

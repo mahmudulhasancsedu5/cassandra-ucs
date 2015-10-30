@@ -63,7 +63,7 @@ public abstract class UnfilteredPartitionIterators
 
         // Note that in general, we should wrap the result so that it's close method actually
         // close the whole UnfilteredPartitionIterator.
-        class Close extends Transformation
+        class Close extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             @Override
             public void onPartitionClose()
@@ -270,7 +270,7 @@ public abstract class UnfilteredPartitionIterators
      */
     public static UnfilteredPartitionIterator loggingIterator(UnfilteredPartitionIterator iterator, final String id, final boolean fullDetails)
     {
-        class Logging extends Transformation<UnfilteredRowIterator>
+        class Logging extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
             {

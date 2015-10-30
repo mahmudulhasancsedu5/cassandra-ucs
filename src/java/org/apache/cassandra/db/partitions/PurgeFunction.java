@@ -21,7 +21,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.transform.Transformation;
 
-public abstract class PurgeFunction extends Transformation<UnfilteredRowIterator>
+public abstract class PurgeFunction extends Transformation<Unfiltered, UnfilteredRowIterator>
 {
     private final boolean isForThrift;
     private final DeletionPurger purger;
