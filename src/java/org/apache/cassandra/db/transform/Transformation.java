@@ -165,4 +165,9 @@ public abstract class Transformation<R extends Unfiltered, P extends BaseRowIter
     {
         return new FilteredRows(iterator, transformation);
     }
+
+    public static void assertInputExhausted(UnfilteredRowIterator iter)
+    {
+        assert !((BaseIterator<?, ?, ?>) iter).input.hasNext();
+    }
 }

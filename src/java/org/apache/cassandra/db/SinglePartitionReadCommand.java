@@ -32,6 +32,7 @@ import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
+import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -44,6 +45,7 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.service.pager.*;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 /**
@@ -332,7 +334,8 @@ public abstract class SinglePartitionReadCommand<F extends ClusteringIndexFilter
                 try
                 {
                     // We want to cache only rowsToCache rows
-                    CachedPartition toCache = CachedBTreePartition.create(DataLimits.cqlLimits(rowsToCache).filter(iter, nowInSec()), nowInSec());
+                    iter = DataLimits.cqlLimits(rowsToCache).filter(iter, nowInSec());
+                    CachedPartition toCache = CachedBTreePartition.create(iter, nowInSec());
                     if (sentinelSuccess && !toCache.isEmpty())
                     {
                         Tracing.trace("Caching {} rows", toCache.rowCount());
@@ -348,7 +351,7 @@ public abstract class SinglePartitionReadCommand<F extends ClusteringIndexFilter
                     if (cacheFullPartitions)
                     {
                         // Everything is guaranteed to be in 'toCache', we're done with 'iter'
-                        assert !iter.hasNext();
+                        Transformation.assertInputExhausted(iter);
                         iter.close();
                         return cacheIterator;
                     }
@@ -356,8 +359,14 @@ public abstract class SinglePartitionReadCommand<F extends ClusteringIndexFilter
                 }
                 catch (RuntimeException | Error e)
                 {
-                    iter.close();
-                    throw e;
+                    try
+                    {
+                        iter.close();
+                    }
+                    catch (Throwable t)
+                    {
+                        Throwables.maybeFail(Throwables.merge(e, t));
+                    }
                 }
             }
             finally
