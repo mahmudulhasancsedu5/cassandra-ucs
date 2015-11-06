@@ -3,7 +3,7 @@ package org.apache.cassandra.db.transform;
 import org.apache.cassandra.db.DeletionPurger;
 import org.apache.cassandra.db.rows.*;
 
-final class Filter extends Transformation
+final class Filter extends Transformation<Unfiltered, UnfilteredRowIterator>
 {
     private final boolean filterEmpty; // generally maps to !isForThrift, but also false for direct row filtration
     private final int nowInSec;
@@ -14,14 +14,17 @@ final class Filter extends Transformation
     }
 
     @Override
-    public RowIterator applyToPartition(BaseRowIterator iterator)
+    public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer/*<RowIterator>*/ nextConsumer)
     {
-        RowIterator filtered = new FilteredRows((UnfilteredRowIterator) iterator, this);
+        return iterator ->
+        {
+            RowIterator filtered = new FilteredRows(iterator, this);
 
-        if (filterEmpty && closeIfEmpty(filtered))
-            return null;
+            if (filterEmpty && closeIfEmpty(filtered))
+                return true; // skip
 
-        return filtered;
+            return nextConsumer.accept(filtered);
+        };
     }
 
     @Override
@@ -35,15 +38,10 @@ final class Filter extends Transformation
     }
 
     @Override
-    public Row applyToRow(Row row)
+    public Consumer<Unfiltered> applyAsRowConsumer(Consumer/*<Row>*/ nextConsumer)
     {
-        return row.purge(DeletionPurger.PURGE_ALL, nowInSec);
-    }
-
-    @Override
-    public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-    {
-        return null;
+        return unfiltered -> !(unfiltered instanceof Row)
+                || nextConsumer.accept(((Row) unfiltered).purge(DeletionPurger.PURGE_ALL, nowInSec));
     }
 
     private static boolean closeIfEmpty(BaseRowIterator<?> iter)

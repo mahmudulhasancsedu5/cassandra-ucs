@@ -9,47 +9,5 @@ import org.apache.cassandra.db.rows.Unfiltered;
 abstract class MoreContents<ITER, R extends Unfiltered, P extends BaseRowIterator<R>> extends Transformation<R, P>
 {
     public abstract ITER moreContents();
-
-    @Override
-    protected Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
-    {
-        return nextConsumer;
-    }
-
-    @Override
-    protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
-    {
-        return nextConsumer;
-    }
-
-    @Override
-    protected final P applyToPartition(P partition)
-    {
-        throw new IllegalStateException("Method should not be called.");
-    }
-
-    @Override
-    protected final Row applyToRow(Row row)
-    {
-        throw new IllegalStateException("Method should not be called.");
-    }
-
-    @Override
-    protected final RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-    {
-        throw new IllegalStateException("Method should not be called.");
-    }
-
-    @Override
-    protected final boolean isDoneForPartition()
-    {
-        throw new IllegalStateException("Method should not be called.");
-    }
-
-    @Override
-    protected final boolean isDone()
-    {
-        throw new IllegalStateException("Method should not be called.");
-    }
 }
 

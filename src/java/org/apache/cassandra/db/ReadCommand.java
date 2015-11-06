@@ -402,20 +402,30 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
             private DecoratedKey currentKey;
 
             @Override
-            public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator iter)
+            public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
             {
-                currentKey = iter.partitionKey();
-                return Transformation.apply(iter, this);
+                return partition ->
+                {
+                    currentKey = partition.partitionKey();
+                    return nextConsumer.accept(Transformation.apply(partition, this));
+                };
             }
 
             @Override
             public Row applyToStatic(Row row)
             {
-                return applyToRow(row);
+                return record(row);
             }
 
-            @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
+            {
+                return value -> nextConsumer.accept(
+                    value instanceof Row
+                        ? record((Row) value)
+                        : record((RangeTombstoneMarker) value));
+            }
+
+            public Row record(Row row)
             {
                 if (row.hasLiveData(ReadCommand.this.nowInSec()))
                     ++liveRows;
@@ -428,8 +438,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                 return row;
             }
 
-            @Override
-            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
+            public RangeTombstoneMarker record(RangeTombstoneMarker marker)
             {
                 countTombstone(marker.clustering());
                 return marker;
@@ -469,16 +478,16 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
         return Transformation.apply(iter, new MetricRecording());
     }
 
-    protected class CheckForAbort<R extends Unfiltered, P extends BaseRowIterator<R>> extends Transformation<R, P>
+    protected class CheckForAbort extends Transformation<Unfiltered, UnfilteredRowIterator>
     {
         @Override
-        public Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
+        public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
         {
             return getConsumer(nextConsumer);
         }
 
         @Override
-        protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
+        protected Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
         {
             return getConsumer(nextConsumer);
         }
@@ -502,12 +511,12 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
 
     protected UnfilteredPartitionIterator withStateTracking(UnfilteredPartitionIterator iter)
     {
-        return Transformation.apply(iter, new CheckForAbort<>());
+        return Transformation.apply(iter, new CheckForAbort());
     }
 
     protected UnfilteredRowIterator withStateTracking(UnfilteredRowIterator iter)
     {
-        return Transformation.apply(iter, new CheckForAbort<>());
+        return Transformation.apply(iter, new CheckForAbort());
     }
 
     private void maybeDelayForTesting()

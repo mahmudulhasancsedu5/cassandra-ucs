@@ -177,12 +177,10 @@ public abstract class DataLimits
         public abstract int counted();
         public abstract int countedInCurrentPartition();
 
-        @Override
+        public abstract void applyToRow(Row row);
         public abstract boolean isDone();
-        @Override
         public abstract boolean isDoneForPartition();
 
-        @Override
         public P applyToPartition(P partition)
         {
             partition = partition instanceof UnfilteredRowIterator ? (P) Transformation.apply((UnfilteredRowIterator) partition, (Counter<Unfiltered, UnfilteredRowIterator>) this)
@@ -351,11 +349,10 @@ public abstract class DataLimits
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public void applyToRow(Row row)
             {
                 if (assumeLiveData || row.hasLiveData(nowInSec))
                     incrementRowCount();
-                return row;
             }
 
             @Override
@@ -549,7 +546,7 @@ public abstract class DataLimits
             }
         }
 
-        public Counter newCounter(int nowInSec, boolean assumeLiveData)
+        public Counter<Unfiltered, UnfilteredRowIterator> newCounter(int nowInSec, boolean assumeLiveData)
         {
             return new ThriftCounter(nowInSec, assumeLiveData);
         }
@@ -571,7 +568,7 @@ public abstract class DataLimits
             return cellsPerPartition * cfs.estimateKeys();
         }
 
-        protected class ThriftCounter extends Counter
+        protected class ThriftCounter extends Counter<Unfiltered, UnfilteredRowIterator>
         {
             protected final int nowInSec;
             protected final boolean assumeLiveData;
@@ -595,7 +592,7 @@ public abstract class DataLimits
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public void applyToRow(Row row)
             {
                 for (Cell cell : row.cells())
                 {
@@ -605,7 +602,6 @@ public abstract class DataLimits
                         ++cellsInCurrentPartition;
                     }
                 }
-                return row;
             }
 
             public int counted()
@@ -669,7 +665,7 @@ public abstract class DataLimits
             return new SuperColumnCountingLimits(1, toFetch);
         }
 
-        public Counter newCounter(int nowInSec, boolean assumeLiveData)
+        public Counter<Unfiltered, UnfilteredRowIterator> newCounter(int nowInSec, boolean assumeLiveData)
         {
             return new SuperColumnCountingCounter(nowInSec, assumeLiveData);
         }
@@ -682,7 +678,7 @@ public abstract class DataLimits
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public void applyToRow(Row row)
             {
                 // In the internal format, a row == a super column, so that's what we want to count.
                 if (assumeLiveData || row.hasLiveData(nowInSec))
@@ -690,7 +686,6 @@ public abstract class DataLimits
                     ++cellsCounted;
                     ++cellsInCurrentPartition;
                 }
-                return row;
             }
         }
     }

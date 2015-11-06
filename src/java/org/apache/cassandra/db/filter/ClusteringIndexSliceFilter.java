@@ -26,6 +26,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.CachedPartition;
 import org.apache.cassandra.db.partitions.Partition;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -100,9 +101,19 @@ public class ClusteringIndexSliceFilter extends AbstractClusteringIndexFilter
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                return tester.includes(row.clustering()) ? row.filter(columnFilter, iterator.metadata()) : null;
+                return value -> 
+                {
+                    if (value instanceof Row)
+                    {
+                        Row row = (Row) value;
+                        if (!tester.includes(row.clustering()))
+                            return true; // skip
+                        value = row.filter(columnFilter, iterator.metadata());
+                    }
+                    return nextConsumer.accept(value);
+                };
             }
 
             @Override

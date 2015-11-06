@@ -21,6 +21,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.filter.DataLimits;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
@@ -91,29 +92,32 @@ abstract class AbstractQueryPager implements QueryPager
         }
 
         @Override
-        public RowIterator applyToPartition(RowIterator partition)
+        public Consumer<RowIterator> applyAsPartitionConsumer(Consumer<RowIterator> nextConsumer)
         {
-            DecoratedKey key = partition.partitionKey();
-            if (lastKey == null || !lastKey.equals(key))
-                remainingInPartition = limits.perPartitionCount();
-            lastKey = key;
-
-            // If this is the first partition of this page, this could be the continuation of a partition we've started
-            // on the previous page. In which case, we could have the problem that the partition has no more "regular"
-            // rows (but the page size is such we didn't knew before) but it does has a static row. We should then skip
-            // the partition as returning it would means to the upper layer that the partition has "only" static columns,
-            // which is not the case (and we know the static results have been sent on the previous page).
-            if (isFirstPartition)
+            return partition ->
             {
-                isFirstPartition = false;
-                if (isPreviouslyReturnedPartition(key) && !partition.hasNext())
-                {
-                    partition.close();
-                    return null;
-                }
-            }
+                DecoratedKey key = partition.partitionKey();
+                if (lastKey == null || !lastKey.equals(key))
+                    remainingInPartition = limits.perPartitionCount();
+                lastKey = key;
 
-            return Transformation.apply(counter.applyToPartition(partition), this);
+                // If this is the first partition of this page, this could be the continuation of a partition we've started
+                // on the previous page. In which case, we could have the problem that the partition has no more "regular"
+                // rows (but the page size is such we didn't knew before) but it does has a static row. We should then skip
+                // the partition as returning it would means to the upper layer that the partition has "only" static columns,
+                // which is not the case (and we know the static results have been sent on the previous page).
+                if (isFirstPartition)
+                {
+                    isFirstPartition = false;
+                    if (isPreviouslyReturnedPartition(key) && !partition.hasNext())
+                    {
+                        partition.close();
+                        return true;    // skip
+                    }
+                }
+
+                return nextConsumer.accept(Transformation.apply(counter.applyToPartition(partition), this));
+            };
         }
 
         @Override
@@ -145,10 +149,9 @@ abstract class AbstractQueryPager implements QueryPager
         }
 
         @Override
-        public Row applyToRow(Row row)
+        public Consumer<Row> applyAsRowConsumer(Consumer<Row> nextConsumer)
         {
-            lastRow = row;
-            return row;
+            return row -> nextConsumer.accept(lastRow = row);
         }
     }
 

@@ -26,6 +26,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.FilteredPartitions;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -272,9 +273,10 @@ public abstract class UnfilteredPartitionIterators
     {
         class Logging extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
-            public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+            @Override
+            public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
             {
-                return UnfilteredRowIterators.loggingIterator(partition, id, fullDetails);
+                return partition -> nextConsumer.accept(UnfilteredRowIterators.loggingIterator(partition, id, fullDetails));
             }
         }
         return Transformation.apply(iterator, new Logging());

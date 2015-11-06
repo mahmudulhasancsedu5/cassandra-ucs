@@ -288,25 +288,21 @@ public class DataResolver extends ResponseResolver
     private class ShortReadProtection extends Transformation<Unfiltered, UnfilteredRowIterator>
     {
         private final InetAddress source;
-        private final DataLimits.Counter counter;
+        private final DataLimits.Counter<Unfiltered, UnfilteredRowIterator> counter;
         private final DataLimits.Counter postReconciliationCounter;
 
         private ShortReadProtection(InetAddress source, DataLimits.Counter postReconciliationCounter)
         {
             this.source = source;
-            this.counter = command.limits().newCounter(command.nowInSec(), false).onlyCount();
+            this.counter = command.limits().<Unfiltered, UnfilteredRowIterator>newCounter(command.nowInSec(), false).onlyCount();
             this.postReconciliationCounter = postReconciliationCounter;
         }
 
         @Override
-        public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+        public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
         {
-            partition = Transformation.apply(partition, counter);
-            // must apply and extend with same protection instance
-            ShortReadRowProtection protection = new ShortReadRowProtection(partition.metadata(), partition.partitionKey());
-            partition = MoreRows.extend(partition, protection);
-            partition = Transformation.apply(partition, protection); // apply after, so it is retained when we extend (in case we need to reextend)
-            return partition;
+            return partition -> nextConsumer.accept(MoreRows.extend(Transformation.apply(partition, counter),
+                                                                    new ShortReadRowProtection(partition.metadata(), partition.partitionKey())));
         }
 
         private class ShortReadRowProtection extends MoreRows<Unfiltered, UnfilteredRowIterator>

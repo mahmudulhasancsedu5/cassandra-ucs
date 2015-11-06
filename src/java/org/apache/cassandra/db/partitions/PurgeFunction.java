@@ -19,6 +19,7 @@ package org.apache.cassandra.db.partitions;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 
 public abstract class PurgeFunction extends Transformation<Unfiltered, UnfilteredRowIterator>
@@ -56,20 +57,23 @@ public abstract class PurgeFunction extends Transformation<Unfiltered, Unfiltere
     }
 
     @Override
-    public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+    public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
     {
-        onNewPartition(partition.partitionKey());
-
-        isReverseOrder = partition.isReverseOrder();
-        UnfilteredRowIterator purged = Transformation.apply(partition, this);
-        if (!isForThrift && purged.isEmpty())
+        return partition ->
         {
-            onEmptyPartitionPostPurge(purged.partitionKey());
-            purged.close();
-            return null;
-        }
+            onNewPartition(partition.partitionKey());
 
-        return purged;
+            isReverseOrder = partition.isReverseOrder();
+            UnfilteredRowIterator purged = Transformation.apply(partition, this);
+            if (!isForThrift && purged.isEmpty())
+            {
+                onEmptyPartitionPostPurge(purged.partitionKey());
+                purged.close();
+                return true;
+            }
+
+            return nextConsumer.accept(purged);
+        };
     }
 
     @Override
@@ -86,16 +90,21 @@ public abstract class PurgeFunction extends Transformation<Unfiltered, Unfiltere
     }
 
     @Override
-    public Row applyToRow(Row row)
+    public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
     {
-        updateProgress();
-        return row.purge(purger, gcBefore);
+        return value ->
+        {
+            updateProgress();
+            if (value instanceof Row)
+                value = ((Row) value).purge(purger, gcBefore);
+            else
+                value = purgeMarker((RangeTombstoneMarker) value);
+            return value == null || nextConsumer.accept(value);
+        };
     }
 
-    @Override
-    public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
+    public RangeTombstoneMarker purgeMarker(RangeTombstoneMarker marker)
     {
-        updateProgress();
         boolean reversed = isReverseOrder;
         if (marker.isBoundary())
         {

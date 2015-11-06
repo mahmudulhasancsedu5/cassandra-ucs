@@ -31,6 +31,9 @@ import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.BaseRowIterator;
+import org.apache.cassandra.db.rows.Unfiltered;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.exceptions.RequestExecutionException;
@@ -227,28 +230,31 @@ public class PartitionRangeReadCommand extends ReadCommand
 
     private UnfilteredPartitionIterator checkCacheFilter(UnfilteredPartitionIterator iter, final ColumnFamilyStore cfs)
     {
-        class CacheFilter extends Transformation
+        class CacheFilter extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             @Override
-            public BaseRowIterator applyToPartition(BaseRowIterator iter)
+            public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
             {
-                // Note that we rely on the fact that until we actually advance 'iter', no really costly operation is actually done
-                // (except for reading the partition key from the index file) due to the call to mergeLazily in queryStorage.
-                DecoratedKey dk = iter.partitionKey();
-
-                // Check if this partition is in the rowCache and if it is, if  it covers our filter
-                CachedPartition cached = cfs.getRawCachedPartition(dk);
-                ClusteringIndexFilter filter = dataRange().clusteringIndexFilter(dk);
-
-                if (cached != null && cfs.isFilterFullyCoveredBy(filter, limits(), cached, nowInSec()))
+                return partition ->
                 {
-                    // We won't use 'iter' so close it now.
-                    iter.close();
+                    // Note that we rely on the fact that until we actually advance 'iter', no really costly operation is actually done
+                    // (except for reading the partition key from the index file) due to the call to mergeLazily in queryStorage.
+                    DecoratedKey dk = partition.partitionKey();
 
-                    return filter.getUnfilteredRowIterator(columnFilter(), cached);
-                }
+                    // Check if this partition is in the rowCache and if it is, if  it covers our filter
+                    CachedPartition cached = cfs.getRawCachedPartition(dk);
+                    ClusteringIndexFilter filter = dataRange().clusteringIndexFilter(dk);
 
-                return iter;
+                    if (cached != null && cfs.isFilterFullyCoveredBy(filter, limits(), cached, nowInSec()))
+                    {
+                        // We won't use 'iter' so close it now.
+                        partition.close();
+
+                        partition = filter.getUnfilteredRowIterator(columnFilter(), cached);
+                    }
+
+                    return nextConsumer.accept(partition);
+                };
             }
         }
         return Transformation.apply(iter, new CacheFilter());

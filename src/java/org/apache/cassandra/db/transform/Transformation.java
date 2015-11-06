@@ -25,33 +25,6 @@ public abstract class Transformation<R extends Unfiltered, P extends BaseRowIter
     protected void onClose() { }
 
     /**
-     * Run on the close of any (logical) rows iterator this function was applied to
-     *
-     * We stipulate logical, because if applied to a transformed iterator the lifetime of the iterator
-     * object may be longer than the lifetime of the "logical" iterator it was applied to; if the iterator
-     * is refilled with MoreContents, for instance, the iterator may outlive this function
-     */
-    protected void onPartitionClose() { }
-
-    /**
-     * Applied to any rows iterator (partition) we encounter in a partitions iterator.
-     *
-     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
-     */
-    protected P applyToPartition(P partition)
-    {
-        return partition;
-    }
-
-    /**
-     * Called after processing each partition to check if it should be the last value in the iteration.
-     */
-    protected boolean isDone()
-    {
-        return false;
-    }
-
-    /**
      * Construct a partition consumer suitable for the transformation. The default version applies
      * applyToPartition and isDone, but can be overridden for better control or performance.
      *
@@ -65,31 +38,17 @@ public abstract class Transformation<R extends Unfiltered, P extends BaseRowIter
      */
     protected Consumer<P> applyAsPartitionConsumer(Consumer<P> nextConsumer)
     {
-        return value -> {
-            P transformed = applyToPartition(value);
-            return (transformed == null || nextConsumer.accept(transformed)) && !isDone();
-        };
+        return nextConsumer;
     }
 
     /**
-     * Applied to any row we encounter in a rows iterator
+     * Run on the close of any (logical) rows iterator this function was applied to
      *
-     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
+     * We stipulate logical, because if applied to a transformed iterator the lifetime of the iterator
+     * object may be longer than the lifetime of the "logical" iterator it was applied to; if the iterator
+     * is refilled with MoreContents, for instance, the iterator may outlive this function
      */
-    protected Row applyToRow(Row row)
-    {
-        return row;
-    }
-
-    /**
-     * Applied to any RTM we encounter in a rows/unfiltered iterator
-     *
-     * Argument cannot be null; result can, meaning that the value should be skipped in the result.
-     */
-    protected RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-    {
-        return marker;
-    }
+    protected void onPartitionClose() { }
 
     /**
      * Applied to the static row of any rows iterator.
@@ -114,14 +73,6 @@ public abstract class Transformation<R extends Unfiltered, P extends BaseRowIter
     }
 
     /**
-     * Called after processing each row/Unfiltered to check if it should be the last value in the iteration.
-     */
-    protected boolean isDoneForPartition()
-    {
-        return false;
-    }
-
-    /**
      * Construct a partition consumer suitable for the transformation. The default version applies
      * applyToRow, applyToMarker and isDoneForPartition, but can be overridden for better control or performance.
      *
@@ -135,13 +86,7 @@ public abstract class Transformation<R extends Unfiltered, P extends BaseRowIter
      */
     protected Consumer<R> applyAsRowConsumer(Consumer<R> nextConsumer)
     {
-        return value -> {
-            @SuppressWarnings("unchecked")
-            R transformed = (R) (value instanceof Row
-                ? applyToRow((Row) value)
-                : applyToMarker((RangeTombstoneMarker) value));
-            return (transformed == null || nextConsumer.accept(transformed)) && !isDoneForPartition();
-        };
+        return nextConsumer;
     }
 
     //******************************************************

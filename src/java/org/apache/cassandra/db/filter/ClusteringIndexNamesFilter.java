@@ -25,6 +25,7 @@ import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -113,13 +114,22 @@ public class ClusteringIndexNamesFilter extends AbstractClusteringIndexFilter
             @Override
             public Row applyToStatic(Row row)
             {
-                return columnFilter.fetchedColumns().statics.isEmpty() ? null : row.filter(columnFilter, iterator.metadata());
+                return columnFilter.fetchedColumns().statics.isEmpty() ? Rows.EMPTY_STATIC_ROW : row.filter(columnFilter, iterator.metadata());
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                return clusterings.contains(row.clustering()) ? row.filter(columnFilter, iterator.metadata()) : null;
+                return row -> 
+                {
+                    if (row instanceof Row)
+                    {
+                        if (!clusterings.contains(row.clustering()))
+                            return true; // skip
+                        row = ((Row) row).filter(columnFilter, iterator.metadata());
+                    }
+                    return nextConsumer.accept(row);
+                };
             }
         }
         return Transformation.apply(iterator, new FilterNotIndexed());

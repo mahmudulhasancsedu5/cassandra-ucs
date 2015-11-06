@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -70,12 +71,17 @@ public abstract class RowIterators
             public Row applyToStatic(Row row)
             {
                 if (!row.isEmpty())
-                    logger.info("[{}] {}", id, row.toString(metadata));
+                    return log(row);
                 return row;
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Row> applyAsRowConsumer(Consumer<Row> nextConsumer)
+            {
+                return value -> nextConsumer.accept(log(value));
+            }
+
+            public Row log(Row row)
             {
                 logger.info("[{}] {}", id, row.toString(metadata));
                 return row;

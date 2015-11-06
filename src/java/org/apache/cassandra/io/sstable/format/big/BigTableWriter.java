@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -172,7 +173,7 @@ public class BigTableWriter extends SSTableWriter
         }
     }
 
-    private static class StatsCollector extends Transformation
+    private static class StatsCollector extends Transformation<Unfiltered, UnfilteredRowIterator>
     {
         private final MetadataCollector collector;
         private int cellCount;
@@ -189,30 +190,31 @@ public class BigTableWriter extends SSTableWriter
                 cellCount += Rows.collectStats(row, collector);
             return row;
         }
-
+        
         @Override
-        public Row applyToRow(Row row)
+        public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
         {
-            collector.updateClusteringValues(row.clustering());
-            cellCount += Rows.collectStats(row, collector);
-            return row;
-        }
-
-        @Override
-        public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-        {
-            collector.updateClusteringValues(marker.clustering());
-            if (marker.isBoundary())
+            return value ->
             {
-                RangeTombstoneBoundaryMarker bm = (RangeTombstoneBoundaryMarker)marker;
-                collector.update(bm.endDeletionTime());
-                collector.update(bm.startDeletionTime());
-            }
-            else
-            {
-                collector.update(((RangeTombstoneBoundMarker)marker).deletionTime());
-            }
-            return marker;
+                collector.updateClusteringValues(value.clustering());
+                if (value instanceof Row)
+                    cellCount += Rows.collectStats((Row) value, collector);
+                else
+                {
+                    RangeTombstoneMarker marker = (RangeTombstoneMarker) value;
+                    if (marker.isBoundary())
+                    {
+                        RangeTombstoneBoundaryMarker bm = (RangeTombstoneBoundaryMarker)marker;
+                        collector.update(bm.endDeletionTime());
+                        collector.update(bm.startDeletionTime());
+                    }
+                    else
+                    {
+                        collector.update(((RangeTombstoneBoundMarker)marker).deletionTime());
+                    }
+                }
+                return nextConsumer.accept(value);
+            };
         }
 
         @Override

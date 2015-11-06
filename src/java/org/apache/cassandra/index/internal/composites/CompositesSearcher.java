@@ -31,6 +31,7 @@ import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.filter.RowFilter;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.index.internal.CassandraIndex;
 import org.apache.cassandra.index.internal.CassandraIndexSearcher;
@@ -205,19 +206,27 @@ public class CompositesSearcher extends CassandraIndexSearcher
         }
 
         ClusteringComparator comparator = dataIter.metadata().comparator;
-        class Transform extends Transformation
+        class Transform extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             private int entriesIdx;
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                IndexEntry entry = findEntry(row.clustering());
-                if (!index.isStale(row, indexValue, nowInSec))
-                    return row;
-
-                staleEntries.add(entry);
-                return null;
+                return value ->
+                {
+                    if (value instanceof Row)
+                    {
+                        Row row = (Row) value;
+                        IndexEntry entry = findEntry(row.clustering());
+                        if (index.isStale(row, indexValue, nowInSec))
+                        {
+                            staleEntries.add(entry);
+                            return true; // skip
+                        }
+                    }
+                    return nextConsumer.accept(value);
+                };
             }
 
             private IndexEntry findEntry(Clustering clustering)

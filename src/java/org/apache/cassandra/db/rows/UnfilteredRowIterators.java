@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.FilteredRows;
 import org.apache.cassandra.db.transform.MoreRows;
 import org.apache.cassandra.db.transform.Transformation;
@@ -161,7 +162,7 @@ public abstract class UnfilteredRowIterators
 
     public static UnfilteredRowIterator cloningIterator(UnfilteredRowIterator iterator, final AbstractAllocator allocator)
     {
-        class Cloner extends Transformation
+        class Cloner extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             private final Row.Builder builder = allocator.cloningBTreeRowBuilder();
 
@@ -172,15 +173,11 @@ public abstract class UnfilteredRowIterators
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                return Rows.copy(row, builder).build();
-            }
-
-            @Override
-            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-            {
-                return marker.copy(allocator);
+                return value -> nextConsumer.accept(value instanceof Row
+                                                    ? Rows.copy((Row) value, builder).build()
+                                                    : ((RangeTombstoneMarker) value).copy(allocator));
             }
         }
         return Transformation.apply(iterator, new Cloner());
@@ -201,7 +198,7 @@ public abstract class UnfilteredRowIterators
      */
     public static UnfilteredRowIterator withValidation(UnfilteredRowIterator iterator, final String filename)
     {
-        class Validator extends Transformation
+        class Validator extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             @Override
             public Row applyToStatic(Row row)
@@ -211,24 +208,17 @@ public abstract class UnfilteredRowIterators
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
             {
-                validate(row);
-                return row;
+                return value -> nextConsumer.accept(validate(value));
             }
 
-            @Override
-            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-            {
-                validate(marker);
-                return marker;
-            }
-
-            private void validate(Unfiltered unfiltered)
+            private Unfiltered validate(Unfiltered unfiltered)
             {
                 try
                 {
                     unfiltered.validateData(iterator.metadata());
+                    return unfiltered;
                 }
                 catch (MarshalException me)
                 {
@@ -256,25 +246,31 @@ public abstract class UnfilteredRowIterators
                     iterator.isReverseOrder(),
                     iterator.partitionLevelDeletion().markedForDeleteAt());
 
-        class Logger extends Transformation
+        class Logger extends Transformation<Unfiltered, UnfilteredRowIterator>
         {
             @Override
             public Row applyToStatic(Row row)
             {
                 if (!row.isEmpty())
-                    logger.info("[{}] {}", id, row.toString(metadata, fullDetails));
+                    log(row);
                 return row;
             }
 
             @Override
-            public Row applyToRow(Row row)
+            public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
+            {
+                return value -> nextConsumer.accept(value instanceof Row
+                                                    ? log((Row) value)
+                                                    : log((RangeTombstoneMarker) value));
+            }
+
+            public Row log(Row row)
             {
                 logger.info("[{}] {}", id, row.toString(metadata, fullDetails));
                 return row;
             }
 
-            @Override
-            public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
+            public RangeTombstoneMarker log(RangeTombstoneMarker marker)
             {
                 logger.info("[{}] {}", id, marker.toString(metadata));
                 return marker;

@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+import org.apache.cassandra.db.transform.Consumer;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.utils.AbstractIterator;
 import com.google.common.collect.Iterators;
@@ -88,11 +89,11 @@ public class ThriftResultsMerger extends Transformation<Unfiltered, UnfilteredRo
     }
 
     @Override
-    public UnfilteredRowIterator applyToPartition(UnfilteredRowIterator iter)
+    public Consumer<UnfilteredRowIterator> applyAsPartitionConsumer(Consumer<UnfilteredRowIterator> nextConsumer)
     {
-        return iter.metadata().isSuper()
-             ? Transformation.apply(iter, new SuperColumnsPartitionMerger(iter, nowInSec))
-             : new PartitionMerger(iter, nowInSec);
+        return iter -> nextConsumer.accept(iter.metadata().isSuper()
+                ? Transformation.apply(iter, new SuperColumnsPartitionMerger(iter, nowInSec))
+                : new PartitionMerger(iter, nowInSec));
     }
 
     private static class PartitionMerger extends WrappingUnfilteredRowIterator
@@ -205,7 +206,7 @@ public class ThriftResultsMerger extends Transformation<Unfiltered, UnfilteredRo
         }
     }
 
-    private static class SuperColumnsPartitionMerger extends Transformation
+    private static class SuperColumnsPartitionMerger extends Transformation<Unfiltered, UnfilteredRowIterator>
     {
         private final int nowInSec;
         private final Row.Builder builder;
@@ -225,7 +226,14 @@ public class ThriftResultsMerger extends Transformation<Unfiltered, UnfilteredRo
         }
 
         @Override
-        public Row applyToRow(Row row)
+        public Consumer<Unfiltered> applyAsRowConsumer(Consumer<Unfiltered> nextConsumer)
+        {
+            return value -> nextConsumer.accept(value instanceof Row
+                    ? mergeRow((Row) value)
+                    : value);
+        }
+
+        public Row mergeRow(Row row)
         {
             PeekingIterator<Cell> staticCells = Iterators.peekingIterator(simpleCellsIterator(row));
             if (!staticCells.hasNext())
