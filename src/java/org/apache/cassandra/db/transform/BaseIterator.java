@@ -73,8 +73,9 @@ abstract class BaseIterator<IN, ITER extends CloseableIterator<? extends IN>, OU
             try { ((AutoCloseable) nextValue).close(); }
             catch (Throwable t) { fail = merge(fail, t); }
         }
-        try { input.close(); }
-        catch (Throwable t) { fail = merge(fail, t); }
+        if (input != null)
+            try { input.close(); }
+            catch (Throwable t) { fail = merge(fail, t); }
         maybeFail(fail);
     }
 
