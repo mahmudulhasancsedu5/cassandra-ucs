@@ -19,7 +19,6 @@ package org.apache.cassandra.db.partition;
 
 import static org.junit.Assert.*;
 
-import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -42,7 +41,6 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.ColumnFilter;
-import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.partitions.AbstractBTreePartition;
 import org.apache.cassandra.db.partitions.ImmutableBTreePartition;
@@ -54,16 +52,15 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.SearchIterator;
-import org.apache.cassandra.utils.Throwables;
 
 public class PartitionImplementationTest
 {
     private static final String KEYSPACE = "PartitionImplementationTest";
     private static final String CF = "Standard";
 
-    private static final int ENTRIES = 100;
-    private static final int TESTS = 100;
-    private static final int KEY_RANGE = ENTRIES * 10;
+    private static final int ENTRIES = 250;
+    private static final int TESTS = 1000;
+    private static final int KEY_RANGE = ENTRIES * 5;
 
     private static CFMetaData cfm;
     private Random rand = new Random(2);
@@ -287,14 +284,12 @@ public class PartitionImplementationTest
                              partition.unfilteredIterator(cf, slices, false));
         // randomly multi-sliced
         Slices multiSlices = makeSlices();
-        // FIXME: failing, returns invalid markers at slice boundaries
         assertIteratorsEqual(slice(sortedContent, multiSlices),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), multiSlices, false));
         assertIteratorsEqual(streamOf(slice(sortedContent, multiSlices)).map(colFilter).iterator(),
                              partition.unfilteredIterator(cf, multiSlices, false));
 
         // reversed
-        // FIXME: failing, wrong markers reported
         assertIteratorsEqual(sortedContent.descendingIterator(),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), Slices.ALL, true));
         assertIteratorsEqual(sortedContent.descendingSet().stream().map(colFilter).iterator(),
@@ -315,7 +310,6 @@ public class PartitionImplementationTest
         testSearchIterator(sortedContent, partition, cf, true);
 
         // sliceable iter
-        // FIXME: failing, returns invalid markers at slice boundary
         testSliceableIterator(sortedContent, partition, ColumnFilter.all(cfm), false);
         testSliceableIterator(sortedContent, partition, cf, false);
         testSliceableIterator(sortedContent, partition, ColumnFilter.all(cfm), true);
@@ -330,18 +324,12 @@ public class PartitionImplementationTest
         boolean started = false;
         while (searchIter.hasNext())
         {
-            int skip = rand.nextInt(KEY_RANGE / 10) - 2; // some chance of 0 or negative
+            int skip = rand.nextInt(KEY_RANGE / 10);
             pos += skip * mul;
             Clustering cl = clustering(pos);
             Row row = searchIter.next(cl);  // returns row with deletion, incl. empty row with deletion
-            if (skip <= 0 && started)
-            {
-                // FIXME: failing, returns empty deleted row if covered by marker
-                assertTrue(row == null);
-                // Reset pos so we don't have a chance to request earlier rows.
-                pos -= skip * mul;
+            if (row == null && skip == 0 && started)    // allowed to return null if already reported row
                 continue;
-            }
             started = true;
             Row expected = getRow(sortedContent, cl);
             assertEquals(expected == null, row == null);
