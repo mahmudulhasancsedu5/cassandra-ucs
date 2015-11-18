@@ -646,6 +646,71 @@ public class StorageProxy implements StorageProxyMBean
         submitHint(mutation, endpointsToHint, null);
     }
 
+    public void deliverMovedHint(Mutation mutation, long creationTime)
+    {
+        logger.info("Hint for key {} is no longer serviced by this node. Attempting delivery to all key replicas.", mutation.key().toString());
+        Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(mutation.getKeyspaceName(), mutation.key());
+        Collection<InetAddress> pendingEndpoints =
+                StorageService.instance.getTokenMetadata().pendingEndpointsFor(mutation.key().getToken(), mutation.getKeyspaceName());
+
+        // Do not send replays to any endpoint that does not take part in hinting.
+        // Take copies of the lists to avoid the risk of shouldHint of some endpoint changing between uses.
+        naturalEndpoints = ImmutableList.copyOf(Iterables.filter(naturalEndpoints, StorageProxy::shouldHint));
+        pendingEndpoints = ImmutableList.copyOf(Iterables.filter(pendingEndpoints, StorageProxy::shouldHint));
+        if (naturalEndpoints.size() + pendingEndpoints.size() > 0)
+        {
+            // We want to send to all replicas, but treat hints as successful deliveries (which amounts to converting the moved hint to one or more properly addressed ones).
+            WriteResponseHandler<IMutation> responseHandler = new WriteResponseHandler<IMutation>(naturalEndpoints, pendingEndpoints, ConsistencyLevel.ALL, null, null, WriteType.SIMPLE)
+            {
+                @Override
+                protected int totalBlockFor()
+                {
+                    // Our list of endpoints is pre-filtered by shouldHint; the expected number of responses may be
+                    // different from the number required for ConsistencyLevel.ALL.
+                    return naturalEndpoints.size() + pendingEndpoints.size();
+                }
+
+                @Override
+                protected void hintSubmitted()
+                {
+                    // Treat hints as successful deliveries.
+                    response(null);
+                }
+
+                @Override
+                protected long hintCreationTime()
+                {
+                    return creationTime;
+                }
+            };
+            final String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
+            // Send to all endpoints and write hints for unsuccessful deliveries.
+            StorageProxy.sendToHintedEndpoints(mutation,
+                                               Iterables.concat(naturalEndpoints, pendingEndpoints),
+                                               responseHandler,
+                                               localDataCenter,
+                                               Stage.MUTATION);
+            // Wait for delivery.
+            responseHandler.get();
+        }
+    }
+
+    public boolean appliesLocally(Mutation mutation)
+    {
+        String keyspaceName = mutation.getKeyspaceName();
+        Token tk = mutation.key().getToken();
+        InetAddress local = FBUtilities.getBroadcastAddress();
+
+        List<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(keyspaceName, tk);
+        if (naturalEndpoints.contains(local))
+            return true;
+        Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(tk, keyspaceName);
+        if (pendingEndpoints.contains(local))
+            return true;
+
+        return false;
+    }
+
     /**
      * Use this method to have these Mutations applied
      * across all replicas.
@@ -2508,11 +2573,11 @@ public class StorageProxy implements StorageProxyMBean
                         logger.debug("Discarding hint for endpoint not part of ring: {}", target);
                 }
                 logger.trace("Adding hints for {}", validTargets);
-                HintsService.instance.write(hostIds, Hint.create(mutation, System.currentTimeMillis()));
+                HintsService.instance.write(hostIds, Hint.create(mutation, responseHandler != null ? responseHandler.hintCreationTime() : System.currentTimeMillis()));
                 validTargets.forEach(HintsService.instance.metrics::incrCreatedHints);
                 // Notify the handler only for CL == ANY
-                if (responseHandler != null && responseHandler.consistencyLevel == ConsistencyLevel.ANY)
-                    responseHandler.response(null);
+                if (responseHandler != null)
+                    responseHandler.hintSubmitted();
             }
         };
 

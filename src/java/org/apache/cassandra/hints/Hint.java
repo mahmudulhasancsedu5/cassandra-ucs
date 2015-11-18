@@ -25,6 +25,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.service.StorageProxy;
 
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.db.TypeSizes.sizeofUnsignedVInt;
@@ -86,14 +87,24 @@ public final class Hint
         if (!isLive())
             return;
 
-        // filter out partition update for table that have been truncated since hint's creation
-        Mutation filtered = mutation;
-        for (UUID id : mutation.getColumnFamilyIds())
-            if (creationTime <= SystemKeyspace.getTruncatedAt(id))
-                filtered = filtered.without(id);
+        // check for topology changes that may have changed the responsible node between scheduling and delivery
+        if (StorageProxy.instance.appliesLocally(mutation))
+        {
+            // filter out partition update for table that have been truncated since hint's creation
+            Mutation filtered = mutation;
+            for (UUID id : mutation.getColumnFamilyIds())
+                if (creationTime <= SystemKeyspace.getTruncatedAt(id))
+                    filtered = filtered.without(id);
 
-        if (!filtered.isEmpty())
-            filtered.apply();
+            if (!filtered.isEmpty())
+                filtered.apply();
+        }
+        else
+            // The topology has changed, and our saved endpoint is no longer a replica of the mutation.
+            // Since we don't know which node(s) it has handed over to, send the hint to all replicas,
+            // writing hints for each one that does not respond.
+            // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+            StorageProxy.instance.deliverMovedHint(mutation, creationTime);
     }
 
     /**
