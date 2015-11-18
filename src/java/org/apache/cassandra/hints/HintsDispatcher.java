@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import com.google.common.util.concurrent.RateLimiter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.gms.FailureDetector;
@@ -43,6 +45,8 @@ import org.apache.cassandra.utils.concurrent.SimpleCondition;
  */
 final class HintsDispatcher implements AutoCloseable
 {
+    private static final Logger logger = LoggerFactory.getLogger(HintsDispatcher.class);
+
     private enum Action { CONTINUE, ABORT, RETRY }
 
     private final HintsReader reader;
@@ -127,17 +131,28 @@ final class HintsDispatcher implements AutoCloseable
     private Action sendHintsAndAwait(HintsReader.Page page)
     {
         Collection<Callback> callbacks = new ArrayList<>();
+        Action action;
 
-        /*
-         * If hints file messaging version matches the version of the target host, we'll use the optimised path -
-         * skipping the redundant decoding/encoding cycle of the already encoded hint.
-         *
-         * If that is not the case, we'll need to perform conversion to a newer (or an older) format, and decoding the hint
-         * is an unavoidable intermediate step.
-         */
-        Action action = reader.descriptor().messagingVersion() == messagingVersion
-                      ? sendHints(page.buffersIterator(), callbacks, this::sendEncodedHint)
-                      : sendHints(page.hintsIterator(), callbacks, this::sendHint);
+        if (address != null)
+        {
+            /*
+             * If hints file messaging version matches the version of the target host, we'll use the optimised path -
+             * skipping the redundant decoding/encoding cycle of the already encoded hint.
+             *
+             * If that is not the case, we'll need to perform conversion to a newer (or an older) format, and decoding the hint
+             * is an unavoidable intermediate step.
+             */
+            action = reader.descriptor().messagingVersion() == messagingVersion
+                          ? sendHints(page.buffersIterator(), callbacks, this::sendEncodedHint)
+                          : sendHints(page.hintsIterator(), callbacks, this::sendHint);
+        }
+        else
+        {
+            logger.info("Node with ID {} no longer exists in the ring. Rerouting all hints to current replicas.", hostId);
+            // Node is no longer part of the ring. Treat hints as misaddressed and send them to all current handlers of
+            // the tokens.
+            action = sendHints(page.hintsIterator(), callbacks, this::deliverMovedHint);
+        }
 
         if (action == Action.ABORT)
             return action;
@@ -158,7 +173,9 @@ final class HintsDispatcher implements AutoCloseable
         {
             if (!isHostAlive() || isPaused())
                 return Action.ABORT;
-            callbacks.add(sendFunction.apply(hints.next()));
+            Callback callback = sendFunction.apply(hints.next());
+            if (callback != null)
+                callbacks.add(callback);
         }
         return Action.CONTINUE;
     }
@@ -169,6 +186,12 @@ final class HintsDispatcher implements AutoCloseable
         HintMessage message = new HintMessage(hostId, hint);
         MessagingService.instance().sendRRWithFailure(message.createMessageOut(), address, callback);
         return callback;
+    }
+
+    private Callback deliverMovedHint(Hint hint)
+    {
+        HintsService.instance.sendToAllReplicas(hint);
+        return null;
     }
 
     /*

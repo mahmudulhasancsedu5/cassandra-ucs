@@ -646,6 +646,22 @@ public class StorageProxy implements StorageProxyMBean
         submitHint(mutation, endpointsToHint, null);
     }
 
+    public boolean appliesLocally(Mutation mutation)
+    {
+        String keyspaceName = mutation.getKeyspaceName();
+        Token tk = mutation.key().getToken();
+        InetAddress local = FBUtilities.getBroadcastAddress();
+
+        List<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(keyspaceName, tk);
+        if (naturalEndpoints.contains(local))
+            return true;
+        Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(tk, keyspaceName);
+        if (pendingEndpoints.contains(local))
+            return true;
+
+        return false;
+    }
+
     /**
      * Use this method to have these Mutations applied
      * across all replicas.
