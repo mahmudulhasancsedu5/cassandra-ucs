@@ -21,8 +21,8 @@ import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,6 +32,7 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +41,8 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParameterizedClass;
 import org.apache.cassandra.metrics.HintedHandoffMetrics;
 import org.apache.cassandra.metrics.StorageMetrics;
-import org.apache.cassandra.schema.CompressionParams;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.service.StorageService;
 
 import static com.google.common.collect.Iterables.transform;
@@ -352,5 +354,27 @@ public final class HintsService implements HintsServiceMBean
     HintsCatalog getCatalog()
     {
         return catalog;
+    }
+
+    /**
+     * Send a hint to all replicas. Used to re-dispatch hints whose destination is either missing or no longer correct.
+     */
+    void sendToAllReplicas(Hint hint)
+    {
+        String keyspaceName = hint.mutation.getKeyspaceName();
+        Token token = hint.mutation.key().getToken();
+        Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(keyspaceName, token);
+        Collection<InetAddress> pendingEndpoints =
+                StorageService.instance.getTokenMetadata().pendingEndpointsFor(token, keyspaceName);
+
+        Iterable<UUID> hostIds =
+            transform(Iterables.filter(
+                                Iterables.concat(
+                                        naturalEndpoints,
+                                        pendingEndpoints),
+                                StorageProxy::shouldHint),
+                        StorageService.instance::getHostIdForEndpoint);
+
+        write(hostIds, hint);
     }
 }

@@ -21,10 +21,14 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.service.StorageProxy;
 
 import static org.apache.cassandra.db.TypeSizes.sizeof;
 import static org.apache.cassandra.db.TypeSizes.sizeofUnsignedVInt;
@@ -46,6 +50,8 @@ import static org.apache.cassandra.db.TypeSizes.sizeofUnsignedVInt;
  */
 public final class Hint
 {
+    private static final Logger logger = LoggerFactory.getLogger(Hint.class);
+
     public static final Serializer serializer = new Serializer();
 
     final Mutation mutation;
@@ -86,14 +92,26 @@ public final class Hint
         if (!isLive())
             return;
 
-        // filter out partition update for table that have been truncated since hint's creation
-        Mutation filtered = mutation;
-        for (UUID id : mutation.getColumnFamilyIds())
-            if (creationTime <= SystemKeyspace.getTruncatedAt(id))
-                filtered = filtered.without(id);
+        // check for topology changes that may have changed the responsible node between scheduling and delivery
+        if (StorageProxy.instance.appliesLocally(mutation))
+        {
+            // filter out partition update for table that have been truncated since hint's creation
+            Mutation filtered = mutation;
+            for (UUID id : mutation.getColumnFamilyIds())
+                if (creationTime <= SystemKeyspace.getTruncatedAt(id))
+                    filtered = filtered.without(id);
 
-        if (!filtered.isEmpty())
-            filtered.apply();
+            if (!filtered.isEmpty())
+                filtered.apply();
+        }
+        else
+        {
+            logger.info("Hint with key {} no longer applies to this node. Rerouting hint to all current replicas.", mutation.key());
+            // The topology has changed, and we are no longer a replica of the mutation.
+            // Since we don't know which node(s) it has handed over to, re-address the hint to all replicas,
+            // This is an exceptional case and should be hit very rarely (see CASSANDRA-5902).
+            HintsService.instance.sendToAllReplicas(this);
+        }
     }
 
     /**
