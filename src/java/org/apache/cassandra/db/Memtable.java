@@ -93,7 +93,6 @@ public class Memtable implements Comparable<Memtable>
     // memtable was created with the new or old comparator.
     public final CellNameType initialComparator;
 
-    // only to be used by init(), to setup the very first memtable for the cfs
     public Memtable(AtomicReference<ReplayPosition> commitLogLowerBound, ColumnFamilyStore cfs)
     {
         this.cfs = cfs;
