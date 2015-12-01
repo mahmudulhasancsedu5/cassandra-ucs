@@ -45,6 +45,8 @@ import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.db.compaction.Scrubber;
+import org.apache.cassandra.db.compaction.Scrubber.ScrubResult;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
@@ -60,6 +62,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CounterId;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.concurrent.Refs;
 
 import static org.junit.Assert.assertEquals;
@@ -300,7 +303,7 @@ public class StreamingTransferTest
         Keyspace keyspace = Keyspace.open(ks);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
 
-        String key = "key1";
+        String key = "key0";
         Mutation rm = new Mutation(ks, ByteBufferUtil.bytes(key));
         // add columns of size slightly less than column_index_size to force insert column index
         rm.add(cfname, cellname(1), ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize() - 64]), 2);
@@ -311,6 +314,16 @@ public class StreamingTransferTest
         cf.delete(new DeletionInfo(cellname(5), cellname(7), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         cf.delete(new DeletionInfo(cellname(8), cellname(10), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         rm.applyUnsafe();
+
+        key = "key1";
+        rm = new Mutation(ks, ByteBufferUtil.bytes(key));
+        // add columns of size slightly less than column_index_size to force insert column index
+        rm.add(cfname, cellname(1), ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize() - 64]), 2);
+        cf = rm.addOrGet(cfname);
+        // add RangeTombstones
+        cf.delete(new DeletionInfo(cellname(2), cellname(3), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
+        rm.applyUnsafe();
+
         cfs.forceBlockingFlush();
 
         int cellCount = countCells(cfs);
@@ -325,21 +338,23 @@ public class StreamingTransferTest
         assertEquals(cellCount, countCells(cfs));
 
         List<Row> rows = Util.getRangeSlice(cfs);
-        assertEquals(1, rows.size());
+        assertEquals(2, rows.size());
     }
 
     private int countCells(ColumnFamilyStore cfs)
     {
         int cellCount = 0;
-        SSTableReader newOne = cfs.getSSTables().iterator().next();
-        Iterator<OnDiskAtomIterator> it = newOne.getScanner();
-        while (it.hasNext())
+        for (SSTableReader sstable : cfs.getSSTables())
         {
-            Iterator<OnDiskAtom> itr = it.next();
-            while (itr.hasNext())
+            Iterator<OnDiskAtomIterator> it = sstable.getScanner();
+            while (it.hasNext())
             {
-                ++cellCount;
-                itr.next();
+                Iterator<OnDiskAtom> itr = it.next();
+                while (itr.hasNext())
+                {
+                    ++cellCount;
+                    itr.next();
+                }
             }
         }
         return cellCount;
