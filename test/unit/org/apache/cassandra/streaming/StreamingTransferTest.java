@@ -26,9 +26,11 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +40,7 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
@@ -274,9 +277,11 @@ public class StreamingTransferTest extends SchemaLoader
         // add RangeTombstones
         cf.delete(new DeletionInfo(ByteBufferUtil.bytes(2), ByteBufferUtil.bytes(3), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         cf.delete(new DeletionInfo(ByteBufferUtil.bytes(5), ByteBufferUtil.bytes(7), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
+        cf.delete(new DeletionInfo(ByteBufferUtil.bytes(8), ByteBufferUtil.bytes(10), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         rm.apply();
         cfs.forceBlockingFlush();
 
+        int cellCount = countCells(cfs);
         SSTableReader sstable = cfs.getSSTables().iterator().next();
         cfs.clearUnsafe();
         transferSSTables(sstable);
@@ -284,8 +289,28 @@ public class StreamingTransferTest extends SchemaLoader
         // confirm that a single SSTable was transferred and registered
         assertEquals(1, cfs.getSSTables().size());
 
+        // Verify table
+        assertEquals(cellCount, countCells(cfs));
+
         List<Row> rows = Util.getRangeSlice(cfs);
         assertEquals(1, rows.size());
+    }
+
+    private int countCells(ColumnFamilyStore cfs)
+    {
+        int cellCount = 0;
+        SSTableReader newOne = cfs.getSSTables().iterator().next();
+        Iterator<OnDiskAtomIterator> it = newOne.getScanner();
+        while (it.hasNext())
+        {
+            Iterator<OnDiskAtom> itr = it.next();
+            while (itr.hasNext())
+            {
+                ++cellCount;
+                itr.next();
+            }
+        }
+        return cellCount;
     }
 
     @Test
