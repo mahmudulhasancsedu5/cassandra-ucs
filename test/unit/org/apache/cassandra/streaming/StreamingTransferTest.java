@@ -268,7 +268,7 @@ public class StreamingTransferTest extends SchemaLoader
         Keyspace keyspace = Keyspace.open(ks);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
 
-        String key = "key1";
+        String key = "key0";
         RowMutation rm = new RowMutation(ks, ByteBufferUtil.bytes(key));
         // add columns of size slightly less than column_index_size to force insert column index
         rm.add(cfname, ByteBufferUtil.bytes(1), ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize() - 64]), 2);
@@ -279,6 +279,16 @@ public class StreamingTransferTest extends SchemaLoader
         cf.delete(new DeletionInfo(ByteBufferUtil.bytes(5), ByteBufferUtil.bytes(7), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         cf.delete(new DeletionInfo(ByteBufferUtil.bytes(8), ByteBufferUtil.bytes(10), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         rm.apply();
+
+        key = "key1";
+        rm = new RowMutation(ks, ByteBufferUtil.bytes(key));
+        // add columns of size slightly less than column_index_size to force insert column index
+        rm.add(cfname, ByteBufferUtil.bytes(1), ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize() - 64]), 2);
+        cf = rm.addOrGet(cfname);
+        // add RangeTombstones
+        cf.delete(new DeletionInfo(ByteBufferUtil.bytes(2), ByteBufferUtil.bytes(3), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
+        rm.apply();
+
         cfs.forceBlockingFlush();
 
         int cellCount = countCells(cfs);
@@ -293,21 +303,23 @@ public class StreamingTransferTest extends SchemaLoader
         assertEquals(cellCount, countCells(cfs));
 
         List<Row> rows = Util.getRangeSlice(cfs);
-        assertEquals(1, rows.size());
+        assertEquals(2, rows.size());
     }
 
     private int countCells(ColumnFamilyStore cfs)
     {
         int cellCount = 0;
-        SSTableReader newOne = cfs.getSSTables().iterator().next();
-        Iterator<OnDiskAtomIterator> it = newOne.getScanner();
-        while (it.hasNext())
+        for (SSTableReader sstable : cfs.getSSTables())
         {
-            Iterator<OnDiskAtom> itr = it.next();
-            while (itr.hasNext())
+            Iterator<OnDiskAtomIterator> it = sstable.getScanner();
+            while (it.hasNext())
             {
-                ++cellCount;
-                itr.next();
+                Iterator<OnDiskAtom> itr = it.next();
+                while (itr.hasNext())
+                {
+                    ++cellCount;
+                    itr.next();
+                }
             }
         }
         return cellCount;
