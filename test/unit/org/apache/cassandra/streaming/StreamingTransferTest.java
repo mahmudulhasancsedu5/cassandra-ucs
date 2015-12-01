@@ -27,9 +27,11 @@ import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +44,7 @@ import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
@@ -57,8 +60,8 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CounterId;
 import org.apache.cassandra.utils.FBUtilities;
-
 import org.apache.cassandra.utils.concurrent.Refs;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.apache.cassandra.Util.cellname;
@@ -306,9 +309,11 @@ public class StreamingTransferTest
         // add RangeTombstones
         cf.delete(new DeletionInfo(cellname(2), cellname(3), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         cf.delete(new DeletionInfo(cellname(5), cellname(7), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
+        cf.delete(new DeletionInfo(cellname(8), cellname(10), cf.getComparator(), 1, (int) (System.currentTimeMillis() / 1000)));
         rm.applyUnsafe();
         cfs.forceBlockingFlush();
 
+        int cellCount = countCells(cfs);
         SSTableReader sstable = cfs.getSSTables().iterator().next();
         cfs.clearUnsafe();
         transferSSTables(sstable);
@@ -316,8 +321,28 @@ public class StreamingTransferTest
         // confirm that a single SSTable was transferred and registered
         assertEquals(1, cfs.getSSTables().size());
 
+        // Verify table
+        assertEquals(cellCount, countCells(cfs));
+
         List<Row> rows = Util.getRangeSlice(cfs);
         assertEquals(1, rows.size());
+    }
+
+    private int countCells(ColumnFamilyStore cfs)
+    {
+        int cellCount = 0;
+        SSTableReader newOne = cfs.getSSTables().iterator().next();
+        Iterator<OnDiskAtomIterator> it = newOne.getScanner();
+        while (it.hasNext())
+        {
+            Iterator<OnDiskAtom> itr = it.next();
+            while (itr.hasNext())
+            {
+                ++cellCount;
+                itr.next();
+            }
+        }
+        return cellCount;
     }
 
     @Test
