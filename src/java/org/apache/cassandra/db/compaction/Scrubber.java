@@ -150,7 +150,7 @@ public class Scrubber implements Closeable
 
                 updateIndexKey();
 
-                if (prevKey != null)
+                if (prevKey != null && indexFile != null)
                 {
                     long nextRowStart = currentRowPositionFromIndex == -1 ? dataFile.length() : currentRowPositionFromIndex;
                     if (dataFile.getFilePointer() < nextRowStart)
