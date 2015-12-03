@@ -50,7 +50,6 @@ import org.apache.cassandra.db.rows.Row.Deletion;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.SearchIterator;
 
 public class PartitionImplementationTest
@@ -61,6 +60,8 @@ public class PartitionImplementationTest
     private static final int ENTRIES = 250;
     private static final int TESTS = 1000;
     private static final int KEY_RANGE = ENTRIES * 5;
+
+    private static final int TIMESTAMP = KEY_RANGE + 1;
 
     private static CFMetaData cfm;
     private Random rand = new Random(2);
@@ -80,7 +81,7 @@ public class PartitionImplementationTest
                                     KeyspaceParams.simple(1),
                                     cfm);
     }
-    
+
     private List<Row> generateRows()
     {
         List<Row> content = new ArrayList<>();
@@ -101,21 +102,21 @@ public class PartitionImplementationTest
     Row makeRow(Clustering clustering, String colValue)
     {
         ColumnDefinition defCol = cfm.getColumnDefinition(new ColumnIdentifier("col", true));
-        Row.Builder row = BTreeRow.unsortedBuilder(FBUtilities.nowInSeconds());
+        Row.Builder row = BTreeRow.unsortedBuilder(TIMESTAMP);
         row.newRow(clustering);
-        row.addCell(BufferCell.live(cfm, defCol, FBUtilities.timestampMicros(), ByteBufferUtil.bytes(colValue)));
+        row.addCell(BufferCell.live(cfm, defCol, TIMESTAMP, ByteBufferUtil.bytes(colValue)));
         return row.build();
     }
-    
+
     Row makeStaticRow()
     {
         ColumnDefinition defCol = cfm.getColumnDefinition(new ColumnIdentifier("static_col", true));
-        Row.Builder row = BTreeRow.unsortedBuilder(FBUtilities.nowInSeconds());
+        Row.Builder row = BTreeRow.unsortedBuilder(TIMESTAMP);
         row.newRow(Clustering.STATIC_CLUSTERING);
-        row.addCell(BufferCell.live(cfm, defCol, FBUtilities.timestampMicros(), ByteBufferUtil.bytes("static value")));
+        row.addCell(BufferCell.live(cfm, defCol, TIMESTAMP, ByteBufferUtil.bytes("static value")));
         return row.build();
     }
-    
+
     private List<Unfiltered> generateMarkersOnly()
     {
         return addMarkers(new ArrayList<>());
@@ -218,13 +219,16 @@ public class PartitionImplementationTest
     private void test(Supplier<Collection<? extends Unfiltered>> content, Row staticRow)
     {
         for (int i = 0; i<TESTS; ++i)
-        try {
-            rand = new Random(i);
-            testIter(content, staticRow);
-        }
-        catch (Throwable t)
         {
-            throw new AssertionError("Test failed with seed " + i, t);
+            try
+            {
+                rand = new Random(i);
+                testIter(content, staticRow);
+            }
+            catch (Throwable t)
+            {
+                throw new AssertionError("Test failed with seed " + i, t);
+            }
         }
     }
 
@@ -237,6 +241,12 @@ public class PartitionImplementationTest
         {
             partition = ImmutableBTreePartition.create(iter);
         }
+
+        ColumnDefinition defCol = cfm.getColumnDefinition(new ColumnIdentifier("col", true));
+        ColumnFilter cf = ColumnFilter.selectionBuilder().add(defCol).build();
+        Function<? super Clusterable, ? extends Clusterable> colFilter = x -> x instanceof Row ? ((Row) x).filter(cf, cfm) : x;
+        Slices slices = Slices.with(cfm.comparator, Slice.make(clustering(KEY_RANGE / 4), clustering(KEY_RANGE * 3 / 4)));
+        Slices multiSlices = makeSlices();
 
         // lastRow
         assertRowsEqual((Row) get(sortedContent.descendingSet(), x -> x instanceof Row),
@@ -270,25 +280,19 @@ public class PartitionImplementationTest
         // unfiltered iterator
         assertIteratorsEqual(sortedContent.iterator(),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), Slices.ALL, false));
-        // filtered
-        ColumnDefinition defCol = cfm.getColumnDefinition(new ColumnIdentifier("col", true));
-        ColumnFilter cf = ColumnFilter.selectionBuilder().add(defCol).build();
-        Function<? super Clusterable, ? extends Clusterable> colFilter = x -> x instanceof Row ? ((Row) x).filter(cf, cfm) : x;
+        // column-filtered
         assertIteratorsEqual(sortedContent.stream().map(colFilter).iterator(),
                              partition.unfilteredIterator(cf, Slices.ALL, false));
         // sliced
-        Slices slices = Slices.with(cfm.comparator, Slice.make(clustering(KEY_RANGE / 4), clustering(KEY_RANGE * 3 / 4)));
         assertIteratorsEqual(slice(sortedContent, slices.get(0)),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), slices, false));
         assertIteratorsEqual(streamOf(slice(sortedContent, slices.get(0))).map(colFilter).iterator(),
                              partition.unfilteredIterator(cf, slices, false));
         // randomly multi-sliced
-        Slices multiSlices = makeSlices();
         assertIteratorsEqual(slice(sortedContent, multiSlices),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), multiSlices, false));
         assertIteratorsEqual(streamOf(slice(sortedContent, multiSlices)).map(colFilter).iterator(),
                              partition.unfilteredIterator(cf, multiSlices, false));
-
         // reversed
         assertIteratorsEqual(sortedContent.descendingIterator(),
                              partition.unfilteredIterator(ColumnFilter.all(cfm), Slices.ALL, true));
