@@ -28,10 +28,12 @@ import java.util.function.Function;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.net.IAsyncCallbackWithFailure;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.concurrent.SimpleCondition;
 
@@ -127,17 +129,27 @@ final class HintsDispatcher implements AutoCloseable
     private Action sendHintsAndAwait(HintsReader.Page page)
     {
         Collection<Callback> callbacks = new ArrayList<>();
+        Action action;
 
-        /*
-         * If hints file messaging version matches the version of the target host, we'll use the optimised path -
-         * skipping the redundant decoding/encoding cycle of the already encoded hint.
-         *
-         * If that is not the case, we'll need to perform conversion to a newer (or an older) format, and decoding the hint
-         * is an unavoidable intermediate step.
-         */
-        Action action = reader.descriptor().messagingVersion() == messagingVersion
-                      ? sendHints(page.buffersIterator(), callbacks, this::sendEncodedHint)
-                      : sendHints(page.hintsIterator(), callbacks, this::sendHint);
+        if (address != null)
+        {
+            /*
+             * If hints file messaging version matches the version of the target host, we'll use the optimised path -
+             * skipping the redundant decoding/encoding cycle of the already encoded hint.
+             *
+             * If that is not the case, we'll need to perform conversion to a newer (or an older) format, and decoding the hint
+             * is an unavoidable intermediate step.
+             */
+            action = reader.descriptor().messagingVersion() == messagingVersion
+                          ? sendHints(page.buffersIterator(), callbacks, this::sendEncodedHint)
+                          : sendHints(page.hintsIterator(), callbacks, this::sendHint);
+        }
+        else
+        {
+            // Node is no longer part of the ring. Treat hints as misaddressed and send them to all current handlers of
+            // the tokens.
+            action = sendHints(page.hintsIterator(), callbacks, this::deliverMovedHint);
+        }
 
         if (action == Action.ABORT)
             return action;
@@ -158,7 +170,9 @@ final class HintsDispatcher implements AutoCloseable
         {
             if (!isHostAlive() || isPaused())
                 return Action.ABORT;
-            callbacks.add(sendFunction.apply(hints.next()));
+            Callback callback = sendFunction.apply(hints.next());
+            if (callback != null)
+                callbacks.add(callback);
         }
         return Action.CONTINUE;
     }
@@ -168,6 +182,19 @@ final class HintsDispatcher implements AutoCloseable
         Callback callback = new Callback();
         HintMessage message = new HintMessage(hostId, hint);
         MessagingService.instance().sendRRWithFailure(message.createMessageOut(), address, callback);
+        return callback;
+    }
+
+    private Callback deliverMovedHint(Hint hint)
+    {
+        Mutation filtered = hint.filteredMutation();
+        if (filtered == null)
+            return null;
+
+        Callback callback = new Callback();
+        // Note: if delivery completes, regardless if it included failures (which are usually written to hints), the
+        // misaddressed hint has been successfully processed and can be removed.
+        StorageProxy.instance.deliverMovedHint(filtered, hint.creationTime, () -> callback.response(null));
         return callback;
     }
 

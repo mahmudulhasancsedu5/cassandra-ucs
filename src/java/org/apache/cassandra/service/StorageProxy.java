@@ -646,7 +646,7 @@ public class StorageProxy implements StorageProxyMBean
         submitHint(mutation, endpointsToHint, null);
     }
 
-    public void deliverMovedHint(Mutation mutation, long creationTime)
+    public void deliverMovedHint(Mutation mutation, long creationTime, Runnable callback)
     {
         logger.info("Hint for key {} is no longer serviced by this node. Attempting delivery to all key replicas.", mutation.key().toString());
         Collection<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(mutation.getKeyspaceName(), mutation.key());
@@ -660,7 +660,7 @@ public class StorageProxy implements StorageProxyMBean
         if (naturalEndpoints.size() + pendingEndpoints.size() > 0)
         {
             // We want to send to all replicas, but treat hints as successful deliveries (which amounts to converting the moved hint to one or more properly addressed ones).
-            WriteResponseHandler<IMutation> responseHandler = new WriteResponseHandler<IMutation>(naturalEndpoints, pendingEndpoints, ConsistencyLevel.ALL, null, null, WriteType.SIMPLE)
+            WriteResponseHandler<IMutation> responseHandler = new WriteResponseHandler<IMutation>(naturalEndpoints, pendingEndpoints, ConsistencyLevel.ALL, null, callback, WriteType.SIMPLE)
             {
                 @Override
                 protected int totalBlockFor()
@@ -690,9 +690,13 @@ public class StorageProxy implements StorageProxyMBean
                                                responseHandler,
                                                localDataCenter,
                                                Stage.MUTATION);
-            // Wait for delivery.
-            responseHandler.get();
+            if (callback == null)
+                // Wait for delivery.
+                responseHandler.get();
         }
+        else if (callback != null)
+            // Nothing to do. Delivery is complete.
+            callback.run();
     }
 
     public boolean appliesLocally(Mutation mutation)
@@ -2575,7 +2579,6 @@ public class StorageProxy implements StorageProxyMBean
                 logger.trace("Adding hints for {}", validTargets);
                 HintsService.instance.write(hostIds, Hint.create(mutation, responseHandler != null ? responseHandler.hintCreationTime() : System.currentTimeMillis()));
                 validTargets.forEach(HintsService.instance.metrics::incrCreatedHints);
-                // Notify the handler only for CL == ANY
                 if (responseHandler != null)
                     responseHandler.hintSubmitted();
             }

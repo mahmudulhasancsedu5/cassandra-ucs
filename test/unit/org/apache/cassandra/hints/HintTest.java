@@ -233,9 +233,6 @@ public class HintTest
         assertNoPartitions(key, TABLE2);
 
         // Attempt to send to new endpoint should have been made. Node is not live hence it should now be a hint.
-        while (StorageProxy.instance.getHintsInProgress() > 0)
-            Thread.sleep(100);
-        Thread.sleep(100);
         assertEquals(totalHintCount + 1, StorageProxy.instance.getTotalHints());
     }
 
@@ -276,8 +273,6 @@ public class HintTest
             assertNoPartitions(key, TABLE2);
 
             // Attempt to send to new endpoint should not have been made.
-            while (StorageMetrics.totalHintsInProgress.getCount() > 0)
-                Thread.sleep(100);
             assertEquals(totalHintCount, StorageMetrics.totalHints.getCount());
         }
         finally
