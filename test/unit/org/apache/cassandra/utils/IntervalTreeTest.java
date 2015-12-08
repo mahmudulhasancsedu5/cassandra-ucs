@@ -40,6 +40,34 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 public class IntervalTreeTest
 {
     @Test
+    public void testRingSearch() throws Exception
+    {
+        List<Interval<Integer, Void>> intervals = new ArrayList<Interval<Integer, Void>>();
+
+        intervals.add(Interval.<Integer, Void>create(1,2));
+        intervals.add(Interval.<Integer, Void>create(3,6));
+        intervals.add(Interval.<Integer, Void>create(2,4));
+        intervals.add(Interval.<Integer, Void>create(5,7));
+        intervals.add(Interval.<Integer, Void>create(1,3));
+        intervals.add(Interval.<Integer, Void>create(4,6));
+        intervals.add(Interval.<Integer, Void>create(8,9));
+        intervals.add(Interval.<Integer, Void>create(15,20));
+        intervals.add(Interval.<Integer, Void>create(40,50));
+        intervals.add(Interval.<Integer, Void>create(49, 60));
+        intervals.add(Interval.<Integer, Void>create(60, 6));
+
+        IntervalTree<Integer, Void, Interval<Integer, Void>> it = new IntervalTree(intervals, null, true);
+
+        assertEquals(3, it.search(Interval.<Integer, Void>create(4, 4)).size());
+        assertEquals(4, it.search(Interval.<Integer, Void>create(4, 5)).size());
+        assertEquals(8, it.search(Interval.<Integer, Void>create(-1, 10)).size());
+        assertEquals(1, it.search(Interval.<Integer, Void>create(-1, -1)).size());
+        assertEquals(5, it.search(Interval.<Integer, Void>create(1, 4)).size());
+        assertEquals(1, it.search(Interval.<Integer, Void>create(0, 1)).size());
+        assertEquals(0, it.search(Interval.<Integer, Void>create(10, 12)).size());
+    }
+
+    @Test
     public void testSearch() throws Exception
     {
         List<Interval<Integer, Void>> intervals = new ArrayList<Interval<Integer, Void>>();

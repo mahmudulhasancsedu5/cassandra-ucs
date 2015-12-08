@@ -45,11 +45,12 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
     private final IntervalNode head;
     private final int count;
     private final Comparator<C> comparator;
+    private final boolean allowWrapAround;
 
     final Ordering<I> minOrdering;
     final Ordering<I> maxOrdering;
 
-    protected IntervalTree(Collection<I> intervals, Comparator<C> comparator)
+    protected IntervalTree(Collection<I> intervals, Comparator<C> comparator, boolean allowWrapAround)
     {
         this.comparator = comparator;
 
@@ -69,8 +70,14 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
             }
         };
 
-        this.head = intervals == null || intervals.isEmpty() ? null : new IntervalNode(intervals);
+        this.head = intervals == null || intervals.isEmpty() ? null : new IntervalNode(intervals, allowWrapAround);
         this.count = intervals == null ? 0 : intervals.size();
+        this.allowWrapAround = allowWrapAround;
+    }
+
+    protected IntervalTree(Collection<I> intervals, Comparator<C> comparator)
+    {
+        this(intervals, comparator, false);
     }
 
     public static <C, D, I extends Interval<C, D>> IntervalTree<C, D, I> build(Collection<I> intervals, Comparator<C> comparator)
@@ -198,8 +205,33 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
             && comparePoints(enclosing.max, enclosed.max) >= 0;
     }
 
+    private boolean isWrapAround(Interval<C, D> interval) {
+        return comparePoints(interval.min, interval.max) > 0;
+    }
+
+    private boolean containsWithWrapAroundSupport(Interval<C, D> interval, C point)
+    {
+        if (isWrapAround(interval))
+        {
+            if (comparePoints(point, interval.min) > 0)
+                return true;
+            else
+                return comparePoints(interval.max, point) >= 0;
+        }
+        else
+        {
+            return comparePoints(interval.min, point) < 0
+              && comparePoints(interval.max, point) >= 0;
+        }
+    }
+
     private boolean contains(Interval<C, D> interval, C point)
     {
+        if (this.allowWrapAround)
+        {
+            return containsWithWrapAroundSupport(interval, point);
+        }
+
         return comparePoints(interval.min, point) <= 0
             && comparePoints(interval.max, point) >= 0;
     }
@@ -221,10 +253,23 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
         final IntervalNode left;
         final IntervalNode right;
 
-        public IntervalNode(Collection<I> toBisect)
+        final boolean allowWrapAround;
+
+        boolean hasWrapAroundIntervals = false;
+
+        protected void assertInterval(I interval)
+        {
+            if (!allowWrapAround) {
+                assert (comparator == null ? ((Comparable) interval.min).compareTo(interval.max)
+                  : comparator.compare(interval.min, interval.max)) <= 0 : "Interval min > max";
+            }
+        }
+
+        public IntervalNode(Collection<I> toBisect, boolean allowWrapAround)
         {
             assert !toBisect.isEmpty();
             logger.trace("Creating IntervalNode from {}", toBisect);
+            this.allowWrapAround = allowWrapAround;
 
             // Building IntervalTree with one interval will be a reasonably
             // common case for range tombstones, so it's worth optimizing
@@ -246,8 +291,7 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
                 List<C> allEndpoints = new ArrayList<C>(toBisect.size() * 2);
                 for (I interval : toBisect)
                 {
-                    assert (comparator == null ? ((Comparable)interval.min).compareTo(interval.max)
-                                               : comparator.compare(interval.min, interval.max)) <= 0 : "Interval min > max";
+                    assertInterval(interval);
                     allEndpoints.add(interval.min);
                     allEndpoints.add(interval.max);
                 }
@@ -267,6 +311,20 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
 
                 for (I candidate : toBisect)
                 {
+                    if (allowWrapAround) {
+                        if (isWrapAround(candidate)) {
+                            if (comparePoints(center, candidate.min) >= 0 || comparePoints(candidate.max, center) >= 0)
+                            {
+                                intersects.add(candidate);
+                            } else
+                            {
+                                rightSegment.add(candidate);
+                            }
+                            this.hasWrapAroundIntervals = true;
+                            continue;
+                        }
+                    }
+
                     if (comparePoints(candidate.max, center) < 0)
                         leftSegment.add(candidate);
                     else if (comparePoints(candidate.min, center) > 0)
@@ -277,8 +335,8 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
 
                 intersectsLeft = minOrdering.sortedCopy(intersects);
                 intersectsRight = maxOrdering.reverse().sortedCopy(intersects);
-                left = leftSegment.isEmpty() ? null : new IntervalNode(leftSegment);
-                right = rightSegment.isEmpty() ? null : new IntervalNode(rightSegment);
+                left = leftSegment.isEmpty() ? null : new IntervalNode(leftSegment, this.allowWrapAround);
+                right = rightSegment.isEmpty() ? null : new IntervalNode(rightSegment, this.allowWrapAround);
 
                 assert (intersects.size() + leftSegment.size() + rightSegment.size()) == toBisect.size() :
                         "intersects (" + String.valueOf(intersects.size()) +
@@ -288,9 +346,19 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
             }
         }
 
+        boolean shouldSearch(Interval<C, D> searchInterval)
+        {
+            if (!allowWrapAround || !hasWrapAroundIntervals)
+            {
+                if (comparePoints(searchInterval.max, low) < 0 || comparePoints(searchInterval.min, high) > 0)
+                    return false;
+            }
+            return true;
+        }
+
         void searchInternal(Interval<C, D> searchInterval, List<D> results)
         {
-            if (comparePoints(searchInterval.max, low) < 0 || comparePoints(searchInterval.min, high) > 0)
+            if (!shouldSearch(searchInterval))
                 return;
 
             if (contains(searchInterval, center))
@@ -298,7 +366,9 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
                 // Adds every interval contained in this node to the result set then search left and right for further
                 // overlapping intervals
                 for (Interval<C, D> interval : intersectsLeft)
+                {
                     results.add(interval.data);
+                }
 
                 if (left != null)
                     left.searchInternal(searchInterval, results);
@@ -311,25 +381,37 @@ public class IntervalTree<C, D, I extends Interval<C, D>> implements Iterable<I>
                 // then search right
                 for (Interval<C, D> interval : intersectsRight)
                 {
-                    if (comparePoints(interval.max, searchInterval.min) >= 0)
+                    if (contains(interval, searchInterval.min))
+                    {
                         results.add(interval.data);
+                    }
                     else
-                        break;
+                    {
+                        if (!allowWrapAround) {
+                            break;
+                        }
+                    }
                 }
                 if (right != null)
                     right.searchInternal(searchInterval, results);
             }
             else
             {
-                assert comparePoints(center, searchInterval.max) > 0;
+                //assert comparePoints(center, searchInterval.max) > 0;
                 // Adds intervals i in intersects left as long as i.min >= searchInterval.max
                 // then search left
                 for (Interval<C, D> interval : intersectsLeft)
                 {
-                    if (comparePoints(interval.min, searchInterval.max) <= 0)
+                    if (contains(interval, searchInterval.max))
+                    {
                         results.add(interval.data);
+                    }
                     else
-                        break;
+                    {
+                        if (!allowWrapAround) {
+                            break;
+                        }
+                    }
                 }
                 if (left != null)
                     left.searchInternal(searchInterval, results);

@@ -27,6 +27,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.collect.*;
+import org.apache.cassandra.utils.*;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,9 +37,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.BiMultiValMap;
-import org.apache.cassandra.utils.Pair;
-import org.apache.cassandra.utils.SortedBiMultiValMap;
 
 public class TokenMetadata
 {
@@ -82,7 +80,31 @@ public class TokenMetadata
     // (don't need to record Token here since it's still part of tokenToEndpointMap until it's done leaving)
     private final Set<InetAddress> leavingEndpoints = new HashSet<>();
     // this is a cache of the calculation from {tokenToEndpointMap, bootstrapTokens, leavingEndpoints}
-    private final ConcurrentMap<String, Multimap<Range<Token>, InetAddress>> pendingRanges = new ConcurrentHashMap<>();
+    public static class PendingRangesIntervalTree extends IntervalTree<Token, InetAddress, Interval<Token, InetAddress>>
+    {
+        protected PendingRangesIntervalTree(Collection<Interval<Token, InetAddress>> intervals, Comparator<Token> comparator)
+        {
+            super(intervals, comparator, true);
+        }
+
+        /*
+      This is used to display the tree
+     */
+        public Map<Range<Token>, Collection<InetAddress>> asMap()
+        {
+            Multimap<Range<Token>, InetAddress> map = HashMultimap.create();
+            Iterator<Interval<Token, InetAddress>> it = this.iterator();
+            while (it.hasNext())
+            {
+                Interval<Token, InetAddress> interval = it.next();
+                Range<Token> range = new Range(interval.min, interval.max);
+                map.put(range, interval.data);
+            }
+            return map.asMap();
+        }
+    }
+
+    private final ConcurrentMap<String, PendingRangesIntervalTree> pendingRanges = new ConcurrentHashMap();
 
     // nodes which are migrating to the new tokens in the ring
     private final Set<Pair<Token, InetAddress>> movingEndpoints = new HashSet<>();
@@ -673,41 +695,30 @@ public class TokenMetadata
         return sortedTokens;
     }
 
-    private Multimap<Range<Token>, InetAddress> getPendingRangesMM(String keyspaceName)
+    public PendingRangesIntervalTree getPendingRanges(String keyspaceName)
     {
-        Multimap<Range<Token>, InetAddress> map = pendingRanges.get(keyspaceName);
-        if (map == null)
-        {
-            map = HashMultimap.create();
-            Multimap<Range<Token>, InetAddress> priorMap = pendingRanges.putIfAbsent(keyspaceName, map);
-            if (priorMap != null)
-                map = priorMap;
-        }
-        return map;
+        return pendingRanges.get(keyspaceName);
     }
 
-    /** a mutable map may be returned but caller should not modify it */
-    public Map<Range<Token>, Collection<InetAddress>> getPendingRanges(String keyspaceName)
+    public boolean hasPendingRangs(String keyspaceName, InetAddress endpoint)
     {
-        return getPendingRangesMM(keyspaceName).asMap();
-    }
-
-    public List<Range<Token>> getPendingRanges(String keyspaceName, InetAddress endpoint)
-    {
-        List<Range<Token>> ranges = new ArrayList<>();
-        for (Map.Entry<Range<Token>, InetAddress> entry : getPendingRangesMM(keyspaceName).entries())
+        PendingRangesIntervalTree intervalTree = pendingRanges.get(keyspaceName);
+        Iterator<Interval<Token, InetAddress>> it = intervalTree.iterator();
+        while (it.hasNext())
         {
-            if (entry.getValue().equals(endpoint))
+            Interval<Token, InetAddress> interval = it.next();
+            if (interval.data.equals(endpoint))
             {
-                ranges.add(entry.getKey());
+                return true;
             }
         }
-        return ranges;
+        return false;
     }
 
-    public void setPendingRanges(String keyspaceName, Multimap<Range<Token>, InetAddress> rangeMap)
+    public void setPendingRanges(String keyspaceName, List<Interval<Token, InetAddress>> intervals)
     {
-        pendingRanges.put(keyspaceName, rangeMap);
+        PendingRangesIntervalTree tree = new PendingRangesIntervalTree(intervals, null);
+        pendingRanges.put(keyspaceName, tree);
     }
 
     public Token getPredecessor(Token token)
@@ -926,11 +937,14 @@ public class TokenMetadata
     {
         StringBuilder sb = new StringBuilder();
 
-        for (Map.Entry<String, Multimap<Range<Token>, InetAddress>> entry : pendingRanges.entrySet())
+        for (String keyspaceName : pendingRanges.keySet())
         {
-            for (Map.Entry<Range<Token>, InetAddress> rmap : entry.getValue().entries())
+            Iterator<Interval<Token, InetAddress>> it = pendingRanges.get(keyspaceName).iterator();
+            while (it.hasNext())
             {
-                sb.append(rmap.getValue()).append(':').append(rmap.getKey());
+                Interval<Token, InetAddress> iterval = it.next();
+                sb.append(iterval.data).append(":")
+                  .append("(").append(iterval.min).append(",").append(iterval.max).append("]");
                 sb.append(System.getProperty("line.separator"));
             }
         }
@@ -940,16 +954,14 @@ public class TokenMetadata
 
     public Collection<InetAddress> pendingEndpointsFor(Token token, String keyspaceName)
     {
-        Map<Range<Token>, Collection<InetAddress>> ranges = getPendingRanges(keyspaceName);
-        if (ranges.isEmpty())
+        PendingRangesIntervalTree pendingRangesIntervalTree = getPendingRanges(keyspaceName);
+
+        if (pendingRangesIntervalTree == null)
             return Collections.emptyList();
 
-        Set<InetAddress> endpoints = new HashSet<>();
-        for (Map.Entry<Range<Token>, Collection<InetAddress>> entry : ranges.entrySet())
-        {
-            if (entry.getKey().contains(token))
-                endpoints.addAll(entry.getValue());
-        }
+        List<InetAddress> results = pendingRangesIntervalTree.search(token);
+        Set<InetAddress> endpoints = new HashSet<InetAddress>();
+        endpoints.addAll(results);
 
         return endpoints;
     }

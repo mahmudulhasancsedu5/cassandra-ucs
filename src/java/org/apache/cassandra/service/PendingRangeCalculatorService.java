@@ -19,11 +19,9 @@
 package org.apache.cassandra.service;
 
 import org.apache.cassandra.utils.BiMultiValMap;
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.config.Schema;
@@ -32,15 +30,13 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
+import org.apache.cassandra.utils.Interval;
 import org.apache.cassandra.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.Collection;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class PendingRangeCalculatorService
@@ -118,7 +114,7 @@ public class PendingRangeCalculatorService
     public static void calculatePendingRanges(AbstractReplicationStrategy strategy, String keyspaceName)
     {
         TokenMetadata tm = StorageService.instance.getTokenMetadata();
-        Multimap<Range<Token>, InetAddress> pendingRanges = HashMultimap.create();
+        List<Interval<Token, InetAddress>> intervals = new ArrayList<>();
         BiMultiValMap<Token, InetAddress> bootstrapTokens = tm.getBootstrapTokens();
         Set<InetAddress> leavingEndpoints = tm.getLeavingEndpoints();
 
@@ -126,7 +122,7 @@ public class PendingRangeCalculatorService
         {
             if (logger.isDebugEnabled())
                 logger.debug("No bootstrapping, leaving or moving nodes, and no relocating tokens -> empty pending ranges for {}", keyspaceName);
-            tm.setPendingRanges(keyspaceName, pendingRanges);
+            tm.setPendingRanges(keyspaceName, intervals);
             return;
         }
 
@@ -147,7 +143,10 @@ public class PendingRangeCalculatorService
         {
             Set<InetAddress> currentEndpoints = ImmutableSet.copyOf(strategy.calculateNaturalEndpoints(range.right, metadata));
             Set<InetAddress> newEndpoints = ImmutableSet.copyOf(strategy.calculateNaturalEndpoints(range.right, allLeftMetadata));
-            pendingRanges.putAll(range, Sets.difference(newEndpoints, currentEndpoints));
+            for (InetAddress endpoint : Sets.difference(newEndpoints, currentEndpoints))
+            {
+                intervals.add(Interval.create(range.left, range.right, endpoint));
+            }
         }
 
         // At this stage pendingRanges has been updated according to leave operations. We can
@@ -162,7 +161,9 @@ public class PendingRangeCalculatorService
 
             allLeftMetadata.updateNormalTokens(tokens, endpoint);
             for (Range<Token> range : strategy.getAddressRanges(allLeftMetadata).get(endpoint))
-                pendingRanges.put(range, endpoint);
+            {
+                intervals.add(Interval.create(range.left, range.right, endpoint));
+            }
             allLeftMetadata.removeEndpoint(endpoint);
         }
 
@@ -180,15 +181,15 @@ public class PendingRangeCalculatorService
 
             for (Range<Token> range : strategy.getAddressRanges(allLeftMetadata).get(endpoint))
             {
-                pendingRanges.put(range, endpoint);
+                intervals.add(Interval.create(range.left, range.right, endpoint));
             }
 
             allLeftMetadata.removeEndpoint(endpoint);
         }
 
-        tm.setPendingRanges(keyspaceName, pendingRanges);
+        tm.setPendingRanges(keyspaceName, intervals);
 
         if (logger.isDebugEnabled())
-            logger.debug("Pending ranges:\n" + (pendingRanges.isEmpty() ? "<empty>" : tm.printPendingRanges()));
+            logger.debug("Pending ranges:\n" + (intervals.isEmpty() ? "<empty>" : tm.printPendingRanges()));
     }
 }
