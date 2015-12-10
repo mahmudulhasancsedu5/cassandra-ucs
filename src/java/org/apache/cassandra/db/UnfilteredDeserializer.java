@@ -419,7 +419,8 @@ public abstract class UnfilteredDeserializer
                         else
                         {
                             LegacyLayout.LegacyAtom atom = atoms.next();
-                            next = isRow(atom) ? readRow(atom) : tombstoneTracker.openNew(atom.asRangeTombstone());
+                            if (!tombstoneTracker.isShadowed(atom))
+                                next = isRow(atom) ? readRow(atom) : tombstoneTracker.openNew(atom.asRangeTombstone());
                         }
                     }
                     else if (tombstoneTracker.hasOpenTombstones())
@@ -506,9 +507,6 @@ public abstract class UnfilteredDeserializer
                         isDone = true;
                         return false;
                     }
-
-                    if (tombstoneTracker.isShadowed(next))
-                        next = null;
                 }
                 return true;
             }
@@ -576,6 +574,7 @@ public abstract class UnfilteredDeserializer
              */
             public boolean isShadowed(LegacyLayout.LegacyAtom atom)
             {
+                assert !hasClosingMarkerBefore(atom);
                 long timestamp = atom.isCell() ? atom.asCell().timestamp : atom.asRangeTombstone().deletionTime.markedForDeleteAt();
 
                 if (partitionDeletion.deletes(timestamp))
