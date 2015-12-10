@@ -406,7 +406,7 @@ public abstract class UnfilteredDeserializer
 
             public boolean hasNext()
             {
-                // Note that we loop on next == null because TombstoneTracker.openNew() could return null below.
+                // Note that we loop on next == null because TombstoneTracker.openNew() could return null below or the atom might be shadowed.
                 while (next == null)
                 {
                     if (atoms.hasNext())
@@ -499,7 +499,7 @@ public abstract class UnfilteredDeserializer
                 if (isDone)
                     return false;
 
-                while (next == null)
+                if (next == null)
                 {
                     next = readAtom();
                     if (next == null)
