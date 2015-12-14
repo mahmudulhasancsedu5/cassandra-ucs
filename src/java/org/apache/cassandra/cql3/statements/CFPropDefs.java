@@ -85,7 +85,7 @@ public class CFPropDefs extends PropertyDefinitions
             return;
 
         validate(keywords, obsoleteKeywords);
-        
+
         try
         {
             getId();
