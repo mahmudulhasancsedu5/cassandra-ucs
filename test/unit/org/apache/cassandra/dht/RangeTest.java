@@ -19,11 +19,13 @@
 package org.apache.cassandra.dht;
 
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import static java.util.Arrays.asList;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
@@ -322,6 +324,41 @@ public class RangeTest
     private Range makeRange(String token1, String token2)
     {
         return new Range(new BigIntegerToken(token1), new BigIntegerToken(token2));
+    }
+
+    private Range<Token> makeRange(long token1, long token2)
+    {
+        return   new Range<Token>(new LongToken(token1), new LongToken(token2));
+    }
+
+    private void assertRanges(Set<Range<Token>> result, Long ... tokens)
+    {
+        assert tokens.length % 2 ==0;
+
+        final Set<Range<Token>> expected = new HashSet<>();
+        for(int i=0; i < tokens.length; i+=2)
+        {
+            expected.add(makeRange(tokens[i], tokens[i+1]));
+        }
+
+        assert CollectionUtils.isEqualCollection(result, expected);
+
+    }
+
+    @Test
+    public void testSubtractAll()
+    {
+        Range<Token> range = new Range<Token>(new LongToken(1L), new LongToken(100L));
+
+        Collection<Range<Token>> collection = new HashSet<>();
+        collection.add(makeRange(1L, 10L));
+        assertRanges(range.subtractAll(collection), 10L, 100L);
+        collection.add(makeRange(90L, 100L));
+        assertRanges(range.subtractAll(collection), 10L, 90L);
+        collection.add(makeRange(54L, 60L));
+        assertRanges(range.subtractAll(collection), 10L, 54L, 60L, 90L);
+        collection.add(makeRange(80L, 95L));
+        assertRanges(range.subtractAll(collection), 10L, 54L, 60L, 80L);
     }
 
     private Set<Range> makeRanges(String[][] tokenPairs)
