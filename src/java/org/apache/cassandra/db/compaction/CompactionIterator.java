@@ -17,14 +17,21 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.RateLimiter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.PurgeFunction;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
@@ -32,7 +39,12 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.index.transactions.CompactionTransaction;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.CompactionMetrics;
+import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.FBUtilitiesTest;
+
+import javax.swing.plaf.BorderUIResource.EmptyBorderUIResource;
 
 /**
  * Merge multiple iterators over the content of sstable into a "compacted" iterator.
@@ -79,8 +91,13 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         this(type, scanners, controller, nowInSec, compactionId, null);
     }
 
-    @SuppressWarnings("resource") // We make sure to close mergedIterator in close() and CompactionIterator is itself an AutoCloseable
     public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, CompactionMetrics metrics)
+    {
+        this(type, scanners, null, controller, nowInSec, compactionId, metrics);
+    }
+
+    @SuppressWarnings("resource") // We make sure to close mergedIterator in close() and CompactionIterator is itself an AutoCloseable
+    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, List<SSTableReader> tombstoneSources, CompactionController controller, int nowInSec, UUID compactionId, CompactionMetrics metrics)
     {
         this.controller = controller;
         this.type = type;
@@ -103,6 +120,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                                              ? EmptyIterators.unfilteredPartition(controller.cfs.metadata, false)
                                              : UnfilteredPartitionIterators.merge(scanners, nowInSec, listener());
         boolean isForThrift = merged.isForThrift(); // to stop capture of iterator in Purger, which is confusing for debug
+        if (tombstoneSources != null && !tombstoneSources.isEmpty())
+            merged = Transformation.apply(merged, new Deleter(tombstoneSources, nowInSec));
         this.compacted = Transformation.apply(merged, new Purger(isForThrift, controller));
     }
 
@@ -304,6 +323,170 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 maxPurgeableTimestamp = controller.maxPurgeableTimestamp(currentKey);
             }
             return maxPurgeableTimestamp;
+        }
+    }
+    
+    private static class Deleter extends Transformation<UnfilteredRowIterator>
+    {
+        final List<SSTableReader> tombstoneSources;
+        final int nowInSec;
+        final TombstoneOnly tombstoneOnly;
+        UnfilteredRowIterator partitionSource;
+        DeletionTime openDeletionTime;
+        Unfiltered next;
+        final ClusteringComparator comparator;
+        final ColumnFilter cf;
+        final CFMetaData metadata;
+
+        private Deleter(List<SSTableReader> tombstoneSources, int nowInSec)
+        {
+            this.tombstoneSources = tombstoneSources;
+            this.tombstoneOnly = new TombstoneOnly(nowInSec);
+            this.nowInSec = nowInSec;
+            metadata = tombstoneSources.get(0).metadata;
+            comparator = metadata.comparator;
+            cf = ColumnFilter.all(metadata);
+        }
+
+        protected void onPartitionClose()
+        {
+            partitionSource.close();
+        }
+
+        @Override
+        protected UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+        {
+            List<UnfilteredRowIterator> iters = null;
+            for (SSTableReader source : tombstoneSources)
+            {
+                @SuppressWarnings("resource") // iter closed as part of partitionSource.close()
+                UnfilteredRowIterator iter = source.iterator(partition.partitionKey(), cf, false, false);
+                if (iter.isEmpty())
+                {
+                    iter.close();
+                    continue;
+                }
+                if (iters == null)
+                    iters = new ArrayList<UnfilteredRowIterator>();
+                iters.add(Transformation.apply(iter, tombstoneOnly));
+            }
+            if (iters == null)
+                return partition;
+
+            partitionSource = UnfilteredRowIterators.merge(iters, nowInSec);
+            next = partitionSource.next();
+            return Transformation.apply(partition, this);
+        }
+
+        protected DeletionTime applyToDeletion(DeletionTime deletionTime)
+        {
+            return partitionSource.partitionLevelDeletion().supersedes(deletionTime) ? partitionSource.partitionLevelDeletion() : deletionTime;
+        }
+
+        protected Row applyToRow(Row row)
+        {
+            DeletionTime activeDeletionTime = proceedTo(row.clustering());
+            return row.filter(cf, activeDeletionTime, false, metadata);
+        }
+
+        protected Row applyToStatic(Row row)
+        {
+            return applyToRow(row);
+        }
+
+        protected RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
+        {
+            DeletionTime activeDeletionTime = proceedTo(marker.clustering());
+            assert activeDeletionTime == openDeletionTime;
+
+            if (marker.isOpen(false))
+            {
+                if (activeDeletionTime.supersedes(marker.openDeletionTime(false)))
+                    // remove open
+                    if (!marker.isClose(false) || activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
+                        return null;
+                    else
+                        return new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
+                else
+                    // open stays
+                    if (marker.isClose(false) && activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
+                        return new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
+                    else
+                        return marker;
+            }
+            assert marker.isClose(false);
+            if (activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
+                return null;
+            else
+                return marker;
+        }
+
+        private DeletionTime proceedTo(Clusterable clustering)
+        {
+            while (true)
+            {
+                if (next == null)
+                {
+                    assert openDeletionTime == DeletionTime.LIVE;
+                    return DeletionTime.LIVE;
+                }
+
+                int cmp = comparator.compare(next, clustering);
+                if (cmp > 0)
+                    return openDeletionTime;
+
+                if (next.isRow())
+                {
+                    Row deletion = (Row) next;
+                    if (cmp == 0)
+                        return deletion.deletion().time();
+                }
+                else
+                {
+                    RangeTombstoneMarker marker = (RangeTombstoneMarker) next;
+                    assert marker.isClose(false) == (openDeletionTime != DeletionTime.LIVE);
+                    assert !marker.isClose(false) || openDeletionTime == marker.openDeletionTime(false);
+                    openDeletionTime = marker.isOpen(false) ? marker.openDeletionTime(false) : DeletionTime.LIVE;
+                }
+                next = partitionSource.next();
+            }
+        }
+    }
+
+    UnfilteredPartitionIterator tombstonesOnly(UnfilteredPartitionIterator iter)
+    {
+        return Transformation.apply(iter, new TombstoneOnly(nowInSec));
+    }
+
+    public static class TombstoneOnly extends Transformation<UnfilteredRowIterator>
+    {
+        private final int nowInSec;
+
+        public TombstoneOnly(int nowInSec)
+        {
+            super();
+            this.nowInSec = nowInSec;
+        }
+
+        @Override
+        protected UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
+        {
+            return Transformation.apply(partition, this);
+        }
+
+        @Override
+        protected Row applyToRow(Row row)
+        {
+            if (!row.hasDeletion(nowInSec))
+                return null;
+
+            return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
+        }
+
+        @Override
+        protected Row applyToStatic(Row row)
+        {
+            return applyToRow(row);
         }
     }
 }
