@@ -186,12 +186,12 @@ public class RangeTest
         Set<Range<T>> correct = Range.rangeSet(ranges);
         Set<Range> result1 = one.intersectionWith(two);
         assert result1.equals(correct) : String.format("%s != %s",
-                                                       StringUtils.join(result1, ","),
-                                                       StringUtils.join(correct, ","));
+                StringUtils.join(result1, ","),
+                StringUtils.join(correct, ","));
         Set<Range> result2 = two.intersectionWith(one);
         assert result2.equals(correct) : String.format("%s != %s",
-                                                       StringUtils.join(result2, ","),
-                                                       StringUtils.join(correct, ","));
+                StringUtils.join(result2, ","),
+                StringUtils.join(correct, ","));
     }
 
     private void assertNoIntersection(Range wraps1, Range nowrap3)
@@ -260,15 +260,15 @@ public class RangeTest
         Range nowrap2 = new Range(new BigIntegerToken("0"), new BigIntegerToken("100"));
 
         assertIntersection(wraps1,
-                           nowrap1,
-                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10")),
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
+                nowrap1,
+                new Range(new BigIntegerToken("0"), new BigIntegerToken("10")),
+                new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
         assertIntersection(wraps2,
-                           nowrap1,
-                           new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
+                nowrap1,
+                new Range(new BigIntegerToken("100"), new BigIntegerToken("200")));
         assertIntersection(wraps1,
-                           nowrap2,
-                           new Range(new BigIntegerToken("0"), new BigIntegerToken("10")));
+                nowrap2,
+                new Range(new BigIntegerToken("0"), new BigIntegerToken("10")));
     }
 
     @Test
@@ -359,6 +359,24 @@ public class RangeTest
         assertRanges(range.subtractAll(collection), 10L, 54L, 60L, 90L);
         collection.add(makeRange(80L, 95L));
         assertRanges(range.subtractAll(collection), 10L, 54L, 60L, 80L);
+    }
+
+    @Test
+    public void testSubtractAllWithWrapAround()
+    {
+        Range<Token> range = new Range<Token>(new LongToken(100L), new LongToken(10L));
+
+        Collection<Range<Token>> collection = new HashSet<>();
+        collection.add(makeRange(20L, 30L));
+        assertRanges(range.subtractAll(collection), 100L, 10L);
+        collection.add(makeRange(200L, 500L));
+        assertRanges(range.subtractAll(collection), 100L, 200L, 500L, 10L);
+        collection.add(makeRange(1L, 10L));
+        assertRanges(range.subtractAll(collection), 100L, 200L, 500L, 1L);
+        collection.add(makeRange(0L, 1L));
+        assertRanges(range.subtractAll(collection), 100L, 200L, 500L, 0L);
+        collection.add(makeRange(1000L, 0));
+        assertRanges(range.subtractAll(collection), 100L, 200L, 500L, 1000L);
     }
 
     private Set<Range> makeRanges(String[][] tokenPairs)
