@@ -132,28 +132,13 @@ public class PendingRangeMaps implements Iterable<Map.Entry<Range<Token>, List<I
     }
 
     static final void addIntersections(Set<InetAddress> endpointsToAdd,
-                                       NavigableMap<Range<Token>, List<InetAddress>> ascendingTailMap,
-                                       NavigableMap<Range<Token>, List<InetAddress>> descendingTailMap)
+                                       NavigableMap<Range<Token>, List<InetAddress>> smallerMap,
+                                       NavigableMap<Range<Token>, List<InetAddress>> biggerMap)
     {
-        // get smaller maps
-        NavigableMap<Range<Token>, List<InetAddress>> smaller;
-        NavigableMap<Range<Token>, List<InetAddress>> bigger;
-
-        if (ascendingTailMap.size() < descendingTailMap.size())
-        {
-            smaller = ascendingTailMap;
-            bigger = descendingTailMap;
-        }
-        else
-        {
-            smaller = descendingTailMap;
-            bigger = ascendingTailMap;
-        }
-
         // find the intersection of two sets
-        for (Range<Token> range : smaller.keySet())
+        for (Range<Token> range : smallerMap.keySet())
         {
-            List<InetAddress> addresses = bigger.get(range);
+            List<InetAddress> addresses = biggerMap.get(range);
             if (addresses != null)
             {
                 endpointsToAdd.addAll(addresses);
@@ -172,7 +157,14 @@ public class PendingRangeMaps implements Iterable<Map.Entry<Range<Token>, List<I
         NavigableMap<Range<Token>, List<InetAddress>> descendingTailMap = descendingMap.tailMap(searchRange, false);
 
         // add intersections of two maps
-        addIntersections(endpoints, ascendingTailMap, descendingTailMap);
+        if (ascendingTailMap.size() < descendingTailMap.size())
+        {
+            addIntersections(endpoints, ascendingTailMap, descendingTailMap);
+        }
+        else
+        {
+            addIntersections(endpoints, descendingTailMap, ascendingTailMap);
+        }
 
         // search for wrap-around sets
         ascendingTailMap = ascendingMapForWrapAround.tailMap(searchRange, true);
