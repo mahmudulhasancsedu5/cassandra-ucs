@@ -104,42 +104,37 @@ public class PendingRangeMaps implements Iterable<Map.Entry<Range<Token>, List<I
         this.descendingMapForWrapAround = new TreeMap<Range<Token>, List<InetAddress>>(descendingComparatorForWrapAround);
     }
 
+    static final void addToMap(Range<Token> range,
+                               InetAddress address,
+                               NavigableMap<Range<Token>, List<InetAddress>> ascendingMap,
+                               NavigableMap<Range<Token>, List<InetAddress>> descendingMap)
+    {
+        List<InetAddress> addresses = ascendingMap.get(range);
+        if (addresses == null)
+        {
+            addresses = new ArrayList<InetAddress>(1);
+            ascendingMap.put(range, addresses);
+            descendingMap.put(range, addresses);
+        }
+        addresses.add(address);
+    }
+
     public void addPendingRange(Range<Token> range, InetAddress address)
     {
         if (Range.isWrapAround(range.left, range.right))
         {
-            List<InetAddress> addresses = ascendingMapForWrapAround.get(range);
-            if (addresses == null)
-            {
-                addresses = new ArrayList<InetAddress>(1);
-                ascendingMapForWrapAround.put(range, addresses);
-                descendingMapForWrapAround.put(range, addresses);
-            }
-            addresses.add(address);
+            addToMap(range, address, ascendingMapForWrapAround, descendingMapForWrapAround);
         }
         else
         {
-            List<InetAddress> addresses = ascendingMap.get(range);
-            if (addresses == null)
-            {
-                addresses = new ArrayList<InetAddress>(1);
-                ascendingMap.put(range, addresses);
-                descendingMap.put(range, addresses);
-            }
-            addresses.add(address);
+            addToMap(range, address, ascendingMap, descendingMap);
         }
     }
 
-    public Collection<InetAddress> pendingEndpointsFor(Token token)
+    static final void addIntersections(Set<InetAddress> endpointsToAdd,
+                                       NavigableMap<Range<Token>, List<InetAddress>> ascendingTailMap,
+                                       NavigableMap<Range<Token>, List<InetAddress>> descendingTailMap)
     {
-        Set<InetAddress> endpoints = new HashSet<>();
-
-        Range searchRange = new Range(token, token);
-
-        // search for non-wrap-around maps
-        NavigableMap<Range<Token>, List<InetAddress>> ascendingTailMap = ascendingMap.tailMap(searchRange, true);
-        NavigableMap<Range<Token>, List<InetAddress>> descendingTailMap = descendingMap.tailMap(searchRange, false);
-
         // get smaller maps
         NavigableMap<Range<Token>, List<InetAddress>> smaller;
         NavigableMap<Range<Token>, List<InetAddress>> bigger;
@@ -161,9 +156,23 @@ public class PendingRangeMaps implements Iterable<Map.Entry<Range<Token>, List<I
             List<InetAddress> addresses = bigger.get(range);
             if (addresses != null)
             {
-                endpoints.addAll(addresses);
+                endpointsToAdd.addAll(addresses);
             }
         }
+    }
+
+    public Collection<InetAddress> pendingEndpointsFor(Token token)
+    {
+        Set<InetAddress> endpoints = new HashSet<>();
+
+        Range searchRange = new Range(token, token);
+
+        // search for non-wrap-around maps
+        NavigableMap<Range<Token>, List<InetAddress>> ascendingTailMap = ascendingMap.tailMap(searchRange, true);
+        NavigableMap<Range<Token>, List<InetAddress>> descendingTailMap = descendingMap.tailMap(searchRange, false);
+
+        // add intersections of two maps
+        addIntersections(endpoints, ascendingTailMap, descendingTailMap);
 
         // search for wrap-around sets
         ascendingTailMap = ascendingMapForWrapAround.tailMap(searchRange, true);
@@ -201,7 +210,8 @@ public class PendingRangeMaps implements Iterable<Map.Entry<Range<Token>, List<I
     }
 
     @Override
-    public Iterator<Map.Entry<Range<Token>, List<InetAddress>>> iterator() {
+    public Iterator<Map.Entry<Range<Token>, List<InetAddress>>> iterator()
+    {
         return Iterators.concat(ascendingMap.entrySet().iterator(), ascendingMapForWrapAround.entrySet().iterator());
     }
 }

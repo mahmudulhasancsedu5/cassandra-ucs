@@ -20,7 +20,8 @@ public class PendingRangeMapsTest {
     }
 
     @Test
-    public void testPendingEndpoints() throws UnknownHostException {
+    public void testPendingEndpoints() throws UnknownHostException
+    {
         PendingRangeMaps pendingRangeMaps = new PendingRangeMaps();
 
         pendingRangeMaps.addPendingRange(genRange("5", "15"), InetAddress.getByName("127.0.0.1"));
@@ -46,7 +47,8 @@ public class PendingRangeMapsTest {
     }
 
     @Test
-    public void testWrapAroundRanges() throws UnknownHostException {
+    public void testWrapAroundRanges() throws UnknownHostException
+    {
         PendingRangeMaps pendingRangeMaps = new PendingRangeMaps();
 
         pendingRangeMaps.addPendingRange(genRange("5", "15"), InetAddress.getByName("127.0.0.1"));

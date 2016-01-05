@@ -712,9 +712,9 @@ public class TokenMetadata
         return ranges;
     }
 
-    public void setPendingRanges(String keyspaceName, PendingRangeMaps rangeSets)
+    public void setPendingRanges(String keyspaceName, PendingRangeMaps rangeMaps)
     {
-        pendingRanges.put(keyspaceName, rangeSets);
+        pendingRanges.put(keyspaceName, rangeMaps);
     }
 
     public Token getPredecessor(Token token)
