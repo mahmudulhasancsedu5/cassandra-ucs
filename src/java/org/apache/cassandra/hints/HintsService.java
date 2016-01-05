@@ -168,6 +168,21 @@ public final class HintsService implements HintsServiceMBean
     }
 
     /**
+     * Write a hint for all replicas. Used to re-dispatch hints whose destination is either missing or no longer correct.
+     */
+    void writeForAllReplicas(Hint hint)
+    {
+        String keyspaceName = hint.mutation.getKeyspaceName();
+        Token token = hint.mutation.key().getToken();
+
+        Iterable<UUID> hostIds =
+        transform(filter(StorageService.instance.getNaturalAndPendingEndpoints(keyspaceName, token), StorageProxy::shouldHint),
+                  StorageService.instance::getHostIdForEndpoint);
+
+        write(hostIds, hint);
+    }
+
+    /**
      * Flush the buffer pool for the selected target nodes, then fsync their writers.
      *
      * @param hostIds host ids of the nodes to flush and fsync hints for
@@ -353,20 +368,5 @@ public final class HintsService implements HintsServiceMBean
     HintsCatalog getCatalog()
     {
         return catalog;
-    }
-
-    /**
-     * Send a hint to all replicas. Used to re-dispatch hints whose destination is either missing or no longer correct.
-     */
-    void sendToAllReplicas(Hint hint)
-    {
-        String keyspaceName = hint.mutation.getKeyspaceName();
-        Token token = hint.mutation.key().getToken();
-
-        Iterable<UUID> hostIds =
-            transform(filter(StorageService.instance.getNaturalAndPendingEndpoints(keyspaceName, token), StorageProxy::shouldHint),
-                      StorageService.instance::getHostIdForEndpoint);
-
-        write(hostIds, hint);
     }
 }

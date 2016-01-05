@@ -190,7 +190,7 @@ final class HintsDispatcher implements AutoCloseable
 
     private Callback deliverMovedHint(Hint hint)
     {
-        HintsService.instance.sendToAllReplicas(hint);
+        HintsService.instance.writeForAllReplicas(hint);
         return null;
     }
 
