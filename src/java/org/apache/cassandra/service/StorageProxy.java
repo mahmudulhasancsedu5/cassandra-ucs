@@ -71,6 +71,8 @@ import org.apache.cassandra.triggers.TriggerExecutor;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.AbstractIterator;
 
+import static com.google.common.collect.Iterables.contains;
+
 public class StorageProxy implements StorageProxyMBean
 {
     public static final String MBEAN_NAME = "org.apache.cassandra.db:type=StorageProxy";
@@ -670,12 +672,10 @@ public class StorageProxy implements StorageProxyMBean
 
     private static void hintMutation(Mutation mutation)
     {
-        Token tk = DatabaseDescriptor.getPartitioner().getToken(mutation.key().getKey());
-        List<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(mutation.getKeyspaceName(), tk);
-        Collection<InetAddress> pendingEndpoints =
-            StorageService.instance.getTokenMetadata().pendingEndpointsFor(tk, mutation.getKeyspaceName());
+        String keyspaceName = mutation.getKeyspaceName();
+        Token token = mutation.key().getToken();
 
-        Iterable<InetAddress> endpoints = Iterables.concat(naturalEndpoints, pendingEndpoints);
+        Iterable<InetAddress> endpoints = StorageService.instance.getNaturalAndPendingEndpoints(keyspaceName, token);
         ArrayList<InetAddress> endpointsToHint = new ArrayList<>(Iterables.size(endpoints));
 
         // local writes can timeout, but cannot be dropped (see LocalMutationRunnable and CASSANDRA-6510),
@@ -690,17 +690,10 @@ public class StorageProxy implements StorageProxyMBean
     public boolean appliesLocally(Mutation mutation)
     {
         String keyspaceName = mutation.getKeyspaceName();
-        Token tk = mutation.key().getToken();
+        Token token = mutation.key().getToken();
         InetAddress local = FBUtilities.getBroadcastAddress();
 
-        List<InetAddress> naturalEndpoints = StorageService.instance.getNaturalEndpoints(keyspaceName, tk);
-        if (naturalEndpoints.contains(local))
-            return true;
-        Collection<InetAddress> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(tk, keyspaceName);
-        if (pendingEndpoints.contains(local))
-            return true;
-
-        return false;
+        return contains(StorageService.instance.getNaturalAndPendingEndpoints(keyspaceName, token), local);
     }
 
     /**
