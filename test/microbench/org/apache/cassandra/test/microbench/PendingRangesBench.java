@@ -38,7 +38,7 @@ public class PendingRangesBench
     }
 
     @Setup
-    public void setUp(final Blackhole bh) throws UnknownHostException
+    public void setUp() throws UnknownHostException
     {
         pendingRangeMaps = new PendingRangeMaps();
         oldPendingRanges = HashMultimap.create();
@@ -65,15 +65,15 @@ public class PendingRangesBench
     }
 
     @Benchmark
-    public void searchToken()
+    public void searchToken(final Blackhole bh)
     {
         int randomToken = ThreadLocalRandom.current().nextInt(maxToken * 10 + 5);
         Token searchToken = new RandomPartitioner.BigIntegerToken(Integer.toString(randomToken));
-        pendingRangeMaps.pendingEndpointsFor(searchToken);
+        bh.consume(pendingRangeMaps.pendingEndpointsFor(searchToken));
     }
 
     @Benchmark
-    public void searchTokenForOldPendingRanges()
+    public void searchTokenForOldPendingRanges(final Blackhole bh)
     {
         int randomToken = ThreadLocalRandom.current().nextInt(maxToken * 10 + 5);
         Token searchToken = new RandomPartitioner.BigIntegerToken(Integer.toString(randomToken));
@@ -83,6 +83,7 @@ public class PendingRangesBench
             if (entry.getKey().contains(searchToken))
                 endpoints.addAll(entry.getValue());
         }
+        bh.consume(endpoints);
     }
 
 }
