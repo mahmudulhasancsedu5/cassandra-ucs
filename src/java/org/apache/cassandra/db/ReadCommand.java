@@ -479,23 +479,31 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
     {
         protected BaseRowIterator<?> applyToPartition(BaseRowIterator partition)
         {
-            maybeAbort();
+            if (maybeAbort())
+            {
+                partition.close();
+                return null;
+            }
+
             return partition;
         }
 
         protected Row applyToRow(Row row)
         {
-            maybeAbort();
-            return row;
+            return maybeAbort() ? null : row;
         }
 
-        private void maybeAbort()
+        private boolean maybeAbort()
         {
             if (isAborted())
+            {
                 stop();
+                return true;
+            }
 
             if (TEST_ITERATION_DELAY_MILLIS > 0)
                 maybeDelayForTesting();
+            return false;
         }
     }
 
