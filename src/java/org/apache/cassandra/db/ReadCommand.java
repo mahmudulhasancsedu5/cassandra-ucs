@@ -495,14 +495,15 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
 
         private boolean maybeAbort()
         {
+            if (TEST_ITERATION_DELAY_MILLIS > 0)
+                maybeDelayForTesting();
+
             if (isAborted())
             {
                 stop();
                 return true;
             }
 
-            if (TEST_ITERATION_DELAY_MILLIS > 0)
-                maybeDelayForTesting();
             return false;
         }
     }
