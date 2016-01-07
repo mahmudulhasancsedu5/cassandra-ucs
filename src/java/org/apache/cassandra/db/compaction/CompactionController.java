@@ -21,16 +21,24 @@ import java.util.*;
 
 import org.apache.cassandra.db.Memtable;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.rows.SliceableUnfilteredRowIterator;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.util.FileDataInput;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.db.RowIndexEntry;
+import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 
 import org.apache.cassandra.utils.OverlapIterator;
@@ -47,9 +55,11 @@ public class CompactionController implements AutoCloseable
 
     public final ColumnFamilyStore cfs;
     private final boolean compactingRepaired;
+    private final boolean provideTombstoneSources;
     private Refs<SSTableReader> overlappingSSTables;
     private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
     private final Iterable<SSTableReader> compacting;
+    private final RateLimiter limiter;
 
     public final int gcBefore;
 
@@ -60,11 +70,18 @@ public class CompactionController implements AutoCloseable
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore)
     {
+        this(cfs, compacting, gcBefore, null, false);
+    }
+
+    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, boolean provideTombstoneSources)
+    {
         assert cfs != null;
         this.cfs = cfs;
         this.gcBefore = gcBefore;
         this.compacting = compacting;
+        this.limiter = limiter;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
+        this.provideTombstoneSources = provideTombstoneSources;
         refreshOverlaps();
     }
 
@@ -220,4 +237,20 @@ public class CompactionController implements AutoCloseable
         return !cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones() || compactingRepaired;
     }
 
+    // caller must close iterators
+    public Iterable<UnfilteredRowIterator> tombstoneSources(DecoratedKey key)
+    {
+        if (!provideTombstoneSources)
+            return null;
+        overlapIterator.update(key);
+        return Iterables.transform(overlapIterator.overlaps(), reader -> getRateLimitedIterator(reader, key));
+    }
+
+    @SuppressWarnings("resource") // caller to close
+    private SliceableUnfilteredRowIterator getRateLimitedIterator(SSTableReader reader, DecoratedKey key)
+    {
+        RowIndexEntry<?> position = reader.getPosition(key, SSTableReader.Operator.EQ);
+        FileDataInput dfile = limiter != null ? reader.openDataReader(limiter) : reader.openDataReader();
+        return reader.iterator(dfile, key, position, ColumnFilter.all(cfs.metadata), false, false);
+    }
 }
