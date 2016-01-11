@@ -318,6 +318,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
 
         DeletionTime tombOpenDeletionTime = DeletionTime.LIVE;
         DeletionTime dataOpenDeletionTime = DeletionTime.LIVE;
+        DeletionTime openDeletionTime = DeletionTime.LIVE;
         Unfiltered tombNext = null;
         Unfiltered dataNext = null;
         Unfiltered next = null;
@@ -367,68 +368,60 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                     if (dataNext.isRow())
                         next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata);
                     else
-                    {
-                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
-                        dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
-                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
-                        RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
-                        if (!supersededBefore)
-                            if (!supersededAfter)
-                                next = dataNext;
-                            else
-                                next = new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
-                        else
-                            if (!supersededAfter)
-                                next = new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
-                            // else both superseded, nothing to issue.
-                    }
-                    dataNext = advance(wrapped);
+                        next = processDataMarker();
                 }
-                else if (cmp > 0)
-                {
-                    if (tombNext.isRangeTombstoneMarker())
-                    {
-                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
-                        tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
-                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
-                        if (supersededBefore != supersededAfter)
-                        {
-                            RangeTombstoneMarker marker = (RangeTombstoneMarker) tombNext;
-                            if (supersededBefore)
-                                next = new RangeTombstoneBoundMarker(marker.closeBound(false).invert(), dataOpenDeletionTime);
-                            else
-                                next = new RangeTombstoneBoundMarker(marker.openBound(false).invert(), dataOpenDeletionTime);
-                        }
-                    }
-                    tombNext = advance(tombSource);
-                }
-                else
+                else if (cmp == 0)
                 {
                     if (dataNext.isRow())
                         next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata).
                                                 filter(cf, ((Row) tombNext).deletion().time(), false, metadata);
                     else
                     {
-                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
                         tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
-                        dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
-                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
-                        RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
-                        if (!supersededBefore)
-                            if (!supersededAfter)
-                                next = dataNext;
-                            else
-                                next = new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
-                        else
-                            if (!supersededAfter)
-                                next = new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
-                            // else both superseded, nothing to issue.
+                        next = processDataMarker();
                     }
-                    dataNext = advance(wrapped);
-                    tombNext = advance(tombSource);
                 }
+                else // (cmp > 0)
+                {
+                    if (tombNext.isRangeTombstoneMarker())
+                    {
+                        tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
+                        boolean supersededBefore = openDeletionTime.isLive();
+                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        // If a range open was not issued because it was superseded and the deletion isn't superseded any more, we need to open it now.
+                        if (supersededBefore && !supersededAfter)
+                            next = new RangeTombstoneBoundMarker(((RangeTombstoneMarker) tombNext).closeBound(false).invert(), dataOpenDeletionTime);
+                        // If the deletion begins to be superseded, we don't close the range yet. This can save us a close/open pair if it ends after the superseding range.
+                    }
+                }
+
+                if (next instanceof RangeTombstoneMarker)
+                    openDeletionTime = updateOpenDeletionTime(openDeletionTime, next);
+
+                if (cmp <= 0)
+                    dataNext = advance(wrapped);
+                if (cmp >= 0)
+                    tombNext = advance(tombSource);
             }
             return next != null;
+        }
+
+        private RangeTombstoneMarker processDataMarker()
+        {
+            dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
+            boolean supersededBefore = openDeletionTime.isLive();
+            boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+            RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
+            if (!supersededBefore)
+                if (!supersededAfter)
+                    return marker;
+                else
+                    return new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
+            else
+                if (!supersededAfter)
+                    return new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
+                else
+                    return null;
         }
 
         @Override
