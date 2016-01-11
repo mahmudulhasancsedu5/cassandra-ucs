@@ -308,16 +308,153 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
     }
     
+    private static class DeletionUnfilteredRowIterator extends WrappingUnfilteredRowIterator
+    {
+        final UnfilteredRowIterator tombSource;
+        final DeletionTime partitionLevelDeletion;
+        final Row staticRow;
+        final ColumnFilter cf;
+        final CFMetaData metadata;
+
+        DeletionTime tombOpenDeletionTime = DeletionTime.LIVE;
+        DeletionTime dataOpenDeletionTime = DeletionTime.LIVE;
+        Unfiltered tombNext = null;
+        Unfiltered dataNext = null;
+        Unfiltered next = null;
+
+        protected DeletionUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource)
+        {
+            super(dataSource);
+            this.tombSource = tombSource;
+            this.partitionLevelDeletion = dataSource.partitionLevelDeletion().supersedes(tombSource.partitionLevelDeletion()) ?
+                    dataSource.partitionLevelDeletion() :
+                    tombSource.partitionLevelDeletion();
+            metadata = dataSource.metadata();
+            cf = ColumnFilter.all(metadata);
+
+            Row tombStat = tombSource.staticRow();
+            Row stat = dataSource.staticRow().filter(cf, tombStat.deletion().time(), isReverseOrder(), metadata);
+            this.staticRow = stat != null ? stat : Rows.EMPTY_STATIC_ROW;
+            tombNext = advance(tombSource);
+            dataNext = advance(dataSource);
+        }
+
+        private static Unfiltered advance(UnfilteredRowIterator source)
+        {
+            return source.hasNext() ? source.next() : null;
+        }
+
+        @Override
+        public DeletionTime partitionLevelDeletion()
+        {
+            return partitionLevelDeletion;
+        }
+
+        @Override
+        public Row staticRow()
+        {
+            return staticRow;
+        }
+
+        @Override
+        public boolean hasNext()
+        {
+            while (next == null && dataNext != null)
+            {
+                int cmp = tombNext == null ? -1 : metadata.comparator.compare(dataNext, tombNext);
+                if (cmp < 0)
+                {
+                    if (dataNext.isRow())
+                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata);
+                    else
+                    {
+                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
+                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
+                        if (!supersededBefore)
+                            if (!supersededAfter)
+                                next = dataNext;
+                            else
+                                next = new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
+                        else
+                            if (!supersededAfter)
+                                next = new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
+                            // else both superseded, nothing to issue.
+                    }
+                    dataNext = advance(wrapped);
+                }
+                else if (cmp > 0)
+                {
+                    if (tombNext.isRangeTombstoneMarker())
+                    {
+                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
+                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        if (supersededBefore != supersededAfter)
+                        {
+                            RangeTombstoneMarker marker = (RangeTombstoneMarker) tombNext;
+                            if (supersededBefore)
+                                next = new RangeTombstoneBoundMarker(marker.closeBound(false).invert(), dataOpenDeletionTime);
+                            else
+                                next = new RangeTombstoneBoundMarker(marker.openBound(false).invert(), dataOpenDeletionTime);
+                        }
+                    }
+                    tombNext = advance(tombSource);
+                }
+                else
+                {
+                    if (dataNext.isRow())
+                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata).
+                                                filter(cf, ((Row) tombNext).deletion().time(), false, metadata);
+                    else
+                    {
+                        boolean supersededBefore = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
+                        dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
+                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
+                        if (!supersededBefore)
+                            if (!supersededAfter)
+                                next = dataNext;
+                            else
+                                next = new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
+                        else
+                            if (!supersededAfter)
+                                next = new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
+                            // else both superseded, nothing to issue.
+                    }
+                    dataNext = advance(wrapped);
+                    tombNext = advance(tombSource);
+                }
+            }
+            return next != null;
+        }
+
+        @Override
+        public Unfiltered next()
+        {
+            if (!hasNext())
+                throw new IllegalStateException();
+
+            Unfiltered v = next;
+            next = null;
+            return v;
+        }
+
+        private DeletionTime updateOpenDeletionTime(DeletionTime openDeletionTime, Unfiltered next)
+        {
+            RangeTombstoneMarker marker = (RangeTombstoneMarker) next;
+            assert openDeletionTime.isLive() == !marker.isClose(false);
+            assert openDeletionTime.isLive() || openDeletionTime.equals(marker.closeDeletionTime(false));
+            return marker.isOpen(false) ? marker.openDeletionTime(false) : DeletionTime.LIVE;
+        }
+    }
+
     private static class Deleter extends Transformation<UnfilteredRowIterator>
     {
         final int nowInSec;
         final TombstoneOnly tombstoneOnly;
-        UnfilteredRowIterator partitionSource;
-        DeletionTime openDeletionTime = DeletionTime.LIVE;
-        Unfiltered next;
-        final ClusteringComparator comparator;
-        final ColumnFilter cf;
-        final CFMetaData metadata;
         final CompactionController controller;
 
         private Deleter(CompactionController controller, int nowInSec)
@@ -325,14 +462,6 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             this.controller = controller;
             this.tombstoneOnly = new TombstoneOnly(nowInSec);
             this.nowInSec = nowInSec;
-            metadata = controller.cfs.metadata;
-            comparator = metadata.comparator;
-            cf = ColumnFilter.all(metadata);
-        }
-
-        protected void onPartitionClose()
-        {
-            partitionSource.close();
         }
 
         @Override
@@ -353,83 +482,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             if (iters.isEmpty())
                 return partition;
 
-            partitionSource = UnfilteredRowIterators.merge(iters, nowInSec);
-            next = partitionSource.next();
-            return Transformation.apply(partition, this);
-        }
-
-        protected DeletionTime applyToDeletion(DeletionTime deletionTime)
-        {
-            return partitionSource.partitionLevelDeletion().supersedes(deletionTime) ? partitionSource.partitionLevelDeletion() : deletionTime;
-        }
-
-        protected Row applyToRow(Row row)
-        {
-            DeletionTime activeDeletionTime = proceedTo(row.clustering());
-            return row.filter(cf, activeDeletionTime, false, metadata);
-        }
-
-        protected Row applyToStatic(Row row)
-        {
-            return applyToRow(row);
-        }
-
-        protected RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-        {
-            DeletionTime activeDeletionTime = proceedTo(marker.clustering());
-            assert activeDeletionTime == openDeletionTime;
-
-            if (marker.isOpen(false))
-            {
-                if (activeDeletionTime.supersedes(marker.openDeletionTime(false)))
-                    // remove open
-                    if (!marker.isClose(false) || activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
-                        return null;
-                    else
-                        return new RangeTombstoneBoundMarker(marker.closeBound(false), marker.closeDeletionTime(false));
-                else
-                    // open stays
-                    if (marker.isClose(false) && activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
-                        return new RangeTombstoneBoundMarker(marker.openBound(false), marker.openDeletionTime(false));
-                    else
-                        return marker;
-            }
-            assert marker.isClose(false);
-            if (activeDeletionTime.supersedes(marker.closeDeletionTime(false)))
-                return null;
-            else
-                return marker;
-        }
-
-        private DeletionTime proceedTo(Clusterable clustering)
-        {
-            while (true)
-            {
-                if (next == null)
-                {
-                    assert openDeletionTime == DeletionTime.LIVE;
-                    return DeletionTime.LIVE;
-                }
-
-                int cmp = comparator.compare(next, clustering);
-                if (cmp > 0)
-                    return openDeletionTime;
-
-                if (next.isRow())
-                {
-                    Row deletion = (Row) next;
-                    if (cmp == 0)
-                        return deletion.deletion().time();
-                }
-                else
-                {
-                    RangeTombstoneMarker marker = (RangeTombstoneMarker) next;
-                    assert marker.isClose(false) == (openDeletionTime != DeletionTime.LIVE);
-                    assert !marker.isClose(false) || openDeletionTime.equals(marker.closeDeletionTime(false));
-                    openDeletionTime = marker.isOpen(false) ? marker.openDeletionTime(false) : DeletionTime.LIVE;
-                }
-                next = partitionSource.hasNext() ? partitionSource.next() : null;
-            }
+            return new DeletionUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec));
         }
     }
 
