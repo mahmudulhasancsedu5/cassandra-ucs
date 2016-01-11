@@ -48,16 +48,9 @@ public class CompactionIteratorTest
     private static final String KSNAME = "CompactionIteratorTest";
     private static final String CFNAME = "Integer1";
 
-    CFMetaData metadata;
-//    = CFMetaData.Builder.create("CompactionIteratorTest", "Test").
-//            addPartitionKey("key", AsciiType.instance).
-//            addClusteringColumn("clustering", Int32Type.instance).
-//            addRegularColumn("data", Int32Type.instance).
-//            build();
-    DecoratedKey kk = Util.dk("key");
-
-    public CompactionIteratorTest()
-    {
+    static final DecoratedKey kk = Util.dk("key");
+    static final CFMetaData metadata;
+    static {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KSNAME,
                                     KeyspaceParams.simple(1),
@@ -70,7 +63,7 @@ public class CompactionIteratorTest
     }
 
     @Test
-    public void testGcCompaction()
+    public void testGcCompactionSupersedeLeft()
     {
         testCompaction(new String[] {
             "5<=[140] 10[150] [140]<20 22<[130] [130]<25 30[150]"
@@ -80,15 +73,96 @@ public class CompactionIteratorTest
         "5<=[140] [140]<=7 30[150]");
     }
 
+    @Test
+    public void testGcCompactionSupersedeMiddle()
+    {
+        testCompaction(new String[] {
+            "5<=[140] 10[150] [140]<40 60[150]"
+        }, new String[] {
+            "7<=[160] 15[180] [160]<=30 40[120]"
+        },
+        5);
+    }
+
+    @Test
+    public void testGcCompactionSupersedeRight()
+    {
+        testCompaction(new String[] {
+            "9<=[140] 10[150] [140]<40 60[150]"
+        }, new String[] {
+            "7<[160] 15[180] [160]<30 40[120]"
+        },
+        3);
+    }
+
+    @Test
+    public void testGcCompactionBoundaries()
+    {
+        testCompaction(new String[] {
+            "5<=[120] [120]<9 9<=[140] 10[150] [140]<40 40<=[120] 60[150] [120]<90"
+        }, new String[] {
+            "7<[160] 15[180] [160]<30 40[120] 45<[140] [140]<80 88<=[130] [130]<100"
+        },
+        8);
+    }
+
+    @Test
+    public void testGcCompactionMatches()
+    {
+        testCompaction(new String[] {
+            "5<=[120] [120]<=9 9<[140] 10[150] [140]<40 40<=[120] 60[150] [120]<90 120<=[100] [100]<130"
+        }, new String[] {
+            "9<[160] 15[180] [160]<40 40[120] 45<[140] [140]<90 90<=[110] [110]<100 120<=[100] [100]<130"
+        },
+        5);
+    }
+
+    @Test
+    public void testGcCompactionRowDeletion()
+    {
+        testCompaction(new String[] {
+            "10[150] 20[160] 25[160] 30[170] 40[120] 50[120]"
+        }, new String[] {
+            "10<=[155] 20[200D180] 30[200D160] [155]<=30 40[150D130] 50[150D100]"
+        },
+        "25[160] 30[170] 50[120]");
+    }
+
     void testCompaction(String[] inputs, String[] tombstones, String expected)
     {
+        int nonGcSz = testNonGcCompaction(inputs, tombstones);
+
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
         List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
+        System.out.println("GC compaction resulted in " + result.size() + " Unfiltereds");
         generator.verifyValid(result);
         verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
         List<Unfiltered> expectedResult = generator.parse(expected, NOW - 1);
         if (!expectedResult.equals(result))
             fail("Expected " + expected + ", got " + generator.str(result));
+    }
+
+    void testCompaction(String[] inputs, String[] tombstones, int expectedCount)
+    {
+        int nonGcSz = testNonGcCompaction(inputs, tombstones);
+
+        UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
+        List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
+        System.out.println("GC compaction resulted in " + result.size() + " Unfiltereds");
+        generator.verifyValid(result);
+        verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
+        if (result.size() > expectedCount)
+            fail("Expected compaction with " + expectedCount + " elements, got " + result.size() + ": " + generator.str(result));
+    }
+
+    int testNonGcCompaction(String[] inputs, String[] tombstones)
+    {
+        UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
+        List<Unfiltered> result = compact(parse(inputs, generator), Collections.emptyList());
+        System.out.println("Non-GC compaction resulted in " + result.size() + " Unfiltereds");
+        generator.verifyValid(result);
+        verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
+        return result.size();
     }
 
     private void verifyEquivalent(List<List<Unfiltered>> sources, List<Unfiltered> result, List<List<Unfiltered>> tombstoneSources, UnfilteredRowsGenerator generator)
