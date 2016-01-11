@@ -30,6 +30,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.RangeTombstone.Bound;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.rows.Unfiltered.Kind;
+import org.apache.cassandra.utils.btree.BTree;
 
 public class UnfilteredRowsGenerator
 {
@@ -58,7 +59,10 @@ public class UnfilteredRowsGenerator
         else
         {
             Row row = (Row) curr;
-            val = val + "[" + row.primaryKeyLivenessInfo().timestamp() + "]";
+            String delTime = "";
+            if (!row.deletion().time().isLive())
+                delTime = "D" + row.deletion().time().markedForDeleteAt();
+            val = val + "[" + row.primaryKeyLivenessInfo().timestamp() + delTime + "]";
         }
         return val;
     }
@@ -171,7 +175,7 @@ public class UnfilteredRowsGenerator
         String[] split = input.split(" ");
         Pattern open = Pattern.compile("(\\d+)<(=)?\\[(\\d+)\\]");
         Pattern close = Pattern.compile("\\[(\\d+)\\]<(=)?(\\d+)");
-        Pattern row = Pattern.compile("(\\d+)(\\[(\\d+)\\])?");
+        Pattern row = Pattern.compile("(\\d+)(\\[(\\d+)(?:D(\\d+))?\\])?");
         List<Unfiltered> out = new ArrayList<>(split.length);
         for (String s : split)
         {
@@ -191,7 +195,8 @@ public class UnfilteredRowsGenerator
             if (m.matches())
             {
                 int live = m.group(3) != null ? Integer.parseInt(m.group(3)) : default_liveness;
-                out.add(emptyRowAt(Integer.parseInt(m.group(1)), x -> live));
+                int delTime = m.group(4) != null ? Integer.parseInt(m.group(4)) : -1;
+                out.add(emptyRowAt(Integer.parseInt(m.group(1)), live, delTime));
                 continue;
             }
             Assert.fail("Can't parse " + s);
@@ -205,6 +210,14 @@ public class UnfilteredRowsGenerator
         final Clustering clustering = clusteringFor(pos);
         final LivenessInfo live = LivenessInfo.create(UnfilteredRowIteratorsMergeTest.metadata, timeGenerator.apply(pos), UnfilteredRowIteratorsMergeTest.nowInSec);
         return BTreeRow.noCellLiveRow(clustering, live);
+    }
+
+    static Row emptyRowAt(int pos, int time, int deletionTime)
+    {
+        final Clustering clustering = clusteringFor(pos);
+        final LivenessInfo live = LivenessInfo.create(UnfilteredRowIteratorsMergeTest.metadata, time, UnfilteredRowIteratorsMergeTest.nowInSec);
+        final DeletionTime delTime = deletionTime == -1 ? DeletionTime.LIVE : new DeletionTime(deletionTime, deletionTime);
+        return BTreeRow.create(clustering, live, Row.Deletion.regular(delTime), BTree.empty());
     }
 
     static Clustering clusteringFor(int i)
