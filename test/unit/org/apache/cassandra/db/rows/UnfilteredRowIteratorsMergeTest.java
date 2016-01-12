@@ -169,12 +169,12 @@ public class UnfilteredRowIteratorsMergeTest
                 {
                     dt = deletionFor(c, source, dt);
                 }
-                Assert.assertEquals("Deletion time mismatch for position " + generator.str(c), dt, deletionFor(c, merged));
+                Assert.assertEquals("Deletion time mismatch for position " + i, dt, deletionFor(c, merged));
                 if (dt == DeletionTime.LIVE)
                 {
                     Optional<Unfiltered> sourceOpt = sources.stream().map(source -> rowFor(c, source)).filter(x -> x != null).findAny();
                     Unfiltered mergedRow = rowFor(c, merged);
-                    Assert.assertEquals("Content mismatch for position " + generator.str(c), generator.str(sourceOpt.orElse(null)), generator.str(mergedRow));
+                    Assert.assertEquals("Content mismatch for position " + i, clustering(sourceOpt.orElse(null)), clustering(mergedRow));
                 }
             }
         }
@@ -187,6 +187,13 @@ public class UnfilteredRowIteratorsMergeTest
             generator.dumpList(merged);
             throw e;
         }
+    }
+
+    String clustering(Clusterable curr)
+    {
+        if (curr == null)
+            return "null";
+        return Int32Type.instance.getString(curr.clustering().get(0));
     }
 
     private Unfiltered rowFor(Clusterable pointer, List<Unfiltered> list)

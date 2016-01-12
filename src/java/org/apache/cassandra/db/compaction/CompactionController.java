@@ -19,9 +19,7 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 
-import org.apache.cassandra.db.Memtable;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
-import org.apache.cassandra.db.rows.SliceableUnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 
 import com.google.common.collect.Iterables;
@@ -34,10 +32,7 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.db.RowIndexEntry;
+import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 
@@ -243,14 +238,16 @@ public class CompactionController implements AutoCloseable
         if (!provideTombstoneSources)
             return null;
         overlapIterator.update(key);
-        return Iterables.transform(overlapIterator.overlaps(), reader -> getRateLimitedIterator(reader, key));
+        return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
+                                                    reader -> !reader.isMarkedSuspect()),
+                                   reader -> getRateLimitedIterator(reader, key));
     }
 
     @SuppressWarnings("resource") // caller to close
-    private SliceableUnfilteredRowIterator getRateLimitedIterator(SSTableReader reader, DecoratedKey key)
+    private UnfilteredRowIterator getRateLimitedIterator(SSTableReader reader, DecoratedKey key)
     {
         RowIndexEntry<?> position = reader.getPosition(key, SSTableReader.Operator.EQ);
         FileDataInput dfile = limiter != null ? reader.openDataReader(limiter) : reader.openDataReader();
-        return reader.iterator(dfile, key, position, ColumnFilter.all(cfs.metadata), false, false);
+        return reader.iterator(dfile, key, position, Slices.ALL, ColumnFilter.all(cfs.metadata), false, false);
     }
 }
