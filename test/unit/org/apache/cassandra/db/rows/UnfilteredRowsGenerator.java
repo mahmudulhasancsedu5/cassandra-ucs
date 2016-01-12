@@ -56,7 +56,7 @@ public class UnfilteredRowsGenerator
             if (marker.isOpen(reversed)) 
                 val = val + (marker.openIsInclusive(reversed) ? "<=" : "<") + "[" + marker.openDeletionTime(reversed).markedForDeleteAt() + "]";
         }
-        else
+        else if (curr instanceof Row)
         {
             Row row = (Row) curr;
             String delTime = "";
