@@ -103,7 +103,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                                              ? EmptyIterators.unfilteredPartition(controller.cfs.metadata, false)
                                              : UnfilteredPartitionIterators.merge(scanners, nowInSec, listener());
         boolean isForThrift = merged.isForThrift(); // to stop capture of iterator in Purger, which is confusing for debug
-        merged = Transformation.apply(merged, new Deleter(controller, nowInSec));
+        merged = Transformation.apply(merged, new GarbageSkipper(controller, nowInSec));
         this.compacted = Transformation.apply(merged, new Purger(isForThrift, controller));
     }
 
@@ -308,7 +308,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
     }
     
-    private static class DeletionUnfilteredRowIterator extends WrappingUnfilteredRowIterator
+    private static class GarbageSkippingUnfilteredRowIterator extends WrappingUnfilteredRowIterator
     {
         final UnfilteredRowIterator tombSource;
         final DeletionTime partitionLevelDeletion;
@@ -323,7 +323,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         Unfiltered dataNext = null;
         Unfiltered next = null;
 
-        protected DeletionUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource)
+        protected GarbageSkippingUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource)
         {
             super(dataSource);
             this.tombSource = tombSource;
@@ -444,16 +444,14 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
     }
 
-    private static class Deleter extends Transformation<UnfilteredRowIterator>
+    private static class GarbageSkipper extends Transformation<UnfilteredRowIterator>
     {
         final int nowInSec;
-        final TombstoneOnly tombstoneOnly;
         final CompactionController controller;
 
-        private Deleter(CompactionController controller, int nowInSec)
+        private GarbageSkipper(CompactionController controller, int nowInSec)
         {
             this.controller = controller;
-            this.tombstoneOnly = new TombstoneOnly(nowInSec);
             this.nowInSec = nowInSec;
         }
 
@@ -466,7 +464,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             List<UnfilteredRowIterator> iters = new ArrayList<>();
             for (UnfilteredRowIterator iter : sources)
             {
-                iter = Transformation.apply(iter, tombstoneOnly);
+                iter = tombstonesOnly(iter);
                 if (!iter.isEmpty())
                     iters.add(iter);
                 else
@@ -475,23 +473,22 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             if (iters.isEmpty())
                 return partition;
 
-            return new DeletionUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec));
+            return new GarbageSkippingUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec));
         }
     }
 
-    UnfilteredPartitionIterator tombstonesOnly(UnfilteredPartitionIterator iter)
+    public static UnfilteredRowIterator tombstonesOnly(UnfilteredRowIterator iter)
     {
-        return Transformation.apply(iter, new TombstoneOnly(nowInSec));
+        return Transformation.apply(iter, TombstoneOnly.instance);
     }
 
-    public static class TombstoneOnly extends Transformation<UnfilteredRowIterator>
+    private static class TombstoneOnly extends Transformation<UnfilteredRowIterator>
     {
-        private final int nowInSec;
+        static final TombstoneOnly instance = new TombstoneOnly();
 
-        public TombstoneOnly(int nowInSec)
+        private TombstoneOnly()
         {
             super();
-            this.nowInSec = nowInSec;
         }
 
         @Override
@@ -503,7 +500,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         @Override
         protected Row applyToRow(Row row)
         {
-            if (!row.hasDeletion(nowInSec))
+            if (row.deletion().isLive())
                 return null;
 
             return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
@@ -512,7 +509,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         @Override
         protected Row applyToStatic(Row row)
         {
-            if (!row.hasDeletion(nowInSec))
+            if (row.deletion().isLive())
                 return Rows.EMPTY_STATIC_ROW;
 
             return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
