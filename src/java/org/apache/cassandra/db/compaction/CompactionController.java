@@ -57,6 +57,7 @@ public class CompactionController implements AutoCloseable
     private final RateLimiter limiter;
 
     public final int gcBefore;
+    public static boolean doGC = false;
 
     protected CompactionController(ColumnFamilyStore cfs, int maxValue)
     {
@@ -65,7 +66,7 @@ public class CompactionController implements AutoCloseable
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore)
     {
-        this(cfs, compacting, gcBefore, null, true);
+        this(cfs, compacting, gcBefore, null, doGC);
     }
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, boolean provideTombstoneSources)
