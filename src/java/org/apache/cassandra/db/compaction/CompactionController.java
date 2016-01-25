@@ -55,9 +55,11 @@ public class CompactionController implements AutoCloseable
     private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
     private final Iterable<SSTableReader> compacting;
     private final RateLimiter limiter;
+    private final long minTimestamp;
 
     public final int gcBefore;
     public static boolean doGC = false;
+    public static boolean cull = true;
 
     protected CompactionController(ColumnFamilyStore cfs, int maxValue)
     {
@@ -78,6 +80,7 @@ public class CompactionController implements AutoCloseable
         this.limiter = limiter;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
         this.provideTombstoneSources = provideTombstoneSources;
+        this.minTimestamp = compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong();
         refreshOverlaps();
     }
 
@@ -240,7 +243,8 @@ public class CompactionController implements AutoCloseable
             return null;
         overlapIterator.update(key);
         return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
-                                                    reader -> !reader.isMarkedSuspect()),
+                                                    reader -> !reader.isMarkedSuspect() &&
+                                                              (!cull || reader.getMaxTimestamp() > minTimestamp)),
                                    reader -> getRateLimitedIterator(reader, key));
     }
 

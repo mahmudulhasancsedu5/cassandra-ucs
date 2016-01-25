@@ -373,8 +373,11 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 else if (cmp == 0)
                 {
                     if (dataNext.isRow())
-                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata).
-                                                filter(cf, ((Row) tombNext).deletion().time(), false, metadata);
+                    {
+                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata);
+                        if (next != null)
+                            next = ((Row) next).filter(cf, ((Row) tombNext).deletion().time(), false, metadata);
+                    }
                     else
                     {
                         tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
