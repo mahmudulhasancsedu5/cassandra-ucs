@@ -46,11 +46,13 @@ import org.apache.cassandra.utils.FBUtilities;
 
 public class GcCompactionBench extends CQLTester
 {
-    static final int COUNT = 290000;
-    static final int ITERS = 99;
+    private static final int DEL_SECTIONS = 1000;
+    private static final int RANGE_FREQUENCY_INV = 4;
+    static final int COUNT = 19000;
+    static final int ITERS = 29;
 
     static final int KEY_RANGE = 50;
-    static final int CLUSTERING_RANGE = 1000 * 1000 * 5;
+    static final int CLUSTERING_RANGE = 1000 * 1000 * 35;
 
     static final int EXTRA_SIZE = 1025;
 
@@ -74,10 +76,12 @@ public class GcCompactionBench extends CQLTester
                     "  data int," +
                     "  extra text," +
                     "  PRIMARY KEY(key, column)" +
-                    ");");
+                    ")"
+                   );
 
     }
-    static AtomicLong id = new AtomicLong();
+    AtomicLong id = new AtomicLong();
+    long compactionTimeNanos = 0;
 
     void pushData(Random rand, int count) throws Throwable
     {
@@ -110,17 +114,28 @@ public class GcCompactionBench extends CQLTester
             long ii = id.incrementAndGet();
             if (ii % 1000 == 0)
                 System.out.print('-');
-            do
+            if (rand.nextInt(RANGE_FREQUENCY_INV) != 1)
+            {
+                do
+                {
+                    key = rand.nextInt(KEY_RANGE);
+                    long cid = rand.nextInt(DEL_SECTIONS);
+                    int cstart = (int) (cid * CLUSTERING_RANGE / DEL_SECTIONS);
+                    int cend = (int) ((cid + 1) * CLUSTERING_RANGE / DEL_SECTIONS);
+                    res = execute("SELECT column FROM %s WHERE key = ? AND column >= ? AND column < ?", key, cstart, cend);
+                } while (res.size() == 0);
+                UntypedResultSet.Row r = Iterables.get(res, rand.nextInt(res.size()));
+                int clustering = r.getInt("column");
+                execute("DELETE FROM %s WHERE key = ? AND column = ?", key, clustering);
+            }
+            else
             {
                 key = rand.nextInt(KEY_RANGE);
-                long cid = rand.nextInt(100);
-                int cstart = (int) (cid * CLUSTERING_RANGE / 100);
-                int cend = (int) ((cid + 1) * CLUSTERING_RANGE / 100);
-                res = execute("SELECT column FROM %s WHERE key = ? AND column >= ? AND column < ?", key, cstart, cend);
-            } while (res.size() == 0);
-            UntypedResultSet.Row r = Iterables.get(res, rand.nextInt(res.size()));
-            int clustering = r.getInt("column");
-            execute("DELETE FROM %s WHERE key = ? AND column = ?", key, clustering);
+                long cid = rand.nextInt(DEL_SECTIONS);
+                int cstart = (int) (cid * CLUSTERING_RANGE / DEL_SECTIONS);
+                int cend = (int) ((cid + 1) * CLUSTERING_RANGE / DEL_SECTIONS);
+                res = execute("DELETE FROM %s WHERE key = ? AND column >= ? AND column < ?", key, cstart, cend);
+            }
             maybeCompact(ii);
         }
     }
@@ -134,19 +149,27 @@ public class GcCompactionBench extends CQLTester
             if (ii % 100000 == 0)
             {
                 System.out.print("C");
+                long startTime = System.nanoTime();
                 getCurrentColumnFamilyStore().enableAutoCompaction(true);
+                long endTime = System.nanoTime();
+                compactionTimeNanos += endTime - startTime;
                 getCurrentColumnFamilyStore().disableAutoCompaction();
             }
         }
     }
 
-    public void testGcCompaction(boolean doGC) throws Throwable
+    public void testGcCompaction(boolean doGC, boolean cull, String compactionClass) throws Throwable
     {
         id.set(0);
-        CompactionController.doGC = false;
+        compactionTimeNanos = 0;
+        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "'  };");
+        boolean doOngoingGC = doGC;
+        CompactionController.doGC = doOngoingGC;
+        CompactionController.cull = cull;
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
 
+        long onStartTime = System.currentTimeMillis();
         ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Future<?>> tasks = new ArrayList<>();
         for (int ti = 0; ti < 1; ++ti)
@@ -170,50 +193,87 @@ public class GcCompactionBench extends CQLTester
             task.get();
 
         flush();
+        long onEndTime = System.currentTimeMillis();
         int startRowCount = countRows(cfs);
         int startTombCount = countTombstoneMarkers(cfs);
+        int startRowDeletions = countRowDeletions(cfs);
         int startTableCount = cfs.getLiveSSTables().size();
         long startSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
-        long startTime = System.currentTimeMillis();
         cfs.snapshot("Before");
         System.out.println();
 
         CompactionController.doGC = doGC;
+        CompactionController.cull = cull;
+        long startTime = System.currentTimeMillis();
         for (SSTableReader reader : cfs.getLiveSSTables())
             CompactionManager.instance.forceUserDefinedCompaction(reader.getFilename());
+        long endTime = System.currentTimeMillis();
 
         cfs.snapshot("After");
 
         int endRowCount = countRows(cfs);
         int endTombCount = countTombstoneMarkers(cfs);
+        int endRowDeletions = countRowDeletions(cfs);
         int endTableCount = cfs.getLiveSSTables().size();
         long endSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
-        long endTime = System.currentTimeMillis();
 
+        System.out.println(cfs.getCompactionParametersJson());
         System.out.println(String.format("%s compactions completed in %.3fs",
-                doGC ? "GC" : "Copy", (endTime - startTime) * 0.001));
-        System.out.println(String.format("At start: %12d tables %12d bytes %12d rows %12d tombstone markers",
-                startTableCount, startSize, startRowCount, startTombCount));
-        System.out.println(String.format("At end:   %12d tables %12d bytes %12d rows %12d tombstone markers",
-                endTableCount, endSize, endRowCount, endTombCount));
+                doGC ? cull ? "GC" : "NoCullGC" : "Copy", (endTime - startTime) * 1e-3));
+        System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing %sbackground compactions",
+                (onEndTime - onStartTime) * 1e-3, compactionTimeNanos * 1e-9, doOngoingGC ? cull ? "GC " : "NoCullGC " : ""));
+        System.out.println(String.format("At start: %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
+                startTableCount, startSize, startRowCount, startRowDeletions, startTombCount));
+        System.out.println(String.format("At end:   %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
+                endTableCount, endSize, endRowCount, endRowDeletions, endTombCount));
     }
 
     @Test
     public void testGcCompaction() throws Throwable
     {
-        testGcCompaction(true);
+        testGcCompaction(true, true, "LeveledCompactionStrategy");
+    }
+
+    @Test
+    public void testNoCullGcCompaction() throws Throwable
+    {
+        testGcCompaction(true, false, "LeveledCompactionStrategy");
     }
 
     @Test
     public void testCopyCompaction() throws Throwable
     {
-        testGcCompaction(false);
+        testGcCompaction(false, false, "LeveledCompactionStrategy");
+    }
+
+    @Test
+    public void testGcCompactionSizeTiered() throws Throwable
+    {
+        testGcCompaction(true, true, "SizeTieredCompactionStrategy");
+    }
+
+    @Test
+    public void testNoCullCompactionSizeTiered() throws Throwable
+    {
+        testGcCompaction(true, false, "SizeTieredCompactionStrategy");
+    }
+
+    @Test
+    public void testCopyCompactionSizeTiered() throws Throwable
+    {
+        testGcCompaction(false, false, "SizeTieredCompactionStrategy");
     }
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)
     {
         int nowInSec = FBUtilities.nowInSeconds();
-        return count(cfs, x -> x.isRangeTombstoneMarker() || x.isRow() && ((Row) x).hasDeletion(nowInSec));
+        return count(cfs, x -> x.isRangeTombstoneMarker());
+    }
+
+    int countRowDeletions(ColumnFamilyStore cfs)
+    {
+        int nowInSec = FBUtilities.nowInSeconds();
+        return count(cfs, x -> x.isRow() && !((Row) x).deletion().isLive());
     }
 
     int countRows(ColumnFamilyStore cfs)
