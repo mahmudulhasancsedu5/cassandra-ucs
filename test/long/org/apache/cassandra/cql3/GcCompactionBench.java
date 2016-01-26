@@ -48,7 +48,7 @@ public class GcCompactionBench extends CQLTester
 {
     private static final int DEL_SECTIONS = 1000;
     private static final int RANGE_FREQUENCY_INV = 4;
-    static final int COUNT = 19000;
+    static final int COUNT = 190000;
     static final int ITERS = 29;
 
     static final int KEY_RANGE = 50;
@@ -158,14 +158,11 @@ public class GcCompactionBench extends CQLTester
         }
     }
 
-    public void testGcCompaction(boolean doGC, boolean cull, String compactionClass) throws Throwable
+    public void testGcCompaction(boolean doGC, String compactionClass) throws Throwable
     {
         id.set(0);
         compactionTimeNanos = 0;
-        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "'  };");
-        boolean doOngoingGC = doGC;
-        CompactionController.doGC = doOngoingGC;
-        CompactionController.cull = cull;
+        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + doGC + "'  };");
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
 
@@ -202,8 +199,6 @@ public class GcCompactionBench extends CQLTester
         cfs.snapshot("Before");
         System.out.println();
 
-        CompactionController.doGC = doGC;
-        CompactionController.cull = cull;
         long startTime = System.currentTimeMillis();
         for (SSTableReader reader : cfs.getLiveSSTables())
             CompactionManager.instance.forceUserDefinedCompaction(reader.getFilename());
@@ -219,9 +214,9 @@ public class GcCompactionBench extends CQLTester
 
         System.out.println(cfs.getCompactionParametersJson());
         System.out.println(String.format("%s compactions completed in %.3fs",
-                doGC ? cull ? "GC" : "NoCullGC" : "Copy", (endTime - startTime) * 1e-3));
-        System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing %sbackground compactions",
-                (onEndTime - onStartTime) * 1e-3, compactionTimeNanos * 1e-9, doOngoingGC ? cull ? "GC " : "NoCullGC " : ""));
+                doGC ? "GC" : "Copy", (endTime - startTime) * 1e-3));
+        System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing background compactions",
+                (onEndTime - onStartTime) * 1e-3, compactionTimeNanos * 1e-9));
         System.out.println(String.format("At start: %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
                 startTableCount, startSize, startRowCount, startRowDeletions, startTombCount));
         System.out.println(String.format("At end:   %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
@@ -231,37 +226,25 @@ public class GcCompactionBench extends CQLTester
     @Test
     public void testGcCompaction() throws Throwable
     {
-        testGcCompaction(true, true, "LeveledCompactionStrategy");
-    }
-
-    @Test
-    public void testNoCullGcCompaction() throws Throwable
-    {
-        testGcCompaction(true, false, "LeveledCompactionStrategy");
+        testGcCompaction(true, "LeveledCompactionStrategy");
     }
 
     @Test
     public void testCopyCompaction() throws Throwable
     {
-        testGcCompaction(false, false, "LeveledCompactionStrategy");
+        testGcCompaction(false, "LeveledCompactionStrategy");
     }
 
     @Test
     public void testGcCompactionSizeTiered() throws Throwable
     {
-        testGcCompaction(true, true, "SizeTieredCompactionStrategy");
-    }
-
-    @Test
-    public void testNoCullCompactionSizeTiered() throws Throwable
-    {
-        testGcCompaction(true, false, "SizeTieredCompactionStrategy");
+        testGcCompaction(true, "SizeTieredCompactionStrategy");
     }
 
     @Test
     public void testCopyCompactionSizeTiered() throws Throwable
     {
-        testGcCompaction(false, false, "SizeTieredCompactionStrategy");
+        testGcCompaction(false, "SizeTieredCompactionStrategy");
     }
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)

@@ -58,8 +58,6 @@ public class CompactionController implements AutoCloseable
     private final long minTimestamp;
 
     public final int gcBefore;
-    public static boolean doGC = false;
-    public static boolean cull = true;
 
     protected CompactionController(ColumnFamilyStore cfs, int maxValue)
     {
@@ -68,7 +66,9 @@ public class CompactionController implements AutoCloseable
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore)
     {
-        this(cfs, compacting, gcBefore, null, doGC);
+        this(cfs, compacting, gcBefore,
+             CompactionManager.instance.getRateLimiter(),
+             cfs.getCompactionStrategyManager().getCompactionParams().provideOverlappingTombstones());
     }
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, boolean provideTombstoneSources)
@@ -244,7 +244,7 @@ public class CompactionController implements AutoCloseable
         overlapIterator.update(key);
         return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
                                                     reader -> !reader.isMarkedSuspect() &&
-                                                              (!cull || reader.getMaxTimestamp() > minTimestamp)),
+                                                              reader.getMaxTimestamp() > minTimestamp),
                                    reader -> getRateLimitedIterator(reader, key));
     }
 
