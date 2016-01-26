@@ -45,7 +45,8 @@ public final class CompactionParams
         CLASS,
         ENABLED,
         MIN_THRESHOLD,
-        MAX_THRESHOLD;
+        MAX_THRESHOLD,
+        PROVIDE_OVERLAPPING_TOMBSTONES;
 
         @Override
         public String toString()
@@ -58,23 +59,26 @@ public final class CompactionParams
     public static final int DEFAULT_MAX_THRESHOLD = 32;
 
     public static final boolean DEFAULT_ENABLED = true;
+    public static final boolean DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES = false;
 
     public static final Map<String, String> DEFAULT_THRESHOLDS =
         ImmutableMap.of(Option.MIN_THRESHOLD.toString(), Integer.toString(DEFAULT_MIN_THRESHOLD),
                         Option.MAX_THRESHOLD.toString(), Integer.toString(DEFAULT_MAX_THRESHOLD));
 
     public static final CompactionParams DEFAULT =
-        new CompactionParams(SizeTieredCompactionStrategy.class, DEFAULT_THRESHOLDS, DEFAULT_ENABLED);
+        new CompactionParams(SizeTieredCompactionStrategy.class, DEFAULT_THRESHOLDS, DEFAULT_ENABLED, DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES);
 
     private final Class<? extends AbstractCompactionStrategy> klass;
     private final ImmutableMap<String, String> options;
     private final boolean isEnabled;
+    private final boolean provideOverlappingTombstones;
 
-    private CompactionParams(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options, boolean isEnabled)
+    private CompactionParams(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options, boolean isEnabled, boolean provideOverlappingTombstones)
     {
         this.klass = klass;
         this.options = ImmutableMap.copyOf(options);
         this.isEnabled = isEnabled;
+        this.provideOverlappingTombstones = provideOverlappingTombstones;
     }
 
     public static CompactionParams create(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options)
@@ -82,6 +86,7 @@ public final class CompactionParams
         boolean isEnabled = options.containsKey(Option.ENABLED.toString())
                           ? Boolean.parseBoolean(options.get(Option.ENABLED.toString()))
                           : DEFAULT_ENABLED;
+        boolean provideOverlappingTombstones = Boolean.parseBoolean(options.getOrDefault(Option.PROVIDE_OVERLAPPING_TOMBSTONES.toString(), "false"));
 
         Map<String, String> allOptions = new HashMap<>(options);
         if (supportsThresholdParams(klass))
@@ -90,7 +95,7 @@ public final class CompactionParams
             allOptions.putIfAbsent(Option.MAX_THRESHOLD.toString(), Integer.toString(DEFAULT_MAX_THRESHOLD));
         }
 
-        return new CompactionParams(klass, allOptions, isEnabled);
+        return new CompactionParams(klass, allOptions, isEnabled, provideOverlappingTombstones);
     }
 
     public static CompactionParams scts(Map<String, String> options)
@@ -117,6 +122,11 @@ public final class CompactionParams
         return threshold == null
              ? DEFAULT_MAX_THRESHOLD
              : Integer.parseInt(threshold);
+    }
+
+    public boolean provideOverlappingTombstones()
+    {
+        return provideOverlappingTombstones;
     }
 
     public void validate()
