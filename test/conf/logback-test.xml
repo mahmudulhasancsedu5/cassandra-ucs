@@ -22,7 +22,7 @@
   <shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
 
   <!-- Status listener is used to wrap stdout/stderr and tee to log file -->
-  <!--  <statusListener class="org.apache.cassandra.LogbackStatusListener" /> -->
+  <statusListener class="org.apache.cassandra.LogbackStatusListener" />
 
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
 
