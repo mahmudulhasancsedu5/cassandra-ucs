@@ -35,7 +35,6 @@ import org.junit.Test;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.compaction.CompactionController;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
@@ -196,15 +195,12 @@ public class GcCompactionBench extends CQLTester
         int startRowDeletions = countRowDeletions(cfs);
         int startTableCount = cfs.getLiveSSTables().size();
         long startSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
-        cfs.snapshot("Before");
         System.out.println();
 
         long startTime = System.currentTimeMillis();
         for (SSTableReader reader : cfs.getLiveSSTables())
             CompactionManager.instance.forceUserDefinedCompaction(reader.getFilename());
         long endTime = System.currentTimeMillis();
-
-        cfs.snapshot("After");
 
         int endRowCount = countRows(cfs);
         int endTombCount = countTombstoneMarkers(cfs);
@@ -249,13 +245,11 @@ public class GcCompactionBench extends CQLTester
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)
     {
-        int nowInSec = FBUtilities.nowInSeconds();
         return count(cfs, x -> x.isRangeTombstoneMarker());
     }
 
     int countRowDeletions(ColumnFamilyStore cfs)
     {
-        int nowInSec = FBUtilities.nowInSeconds();
         return count(cfs, x -> x.isRow() && !((Row) x).deletion().isLive());
     }
 
