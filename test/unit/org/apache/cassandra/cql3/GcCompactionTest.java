@@ -26,13 +26,11 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import com.google.common.collect.Iterables;
-
 import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.db.rows.RangeTombstoneMarker;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
@@ -56,7 +54,8 @@ public class GcCompactionTest extends CQLTester
                 "  data int," +
                 "  extra text," +
                 "  PRIMARY KEY(key, column)" +
-                ");");
+                ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'true'  };"
+                );
 
         for (int i = 0; i < KEY_COUNT; ++i)
             for (int j = 0; j < CLUSTERING_COUNT; ++j)
@@ -89,14 +88,13 @@ public class GcCompactionTest extends CQLTester
         SSTableReader table2 = getNewTable();
         assertEquals(0, countRows(table2));
         assertTrue(countTombstoneMarkers(table2) > 0);
-        
+
         CompactionManager.instance.forceUserDefinedCompaction(table0.getFilename());
 
         assertEquals(3, cfs.getLiveSSTables().size());
         SSTableReader table3 = getNewTable();
         assertEquals(0, countTombstoneMarkers(table3));
-//        assertEquals(rowCount, countRows(table3));
-        
+        assertTrue(rowCount > countRows(table3));
     }
 
     private SSTableReader getNewTable()

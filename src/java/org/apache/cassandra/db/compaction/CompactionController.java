@@ -80,7 +80,9 @@ public class CompactionController implements AutoCloseable
         this.limiter = limiter;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
         this.provideTombstoneSources = provideTombstoneSources;
-        this.minTimestamp = compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong();
+        this.minTimestamp = !compacting.isEmpty()       // check needed for test
+                          ? compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong()
+                          : 0;
         refreshOverlaps();
     }
 

@@ -31,8 +31,6 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.SystemKeyspace;
-import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.partitions.AbstractUnfilteredPartitionIterator;
@@ -50,6 +48,8 @@ public class CompactionIteratorTest
 
     static final DecoratedKey kk = Util.dk("key");
     static final CFMetaData metadata;
+    private static final int RANGE = 1000;
+    private static final int COUNT = 100;
     static {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KSNAME,
@@ -141,7 +141,7 @@ public class CompactionIteratorTest
 
     void testCompaction(String[] inputs, String[] tombstones, String expected)
     {
-        int nonGcSz = testNonGcCompaction(inputs, tombstones);
+        testNonGcCompaction(inputs, tombstones);
 
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
         List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
@@ -155,7 +155,7 @@ public class CompactionIteratorTest
 
     void testCompaction(String[] inputs, String[] tombstones, int expectedCount)
     {
-        int nonGcSz = testNonGcCompaction(inputs, tombstones);
+        testNonGcCompaction(inputs, tombstones);
 
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
         List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
@@ -226,28 +226,43 @@ public class CompactionIteratorTest
             return result;
         }
     }
-    
+
     private UnfilteredRowIterator listToIterator(List<Unfiltered> list, DecoratedKey key)
     {
         return UnfilteredRowsGenerator.source(list, metadata, key);
     }
     
-//    NavigableMap<DecoratedKey, UnfilteredRowIterator> generateContent(Random rand, List<DecoratedKey> keys, int pcount, int rcount)
-//    {
-//        NavigableMap<DecoratedKey, UnfilteredRowIterator> map = new TreeMap<>();
-//        for (int i = 0; i < pcount; ++i)
-//        {
-//            DecoratedKey key = keys.get(rand.nextInt(keys.size()));
-//            map.put(key, generateContent(rand, rcount));
-//        }
-//        return map;
-//    }
-//
-//    UnfilteredRowIterator generateContent(Random rand, int rcount)
-//    {
-//        // TODO Auto-generated method stub
-//        return null;
-//    }
+    NavigableMap<DecoratedKey, List<Unfiltered>> generateContent(Random rand, UnfilteredRowsGenerator generator,
+                                                                 List<DecoratedKey> keys, int pcount, int rcount)
+    {
+        NavigableMap<DecoratedKey, List<Unfiltered>> map = new TreeMap<>();
+        for (int i = 0; i < pcount; ++i)
+        {
+            DecoratedKey key = keys.get(rand.nextInt(keys.size()));
+            map.put(key, generator.generateSource(rand, rcount, RANGE, NOW - 5, x -> NOW - 1));
+        }
+        return map;
+    }
+    
+    @Test
+    public void testRandom()
+    {
+        UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
+        for (int seed = 1; seed < 100; ++seed)
+        {
+            Random rand = new Random(seed);
+            List<List<Unfiltered>> sources = new ArrayList<>();
+            for (int i = 0; i < 10; ++i)
+                sources.add(generator.generateSource(rand, COUNT, RANGE, NOW - 5, x -> NOW - 15));
+            int srcSz = sources.stream().mapToInt(CompactionIteratorTest::size).sum();
+            List<List<Unfiltered>> tombSources = new ArrayList<>();
+            for (int i = 0; i < 10; ++i)
+                sources.add(generator.generateSource(rand, COUNT, RANGE, NOW - 5, x -> NOW - 15));
+            List<Unfiltered> result = compact(sources, tombSources);
+            verifyEquivalent(sources, result, tombSources, generator);
+            assertTrue(size(result) < srcSz);
+        }
+    }
 
     class Controller extends CompactionController
     {
