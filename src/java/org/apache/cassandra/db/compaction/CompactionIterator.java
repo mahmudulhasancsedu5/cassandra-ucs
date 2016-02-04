@@ -311,7 +311,6 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     private static class GarbageSkippingUnfilteredRowIterator extends WrappingUnfilteredRowIterator
     {
         final UnfilteredRowIterator tombSource;
-        final DeletionTime partitionLevelDeletion;
         final Row staticRow;
         final ColumnFilter cf;
         final CFMetaData metadata;
@@ -327,9 +326,6 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         {
             super(dataSource);
             this.tombSource = tombSource;
-            this.partitionLevelDeletion = dataSource.partitionLevelDeletion().supersedes(tombSource.partitionLevelDeletion()) ?
-                    dataSource.partitionLevelDeletion() :
-                    tombSource.partitionLevelDeletion();
             metadata = dataSource.metadata();
             cf = ColumnFilter.all(metadata);
 
@@ -343,12 +339,6 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         private static Unfiltered advance(UnfilteredRowIterator source)
         {
             return source.hasNext() ? source.next() : null;
-        }
-
-        @Override
-        public DeletionTime partitionLevelDeletion()
-        {
-            return partitionLevelDeletion;
         }
 
         @Override

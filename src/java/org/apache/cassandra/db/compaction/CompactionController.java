@@ -241,7 +241,7 @@ public class CompactionController implements AutoCloseable
     // caller must close iterators
     public Iterable<UnfilteredRowIterator> tombstoneSources(DecoratedKey key)
     {
-        if (!provideTombstoneSources)
+        if (!provideTombstoneSources || !compactingRepaired())
             return null;
         overlapIterator.update(key);
         return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
