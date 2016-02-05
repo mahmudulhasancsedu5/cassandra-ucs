@@ -341,6 +341,12 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             return source.hasNext() ? source.next() : null;
         }
 
+        public void close()
+        {
+            super.close();
+            tombSource.close();
+        }
+
         @Override
         public Row staticRow()
         {
