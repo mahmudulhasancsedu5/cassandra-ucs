@@ -37,6 +37,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.dht.BootStrapper;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
@@ -78,6 +79,12 @@ public class HintTest
     @Before
     public void resetGcGraceSeconds()
     {
+        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
+        InetAddress local = FBUtilities.getBroadcastAddress();
+        tokenMeta.clearUnsafe();
+        tokenMeta.updateHostId(UUID.randomUUID(), local);
+        tokenMeta.updateNormalTokens(BootStrapper.getRandomTokens(tokenMeta, 1), local);
+
         for (CFMetaData table : Schema.instance.getTablesAndViews(KEYSPACE))
             table.gcGraceSeconds(TableParams.DEFAULT_GC_GRACE_SECONDS);
     }
