@@ -693,7 +693,8 @@ public class StorageProxy implements StorageProxyMBean
         Token token = mutation.key().getToken();
         InetAddress local = FBUtilities.getBroadcastAddress();
 
-        return contains(StorageService.instance.getNaturalAndPendingEndpoints(keyspaceName, token), local);
+        return StorageService.instance.getNaturalEndpoints(keyspaceName, token).contains(local)
+               || StorageService.instance.getTokenMetadata().pendingEndpointsFor(token, keyspaceName).contains(local);
     }
 
     /**

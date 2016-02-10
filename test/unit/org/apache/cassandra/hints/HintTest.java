@@ -19,7 +19,10 @@ package org.apache.cassandra.hints;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Collections;
 import java.util.UUID;
+
+import com.google.common.collect.ImmutableList;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -34,12 +37,12 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.FilteredPartition;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
-import org.apache.cassandra.dht.BootStrapper;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.metrics.StorageMetrics;
+import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.TableParams;
@@ -75,12 +78,6 @@ public class HintTest
     @Before
     public void resetGcGraceSeconds()
     {
-        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
-        InetAddress local = FBUtilities.getBroadcastAddress();
-        tokenMeta.clearUnsafe();
-        tokenMeta.updateHostId(UUID.randomUUID(), local);
-        tokenMeta.updateNormalTokens(BootStrapper.getRandomTokens(tokenMeta, 1), local);
-
         for (CFMetaData table : Schema.instance.getTablesAndViews(KEYSPACE))
             table.gcGraceSeconds(TableParams.DEFAULT_GC_GRACE_SECONDS);
     }
@@ -199,23 +196,24 @@ public class HintTest
         assertNoPartitions(key, TABLE2);
     }
 
-    @Test //(timeout = 6000)
+    @SuppressWarnings("unchecked")
+    @Test
     public void testChangedTopology() throws Exception
     {
-        // Prepare metadata with injected stale endpoint.
-        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
-        InetAddress local = FBUtilities.getBroadcastAddress();
-        InetAddress endpoint = InetAddress.getByName("1.1.1.1");
-        UUID targetId = UUID.randomUUID();
-        tokenMeta.updateHostId(targetId, endpoint);
-        tokenMeta.updateNormalTokens(BootStrapper.getRandomTokens(tokenMeta, 1), endpoint);
-        tokenMeta.removeEndpoint(local);
-
-        // insert 1 hint
+        // create a hint
         long now = FBUtilities.timestampMicros();
         String key = "testChangedTopology";
         Mutation mutation = createMutation(key, now);
         Hint hint = Hint.create(mutation, now / 1000);
+
+        // Prepare metadata with injected stale endpoint serving the mutation key.
+        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
+        InetAddress local = FBUtilities.getBroadcastAddress();
+        InetAddress endpoint = InetAddress.getByName("1.1.1.1");
+        UUID localId = StorageService.instance.getLocalHostUUID();
+        UUID targetId = UUID.randomUUID();
+        tokenMeta.updateHostId(targetId, endpoint);
+        tokenMeta.updateNormalTokens(ImmutableList.of(mutation.key().getToken()), endpoint);
 
         // sanity check that there is no data inside yet
         assertNoPartitions(key, TABLE0);
@@ -224,8 +222,11 @@ public class HintTest
 
         assert StorageProxy.instance.getHintsInProgress() == 0;
         long totalHintCount = StorageProxy.instance.getTotalHints();
-        DatabaseDescriptor.setWriteRpcTimeout(6000000L);
-        hint.apply();
+        // Process hint message.
+        HintMessage message = new HintMessage(localId, hint);
+        MessagingService.instance().getVerbHandler(MessagingService.Verb.HINT).doVerb(
+                MessageIn.create(local, message, Collections.emptyMap(), MessagingService.Verb.HINT, MessagingService.current_version),
+                -1);
 
         // hint should not be applied as we no longer are a replica
         assertNoPartitions(key, TABLE0);
@@ -236,23 +237,24 @@ public class HintTest
         assertEquals(totalHintCount + 1, StorageProxy.instance.getTotalHints());
     }
 
-    @Test //(timeout = 6000)
+    @SuppressWarnings("unchecked")
+    @Test
     public void testChangedTopologyNotHintable() throws Exception
     {
-        // Prepare metadata with injected stale endpoint.
-        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
-        InetAddress local = FBUtilities.getBroadcastAddress();
-        InetAddress endpoint = InetAddress.getByName("1.1.1.1");
-        UUID targetId = UUID.randomUUID();
-        tokenMeta.updateHostId(targetId, endpoint);
-        tokenMeta.updateNormalTokens(BootStrapper.getRandomTokens(tokenMeta, 1), endpoint);
-        tokenMeta.removeEndpoint(local);
-
-        // insert 1 hint
+        // create a hint
         long now = FBUtilities.timestampMicros();
         String key = "testChangedTopology";
         Mutation mutation = createMutation(key, now);
         Hint hint = Hint.create(mutation, now / 1000);
+
+        // Prepare metadata with injected stale endpoint.
+        TokenMetadata tokenMeta = StorageService.instance.getTokenMetadata();
+        InetAddress local = FBUtilities.getBroadcastAddress();
+        InetAddress endpoint = InetAddress.getByName("1.1.1.1");
+        UUID localId = StorageService.instance.getLocalHostUUID();
+        UUID targetId = UUID.randomUUID();
+        tokenMeta.updateHostId(targetId, endpoint);
+        tokenMeta.updateNormalTokens(ImmutableList.of(mutation.key().getToken()), endpoint);
 
         // sanity check that there is no data inside yet
         assertNoPartitions(key, TABLE0);
@@ -265,7 +267,11 @@ public class HintTest
 
             assert StorageMetrics.totalHintsInProgress.getCount() == 0;
             long totalHintCount = StorageMetrics.totalHints.getCount();
-            hint.apply();
+            // Process hint message.
+            HintMessage message = new HintMessage(localId, hint);
+            MessagingService.instance().getVerbHandler(MessagingService.Verb.HINT).doVerb(
+                    MessageIn.create(local, message, Collections.emptyMap(), MessagingService.Verb.HINT, MessagingService.current_version),
+                    -1);
 
             // hint should not be applied as we no longer are a replica
             assertNoPartitions(key, TABLE0);
