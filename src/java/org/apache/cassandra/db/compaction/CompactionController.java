@@ -68,7 +68,9 @@ public class CompactionController implements AutoCloseable
     {
         this(cfs, compacting, gcBefore,
              CompactionManager.instance.getRateLimiter(),
-             cfs.getCompactionStrategyManager().getCompactionParams().provideOverlappingTombstones());
+             // Single SSTable compactions should try to remove deleted data if possible.
+             compacting.size() == 1 ||
+                     cfs.getCompactionStrategyManager().getCompactionParams().provideOverlappingTombstones());
     }
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, boolean provideTombstoneSources)
@@ -246,6 +248,7 @@ public class CompactionController implements AutoCloseable
         overlapIterator.update(key);
         return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
                                                     reader -> !reader.isMarkedSuspect() &&
+                                                              reader.hasTombstones() &&
                                                               reader.getMaxTimestamp() > minTimestamp),
                                    reader -> getRateLimitedIterator(reader, key));
     }
