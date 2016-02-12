@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.RateLimiter;
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,12 +51,12 @@ public class CompactionController implements AutoCloseable
 
     public final ColumnFamilyStore cfs;
     private final boolean compactingRepaired;
-    private final boolean provideTombstoneSources;
     private Refs<SSTableReader> overlappingSSTables;
     private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
     private final Iterable<SSTableReader> compacting;
     private final RateLimiter limiter;
     private final long minTimestamp;
+    final TombstoneOption tombstoneOption;
 
     public final int gcBefore;
 
@@ -68,12 +69,12 @@ public class CompactionController implements AutoCloseable
     {
         this(cfs, compacting, gcBefore,
              CompactionManager.instance.getRateLimiter(),
-             // Single SSTable compactions should try to remove deleted data if possible.
-             compacting.size() == 1 ||
-                     cfs.getCompactionStrategyManager().getCompactionParams().provideOverlappingTombstones());
+//              Single SSTable compactions should try to remove deleted data if possible.
+//             compacting.size() == 1 ||
+                     cfs.getCompactionStrategyManager().getCompactionParams().tombstoneOption());
     }
 
-    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, boolean provideTombstoneSources)
+    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, TombstoneOption tombstoneOption)
     {
         assert cfs != null;
         this.cfs = cfs;
@@ -81,7 +82,7 @@ public class CompactionController implements AutoCloseable
         this.compacting = compacting;
         this.limiter = limiter;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
-        this.provideTombstoneSources = provideTombstoneSources;
+        this.tombstoneOption = tombstoneOption;
         this.minTimestamp = !compacting.isEmpty()       // check needed for test
                           ? compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong()
                           : 0;
@@ -240,10 +241,15 @@ public class CompactionController implements AutoCloseable
         return !cfs.getCompactionStrategyManager().onlyPurgeRepairedTombstones() || compactingRepaired;
     }
 
+    boolean provideTombstoneSources()
+    {
+        return tombstoneOption != TombstoneOption.NONE;
+    }
+
     // caller must close iterators
     public Iterable<UnfilteredRowIterator> tombstoneSources(DecoratedKey key)
     {
-        if (!provideTombstoneSources || !compactingRepaired())
+        if (!provideTombstoneSources() || !compactingRepaired())
             return null;
         overlapIterator.update(key);
         return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
