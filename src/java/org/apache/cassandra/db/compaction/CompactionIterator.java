@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.PurgeFunction;
@@ -33,6 +34,7 @@ import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.index.transactions.CompactionTransaction;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.metrics.CompactionMetrics;
+import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 
 /**
  * Merge multiple iterators over the content of sstable into a "compacted" iterator.
@@ -52,7 +54,6 @@ import org.apache.cassandra.metrics.CompactionMetrics;
  */
 public class CompactionIterator extends CompactionInfo.Holder implements UnfilteredPartitionIterator
 {
-    private static final Logger logger = LoggerFactory.getLogger(CompactionIterator.class);
     private static final long UNFILTERED_TO_UPDATE_PROGRESS = 100;
 
     private final OperationType type;
@@ -313,7 +314,9 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         final UnfilteredRowIterator tombSource;
         final Row staticRow;
         final ColumnFilter cf;
+        final int nowInSec;
         final CFMetaData metadata;
+        final boolean cellLevelGC;
 
         DeletionTime tombOpenDeletionTime = DeletionTime.LIVE;
         DeletionTime dataOpenDeletionTime = DeletionTime.LIVE;
@@ -322,10 +325,12 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         Unfiltered dataNext = null;
         Unfiltered next = null;
 
-        protected GarbageSkippingUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource)
+        protected GarbageSkippingUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource, int nowInSec, boolean cellLevelGC)
         {
             super(dataSource);
             this.tombSource = tombSource;
+            this.nowInSec = nowInSec;
+            this.cellLevelGC = cellLevelGC;
             metadata = dataSource.metadata();
             cf = ColumnFilter.all(metadata);
 
@@ -370,9 +375,18 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 {
                     if (dataNext.isRow())
                     {
-                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata);
-                        if (next != null)
-                            next = ((Row) next).filter(cf, ((Row) tombNext).deletion().time(), false, metadata);
+                        Row nextRow = (Row) dataNext;
+                        if (cellLevelGC)
+                        {
+                            next = Rows.removeShadowedCells(nextRow, (Row) tombNext, tombOpenDeletionTime, nowInSec);
+                        }
+                        else
+                        {
+                            DeletionTime deletion = ((Row) tombNext).deletion().time();
+                            if (tombOpenDeletionTime.supersedes(deletion))
+                                deletion = tombOpenDeletionTime;
+                            next = nextRow.filter(cf, deletion, false, metadata);
+                        }
                     }
                     else
                     {
@@ -447,11 +461,13 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     {
         final int nowInSec;
         final CompactionController controller;
+        final boolean cellLevelGC;
 
         private GarbageSkipper(CompactionController controller, int nowInSec)
         {
             this.controller = controller;
             this.nowInSec = nowInSec;
+            cellLevelGC = controller.tombstoneOption == TombstoneOption.CELL;
         }
 
         @Override
@@ -463,7 +479,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             List<UnfilteredRowIterator> iters = new ArrayList<>();
             for (UnfilteredRowIterator iter : sources)
             {
-                iter = tombstonesOnly(iter);
+                if (!cellLevelGC)
+                    iter = tombstonesOnly(iter);
                 if (!iter.isEmpty())
                     iters.add(iter);
                 else
@@ -472,7 +489,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             if (iters.isEmpty())
                 return partition;
 
-            return new GarbageSkippingUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec));
+            return new GarbageSkippingUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec), nowInSec, cellLevelGC);
         }
     }
 

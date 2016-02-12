@@ -35,23 +35,25 @@ import org.junit.Test;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class GcCompactionBench extends CQLTester
 {
     private static final int DEL_SECTIONS = 1000;
-    private static final int RANGE_FREQUENCY_INV = 4;
+    private static final int RANGE_FREQUENCY_INV = 16;
     static final int COUNT = 190000;
     static final int ITERS = 29;
 
     static final int KEY_RANGE = 50;
-    static final int CLUSTERING_RANGE = 1000 * 1000 * 35;
+    static final int CLUSTERING_RANGE = 1000 * 10 * 35;
 
     static final int EXTRA_SIZE = 1025;
 
@@ -157,11 +159,11 @@ public class GcCompactionBench extends CQLTester
         }
     }
 
-    public void testGcCompaction(boolean doGC, String compactionClass) throws Throwable
+    public void testGcCompaction(TombstoneOption tombstoneOption, String compactionClass) throws Throwable
     {
         id.set(0);
         compactionTimeNanos = 0;
-        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + doGC + "'  };");
+        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + tombstoneOption + "'  };");
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
 
@@ -210,7 +212,7 @@ public class GcCompactionBench extends CQLTester
 
         System.out.println(cfs.getCompactionParametersJson());
         System.out.println(String.format("%s compactions completed in %.3fs",
-                doGC ? "GC" : "Copy", (endTime - startTime) * 1e-3));
+                tombstoneOption.toString(), (endTime - startTime) * 1e-3));
         System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing background compactions",
                 (onEndTime - onStartTime) * 1e-3, compactionTimeNanos * 1e-9));
         System.out.println(String.format("At start: %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
@@ -219,28 +221,34 @@ public class GcCompactionBench extends CQLTester
                 endTableCount, endSize, endRowCount, endRowDeletions, endTombCount));
     }
 
-    @Test
-    public void testGcCompaction() throws Throwable
+//    @Test
+    public void testRowGcCompaction() throws Throwable
     {
-        testGcCompaction(true, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.ROW, "LeveledCompactionStrategy");
     }
 
-    @Test
+//    @Test
     public void testCopyCompaction() throws Throwable
     {
-        testGcCompaction(false, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.NONE, "LeveledCompactionStrategy");
     }
 
     @Test
-    public void testGcCompactionSizeTiered() throws Throwable
+    public void testCellGcCompactionSizeTiered() throws Throwable
     {
-        testGcCompaction(true, "SizeTieredCompactionStrategy");
+        testGcCompaction(TombstoneOption.CELL, "SizeTieredCompactionStrategy");
+    }
+
+    @Test
+    public void testRowGcCompactionSizeTiered() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.ROW, "SizeTieredCompactionStrategy");
     }
 
     @Test
     public void testCopyCompactionSizeTiered() throws Throwable
     {
-        testGcCompaction(false, "SizeTieredCompactionStrategy");
+        testGcCompaction(TombstoneOption.NONE, "SizeTieredCompactionStrategy");
     }
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)

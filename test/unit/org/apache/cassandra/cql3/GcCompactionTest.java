@@ -60,7 +60,7 @@ public class GcCompactionTest extends CQLTester
                         "  data int," +
                         "  extra text," +
                         "  PRIMARY KEY(key, column)" +
-                        ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'true'  };"
+                        ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'row'  };"
                         );
 
         for (int i = 0; i < KEY_COUNT; ++i)
@@ -101,7 +101,7 @@ public class GcCompactionTest extends CQLTester
     @Test
     public void testLocalDeletionTime() throws Throwable
     {
-        createTable("create table %s (k int, c1 int, primary key (k, c1)) with compaction = {'class': 'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones':'true'}");
+        createTable("create table %s (k int, c1 int, primary key (k, c1)) with compaction = {'class': 'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones':'row'}");
         execute("delete from %s where k = 1");
         Set<SSTableReader> readers = new HashSet<>(getCurrentColumnFamilyStore().getLiveSSTables());
         getCurrentColumnFamilyStore().forceBlockingFlush();
