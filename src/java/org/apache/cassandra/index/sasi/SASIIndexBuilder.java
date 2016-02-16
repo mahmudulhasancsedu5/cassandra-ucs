@@ -76,7 +76,7 @@ class SASIIndexBuilder extends SecondaryIndexBuilder
                             dataFile.seek(indexEntry.position + indexEntry.headerOffset());
                             ByteBufferUtil.readWithShortLength(dataFile); // key
 
-                            try (SSTableIdentityIterator partition = new SSTableIdentityIterator(sstable, dataFile, key))
+                            try (SSTableIdentityIterator partition = SSTableIdentityIterator.create(sstable, dataFile, key))
                             {
                                 while (partition.hasNext())
                                     indexWriter.nextUnfilteredCluster(partition.next());

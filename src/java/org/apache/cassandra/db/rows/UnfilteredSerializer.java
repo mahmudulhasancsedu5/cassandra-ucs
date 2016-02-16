@@ -363,6 +363,46 @@ public class UnfilteredSerializer
         }
     }
 
+    public Unfiltered deserializeTombstonesOnly(DataInputPlus in, SerializationHeader header, SerializationHelper helper, Row.Builder builder)
+    throws IOException
+    {
+        // It wouldn't be wrong per-se to use an unsorted builder, but it would be inefficient so make sure we don't do it by mistake
+        assert builder.isSorted();
+
+        while (true)
+        {
+            int flags = in.readUnsignedByte();
+            if (isEndOfPartition(flags))
+                return null;
+
+            int extendedFlags = readExtendedFlags(in, flags);
+
+            if (kind(flags) == Unfiltered.Kind.RANGE_TOMBSTONE_MARKER)
+            {
+                RangeTombstone.Bound bound = RangeTombstone.Bound.serializer.deserialize(in, helper.version, header.clusteringTypes());
+                return deserializeMarkerBody(in, header, bound);
+            }
+            else
+            {
+                assert !isStatic(extendedFlags); // deserializeStaticRow should be used for that.
+                Clustering clustering = Clustering.serializer.deserialize(in, helper.version, header.clusteringTypes());
+                if ((flags & HAS_DELETION) != 0)
+                {
+                    // FIXME: Don't see a way to read row deletion and skip columns. 
+                    builder.newRow(clustering);
+                    Row row = deserializeRowBody(in, header, helper, flags, extendedFlags, builder);
+                    return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
+                }
+                else
+                {
+//                    Clustering.serializer.deserialize(in, helper.version, header.clusteringTypes());
+                    skipRowBody(in);
+                    // Continue with next item.
+                }
+            }
+        }
+    }
+
     public Row deserializeStaticRow(DataInputPlus in, SerializationHeader header, SerializationHelper helper)
     throws IOException
     {
