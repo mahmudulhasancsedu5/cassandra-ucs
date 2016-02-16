@@ -22,12 +22,14 @@ import java.util.*;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 
+import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 
 import org.slf4j.Logger;
@@ -36,7 +38,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
-
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OverlapIterator;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -57,6 +59,7 @@ public class CompactionController implements AutoCloseable
     private final RateLimiter limiter;
     private final long minTimestamp;
     final TombstoneOption tombstoneOption;
+    final Map<SSTableReader, FileDataInput> openDataFiles = new HashMap<>();
 
     public final int gcBefore;
 
@@ -233,6 +236,7 @@ public class CompactionController implements AutoCloseable
 
     public void close()
     {
+        FileUtils.closeQuietly(openDataFiles.values());
         overlappingSSTables.release();
     }
 
@@ -247,23 +251,31 @@ public class CompactionController implements AutoCloseable
     }
 
     // caller must close iterators
-    public Iterable<UnfilteredRowIterator> tombstoneSources(DecoratedKey key)
+    public Iterable<UnfilteredRowIterator> shadowSources(DecoratedKey key, boolean tombstoneOnly)
     {
         if (!provideTombstoneSources() || !compactingRepaired())
             return null;
         overlapIterator.update(key);
-        return Iterables.transform(Iterables.filter(overlapIterator.overlaps(),
-                                                    reader -> !reader.isMarkedSuspect() &&
-                                                              reader.hasTombstones() &&
-                                                              reader.getMaxTimestamp() > minTimestamp),
-                                   reader -> getRateLimitedIterator(reader, key));
+        return Iterables.filter(Iterables.transform(overlapIterator.overlaps(),
+                                                    reader -> getShadowIterator(reader, key, tombstoneOnly)),
+                                Predicates.notNull());
     }
 
     @SuppressWarnings("resource") // caller to close
-    private UnfilteredRowIterator getRateLimitedIterator(SSTableReader reader, DecoratedKey key)
+    private UnfilteredRowIterator getShadowIterator(SSTableReader reader, DecoratedKey key, boolean tombstoneOnly)
     {
+        if (reader.isMarkedSuspect() ||
+            reader.getMaxTimestamp() <= minTimestamp)
+            return null;
         RowIndexEntry<?> position = reader.getPosition(key, SSTableReader.Operator.EQ);
-        FileDataInput dfile = limiter != null ? reader.openDataReader(limiter) : reader.openDataReader();
-        return reader.iterator(dfile, key, position, Slices.ALL, ColumnFilter.all(cfs.metadata), false, false);
+        if (position == null)
+            return null;
+        FileDataInput dfile = openDataFiles.computeIfAbsent(reader, this::openDataFile);
+        return reader.identityIterator(dfile, key, position, tombstoneOnly);
+    }
+
+    private FileDataInput openDataFile(SSTableReader reader)
+    {
+        return limiter != null ? reader.openDataReader(limiter) : reader.openDataReader();
     }
 }

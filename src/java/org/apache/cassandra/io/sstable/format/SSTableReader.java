@@ -1593,6 +1593,8 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     public abstract UnfilteredRowIterator iterator(DecoratedKey key, Slices slices, ColumnFilter selectedColumns, boolean reversed, boolean isForThrift);
     public abstract UnfilteredRowIterator iterator(FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry, Slices slices, ColumnFilter selectedColumns, boolean reversed, boolean isForThrift);
 
+    public abstract UnfilteredRowIterator identityIterator(FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry, boolean tombstoneOnly);
+
     /**
      * Finds and returns the first key beyond a given token in this SSTable or null if no such key exists.
      */

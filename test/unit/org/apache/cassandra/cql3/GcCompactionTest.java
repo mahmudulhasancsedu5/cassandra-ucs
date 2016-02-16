@@ -54,14 +54,35 @@ public class GcCompactionTest extends CQLTester
     @Test
     public void testGcCompaction() throws Throwable
     {
-        createTable("CREATE TABLE %s(" +
-                        "  key int," +
-                        "  column int," +
-                        "  data int," +
-                        "  extra text," +
-                        "  PRIMARY KEY(key, column)" +
-                        ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'row'  };"
-                        );
+        runCompactionTest("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  column int," +
+                          "  data int," +
+                          "  extra text," +
+                          "  PRIMARY KEY(key, column)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'row'  };"
+                          );
+
+    }
+
+    @Test
+    public void testGcCompactionRanges() throws Throwable
+    {
+
+        runCompactionTest("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  column int," +
+                          "  col2 int," +
+                          "  data int," +
+                          "  extra text," +
+                          "  PRIMARY KEY(key, column, data)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'row'  };"
+                          );
+    }
+
+    private void runCompactionTest(String tableDef) throws Throwable
+    {
+        createTable(tableDef);
 
         for (int i = 0; i < KEY_COUNT; ++i)
             for (int j = 0; j < CLUSTERING_COUNT; ++j)
@@ -142,7 +163,7 @@ public class GcCompactionTest extends CQLTester
             {
                 execute("DELETE FROM %s WHERE key = ? AND column = ?", i, j);
                 if (readd_step > 0 && j % readd_step == 0)
-                    execute("INSERT INTO %s (key, column, extra) VALUES (?, ?, ?)", i, j, "readded " + i + ":" + j);
+                    execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", i, j, i-j, "readded " + i + ":" + j);
             }
     }
 

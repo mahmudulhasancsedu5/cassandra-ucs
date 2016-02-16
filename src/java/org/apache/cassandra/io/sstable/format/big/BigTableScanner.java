@@ -331,7 +331,7 @@ public class BigTableScanner implements ISSTableScanner
                             {
                                 dfile.seek(currentEntry.position + currentEntry.headerOffset());
                                 ByteBufferUtil.readWithShortLength(dfile); // key
-                                return new SSTableIdentityIterator(sstable, dfile, partitionKey());
+                                return SSTableIdentityIterator.create(sstable, dfile, partitionKey());
                             }
 
                             ClusteringIndexFilter filter = dataRange.clusteringIndexFilter(partitionKey());

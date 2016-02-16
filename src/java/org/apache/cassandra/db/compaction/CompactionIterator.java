@@ -473,14 +473,12 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         @Override
         protected UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
         {
-            Iterable<UnfilteredRowIterator> sources = controller.tombstoneSources(partition.partitionKey());
+            Iterable<UnfilteredRowIterator> sources = controller.shadowSources(partition.partitionKey(), !cellLevelGC);
             if (sources == null)
                 return partition;
             List<UnfilteredRowIterator> iters = new ArrayList<>();
             for (UnfilteredRowIterator iter : sources)
             {
-                if (!cellLevelGC)
-                    iter = tombstonesOnly(iter);
                 if (!iter.isEmpty())
                     iters.add(iter);
                 else

@@ -275,8 +275,9 @@ public class CompactionIteratorTest
         }
 
         @Override
-        public Iterable<UnfilteredRowIterator> tombstoneSources(DecoratedKey key)
+        public Iterable<UnfilteredRowIterator> shadowSources(DecoratedKey key, boolean tombstoneOnly)
         {
+            assert tombstoneOnly;
             return tombstoneSources.get(key);
         }
     }
