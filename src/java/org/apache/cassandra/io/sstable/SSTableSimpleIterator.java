@@ -59,7 +59,7 @@ public abstract class SSTableSimpleIterator extends AbstractIterator<Unfiltered>
             return new CurrentFormatIterator(metadata, in, header, helper);
     }
 
-    public static SSTableSimpleIterator createTombstoneOnly(CFMetaData metadata, DataInputPlus in, SerializationHeader header, SerializationHelper helper, DeletionTime partitionDeletion)
+    public static SSTableSimpleIterator createTombstoneOnly(CFMetaData metadata, FileDataInput in, SerializationHeader header, SerializationHelper helper, DeletionTime partitionDeletion)
     {
         if (helper.version < MessagingService.VERSION_30)
             // FIXME
@@ -108,7 +108,7 @@ public abstract class SSTableSimpleIterator extends AbstractIterator<Unfiltered>
 
         private final Row.Builder builder;
 
-        private CurrentFormatTombstoneIterator(CFMetaData metadata, DataInputPlus in, SerializationHeader header, SerializationHelper helper)
+        private CurrentFormatTombstoneIterator(CFMetaData metadata, FileDataInput in, SerializationHeader header, SerializationHelper helper)
         {
             super(metadata, in, helper);
             this.header = header;
@@ -130,7 +130,7 @@ public abstract class SSTableSimpleIterator extends AbstractIterator<Unfiltered>
         {
             try
             {
-                Unfiltered unfiltered = UnfilteredSerializer.serializer.deserializeTombstonesOnly(in, header, helper, builder);
+                Unfiltered unfiltered = UnfilteredSerializer.serializer.deserializeTombstonesOnly((FileDataInput) in, header, helper, builder);
                 return unfiltered == null ? endOfData() : unfiltered;
             }
             catch (IOException e)
