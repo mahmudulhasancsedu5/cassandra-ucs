@@ -28,6 +28,7 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -348,6 +349,24 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
                 }
             }
             return values;
+        }
+
+        public void skipValuesWithoutSize(FileDataInput in, int size, int version, List<AbstractType<?>> types) throws IOException
+        {
+            // Callers of this method should handle the case where size = 0 (in all case we want to return a special value anyway).
+            assert size > 0;
+            int offset = 0;
+            while (offset < size)
+            {
+                long header = in.readUnsignedVInt();
+                int limit = Math.min(size, offset + 32);
+                while (offset < limit)
+                {
+                    if (!isNull(header, offset) && !isEmpty(header, offset))
+                         types.get(offset).skipValue(in);
+                    offset++;
+                }
+            }
         }
 
         /**
