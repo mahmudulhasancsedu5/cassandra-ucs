@@ -117,7 +117,7 @@ public class BigTableReader extends SSTableReader
 
     @SuppressWarnings("resource") // caller to close
     @Override
-    public UnfilteredRowIterator identityIterator(FileDataInput dfile, DecoratedKey key, RowIndexEntry position, boolean tombstoneOnly)
+    public UnfilteredRowIterator simpleIterator(FileDataInput dfile, DecoratedKey key, RowIndexEntry position, boolean tombstoneOnly)
     {
         return SSTableIdentityIterator.create(this, dfile, position, key, tombstoneOnly);
     }

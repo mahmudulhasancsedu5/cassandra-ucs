@@ -47,13 +47,13 @@ import org.apache.cassandra.utils.FBUtilities;
 
 public class GcCompactionBench extends CQLTester
 {
-    private static final int DEL_SECTIONS = 1000;
+    private static final int DEL_SECTIONS = 2000;
     private static final int RANGE_FREQUENCY_INV = 16;
     static final int COUNT = 190000;
     static final int ITERS = 29;
 
     static final int KEY_RANGE = 50;
-    static final int CLUSTERING_RANGE = 1000 * 10 * 35;
+    static final int CLUSTERING_RANGE = 250000;
 
     static final int EXTRA_SIZE = 1025;
 
@@ -221,13 +221,25 @@ public class GcCompactionBench extends CQLTester
                 endTableCount, endSize, endRowCount, endRowDeletions, endTombCount));
     }
 
-//    @Test
+    @Test
+    public void testWarmup() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.NONE, "LeveledCompactionStrategy");
+    }
+
+    @Test
+    public void testCellGcCompaction() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.CELL, "LeveledCompactionStrategy");
+    }
+
+    @Test
     public void testRowGcCompaction() throws Throwable
     {
         testGcCompaction(TombstoneOption.ROW, "LeveledCompactionStrategy");
     }
 
-//    @Test
+    @Test
     public void testCopyCompaction() throws Throwable
     {
         testGcCompaction(TombstoneOption.NONE, "LeveledCompactionStrategy");
