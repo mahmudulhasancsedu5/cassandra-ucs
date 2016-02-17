@@ -19,6 +19,8 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 
+import com.google.common.collect.Ordering;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -312,6 +314,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     private static class GarbageSkippingUnfilteredRowIterator extends WrappingUnfilteredRowIterator
     {
         final UnfilteredRowIterator tombSource;
+        final DeletionTime partitionLevelDeletion;
         final Row staticRow;
         final ColumnFilter cf;
         final int nowInSec;
@@ -321,6 +324,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         DeletionTime tombOpenDeletionTime = DeletionTime.LIVE;
         DeletionTime dataOpenDeletionTime = DeletionTime.LIVE;
         DeletionTime openDeletionTime = DeletionTime.LIVE;
+        DeletionTime partitionDeletionTime;
+        DeletionTime activeDeletionTime;
         Unfiltered tombNext = null;
         Unfiltered dataNext = null;
         Unfiltered next = null;
@@ -334,9 +339,19 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             metadata = dataSource.metadata();
             cf = ColumnFilter.all(metadata);
 
-            Row tombStat = tombSource.staticRow();
-            Row stat = dataSource.staticRow().filter(cf, tombStat.deletion().time(), isReverseOrder(), metadata);
-            this.staticRow = stat != null ? stat : Rows.EMPTY_STATIC_ROW;
+            activeDeletionTime = partitionDeletionTime = tombSource.partitionLevelDeletion();
+            this.partitionLevelDeletion = dataSource.partitionLevelDeletion().supersedes(tombSource.partitionLevelDeletion()) ?
+                    dataSource.partitionLevelDeletion() :
+                    DeletionTime.LIVE;
+
+            Row tombStaticRow = tombSource.staticRow();
+            Row dataStaticRow = dataSource.staticRow().filter(cf,
+                                                              Ordering.natural().max(tombStaticRow.deletion().time(),
+                                                                                     partitionDeletionTime),
+                                                              isReverseOrder(),
+                                                              metadata);
+            this.staticRow = dataStaticRow != null ? dataStaticRow : Rows.EMPTY_STATIC_ROW;
+
             tombNext = advance(tombSource);
             dataNext = advance(dataSource);
         }
@@ -344,6 +359,12 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         private static Unfiltered advance(UnfilteredRowIterator source)
         {
             return source.hasNext() ? source.next() : null;
+        }
+
+        @Override
+        public DeletionTime partitionLevelDeletion()
+        {
+            return partitionLevelDeletion;
         }
 
         public void close()
@@ -367,7 +388,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 if (cmp < 0)
                 {
                     if (dataNext.isRow())
-                        next = ((Row) dataNext).filter(cf, tombOpenDeletionTime, false, metadata);
+                        next = ((Row) dataNext).filter(cf, activeDeletionTime, false, metadata);
                     else
                         next = processDataMarker();
                 }
@@ -378,19 +399,20 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                         Row nextRow = (Row) dataNext;
                         if (cellLevelGC)
                         {
-                            next = Rows.removeShadowedCells(nextRow, (Row) tombNext, tombOpenDeletionTime, nowInSec);
+                            next = Rows.removeShadowedCells(nextRow, (Row) tombNext, activeDeletionTime, nowInSec);
                         }
                         else
                         {
-                            DeletionTime deletion = ((Row) tombNext).deletion().time();
-                            if (tombOpenDeletionTime.supersedes(deletion))
-                                deletion = tombOpenDeletionTime;
+                            DeletionTime deletion = Ordering.natural().max(((Row) tombNext).deletion().time(),
+                                                                           activeDeletionTime);
                             next = nextRow.filter(cf, deletion, false, metadata);
                         }
                     }
                     else
                     {
                         tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
+                        activeDeletionTime = Ordering.natural().max(partitionDeletionTime,
+                                                                    tombOpenDeletionTime);
                         next = processDataMarker();
                     }
                 }
@@ -399,8 +421,10 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                     if (tombNext.isRangeTombstoneMarker())
                     {
                         tombOpenDeletionTime = updateOpenDeletionTime(tombOpenDeletionTime, tombNext);
+                        activeDeletionTime = Ordering.natural().max(partitionDeletionTime,
+                                                                    tombOpenDeletionTime);
                         boolean supersededBefore = openDeletionTime.isLive();
-                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+                        boolean supersededAfter = !dataOpenDeletionTime.supersedes(activeDeletionTime);
                         // If a range open was not issued because it was superseded and the deletion isn't superseded any more, we need to open it now.
                         if (supersededBefore && !supersededAfter)
                             next = new RangeTombstoneBoundMarker(((RangeTombstoneMarker) tombNext).closeBound(false).invert(), dataOpenDeletionTime);
@@ -423,7 +447,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         {
             dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
             boolean supersededBefore = openDeletionTime.isLive();
-            boolean supersededAfter = !dataOpenDeletionTime.supersedes(tombOpenDeletionTime);
+            boolean supersededAfter = !dataOpenDeletionTime.supersedes(activeDeletionTime);
             RangeTombstoneMarker marker = (RangeTombstoneMarker) dataNext;
             if (!supersededBefore)
                 if (!supersededAfter)

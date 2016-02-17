@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import com.google.common.collect.Iterables;
@@ -52,7 +53,21 @@ public class GcCompactionTest extends CQLTester
     static final int CLUSTERING_COUNT = 20;
 
     @Test
-    public void testGcCompaction() throws Throwable
+    public void testGcCompactionPartitions() throws Throwable
+    {
+        runCompactionTest("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  column int," +
+                          "  data int," +
+                          "  extra text," +
+                          "  PRIMARY KEY((key, column), data)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'row'  };"
+                          );
+
+    }
+
+    @Test
+    public void testGcCompactionRows() throws Throwable
     {
         runCompactionTest("CREATE TABLE %s(" +
                           "  key int," +
@@ -120,6 +135,46 @@ public class GcCompactionTest extends CQLTester
     }
 
     @Test
+    public void testGcCompactionCells() throws Throwable
+    {
+        createTable("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  column int," +
+                          "  data int," +
+                          "  extra text," +
+                          "  PRIMARY KEY(key)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'cell'  };"
+                          );
+
+        for (int i = 0; i < KEY_COUNT; ++i)
+            for (int j = 0; j < CLUSTERING_COUNT; ++j)
+                execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", i, j, i+j, "" + i + ":" + j);
+
+        Set<SSTableReader> readers = new HashSet<>();
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+
+        flush();
+        assertEquals(1, cfs.getLiveSSTables().size());
+        SSTableReader table0 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table0));
+        int cellCount = countCells(table0);
+
+        deleteWithSomeInserts(3, 0, 2);
+        flush();
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table1 = getNewTable(readers);
+        assertTrue(countCells(table1) > 0);
+        assertEquals(0, countTombstoneMarkers(table0));
+
+        CompactionManager.instance.forceUserDefinedCompaction(table0.getFilename());
+
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table3 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table3));
+        assertTrue(cellCount > countCells(table3));
+    }
+
+    @Test
     public void testLocalDeletionTime() throws Throwable
     {
         createTable("create table %s (k int, c1 int, primary key (k, c1)) with compaction = {'class': 'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones':'row'}");
@@ -130,21 +185,12 @@ public class GcCompactionTest extends CQLTester
         Thread.sleep(2000);
         execute("delete from %s where k = 1");
         getCurrentColumnFamilyStore().forceBlockingFlush();
-        getNewTable(readers);
-
-        long maxTS = oldSSTable.getSSTableMetadata().maxTimestamp;
-        long minTS = oldSSTable.getSSTableMetadata().minTimestamp;
-        long maxLDT = oldSSTable.getSSTableMetadata().maxLocalDeletionTime;
-        long minLDT = oldSSTable.getSSTableMetadata().minLocalDeletionTime;
+        SSTableReader newTable = getNewTable(readers);
 
         CompactionManager.instance.forceUserDefinedCompaction(oldSSTable.getFilename());
 
-        SSTableReader oldRecompacted = getNewTable(readers);
-
-        assertEquals(maxTS, oldRecompacted.getSSTableMetadata().maxTimestamp);
-        assertEquals(minTS, oldRecompacted.getSSTableMetadata().minTimestamp);
-        assertEquals(maxLDT, oldRecompacted.getSSTableMetadata().maxLocalDeletionTime);
-        assertEquals(minLDT, oldRecompacted.getSSTableMetadata().minLocalDeletionTime);
+        // Old table now doesn't contain any data and should disappear.
+        assertEquals(Collections.singleton(newTable), getCurrentColumnFamilyStore().getLiveSSTables());
     }
 
     private SSTableReader getNewTable(Set<SSTableReader> readers)
@@ -156,30 +202,41 @@ public class GcCompactionTest extends CQLTester
         return Iterables.get(newOnes, 0);
     }
 
-    void deleteWithSomeInserts(int key_step, int clustering_step, int readd_step) throws Throwable
+    void deleteWithSomeInserts(int key_step, int delete_step, int readd_step) throws Throwable
     {
         for (int i = 0; i < KEY_COUNT; i += key_step)
-            for (int j = 0; j < CLUSTERING_COUNT; j += clustering_step)
-            {
-                execute("DELETE FROM %s WHERE key = ? AND column = ?", i, j);
-                if (readd_step > 0 && j % readd_step == 0)
+        {
+            if (delete_step > 0)
+                for (int j = 0; j < CLUSTERING_COUNT; j += delete_step)
+                {
+                    execute("DELETE FROM %s WHERE key = ? AND column = ?", i, j);
+                }
+            if (readd_step > 0)
+                for (int j = 0; j < CLUSTERING_COUNT; j += readd_step)
+                {
                     execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", i, j, i-j, "readded " + i + ":" + j);
-            }
+                }
+        }
     }
 
     int countTombstoneMarkers(SSTableReader reader)
     {
         int nowInSec = FBUtilities.nowInSeconds();
-        return count(reader, x -> x.isRangeTombstoneMarker() || x.isRow() && ((Row) x).hasDeletion(nowInSec));
+        return count(reader, x -> x.isRangeTombstoneMarker() || x.isRow() && ((Row) x).hasDeletion(nowInSec) ? 1 : 0, x -> x.partitionLevelDeletion().isLive() ? 0 : 1);
     }
 
     int countRows(SSTableReader reader)
     {
         int nowInSec = FBUtilities.nowInSeconds();
-        return count(reader, x -> x.isRow() && ((Row) x).hasLiveData(nowInSec));
+        return count(reader, x -> x.isRow() && ((Row) x).hasLiveData(nowInSec) ? 1 : 0, x -> 0);
     }
 
-    int count(SSTableReader reader, Predicate<Unfiltered> predicate)
+    int countCells(SSTableReader reader)
+    {
+        return count(reader, x -> x.isRow() ? Iterables.size((Row) x) : 0, x -> 0);
+    }
+
+    int count(SSTableReader reader, Function<Unfiltered, Integer> predicate, Function<UnfilteredRowIterator, Integer> partitionPredicate)
     {
         int instances = 0;
         try (ISSTableScanner partitions = reader.getScanner())
@@ -188,11 +245,11 @@ public class GcCompactionTest extends CQLTester
             {
                 try (UnfilteredRowIterator iter = partitions.next())
                 {
+                    instances += partitionPredicate.apply(iter);
                     while (iter.hasNext())
                     {
                         Unfiltered atom = iter.next();
-                        if (predicate.test(atom))
-                            ++instances;
+                        instances += predicate.apply(atom);
                     }
                 }
             }
