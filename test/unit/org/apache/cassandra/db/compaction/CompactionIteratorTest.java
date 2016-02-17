@@ -20,6 +20,8 @@ package org.apache.cassandra.db.compaction;
 import static org.junit.Assert.*;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.google.common.collect.*;
 
@@ -30,6 +32,7 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -50,6 +53,9 @@ public class CompactionIteratorTest
     static final CFMetaData metadata;
     private static final int RANGE = 1000;
     private static final int COUNT = 100;
+
+    Map<List<Unfiltered>, DeletionTime> deletionTimes = new HashMap<>();
+
     static {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KSNAME,
@@ -139,15 +145,28 @@ public class CompactionIteratorTest
         "25[160] 30[170] 50[120]");
     }
 
+    @Test
+    public void testGcCompactionPartitionDeletion()
+    {
+        testCompaction(new String[] {
+            "10[150] 20[160] 25[160] 30[170] 40[120] 50[120]"
+        }, new String[] {
+            "D165|10<=[155] 20[200D180] 30[200D160] [155]<=30 40[150D130] 50[150D100]"
+        },
+        "30[170]");
+    }
+
     void testCompaction(String[] inputs, String[] tombstones, String expected)
     {
         testNonGcCompaction(inputs, tombstones);
 
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
-        List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
+        List<List<Unfiltered>> inputLists = parse(inputs, generator);
+        List<List<Unfiltered>> tombstoneLists = parse(tombstones, generator);
+        List<Unfiltered> result = compact(inputLists, tombstoneLists);
         System.out.println("GC compaction resulted in " + size(result) + " Unfiltereds");
         generator.verifyValid(result);
-        verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
+        verifyEquivalent(inputLists, result, tombstoneLists, generator);
         List<Unfiltered> expectedResult = generator.parse(expected, NOW - 1);
         if (!expectedResult.equals(result))
             fail("Expected " + expected + ", got " + generator.str(result));
@@ -158,10 +177,12 @@ public class CompactionIteratorTest
         testNonGcCompaction(inputs, tombstones);
 
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
-        List<Unfiltered> result = compact(parse(inputs, generator), parse(tombstones, generator));
+        List<List<Unfiltered>> inputLists = parse(inputs, generator);
+        List<List<Unfiltered>> tombstoneLists = parse(tombstones, generator);
+        List<Unfiltered> result = compact(inputLists, tombstoneLists);
         System.out.println("GC compaction resulted in " + size(result) + " Unfiltereds");
         generator.verifyValid(result);
-        verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
+        verifyEquivalent(inputLists, result, tombstoneLists, generator);
         if (size(result) > expectedCount)
             fail("Expected compaction with " + expectedCount + " elements, got " + size(result) + ": " + generator.str(result));
     }
@@ -169,10 +190,12 @@ public class CompactionIteratorTest
     int testNonGcCompaction(String[] inputs, String[] tombstones)
     {
         UnfilteredRowsGenerator generator = new UnfilteredRowsGenerator(metadata.comparator, false);
-        List<Unfiltered> result = compact(parse(inputs, generator), Collections.emptyList());
+        List<List<Unfiltered>> inputLists = parse(inputs, generator);
+        List<List<Unfiltered>> tombstoneLists = parse(tombstones, generator);
+        List<Unfiltered> result = compact(inputLists, Collections.emptyList());
         System.out.println("Non-GC compaction resulted in " + size(result) + " Unfiltereds");
         generator.verifyValid(result);
-        verifyEquivalent(parse(inputs, generator), result, parse(tombstones, generator), generator);
+        verifyEquivalent(inputLists, result, tombstoneLists, generator);
         return size(result);
     }
     
@@ -203,7 +226,22 @@ public class CompactionIteratorTest
 
     private List<List<Unfiltered>> parse(String[] inputs, UnfilteredRowsGenerator generator)
     {
-        return Lists.transform(Arrays.asList(inputs), x -> generator.parse(x, NOW - 1));
+        return ImmutableList.copyOf(Lists.transform(Arrays.asList(inputs), x -> parse(x, generator)));
+    }
+    
+    private List<Unfiltered> parse(String input, UnfilteredRowsGenerator generator)
+    {
+        Matcher m = Pattern.compile("D(\\d+)\\|").matcher(input);
+        if (m.lookingAt())
+        {
+            int del = Integer.parseInt(m.group(1));
+            input = input.substring(m.end());
+            List<Unfiltered> list = generator.parse(input, NOW - 1);
+            deletionTimes.put(list, new DeletionTime(del, del));
+            return list;
+        }
+        else
+            return generator.parse(input, NOW - 1);
     }
 
     private List<Unfiltered> compact(Iterable<List<Unfiltered>> sources, Iterable<List<Unfiltered>> tombstoneSources)
@@ -229,9 +267,9 @@ public class CompactionIteratorTest
 
     private UnfilteredRowIterator listToIterator(List<Unfiltered> list, DecoratedKey key)
     {
-        return UnfilteredRowsGenerator.source(list, metadata, key);
+        return UnfilteredRowsGenerator.source(list, metadata, key, deletionTimes.getOrDefault(list, DeletionTime.LIVE));
     }
-    
+
     NavigableMap<DecoratedKey, List<Unfiltered>> generateContent(Random rand, UnfilteredRowsGenerator generator,
                                                                  List<DecoratedKey> keys, int pcount, int rcount)
     {

@@ -272,10 +272,15 @@ public class UnfilteredRowsGenerator
                                                           new ByteBuffer[] {clusteringFor(pos).get(0)}),
                                              new DeletionTime(delTime, delTime));
     }
-    
+
     public static UnfilteredRowIterator source(Iterable<Unfiltered> content, CFMetaData metadata, DecoratedKey partitionKey)
     {
-        return new Source(content.iterator(), metadata, partitionKey, DeletionTime.LIVE, false);
+        return source(content, metadata, partitionKey, DeletionTime.LIVE);
+    }
+
+    public static UnfilteredRowIterator source(Iterable<Unfiltered> content, CFMetaData metadata, DecoratedKey partitionKey, DeletionTime delTime)
+    {
+        return new Source(content.iterator(), metadata, partitionKey, delTime, false);
     }
 
     static class Source extends AbstractUnfilteredRowIterator implements UnfilteredRowIterator
