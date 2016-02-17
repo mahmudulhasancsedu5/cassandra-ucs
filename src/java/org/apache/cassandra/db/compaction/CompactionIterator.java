@@ -21,11 +21,7 @@ import java.util.*;
 
 import com.google.common.collect.Ordering;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.PurgeFunction;
@@ -512,45 +508,6 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 return partition;
 
             return new GarbageSkippingUnfilteredRowIterator(partition, UnfilteredRowIterators.merge(iters, nowInSec), nowInSec, cellLevelGC);
-        }
-    }
-
-    public static UnfilteredRowIterator tombstonesOnly(UnfilteredRowIterator iter)
-    {
-        return Transformation.apply(iter, TombstoneOnly.instance);
-    }
-
-    private static class TombstoneOnly extends Transformation<UnfilteredRowIterator>
-    {
-        static final TombstoneOnly instance = new TombstoneOnly();
-
-        private TombstoneOnly()
-        {
-            super();
-        }
-
-        @Override
-        protected UnfilteredRowIterator applyToPartition(UnfilteredRowIterator partition)
-        {
-            return Transformation.apply(partition, this);
-        }
-
-        @Override
-        protected Row applyToRow(Row row)
-        {
-            if (row.deletion().isLive())
-                return null;
-
-            return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
-        }
-
-        @Override
-        protected Row applyToStatic(Row row)
-        {
-            if (row.deletion().isLive())
-                return Rows.EMPTY_STATIC_ROW;
-
-            return BTreeRow.emptyDeletedRow(row.clustering(), row.deletion());
         }
     }
 }

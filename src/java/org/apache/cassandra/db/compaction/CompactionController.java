@@ -72,9 +72,7 @@ public class CompactionController implements AutoCloseable
     {
         this(cfs, compacting, gcBefore,
              CompactionManager.instance.getRateLimiter(),
-//              Single SSTable compactions should try to remove deleted data if possible.
-//             compacting.size() == 1 ||
-                     cfs.getCompactionStrategyManager().getCompactionParams().tombstoneOption());
+             cfs.getCompactionStrategyManager().getCompactionParams().tombstoneOption());
     }
 
     public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, TombstoneOption tombstoneOption)
@@ -265,13 +263,14 @@ public class CompactionController implements AutoCloseable
     private UnfilteredRowIterator getShadowIterator(SSTableReader reader, DecoratedKey key, boolean tombstoneOnly)
     {
         if (reader.isMarkedSuspect() ||
-            reader.getMaxTimestamp() <= minTimestamp)
+            reader.getMaxTimestamp() <= minTimestamp ||
+            tombstoneOption == TombstoneOption.ROW && !reader.hasTombstones())
             return null;
         RowIndexEntry<?> position = reader.getPosition(key, SSTableReader.Operator.EQ);
         if (position == null)
             return null;
         FileDataInput dfile = openDataFiles.computeIfAbsent(reader, this::openDataFile);
-        return reader.identityIterator(dfile, key, position, tombstoneOnly);
+        return reader.simpleIterator(dfile, key, position, tombstoneOnly);
     }
 
     private FileDataInput openDataFile(SSTableReader reader)

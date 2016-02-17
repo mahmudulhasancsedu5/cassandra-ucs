@@ -27,7 +27,7 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
      * object may be longer than the lifetime of the "logical" iterator it was applied to; if the iterator
      * is refilled with MoreContents, for instance, the iterator may outlive this function
      */
-    protected void onClose() throws Exception { }
+    protected void onClose() { }
 
     /**
      * Run on the close of any (logical) rows iterator this function was applied to
@@ -36,7 +36,7 @@ public abstract class Transformation<I extends BaseRowIterator<?>>
      * object may be longer than the lifetime of the "logical" iterator it was applied to; if the iterator
      * is refilled with MoreContents, for instance, the iterator may outlive this function
      */
-    protected void onPartitionClose() throws Exception { }
+    protected void onPartitionClose() { }
 
     /**
      * Applied to any rows iterator (partition) we encounter in a partitions iterator
