@@ -58,6 +58,11 @@ public class TombstonesWithIndexedSSTableTest extends CQLTester
         for (int i = 0; i < ROWS; i++)
             execute("INSERT INTO %s(k, t, v) VALUES (?, ?, ?)", 0, i, text + i);
 
+        // Sanity check that we're testing what we want to test, that is that we're reading from an indexed
+        // sstable. Note that we'll almost surely have a single indexed sstable in practice, but it's theorically
+        // possible for a compact strategy to yield more than that and as long as one is indexed we're pretty
+        // much testing what we want. If this check ever fails on some specific setting, we'll have to either
+        // tweak ROWS and VALUE_LENGTH, or skip the test on those settings.
         DecoratedKey dk = Util.dk(ByteBufferUtil.bytes(0));
         int minDeleted = ROWS;
         int maxDeleted = 0;
