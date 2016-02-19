@@ -234,11 +234,8 @@ public class GcCompactionBench extends CQLTester
 
         String hashesBefore = getHashes();
 
-        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + tombstoneOption + "'  };");
-
         long startTime = System.currentTimeMillis();
-        for (SSTableReader reader : cfs.getLiveSSTables())
-            CompactionManager.instance.forceUserDefinedCompaction(reader.getFilename());
+        CompactionManager.instance.performGarbageCollection(cfs, tombstoneOption);
         long endTime = System.currentTimeMillis();
 
         int endRowCount = countRows(cfs);
