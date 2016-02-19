@@ -72,6 +72,7 @@ import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.metrics.ThreadPoolMetrics;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingServiceMBean;
+import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.CacheServiceMBean;
 import org.apache.cassandra.service.GCInspector;
@@ -257,6 +258,11 @@ public class NodeProbe implements AutoCloseable
         return ssProxy.upgradeSSTables(keyspaceName, excludeCurrentVersion, tableNames);
     }
 
+    public int garbageCollect(TombstoneOption tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
+    {
+        return ssProxy.garbageCollect(tombstoneOption, keyspaceName, tableNames);
+    }
+
     public void forceKeyspaceCleanup(PrintStream out, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         if (forceKeyspaceCleanup(keyspaceName, tableNames) != 0)
@@ -288,6 +294,15 @@ public class NodeProbe implements AutoCloseable
     public void upgradeSSTables(PrintStream out, String keyspaceName, boolean excludeCurrentVersion, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         if (upgradeSSTables(keyspaceName, excludeCurrentVersion, tableNames) != 0)
+        {
+            failed = true;
+            out.println("Aborted upgrading sstables for atleast one table in keyspace "+keyspaceName+", check server logs for more information.");
+        }
+    }
+
+    public void garbageCollect(PrintStream out, TombstoneOption tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
+    {
+        if (garbageCollect(tombstoneOption, keyspaceName, tableNames) != 0)
         {
             failed = true;
             out.println("Aborted upgrading sstables for atleast one table in keyspace "+keyspaceName+", check server logs for more information.");
