@@ -19,6 +19,7 @@
 package org.apache.cassandra.cql3;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -32,10 +33,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import junit.framework.Assert;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
@@ -47,13 +48,17 @@ import org.apache.cassandra.utils.FBUtilities;
 
 public class GcCompactionBench extends CQLTester
 {
-    private static final int DEL_SECTIONS = 2000;
-    private static final int RANGE_FREQUENCY_INV = 16;
-    static final int COUNT = 190000;
-    static final int ITERS = 29;
+    private static final String SIZE_TIERED_STRATEGY = "SizeTieredCompactionStrategy', 'min_sstable_size' : '0";
+    private static final String LEVELED_STRATEGY = "LeveledCompactionStrategy', 'sstable_size_in_mb' : '16";
 
-    static final int KEY_RANGE = 50;
-    static final int CLUSTERING_RANGE = 250000;
+    private static final int DEL_SECTIONS = 1000;
+    private static final int FLUSH_FREQ = 10000;
+    private static final int RANGE_FREQUENCY_INV = 16;
+    static final int COUNT = 90000;
+    static final int ITERS = 9;
+
+    static final int KEY_RANGE = 10;
+    static final int CLUSTERING_RANGE = 210000;
 
     static final int EXTRA_SIZE = 1025;
 
@@ -67,6 +72,8 @@ public class GcCompactionBench extends CQLTester
         DatabaseDescriptor.setCommitLogSyncPeriod(100);
         CQLTester.setUpClass();
     }
+    
+    String hashQuery;
 
     @Before
     public void before() throws Throwable
@@ -80,6 +87,32 @@ public class GcCompactionBench extends CQLTester
                     ")"
                    );
 
+        String hashIFunc = parseFunctionName(createFunction(KEYSPACE, "int, int",
+                " CREATE FUNCTION %s (state int, val int)" +
+                " CALLED ON NULL INPUT" +
+                " RETURNS int" +
+                " LANGUAGE java" +
+                " AS 'return val != null ? state * 17 + val : state;'")).name;
+        String hashTFunc = parseFunctionName(createFunction(KEYSPACE, "int, text",
+                " CREATE FUNCTION %s (state int, val text)" +
+                " CALLED ON NULL INPUT" +
+                " RETURNS int" +
+                " LANGUAGE java" +
+                " AS 'return val != null ? state * 17 + val.hashCode() : state;'")).name;
+
+        String hashInt = createAggregate(KEYSPACE, "int",
+                " CREATE AGGREGATE %s (int)" +
+                " SFUNC " + hashIFunc +
+                " STYPE int" +
+                " INITCOND 1");
+        String hashText = createAggregate(KEYSPACE, "text",
+                " CREATE AGGREGATE %s (text)" +
+                " SFUNC " + hashTFunc +
+                " STYPE int" +
+                " INITCOND 1");
+
+        hashQuery = String.format("SELECT count(column), %s(key), %s(column), %s(data), %s(extra), avg(key), avg(column), avg(data) FROM %%s",
+                                  hashInt, hashInt, hashInt, hashText);
     }
     AtomicLong id = new AtomicLong();
     long compactionTimeNanos = 0;
@@ -123,7 +156,7 @@ public class GcCompactionBench extends CQLTester
                     long cid = rand.nextInt(DEL_SECTIONS);
                     int cstart = (int) (cid * CLUSTERING_RANGE / DEL_SECTIONS);
                     int cend = (int) ((cid + 1) * CLUSTERING_RANGE / DEL_SECTIONS);
-                    res = execute("SELECT column FROM %s WHERE key = ? AND column >= ? AND column < ?", key, cstart, cend);
+                    res = execute("SELECT column FROM %s WHERE key = ? AND column >= ? AND column < ? LIMIT 1", key, cstart, cend);
                 } while (res.size() == 0);
                 UntypedResultSet.Row r = Iterables.get(res, rand.nextInt(res.size()));
                 int clustering = r.getInt("column");
@@ -143,13 +176,13 @@ public class GcCompactionBench extends CQLTester
 
     private void maybeCompact(long ii)
     {
-        if (ii % 10000 == 0)
+        if (ii % FLUSH_FREQ == 0)
         {
             System.out.print("F");
             flush();
-            if (ii % 100000 == 0)
+            if (ii % (FLUSH_FREQ * 10) == 0)
             {
-                System.out.print("C");
+                System.out.println("C");
                 long startTime = System.nanoTime();
                 getCurrentColumnFamilyStore().enableAutoCompaction(true);
                 long endTime = System.nanoTime();
@@ -159,11 +192,11 @@ public class GcCompactionBench extends CQLTester
         }
     }
 
-    public void testGcCompaction(TombstoneOption tombstoneOption, String compactionClass) throws Throwable
+    public void testGcCompaction(TombstoneOption tombstoneOption, TombstoneOption backgroundTombstoneOption, String compactionClass) throws Throwable
     {
         id.set(0);
         compactionTimeNanos = 0;
-        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + tombstoneOption + "'  };");
+        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + backgroundTombstoneOption + "'  };");
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
 
@@ -175,7 +208,7 @@ public class GcCompactionBench extends CQLTester
             Random rand = new Random(ti);
             tasks.add(es.submit(() -> 
             {
-                for (int i = 0; i < 10; ++i)
+                for (int i = 0; i < ITERS; ++i)
                     try
                     {
                         pushData(rand, COUNT);
@@ -199,6 +232,10 @@ public class GcCompactionBench extends CQLTester
         long startSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
         System.out.println();
 
+        String hashesBefore = getHashes();
+
+        alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "', 'provide_overlapping_tombstones' : '" + tombstoneOption + "'  };");
+
         long startTime = System.currentTimeMillis();
         for (SSTableReader reader : cfs.getLiveSSTables())
             CompactionManager.instance.forceUserDefinedCompaction(reader.getFilename());
@@ -213,54 +250,84 @@ public class GcCompactionBench extends CQLTester
         System.out.println(cfs.getCompactionParametersJson());
         System.out.println(String.format("%s compactions completed in %.3fs",
                 tombstoneOption.toString(), (endTime - startTime) * 1e-3));
-        System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing background compactions",
+        System.out.println(String.format("Operations completed in %.3fs, out of which %.3f for ongoing " + backgroundTombstoneOption + " background compactions",
                 (onEndTime - onStartTime) * 1e-3, compactionTimeNanos * 1e-9));
         System.out.println(String.format("At start: %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
                 startTableCount, startSize, startRowCount, startRowDeletions, startTombCount));
         System.out.println(String.format("At end:   %12d tables %12d bytes %12d rows %12d deleted rows %12d tombstone markers",
                 endTableCount, endSize, endRowCount, endRowDeletions, endTombCount));
+
+        String hashesAfter = getHashes();
+        Assert.assertEquals(hashesBefore, hashesAfter);
+    }
+
+    private String getHashes() throws Throwable
+    {
+        long startTime = System.currentTimeMillis();
+        String hashes = Arrays.toString(getRows(execute(hashQuery))[0]);
+        long endTime = System.currentTimeMillis();
+        System.out.println(String.format("Hashes: %s, retrieved in %.3fs", hashes, (endTime - startTime) * 1e-3));
+        return hashes;
     }
 
     @Test
-    public void testWarmup() throws Throwable
+    public void testCellAtEnd() throws Throwable
     {
-        testGcCompaction(TombstoneOption.NONE, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.CELL, TombstoneOption.NONE, LEVELED_STRATEGY);
     }
 
     @Test
-    public void testCellGcCompaction() throws Throwable
+    public void testRowAtEnd() throws Throwable
     {
-        testGcCompaction(TombstoneOption.CELL, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.CELL, TombstoneOption.NONE, LEVELED_STRATEGY);
     }
 
     @Test
-    public void testRowGcCompaction() throws Throwable
+    public void testCellThroughout() throws Throwable
     {
-        testGcCompaction(TombstoneOption.ROW, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.CELL, TombstoneOption.CELL, LEVELED_STRATEGY);
+    }
+
+    @Test
+    public void testRowThroughout() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.ROW, TombstoneOption.ROW, LEVELED_STRATEGY);
     }
 
     @Test
     public void testCopyCompaction() throws Throwable
     {
-        testGcCompaction(TombstoneOption.NONE, "LeveledCompactionStrategy");
+        testGcCompaction(TombstoneOption.NONE, TombstoneOption.NONE, LEVELED_STRATEGY);
     }
 
     @Test
-    public void testCellGcCompactionSizeTiered() throws Throwable
+    public void testCellAtEndSizeTiered() throws Throwable
     {
-        testGcCompaction(TombstoneOption.CELL, "SizeTieredCompactionStrategy");
+        testGcCompaction(TombstoneOption.CELL, TombstoneOption.NONE, SIZE_TIERED_STRATEGY);
     }
 
     @Test
-    public void testRowGcCompactionSizeTiered() throws Throwable
+    public void testRowAtEndSizeTiered() throws Throwable
     {
-        testGcCompaction(TombstoneOption.ROW, "SizeTieredCompactionStrategy");
+        testGcCompaction(TombstoneOption.ROW, TombstoneOption.NONE, SIZE_TIERED_STRATEGY);
+    }
+
+    @Test
+    public void testCellThroughoutSizeTiered() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.CELL, TombstoneOption.CELL, SIZE_TIERED_STRATEGY);
+    }
+
+    @Test
+    public void testRowThroughoutSizeTiered() throws Throwable
+    {
+        testGcCompaction(TombstoneOption.ROW, TombstoneOption.ROW, SIZE_TIERED_STRATEGY);
     }
 
     @Test
     public void testCopyCompactionSizeTiered() throws Throwable
     {
-        testGcCompaction(TombstoneOption.NONE, "SizeTieredCompactionStrategy");
+        testGcCompaction(TombstoneOption.NONE, TombstoneOption.NONE, SIZE_TIERED_STRATEGY);
     }
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)
