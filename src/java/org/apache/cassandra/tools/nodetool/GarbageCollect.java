@@ -24,7 +24,6 @@ import io.airlift.command.Option;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool.NodeToolCmd;
 
@@ -36,8 +35,9 @@ public class GarbageCollect extends NodeToolCmd
 
     @Option(title = "granularity",
         name = {"-g", "--granularity"},
+        allowedValues = {"ROW", "CELL"},
         description = "Granularity of garbage removal. ROW (default) removes deleted partitions and rows, CELL also removes overwritten or deleted cells.")
-    private TombstoneOption tombstoneOption = TombstoneOption.ROW;
+    private String tombstoneOption = "ROW";
 
     @Override
     public void execute(NodeProbe probe)

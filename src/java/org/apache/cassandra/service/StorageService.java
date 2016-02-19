@@ -2775,8 +2775,9 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return status.statusCode;
     }
 
-    public int garbageCollect(TombstoneOption tombstoneOption, String keyspaceName, String ... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int garbageCollect(String tombstoneOptionString, String keyspaceName, String ... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
+        TombstoneOption tombstoneOption = TombstoneOption.valueOf(tombstoneOptionString);
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
         for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspaceName, columnFamilies))
         {
