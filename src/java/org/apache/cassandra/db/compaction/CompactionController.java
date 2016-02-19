@@ -264,7 +264,7 @@ public class CompactionController implements AutoCloseable
     {
         if (reader.isMarkedSuspect() ||
             reader.getMaxTimestamp() <= minTimestamp ||
-            tombstoneOption == TombstoneOption.ROW && !reader.hasTombstones())
+            tombstoneOnly && !reader.hasTombstones())
             return null;
         RowIndexEntry<?> position = reader.getPosition(key, SSTableReader.Operator.EQ);
         if (position == null)
