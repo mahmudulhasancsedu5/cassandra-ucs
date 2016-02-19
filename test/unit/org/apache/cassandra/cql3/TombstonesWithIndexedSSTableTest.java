@@ -65,7 +65,7 @@ public class TombstonesWithIndexedSSTableTest extends CQLTester
         // Place some range deletions around an indexed location to get a tombstone boundary as the index's firstName.
         // Because we insert a tombstone before it, the index position may move, so repeat procedure until the index
         // boundary hits a tombstone boundary.
-        deletionLoop:
+    deletionLoop:
         while (true)
         {
             flush();
@@ -104,7 +104,7 @@ public class TombstonesWithIndexedSSTableTest extends CQLTester
         assertRowCount(execute("SELECT DISTINCT s FROM %s WHERE k = ? ORDER BY t DESC", 0), 1);
     }
 
-    // Creates a random string
+    // Creates a random string 
     public static String makeRandomString(int length)
     {
         Random random = new Random();
