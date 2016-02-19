@@ -30,8 +30,6 @@ import java.util.concurrent.TimeoutException;
 import javax.management.NotificationEmitter;
 import javax.management.openmbean.TabularData;
 
-import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
-
 public interface StorageServiceMBean extends NotificationEmitter
 {
     /**
@@ -287,7 +285,7 @@ public interface StorageServiceMBean extends NotificationEmitter
      * Rewrites all sstables from the given tables to remove deleted data.
      * The tombstone option defines the granularity of the procedure: ROW removes deleted partitions and rows, CELL also removes overwritten or deleted cells.
      */
-    public int garbageCollect(TombstoneOption tombstoneOption, String keyspaceName, String[] tableNames) throws IOException, ExecutionException, InterruptedException;
+    public int garbageCollect(String tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException;
 
     /**
      * Flush all memtables for the given column families, or all columnfamilies for the given keyspace

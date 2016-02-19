@@ -258,7 +258,7 @@ public class NodeProbe implements AutoCloseable
         return ssProxy.upgradeSSTables(keyspaceName, excludeCurrentVersion, tableNames);
     }
 
-    public int garbageCollect(TombstoneOption tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
+    public int garbageCollect(String tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         return ssProxy.garbageCollect(tombstoneOption, keyspaceName, tableNames);
     }
@@ -300,7 +300,7 @@ public class NodeProbe implements AutoCloseable
         }
     }
 
-    public void garbageCollect(PrintStream out, TombstoneOption tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
+    public void garbageCollect(PrintStream out, String tombstoneOption, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         if (garbageCollect(tombstoneOption, keyspaceName, tableNames) != 0)
         {
