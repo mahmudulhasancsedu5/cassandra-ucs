@@ -272,7 +272,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
             if (kind == Kind.CLUSTERING)
                 return Clustering.serializer.deserialize(in, version, types);
             else
-                return Slice.Bound.serializer.deserializeValues(in, kind, version, types);
+                return RangeTombstone.Bound.serializer.deserializeValues(in, kind, version, types);
         }
 
         public long serializedSize(ClusteringPrefix clustering, int version, List<AbstractType<?>> types)
@@ -282,7 +282,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
             if (clustering.kind() == Kind.CLUSTERING)
                 return 1 + Clustering.serializer.serializedSize((Clustering)clustering, version, types);
             else
-                return Slice.Bound.serializer.serializedSize((Slice.Bound)clustering, version, types);
+                return RangeTombstone.Bound.serializer.serializedSize((RangeTombstone.Bound)clustering, version, types);
         }
 
         void serializeValuesWithoutSize(ClusteringPrefix clustering, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
