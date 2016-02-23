@@ -41,7 +41,7 @@ public class Slice
     public static final Slice ALL = new Slice(ClusteringBound.BOTTOM, ClusteringBound.TOP)
     {
         @Override
-        public boolean selects(ClusteringComparator comparator, Clustering clustering)
+        public boolean includes(ClusteringComparator comparator, ClusteringPrefix clustering)
         {
             return true;
         }
@@ -164,27 +164,14 @@ public class Slice
     }
 
     /**
-     * Returns whether a given clustering is selected by this slice.
-     *
-     * @param comparator the comparator for the table this is a slice of.
-     * @param clustering the clustering to test inclusion of.
-     *
-     * @return whether {@code clustering} is selected by this slice.
-     */
-    public boolean selects(ClusteringComparator comparator, Clustering clustering)
-    {
-        return comparator.compare(start, clustering) <= 0 && comparator.compare(clustering, end) <= 0;
-    }
-
-    /**
-     * Returns whether a given bound is included in this slice.
+     * Returns whether a given clustering or bound is included in this slice.
      *
      * @param comparator the comparator for the table this is a slice of.
      * @param bound the bound to test inclusion of.
      *
      * @return whether {@code bound} is within the bounds of this slice.
      */
-    public boolean includes(ClusteringComparator comparator, org.apache.cassandra.db.AbstractClusteringBound bound)
+    public boolean includes(ClusteringComparator comparator, ClusteringPrefix bound)
     {
         return comparator.compare(start, bound) <= 0 && comparator.compare(bound, end) <= 0;
     }

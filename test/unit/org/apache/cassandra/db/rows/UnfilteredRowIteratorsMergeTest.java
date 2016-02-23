@@ -231,9 +231,9 @@ public class UnfilteredRowIteratorsMergeTest
                 // Join. Prefer not to use merger to check its correctness.
                 ClusteringBound b = ((RangeTombstoneBoundMarker) prev).clustering();
                 ClusteringBoundary boundary = ClusteringBoundary.create(b.isInclusive()
-                                        ? ClusteringPrefix.Kind.INCL_END_EXCL_START_BOUNDARY
-                                        : ClusteringPrefix.Kind.EXCL_END_INCL_START_BOUNDARY,
-                                    b.getRawValues());
+                                                                            ? ClusteringPrefix.Kind.INCL_END_EXCL_START_BOUNDARY
+                                                                            : ClusteringPrefix.Kind.EXCL_END_INCL_START_BOUNDARY,
+                                                                        b.getRawValues());
                 prev = new RangeTombstoneBoundaryMarker(boundary, prev.closeDeletionTime(false), curr.openDeletionTime(false));
                 currUnfiltered = prev;
                 --di;
@@ -488,7 +488,7 @@ public class UnfilteredRowIteratorsMergeTest
     private RangeTombstoneMarker marker(int pos, int delTime, boolean isStart, boolean inclusive)
     {
         return new RangeTombstoneBoundMarker(ClusteringBound.create(ClusteringBound.boundKind(isStart, inclusive),
-                                                          new ByteBuffer[] {clusteringFor(pos).get(0)}),
+                                                                    new ByteBuffer[] {clusteringFor(pos).get(0)}),
                                              new DeletionTime(delTime, delTime));
     }
 }
