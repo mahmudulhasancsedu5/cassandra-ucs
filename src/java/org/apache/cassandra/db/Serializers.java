@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -86,11 +85,11 @@ public class Serializers
                     {
                         // It's a range tombstone bound. It is a start since that's the only part we've ever included
                         // in the index entries.
-                        Bound.Kind boundKind = eoc > 0
-                                               ? Bound.Kind.EXCL_START_BOUND
-                                               : Bound.Kind.INCL_START_BOUND;
+                        ClusteringPrefix.Kind boundKind = eoc > 0
+                                               ? ClusteringPrefix.Kind.EXCL_START_BOUND
+                                               : ClusteringPrefix.Kind.INCL_START_BOUND;
 
-                        return Bound.create(boundKind, components.toArray(new ByteBuffer[components.size()]));
+                        return ClusteringBound.create(boundKind, components.toArray(new ByteBuffer[components.size()]));
                     }
                 }
 

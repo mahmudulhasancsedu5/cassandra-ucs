@@ -28,11 +28,11 @@ import org.apache.cassandra.utils.memory.AbstractAllocator;
 /**
  * A range tombstone marker that indicates the bound of a range tombstone (start or end).
  */
-public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker<Slice.Bound>
+public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker<ClusteringBound>
 {
     private final DeletionTime deletion;
 
-    public RangeTombstoneBoundMarker(Slice.Bound bound, DeletionTime deletion)
+    public RangeTombstoneBoundMarker(ClusteringBound bound, DeletionTime deletion)
     {
         super(bound);
         this.deletion = deletion;
@@ -40,25 +40,25 @@ public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker<Slic
 
     public static RangeTombstoneBoundMarker inclusiveOpen(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        Slice.Bound bound = RangeTombstone.Bound.inclusiveOpen(reversed, boundValues);
+        ClusteringBound bound = AbstractClusteringBound.inclusiveOpen(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker exclusiveOpen(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        Slice.Bound bound = RangeTombstone.Bound.exclusiveOpen(reversed, boundValues);
+        ClusteringBound bound = AbstractClusteringBound.exclusiveOpen(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker inclusiveClose(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        Slice.Bound bound = RangeTombstone.Bound.inclusiveClose(reversed, boundValues);
+        ClusteringBound bound = AbstractClusteringBound.inclusiveClose(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker exclusiveClose(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        Slice.Bound bound = RangeTombstone.Bound.exclusiveClose(reversed, boundValues);
+        ClusteringBound bound = AbstractClusteringBound.exclusiveClose(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
@@ -103,12 +103,12 @@ public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker<Slic
         return bound.isInclusive();
     }
 
-    public Slice.Bound openBound(boolean reversed)
+    public ClusteringBound openBound(boolean reversed)
     {
         return isOpen(reversed) ? clustering() : null;
     }
 
-    public Slice.Bound closeBound(boolean reversed)
+    public ClusteringBound closeBound(boolean reversed)
     {
         return isClose(reversed) ? clustering() : null;
     }

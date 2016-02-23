@@ -31,7 +31,6 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.rows.*;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -107,12 +106,12 @@ public class RowTest
             while (merged.hasNext())
             {
                 RangeTombstoneBoundMarker openMarker = (RangeTombstoneBoundMarker)merged.next();
-                Bound openBound = openMarker.clustering();
+                ClusteringBound openBound = openMarker.clustering();
                 DeletionTime openDeletion = new DeletionTime(openMarker.deletionTime().markedForDeleteAt(),
                                                                    openMarker.deletionTime().localDeletionTime());
 
                 RangeTombstoneBoundMarker closeMarker = (RangeTombstoneBoundMarker)merged.next();
-                Bound closeBound = closeMarker.clustering();
+                ClusteringBound closeBound = closeMarker.clustering();
                 DeletionTime closeDeletion = new DeletionTime(closeMarker.deletionTime().markedForDeleteAt(),
                                                                     closeMarker.deletionTime().localDeletionTime());
 
@@ -166,16 +165,16 @@ public class RowTest
         Util.assertEmpty(Util.cmd(cfs, dk).includeRow("c1").withNowInSeconds(nowInSeconds + ttl + 1).build());
     }
 
-    private void assertRangeTombstoneMarkers(Bound start, Bound end, DeletionTime deletionTime, Object[] expected)
+    private void assertRangeTombstoneMarkers(ClusteringBound start, ClusteringBound end, DeletionTime deletionTime, Object[] expected)
     {
         AbstractType clusteringType = (AbstractType)cfm.comparator.subtype(0);
 
         assertEquals(1, start.size());
-        assertEquals(start.kind(), Bound.Kind.INCL_START_BOUND);
+        assertEquals(start.kind(), ClusteringPrefix.Kind.INCL_START_BOUND);
         assertEquals(expected[0], clusteringType.getString(start.get(0)));
 
         assertEquals(1, end.size());
-        assertEquals(end.kind(), Bound.Kind.INCL_END_BOUND);
+        assertEquals(end.kind(), ClusteringPrefix.Kind.INCL_END_BOUND);
         assertEquals(expected[1], clusteringType.getString(end.get(0)));
 
         assertEquals(expected[2], deletionTime.markedForDeleteAt());

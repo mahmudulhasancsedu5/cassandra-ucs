@@ -32,7 +32,7 @@ import org.apache.cassandra.utils.memory.AbstractAllocator;
 public interface RangeTombstoneMarker extends Unfiltered
 {
     @Override
-    public RangeTombstone.Bound clustering();
+    public AbstractClusteringBound clustering();
 
     public boolean isBoundary();
 
@@ -44,8 +44,8 @@ public interface RangeTombstoneMarker extends Unfiltered
     public boolean openIsInclusive(boolean reversed);
     public boolean closeIsInclusive(boolean reversed);
 
-    public Slice.Bound openBound(boolean reversed);
-    public Slice.Bound closeBound(boolean reversed);
+    public ClusteringBound openBound(boolean reversed);
+    public ClusteringBound closeBound(boolean reversed);
 
     public RangeTombstoneMarker copy(AbstractAllocator allocator);
 
@@ -67,7 +67,7 @@ public interface RangeTombstoneMarker extends Unfiltered
         private final DeletionTime partitionDeletion;
         private final boolean reversed;
 
-        private RangeTombstone.Bound bound;
+        private AbstractClusteringBound bound;
         private final RangeTombstoneMarker[] markers;
 
         // For each iterator, what is the currently open marker deletion time (or null if there is no open marker on that iterator)

@@ -22,7 +22,6 @@ import java.util.Iterator;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.utils.SearchIterator;
@@ -194,8 +193,8 @@ public abstract class AbstractBTreePartition implements Partition, Iterable<Row>
 
     private UnfilteredRowIterator sliceIterator(ColumnFilter selection, Slice slice, boolean reversed, Holder current, Row staticRow)
     {
-        Bound start = slice.start() == Slice.Bound.BOTTOM ? null : slice.start();
-        Bound end = slice.end() == Slice.Bound.TOP ? null : slice.end();
+        ClusteringBound start = slice.start() == ClusteringBound.BOTTOM ? null : slice.start();
+        ClusteringBound end = slice.end() == ClusteringBound.TOP ? null : slice.end();
         Iterator<Row> rowIter = BTree.slice(current.tree, metadata.comparator, start, true, end, true, desc(reversed));
         Iterator<RangeTombstone> deleteIter = current.deletionInfo.rangeIterator(slice, reversed);
 

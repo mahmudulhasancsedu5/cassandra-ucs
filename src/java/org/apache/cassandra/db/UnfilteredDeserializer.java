@@ -27,7 +27,6 @@ import com.google.common.collect.PeekingIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
@@ -82,7 +81,7 @@ public abstract class UnfilteredDeserializer
      * comparison. Whenever we know what to do with this atom (read it or skip it),
      * readNext or skipNext should be called.
      */
-    public abstract int compareNextTo(Bound bound) throws IOException;
+    public abstract int compareNextTo(ClusteringBound bound) throws IOException;
 
     /**
      * Returns whether the next atom is a row or not.
@@ -174,7 +173,7 @@ public abstract class UnfilteredDeserializer
             isReady = true;
         }
 
-        public int compareNextTo(Bound bound) throws IOException
+        public int compareNextTo(ClusteringBound bound) throws IOException
         {
             if (!isReady)
                 prepareNext();
@@ -203,7 +202,7 @@ public abstract class UnfilteredDeserializer
             isReady = false;
             if (UnfilteredSerializer.kind(nextFlags) == Unfiltered.Kind.RANGE_TOMBSTONE_MARKER)
             {
-                RangeTombstone.Bound bound = clusteringDeserializer.deserializeNextBound();
+                AbstractClusteringBound bound = clusteringDeserializer.deserializeNextBound();
                 return UnfilteredSerializer.serializer.deserializeMarkerBody(in, header, bound);
             }
             else
@@ -327,7 +326,7 @@ public abstract class UnfilteredDeserializer
             return tombstone.isCollectionTombstone() || tombstone.isRowDeletion(metadata);
         }
 
-        public int compareNextTo(Bound bound) throws IOException
+        public int compareNextTo(ClusteringBound bound) throws IOException
         {
             if (!hasNext())
                 throw new IllegalStateException();

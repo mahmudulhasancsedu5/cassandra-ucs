@@ -35,7 +35,6 @@ import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.partitions.*;
-import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -194,26 +193,26 @@ public abstract class LegacyLayout
         List<CompositeType.CompositeComponent> prefix = components.size() <= metadata.comparator.size()
                                                       ? components
                                                       : components.subList(0, metadata.comparator.size());
-        Bound.Kind boundKind;
+        ClusteringPrefix.Kind boundKind;
         if (isStart)
         {
             if (components.get(components.size() - 1).eoc > 0)
-                boundKind = Bound.Kind.EXCL_START_BOUND;
+                boundKind = ClusteringPrefix.Kind.EXCL_START_BOUND;
             else
-                boundKind = Bound.Kind.INCL_START_BOUND;
+                boundKind = ClusteringPrefix.Kind.INCL_START_BOUND;
         }
         else
         {
             if (components.get(components.size() - 1).eoc < 0)
-                boundKind = Bound.Kind.EXCL_END_BOUND;
+                boundKind = ClusteringPrefix.Kind.EXCL_END_BOUND;
             else
-                boundKind = Bound.Kind.INCL_END_BOUND;
+                boundKind = ClusteringPrefix.Kind.INCL_END_BOUND;
         }
 
         ByteBuffer[] prefixValues = new ByteBuffer[prefix.size()];
         for (int i = 0; i < prefix.size(); i++)
             prefixValues[i] = prefix.get(i).value;
-        Bound sb = Bound.create(boundKind, prefixValues);
+        ClusteringBound sb = ClusteringBound.create(boundKind, prefixValues);
 
         ColumnDefinition collectionName = components.size() == metadata.comparator.size() + 1
                                         ? metadata.getColumnDefinition(components.get(metadata.comparator.size()).value)
@@ -221,9 +220,9 @@ public abstract class LegacyLayout
         return new LegacyBound(sb, metadata.isCompound() && CompositeType.isStaticName(bound), collectionName);
     }
 
-    public static ByteBuffer encodeBound(CFMetaData metadata, Bound bound, boolean isStart)
+    public static ByteBuffer encodeBound(CFMetaData metadata, ClusteringBound bound, boolean isStart)
     {
-        if (bound == Bound.BOTTOM || bound == Bound.TOP || metadata.comparator.size() == 0)
+        if (bound == ClusteringBound.BOTTOM || bound == ClusteringBound.TOP || metadata.comparator.size() == 0)
             return ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
         ClusteringPrefix clustering = bound.clustering();
@@ -723,8 +722,8 @@ public abstract class LegacyLayout
         if (!row.deletion().isLive())
         {
             Clustering clustering = row.clustering();
-            Bound startBound = Bound.inclusiveStartOf(clustering);
-            Bound endBound = Bound.inclusiveEndOf(clustering);
+            ClusteringBound startBound = ClusteringBound.inclusiveStartOf(clustering);
+            ClusteringBound endBound = ClusteringBound.inclusiveEndOf(clustering);
 
             LegacyBound start = new LegacyLayout.LegacyBound(startBound, false, null);
             LegacyBound end = new LegacyLayout.LegacyBound(endBound, false, null);
@@ -743,8 +742,8 @@ public abstract class LegacyLayout
             {
                 Clustering clustering = row.clustering();
 
-                Bound startBound = Bound.inclusiveStartOf(clustering);
-                Bound endBound = Bound.inclusiveEndOf(clustering);
+                ClusteringBound startBound = ClusteringBound.inclusiveStartOf(clustering);
+                ClusteringBound endBound = ClusteringBound.inclusiveEndOf(clustering);
 
                 LegacyLayout.LegacyBound start = new LegacyLayout.LegacyBound(startBound, col.isStatic(), col);
                 LegacyLayout.LegacyBound end = new LegacyLayout.LegacyBound(endBound, col.isStatic(), col);
@@ -1329,14 +1328,14 @@ public abstract class LegacyLayout
 
     public static class LegacyBound
     {
-        public static final LegacyBound BOTTOM = new LegacyBound(Bound.BOTTOM, false, null);
-        public static final LegacyBound TOP = new LegacyBound(Bound.TOP, false, null);
+        public static final LegacyBound BOTTOM = new LegacyBound(ClusteringBound.BOTTOM, false, null);
+        public static final LegacyBound TOP = new LegacyBound(ClusteringBound.TOP, false, null);
 
-        public final Bound bound;
+        public final ClusteringBound bound;
         public final boolean isStatic;
         public final ColumnDefinition collectionName;
 
-        public LegacyBound(Bound bound, boolean isStatic, ColumnDefinition collectionName)
+        public LegacyBound(ClusteringBound bound, boolean isStatic, ColumnDefinition collectionName)
         {
             this.bound = bound;
             this.isStatic = isStatic;
@@ -1641,7 +1640,7 @@ public abstract class LegacyLayout
             deletionInfo.add(topLevel);
         }
 
-        private static Bound staticBound(CFMetaData metadata, boolean isStart)
+        private static ClusteringBound staticBound(CFMetaData metadata, boolean isStart)
         {
             // In pre-3.0 nodes, static row started by a clustering with all empty values so we
             // preserve that here. Note that in practice, it doesn't really matter since the rest
@@ -1650,8 +1649,8 @@ public abstract class LegacyLayout
             for (int i = 0; i < values.length; i++)
                 values[i] = ByteBufferUtil.EMPTY_BYTE_BUFFER;
             return isStart
-                 ? Bound.inclusiveStartOf(values)
-                 : Bound.inclusiveEndOf(values);
+                 ? ClusteringBound.inclusiveStartOf(values)
+                 : ClusteringBound.inclusiveEndOf(values);
         }
 
         public void add(CFMetaData metadata, LegacyRangeTombstone tombstone)
