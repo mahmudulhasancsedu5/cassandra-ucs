@@ -20,7 +20,6 @@ package org.apache.cassandra.db.rows;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 
@@ -45,8 +44,8 @@ public interface RangeTombstoneMarker extends Unfiltered
     public boolean openIsInclusive(boolean reversed);
     public boolean closeIsInclusive(boolean reversed);
 
-    public RangeTombstone.Bound openBound(boolean reversed);
-    public RangeTombstone.Bound closeBound(boolean reversed);
+    public Slice.Bound openBound(boolean reversed);
+    public Slice.Bound closeBound(boolean reversed);
 
     public RangeTombstoneMarker copy(AbstractAllocator allocator);
 

@@ -325,7 +325,7 @@ public class RowAndDeletionMergeIteratorTest
     }
 
 
-    private void assertRtMarker(Unfiltered unfiltered, Bound bound)
+    private void assertRtMarker(Unfiltered unfiltered, RangeTombstone.Bound bound)
     {
         assertEquals(Unfiltered.Kind.RANGE_TOMBSTONE_MARKER, unfiltered.kind());
         assertEquals(bound, unfiltered.clustering());

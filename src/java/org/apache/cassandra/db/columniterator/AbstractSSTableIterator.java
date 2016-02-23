@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -519,11 +520,11 @@ abstract class AbstractSSTableIterator implements UnfilteredRowIterator
 
         // Finds the index of the first block containing the provided bound, starting at the provided index.
         // Will be -1 if the bound is before any block, and blocksCount() if it is after every block.
-        public int findBlockIndex(Slice.Bound bound, int fromIdx)
+        public int findBlockIndex(Bound bound, int fromIdx)
         {
-            if (bound == Slice.Bound.BOTTOM)
+            if (bound == Bound.BOTTOM)
                 return -1;
-            if (bound == Slice.Bound.TOP)
+            if (bound == Bound.TOP)
                 return blocksCount();
 
             return IndexHelper.indexFor(bound, indexes, comparator, reversed, fromIdx);

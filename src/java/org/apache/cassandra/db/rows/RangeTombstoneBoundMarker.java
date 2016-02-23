@@ -28,43 +28,37 @@ import org.apache.cassandra.utils.memory.AbstractAllocator;
 /**
  * A range tombstone marker that indicates the bound of a range tombstone (start or end).
  */
-public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker
+public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker<Slice.Bound>
 {
     private final DeletionTime deletion;
 
-    public RangeTombstoneBoundMarker(RangeTombstone.Bound bound, DeletionTime deletion)
-    {
-        super(bound);
-        assert !bound.isBoundary();
-        this.deletion = deletion;
-    }
-
     public RangeTombstoneBoundMarker(Slice.Bound bound, DeletionTime deletion)
     {
-        this(new RangeTombstone.Bound(bound.kind(), bound.getRawValues()), deletion);
+        super(bound);
+        this.deletion = deletion;
     }
 
     public static RangeTombstoneBoundMarker inclusiveOpen(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        RangeTombstone.Bound bound = RangeTombstone.Bound.inclusiveOpen(reversed, boundValues);
+        Slice.Bound bound = RangeTombstone.Bound.inclusiveOpen(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker exclusiveOpen(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        RangeTombstone.Bound bound = RangeTombstone.Bound.exclusiveOpen(reversed, boundValues);
+        Slice.Bound bound = RangeTombstone.Bound.exclusiveOpen(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker inclusiveClose(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        RangeTombstone.Bound bound = RangeTombstone.Bound.inclusiveClose(reversed, boundValues);
+        Slice.Bound bound = RangeTombstone.Bound.inclusiveClose(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
     public static RangeTombstoneBoundMarker exclusiveClose(boolean reversed, ByteBuffer[] boundValues, DeletionTime deletion)
     {
-        RangeTombstone.Bound bound = RangeTombstone.Bound.exclusiveClose(reversed, boundValues);
+        Slice.Bound bound = RangeTombstone.Bound.exclusiveClose(reversed, boundValues);
         return new RangeTombstoneBoundMarker(bound, deletion);
     }
 
@@ -109,12 +103,12 @@ public class RangeTombstoneBoundMarker extends AbstractRangeTombstoneMarker
         return bound.isInclusive();
     }
 
-    public RangeTombstone.Bound openBound(boolean reversed)
+    public Slice.Bound openBound(boolean reversed)
     {
         return isOpen(reversed) ? clustering() : null;
     }
 
-    public RangeTombstone.Bound closeBound(boolean reversed)
+    public Slice.Bound closeBound(boolean reversed)
     {
         return isClose(reversed) ? clustering() : null;
     }

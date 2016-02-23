@@ -25,6 +25,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.utils.memory.AbstractAllocator;
 
 /**
  * A slice represents the selection of a range of rows.
@@ -157,7 +158,7 @@ public class Slice
      * @return whether the slice formed by {@code start} and {@code end} is
      * empty or not.
      */
-    public static boolean isEmpty(ClusteringComparator comparator, Slice.Bound start, Slice.Bound end)
+    public static boolean isEmpty(ClusteringComparator comparator, Bound start, Bound end)
     {
         assert start.isStart() && end.isEnd();
         return comparator.compare(end, start) < 0;
@@ -184,7 +185,7 @@ public class Slice
      *
      * @return whether {@code bound} is within the bounds of this slice.
      */
-    public boolean includes(ClusteringComparator comparator, Bound bound)
+    public boolean includes(ClusteringComparator comparator, org.apache.cassandra.db.RangeTombstone.Bound bound)
     {
         return comparator.compare(start, bound) <= 0 && comparator.compare(bound, end) <= 0;
     }
@@ -332,8 +333,8 @@ public class Slice
 
         public Slice deserialize(DataInputPlus in, int version, List<AbstractType<?>> types) throws IOException
         {
-            Bound start = Bound.serializer.deserialize(in, version, types);
-            Bound end = Bound.serializer.deserialize(in, version, types);
+            Bound start = (Bound) Bound.serializer.deserialize(in, version, types);
+            Bound end = (Bound) Bound.serializer.deserialize(in, version, types);
             return new Slice(start, end);
         }
     }
@@ -343,17 +344,12 @@ public class Slice
      * <p>
      * This can be either a start or an end bound, and this can be either inclusive or exclusive.
      */
-    public static class Bound extends AbstractBufferClusteringPrefix
+    public static class Bound extends RangeTombstone.Bound
     {
-        public static final Serializer serializer = new Serializer();
-
-        /**
-         * The smallest and biggest bound. Note that as range tomstone bounds are (special case) of slice bounds,
-         * we want the BOTTOM and TOP to be the same object, but we alias them here because it's cleaner when dealing
-         * with slices to refer to Slice.Bound.BOTTOM and Slice.Bound.TOP.
-         */
-        public static final Bound BOTTOM = RangeTombstone.Bound.BOTTOM;
-        public static final Bound TOP = RangeTombstone.Bound.TOP;
+        /** The smallest start bound, i.e. the one that starts before any row. */
+        public static final Bound BOTTOM = new Bound(Kind.INCL_START_BOUND, EMPTY_VALUES_ARRAY);
+        /** The biggest end bound, i.e. the one that ends after any row. */
+        public static final Bound TOP = new Bound(Kind.INCL_END_BOUND, EMPTY_VALUES_ARRAY);
 
         protected Bound(Kind kind, ByteBuffer[] values)
         {
@@ -430,10 +426,15 @@ public class Slice
             return builder.buildBound(isStart, isInclusive);
         }
 
-        public Bound withNewKind(Kind kind)
+        @Override
+        public Bound invert()
         {
-            assert !kind.isBoundary();
-            return new Bound(kind, values);
+            return create(kind().invert(), values);
+        }
+
+        public Bound copy(AbstractAllocator allocator)
+        {
+            return (Bound) super.copy(allocator);
         }
 
         public boolean isStart()
@@ -454,19 +455,6 @@ public class Slice
         public boolean isExclusive()
         {
             return kind == Kind.EXCL_START_BOUND || kind == Kind.EXCL_END_BOUND;
-        }
-
-        /**
-         * Returns the inverse of the current bound.
-         * <p>
-         * This invert both start into end (and vice-versa) and inclusive into exclusive (and vice-versa).
-         *
-         * @return the invert of this bound. For instance, if this bound is an exlusive start, this return
-         * an inclusive end with the same values.
-         */
-        public Slice.Bound invert()
-        {
-            return withNewKind(kind().invert());
         }
 
         // For use by intersects, it's called with the sstable bound opposite to the slice bound
@@ -495,63 +483,6 @@ public class Slice
 
             // The slice bound is equal to the sstable bound. Results depends on whether the slice is inclusive or not
             return isInclusive() ? 0 : (isStart() ? 1 : -1);
-        }
-
-        public String toString(CFMetaData metadata)
-        {
-            return toString(metadata.comparator);
-        }
-
-        public String toString(ClusteringComparator comparator)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.append(kind()).append('(');
-            for (int i = 0; i < size(); i++)
-            {
-                if (i > 0)
-                    sb.append(", ");
-                sb.append(comparator.subtype(i).getString(get(i)));
-            }
-            return sb.append(')').toString();
-        }
-
-        /**
-         * Serializer for slice bounds.
-         * <p>
-         * Contrarily to {@code Clustering}, a slice bound can be a true prefix of the full clustering, so we actually record
-         * its size.
-         */
-        public static class Serializer
-        {
-            public void serialize(Slice.Bound bound, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
-            {
-                out.writeByte(bound.kind().ordinal());
-                out.writeShort(bound.size());
-                ClusteringPrefix.serializer.serializeValuesWithoutSize(bound, out, version, types);
-            }
-
-            public long serializedSize(Slice.Bound bound, int version, List<AbstractType<?>> types)
-            {
-                return 1 // kind ordinal
-                     + TypeSizes.sizeof((short)bound.size())
-                     + ClusteringPrefix.serializer.valuesWithoutSizeSerializedSize(bound, version, types);
-            }
-
-            public Slice.Bound deserialize(DataInputPlus in, int version, List<AbstractType<?>> types) throws IOException
-            {
-                Kind kind = Kind.values()[in.readByte()];
-                return deserializeValues(in, kind, version, types);
-            }
-
-            public Slice.Bound deserializeValues(DataInputPlus in, Kind kind, int version, List<AbstractType<?>> types) throws IOException
-            {
-                int size = in.readUnsignedShort();
-                if (size == 0)
-                    return kind.isStart() ? BOTTOM : TOP;
-
-                ByteBuffer[] values = ClusteringPrefix.serializer.deserializeValuesWithoutSize(in, size, version, types);
-                return Slice.Bound.create(kind, values);
-            }
         }
     }
 }

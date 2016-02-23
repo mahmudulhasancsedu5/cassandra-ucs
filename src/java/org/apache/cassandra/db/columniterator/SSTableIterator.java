@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.NoSuchElementException;
 
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -57,9 +58,9 @@ public class SSTableIterator extends AbstractSSTableIterator
     private class ForwardReader extends Reader
     {
         // The start of the current slice. This will be null as soon as we know we've passed that bound.
-        protected Slice.Bound start;
+        protected Bound start;
         // The end of the current slice. Will never be null.
-        protected Slice.Bound end = Slice.Bound.TOP;
+        protected Bound end = Bound.TOP;
 
         protected Unfiltered next; // the next element to return: this is computed by hasNextInternal().
 
@@ -73,7 +74,7 @@ public class SSTableIterator extends AbstractSSTableIterator
 
         public void setForSlice(Slice slice) throws IOException
         {
-            start = slice.start() == Slice.Bound.BOTTOM ? null : slice.start();
+            start = slice.start() == Bound.BOTTOM ? null : slice.start();
             end = slice.end();
 
             sliceDone = false;
@@ -101,7 +102,7 @@ public class SSTableIterator extends AbstractSSTableIterator
                     updateOpenMarker((RangeTombstoneMarker)deserializer.readNext());
             }
 
-            Slice.Bound sliceStart = start;
+            Bound sliceStart = start;
             start = null;
 
             // We've reached the beginning of our queried slice. If we have an open marker

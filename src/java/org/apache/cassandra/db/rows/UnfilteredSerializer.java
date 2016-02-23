@@ -384,9 +384,9 @@ public class UnfilteredSerializer
         }
 
         if (bound.isBoundary())
-            return new RangeTombstoneBoundaryMarker(bound, header.readDeletionTime(in), header.readDeletionTime(in));
+            return new RangeTombstoneBoundaryMarker((RangeTombstone.Boundary) bound, header.readDeletionTime(in), header.readDeletionTime(in));
         else
-            return new RangeTombstoneBoundMarker(bound, header.readDeletionTime(in));
+            return new RangeTombstoneBoundMarker((Slice.Bound) bound, header.readDeletionTime(in));
     }
 
     public Row deserializeRowBody(DataInputPlus in,

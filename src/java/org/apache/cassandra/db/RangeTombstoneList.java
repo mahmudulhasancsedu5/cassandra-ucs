@@ -26,6 +26,7 @@ import org.apache.cassandra.utils.AbstractIterator;
 import com.google.common.collect.Iterators;
 
 import org.apache.cassandra.cache.IMeasurableMemory;
+import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
@@ -54,15 +55,15 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
 
     // Note: we don't want to use a List for the markedAts and delTimes to avoid boxing. We could
     // use a List for starts and ends, but having arrays everywhere is almost simpler.
-    private Slice.Bound[] starts;
-    private Slice.Bound[] ends;
+    private Bound[] starts;
+    private Bound[] ends;
     private long[] markedAts;
     private int[] delTimes;
 
     private long boundaryHeapSize;
     private int size;
 
-    private RangeTombstoneList(ClusteringComparator comparator, Slice.Bound[] starts, Slice.Bound[] ends, long[] markedAts, int[] delTimes, long boundaryHeapSize, int size)
+    private RangeTombstoneList(ClusteringComparator comparator, Bound[] starts, Bound[] ends, long[] markedAts, int[] delTimes, long boundaryHeapSize, int size)
     {
         assert starts.length == ends.length && starts.length == markedAts.length && starts.length == delTimes.length;
         this.comparator = comparator;
@@ -76,7 +77,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
 
     public RangeTombstoneList(ClusteringComparator comparator, int capacity)
     {
-        this(comparator, new Slice.Bound[capacity], new Slice.Bound[capacity], new long[capacity], new int[capacity], 0, 0);
+        this(comparator, new Bound[capacity], new Bound[capacity], new long[capacity], new int[capacity], 0, 0);
     }
 
     public boolean isEmpty()
@@ -107,8 +108,8 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
     public RangeTombstoneList copy(AbstractAllocator allocator)
     {
         RangeTombstoneList copy =  new RangeTombstoneList(comparator,
-                                                          new Slice.Bound[size],
-                                                          new Slice.Bound[size],
+                                                          new Bound[size],
+                                                          new Bound[size],
                                                           Arrays.copyOf(markedAts, size),
                                                           Arrays.copyOf(delTimes, size),
                                                           boundaryHeapSize, size);
@@ -123,12 +124,12 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         return copy;
     }
 
-    private static Slice.Bound clone(Slice.Bound bound, AbstractAllocator allocator)
+    private static Bound clone(Bound bound, AbstractAllocator allocator)
     {
         ByteBuffer[] values = new ByteBuffer[bound.size()];
         for (int i = 0; i < values.length; i++)
             values[i] = allocator.clone(bound.get(i));
-        return new Slice.Bound(bound.kind(), values);
+        return new Bound(bound.kind(), values);
     }
 
     public void add(RangeTombstone tombstone)
@@ -145,7 +146,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
      * This method will be faster if the new tombstone sort after all the currently existing ones (this is a common use case),
      * but it doesn't assume it.
      */
-    public void add(Slice.Bound start, Slice.Bound end, long markedAt, int delTime)
+    public void add(Bound start, Bound end, long markedAt, int delTime)
     {
         if (isEmpty())
         {
@@ -324,17 +325,17 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         return new RangeTombstone(Slice.make(starts[idx], ends[idx]), new DeletionTime(markedAts[idx], delTimes[idx]));
     }
 
-    private RangeTombstone rangeTombstoneWithNewStart(int idx, Slice.Bound newStart)
+    private RangeTombstone rangeTombstoneWithNewStart(int idx, Bound newStart)
     {
         return new RangeTombstone(Slice.make(newStart, ends[idx]), new DeletionTime(markedAts[idx], delTimes[idx]));
     }
 
-    private RangeTombstone rangeTombstoneWithNewEnd(int idx, Slice.Bound newEnd)
+    private RangeTombstone rangeTombstoneWithNewEnd(int idx, Bound newEnd)
     {
         return new RangeTombstone(Slice.make(starts[idx], newEnd), new DeletionTime(markedAts[idx], delTimes[idx]));
     }
 
-    private RangeTombstone rangeTombstoneWithNewBounds(int idx, Slice.Bound newStart, Slice.Bound newEnd)
+    private RangeTombstone rangeTombstoneWithNewBounds(int idx, Bound newStart, Bound newEnd)
     {
         return new RangeTombstone(Slice.make(newStart, newEnd), new DeletionTime(markedAts[idx], delTimes[idx]));
     }
@@ -380,13 +381,13 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
 
     private Iterator<RangeTombstone> forwardIterator(final Slice slice)
     {
-        int startIdx = slice.start() == Slice.Bound.BOTTOM ? 0 : searchInternal(slice.start(), 0, size);
+        int startIdx = slice.start() == Bound.BOTTOM ? 0 : searchInternal(slice.start(), 0, size);
         final int start = startIdx < 0 ? -startIdx-1 : startIdx;
 
         if (start >= size)
             return Collections.emptyIterator();
 
-        int finishIdx = slice.end() == Slice.Bound.TOP ? size - 1 : searchInternal(slice.end(), start, size);
+        int finishIdx = slice.end() == Bound.TOP ? size - 1 : searchInternal(slice.end(), start, size);
         // if stopIdx is the first range after 'slice.end()' we care only until the previous range
         final int finish = finishIdx < 0 ? -finishIdx-2 : finishIdx;
 
@@ -397,8 +398,8 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         {
             // We want to make sure the range are stricly included within the queried slice as this
             // make it easier to combine things when iterating over successive slices.
-            Slice.Bound s = comparator.compare(starts[start], slice.start()) < 0 ? slice.start() : starts[start];
-            Slice.Bound e = comparator.compare(slice.end(), ends[start]) < 0 ? slice.end() : ends[start];
+            Bound s = comparator.compare(starts[start], slice.start()) < 0 ? slice.start() : starts[start];
+            Bound e = comparator.compare(slice.end(), ends[start]) < 0 ? slice.end() : ends[start];
             return Iterators.<RangeTombstone>singletonIterator(rangeTombstoneWithNewBounds(start, s, e));
         }
 
@@ -425,14 +426,14 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
 
     private Iterator<RangeTombstone> reverseIterator(final Slice slice)
     {
-        int startIdx = slice.end() == Slice.Bound.TOP ? size - 1 : searchInternal(slice.end(), 0, size);
+        int startIdx = slice.end() == Bound.TOP ? size - 1 : searchInternal(slice.end(), 0, size);
         // if startIdx is the first range after 'slice.end()' we care only until the previous range
         final int start = startIdx < 0 ? -startIdx-2 : startIdx;
 
         if (start < 0)
             return Collections.emptyIterator();
 
-        int finishIdx = slice.start() == Slice.Bound.BOTTOM ? 0 : searchInternal(slice.start(), 0, start + 1);  // include same as finish
+        int finishIdx = slice.start() == Bound.BOTTOM ? 0 : searchInternal(slice.start(), 0, start + 1);  // include same as finish
         // if stopIdx is the first range after 'slice.end()' we care only until the previous range
         final int finish = finishIdx < 0 ? -finishIdx-1 : finishIdx;
 
@@ -443,8 +444,8 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         {
             // We want to make sure the range are stricly included within the queried slice as this
             // make it easier to combine things when iterator over successive slices.
-            Slice.Bound s = comparator.compare(starts[start], slice.start()) < 0 ? slice.start() : starts[start];
-            Slice.Bound e = comparator.compare(slice.end(), ends[start]) < 0 ? slice.end() : ends[start];
+            Bound s = comparator.compare(starts[start], slice.start()) < 0 ? slice.start() : starts[start];
+            Bound e = comparator.compare(slice.end(), ends[start]) < 0 ? slice.end() : ends[start];
             return Iterators.<RangeTombstone>singletonIterator(rangeTombstoneWithNewBounds(start, s, e));
         }
 
@@ -527,7 +528,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
      *   - e_i <= s_i+1
      * Basically, range are non overlapping and in order.
      */
-    private void insertFrom(int i, Slice.Bound start, Slice.Bound end, long markedAt, int delTime)
+    private void insertFrom(int i, Bound start, Bound end, long markedAt, int delTime)
     {
         while (i < size)
         {
@@ -546,7 +547,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
                 // First deal with what might come before the newly added one.
                 if (comparator.compare(starts[i], start) < 0)
                 {
-                    Slice.Bound newEnd = start.invert();
+                    Bound newEnd = start.invert();
                     if (!Slice.isEmpty(comparator, starts[i], newEnd))
                     {
                         addInternal(i, starts[i], start.invert(), markedAts[i], delTimes[i]);
@@ -594,7 +595,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
                     // one to reflect the not overwritten parts. We're then done.
                     addInternal(i, start, end, markedAt, delTime);
                     i++;
-                    Slice.Bound newStart = end.invert();
+                    Bound newStart = end.invert();
                     if (!Slice.isEmpty(comparator, newStart, ends[i]))
                     {
                         setInternal(i, newStart, ends[i], markedAts[i], delTimes[i]);
@@ -616,7 +617,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
                         addInternal(i, start, end, markedAt, delTime);
                         return;
                     }
-                    Slice.Bound newEnd = starts[i].invert();
+                    Bound newEnd = starts[i].invert();
                     if (!Slice.isEmpty(comparator, start, newEnd))
                     {
                         addInternal(i, start, newEnd, markedAt, delTime);
@@ -648,7 +649,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
     /*
      * Adds the new tombstone at index i, growing and/or moving elements to make room for it.
      */
-    private void addInternal(int i, Slice.Bound start, Slice.Bound end, long markedAt, int delTime)
+    private void addInternal(int i, Bound start, Bound end, long markedAt, int delTime)
     {
         assert i >= 0;
 
@@ -687,12 +688,12 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         delTimes = grow(delTimes, size, newLength, i);
     }
 
-    private static Slice.Bound[] grow(Slice.Bound[] a, int size, int newLength, int i)
+    private static Bound[] grow(Bound[] a, int size, int newLength, int i)
     {
         if (i < 0 || i >= size)
             return Arrays.copyOf(a, newLength);
 
-        Slice.Bound[] newA = new Slice.Bound[newLength];
+        Bound[] newA = new Bound[newLength];
         System.arraycopy(a, 0, newA, 0, i);
         System.arraycopy(a, i, newA, i+1, size - i);
         return newA;
@@ -737,7 +738,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         starts[i] = null;
     }
 
-    private void setInternal(int i, Slice.Bound start, Slice.Bound end, long markedAt, int delTime)
+    private void setInternal(int i, Bound start, Bound end, long markedAt, int delTime)
     {
         if (starts[i] != null)
             boundaryHeapSize -= starts[i].unsharedHeapSize() + ends[i].unsharedHeapSize();

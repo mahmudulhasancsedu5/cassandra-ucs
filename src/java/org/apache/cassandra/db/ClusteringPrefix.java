@@ -25,6 +25,7 @@ import java.util.*;
 import org.apache.cassandra.cache.IMeasurableMemory;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.db.RangeTombstone.Bound;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -37,7 +38,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * a "kind" that allows us to implement slices with inclusive and exclusive bounds.
  * <p>
  * In practice, {@code ClusteringPrefix} is just the common parts to its 3 main subtype: {@link Clustering} and
- * {@link Slice.Bound}/{@link RangeTombstone.Bound}, where:
+ * {@link Slice.Bound}/{@link RangeTombstone.Boundary}, where:
  *   1) {@code Clustering} represents the clustering values for a row, i.e. the values for it's clustering columns.
  *   2) {@code Slice.Bound} represents a bound (start or end) of a slice (of rows).
  *   3) {@code RangeTombstoneBoundMarker.Bound} represents a range tombstone marker "bound".
@@ -51,7 +52,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
      * The kind of clustering prefix this actually is.
      *
      * The kind {@code STATIC_CLUSTERING} is only implemented by {@link Clustering#STATIC_CLUSTERING} and {@code CLUSTERING} is
-     * implemented by the {@link Clustering} class. The rest is used by {@link Slice.Bound} and {@link RangeTombstone.Bound}.
+     * implemented by the {@link Clustering} class. The rest is used by {@link Slice.Bound} and {@link RangeTombstone.Boundary}.
      */
     public enum Kind
     {
@@ -122,8 +123,9 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
                 case EXCL_START_BOUND:
                 case EXCL_END_BOUND:
                     return true;
+                default:
+                    return false;
             }
-            return false;
         }
 
         public boolean isBoundary()
@@ -133,8 +135,9 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
                 case INCL_END_EXCL_START_BOUNDARY:
                 case EXCL_END_INCL_START_BOUNDARY:
                     return true;
+                default:
+                    return false;
             }
-            return false;
         }
 
         public boolean isStart()
@@ -259,7 +262,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
             }
             else
             {
-                RangeTombstone.Bound.serializer.serialize((RangeTombstone.Bound)clustering, out, version, types);
+                Bound.serializer.serialize((Bound)clustering, out, version, types);
             }
         }
 
@@ -271,7 +274,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
             if (kind == Kind.CLUSTERING)
                 return Clustering.serializer.deserialize(in, version, types);
             else
-                return RangeTombstone.Bound.serializer.deserializeValues(in, kind, version, types);
+                return Bound.serializer.deserializeValues(in, kind, version, types);
         }
 
         public long serializedSize(ClusteringPrefix clustering, int version, List<AbstractType<?>> types)
@@ -281,7 +284,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
             if (clustering.kind() == Kind.CLUSTERING)
                 return 1 + Clustering.serializer.serializedSize((Clustering)clustering, version, types);
             else
-                return RangeTombstone.Bound.serializer.serializedSize((RangeTombstone.Bound)clustering, version, types);
+                return Bound.serializer.serializedSize((Bound)clustering, version, types);
         }
 
         void serializeValuesWithoutSize(ClusteringPrefix clustering, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
@@ -433,7 +436,7 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
                 this.nextValues = new ByteBuffer[nextSize];
         }
 
-        public int compareNextTo(Slice.Bound bound) throws IOException
+        public int compareNextTo(Bound bound) throws IOException
         {
             if (bound == Slice.Bound.TOP)
                 return -1;
@@ -487,11 +490,11 @@ public interface ClusteringPrefix extends IMeasurableMemory, Clusterable
                 continue;
         }
 
-        public RangeTombstone.Bound deserializeNextBound() throws IOException
+        public Bound deserializeNextBound() throws IOException
         {
             assert !nextIsRow;
             deserializeAll();
-            RangeTombstone.Bound bound = new RangeTombstone.Bound(nextKind, nextValues);
+            Bound bound = Bound.create(nextKind, nextValues);
             nextValues = null;
             return bound;
         }

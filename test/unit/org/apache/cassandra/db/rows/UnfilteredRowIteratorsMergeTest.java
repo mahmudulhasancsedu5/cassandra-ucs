@@ -230,9 +230,12 @@ public class UnfilteredRowIteratorsMergeTest
             if (prev != null && curr != null && prev.isClose(false) && curr.isOpen(false) && prev.clustering().invert().equals(curr.clustering()))
             {
                 // Join. Prefer not to use merger to check its correctness.
-                RangeTombstone.Bound b = prev.clustering();
-                b = b.withNewKind(b.isInclusive() ? RangeTombstone.Bound.Kind.INCL_END_EXCL_START_BOUNDARY : RangeTombstone.Bound.Kind.EXCL_END_INCL_START_BOUNDARY);
-                prev = new RangeTombstoneBoundaryMarker(b, prev.closeDeletionTime(false), curr.openDeletionTime(false));
+                Bound b = ((RangeTombstoneBoundMarker) prev).clustering();
+                RangeTombstone.Boundary boundary = RangeTombstone.Boundary.create(b.isInclusive()
+                                                                                      ? RangeTombstone.Bound.Kind.INCL_END_EXCL_START_BOUNDARY
+                                                                                      : RangeTombstone.Bound.Kind.EXCL_END_INCL_START_BOUNDARY,
+                                                                                  b.getRawValues());
+                prev = new RangeTombstoneBoundaryMarker(boundary, prev.closeDeletionTime(false), curr.openDeletionTime(false));
                 currUnfiltered = prev;
                 --di;
             }

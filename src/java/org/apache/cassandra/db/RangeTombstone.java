@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Objects;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.rows.RangeTombstoneMarker;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -101,19 +102,21 @@ public class RangeTombstone
      *      iterator. See this comment for more details: https://goo.gl/yyB5mR.
      *   2) This saves some storage space.
      */
-    public static class Bound extends Slice.Bound
+    public static abstract class Bound extends AbstractBufferClusteringPrefix
     {
         public static final Serializer serializer = new Serializer();
 
-        /** The smallest start bound, i.e. the one that starts before any row. */
-        public static final Bound BOTTOM = new Bound(Kind.INCL_START_BOUND, EMPTY_VALUES_ARRAY);
-        /** The biggest end bound, i.e. the one that ends after any row. */
-        public static final Bound TOP = new Bound(Kind.INCL_END_BOUND, EMPTY_VALUES_ARRAY);
-
-        public Bound(Kind kind, ByteBuffer[] values)
+        protected Bound(Kind kind, ByteBuffer[] values)
         {
             super(kind, values);
             assert values.length > 0 || !kind.isBoundary();
+        }
+
+        public static Bound create(Kind kind, ByteBuffer[] values)
+        {
+            return kind.isBoundary()
+                    ? new Boundary(kind, values)
+                    : new Slice.Bound(kind, values);
         }
 
         public boolean isBoundary()
@@ -131,39 +134,34 @@ public class RangeTombstone
             return kind.isClose(reversed);
         }
 
-        public static RangeTombstone.Bound inclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
+        public static Slice.Bound inclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.INCL_END_BOUND : Kind.INCL_START_BOUND, boundValues);
+            return new Slice.Bound(reversed ? Kind.INCL_END_BOUND : Kind.INCL_START_BOUND, boundValues);
         }
 
-        public static RangeTombstone.Bound exclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
+        public static Slice.Bound exclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.EXCL_END_BOUND : Kind.EXCL_START_BOUND, boundValues);
+            return new Slice.Bound(reversed ? Kind.EXCL_END_BOUND : Kind.EXCL_START_BOUND, boundValues);
         }
 
-        public static RangeTombstone.Bound inclusiveClose(boolean reversed, ByteBuffer[] boundValues)
+        public static Slice.Bound inclusiveClose(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.INCL_START_BOUND : Kind.INCL_END_BOUND, boundValues);
+            return new Slice.Bound(reversed ? Kind.INCL_START_BOUND : Kind.INCL_END_BOUND, boundValues);
         }
 
-        public static RangeTombstone.Bound exclusiveClose(boolean reversed, ByteBuffer[] boundValues)
+        public static Slice.Bound exclusiveClose(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.EXCL_START_BOUND : Kind.EXCL_END_BOUND, boundValues);
+            return new Slice.Bound(reversed ? Kind.EXCL_START_BOUND : Kind.EXCL_END_BOUND, boundValues);
         }
 
-        public static RangeTombstone.Bound inclusiveCloseExclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
+        public static Boundary inclusiveCloseExclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.EXCL_END_INCL_START_BOUNDARY : Kind.INCL_END_EXCL_START_BOUNDARY, boundValues);
+            return new Boundary(reversed ? Kind.EXCL_END_INCL_START_BOUNDARY : Kind.INCL_END_EXCL_START_BOUNDARY, boundValues);
         }
 
-        public static RangeTombstone.Bound exclusiveCloseInclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
+        public static Boundary exclusiveCloseInclusiveOpen(boolean reversed, ByteBuffer[] boundValues)
         {
-            return new Bound(reversed ? Kind.INCL_END_EXCL_START_BOUNDARY : Kind.EXCL_END_INCL_START_BOUNDARY, boundValues);
-        }
-
-        public static RangeTombstone.Bound fromSliceBound(Slice.Bound sliceBound)
-        {
-            return new RangeTombstone.Bound(sliceBound.kind(), sliceBound.getRawValues());
+            return new Boundary(reversed ? Kind.INCL_END_EXCL_START_BOUNDARY : Kind.EXCL_END_INCL_START_BOUNDARY, boundValues);
         }
 
         public RangeTombstone.Bound copy(AbstractAllocator allocator)
@@ -171,14 +169,36 @@ public class RangeTombstone
             ByteBuffer[] newValues = new ByteBuffer[size()];
             for (int i = 0; i < size(); i++)
                 newValues[i] = allocator.clone(get(i));
-            return new Bound(kind(), newValues);
+            return create(kind(), newValues);
         }
 
-        @Override
-        public Bound withNewKind(Kind kind)
+        public String toString(CFMetaData metadata)
         {
-            return new Bound(kind, values);
+            return toString(metadata.comparator);
         }
+
+        public String toString(ClusteringComparator comparator)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.append(kind()).append('(');
+            for (int i = 0; i < size(); i++)
+            {
+                if (i > 0)
+                    sb.append(", ");
+                sb.append(comparator.subtype(i).getString(get(i)));
+            }
+            return sb.append(')').toString();
+        }
+
+        /**
+         * Returns the inverse of the current bound.
+         * <p>
+         * This invert both start into end (and vice-versa) and inclusive into exclusive (and vice-versa).
+         *
+         * @return the invert of this bound. For instance, if this bound is an exlusive start, this return
+         * an inclusive end with the same values.
+         */
+        public abstract Bound invert();
 
         public static class Serializer
         {
@@ -207,11 +227,47 @@ public class RangeTombstone
             {
                 int size = in.readUnsignedShort();
                 if (size == 0)
-                    return kind.isStart() ? BOTTOM : TOP;
+                    return kind.isStart() ? Slice.Bound.BOTTOM : Slice.Bound.TOP;
 
                 ByteBuffer[] values = ClusteringPrefix.serializer.deserializeValuesWithoutSize(in, size, version, types);
-                return new RangeTombstone.Bound(kind, values);
+                return create(kind, values);
             }
+        }
+    }
+
+    public static class Boundary extends Bound
+    {
+        protected Boundary(Kind kind, ByteBuffer[] values)
+        {
+            super(kind, values);
+        }
+
+        public static Boundary create(Kind kind, ByteBuffer[] values)
+        {
+            assert kind.isBoundary();
+            return new Boundary(kind, values);
+        }
+
+        @Override
+        public Boundary invert()
+        {
+            return create(kind().invert(), values);
+        }
+
+        @Override
+        public Boundary copy(AbstractAllocator allocator)
+        {
+            return (Boundary) super.copy(allocator);
+        }
+
+        public Slice.Bound openBound(boolean reversed)
+        {
+            return Slice.Bound.create(kind.openBoundOfBoundary(reversed), values);
+        }
+
+        public Slice.Bound closeBound(boolean reversed)
+        {
+            return Slice.Bound.create(kind.closeBoundOfBoundary(reversed), values);
         }
     }
 }

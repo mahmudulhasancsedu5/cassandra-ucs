@@ -22,6 +22,7 @@ import java.util.*;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.Slice.Bound;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.ImmutableBTreePartition;
 import org.apache.cassandra.db.rows.*;
@@ -139,7 +140,7 @@ public class SSTableReversedIterator extends AbstractSSTableIterator
 
         // Reads the unfiltered from disk and load them into the reader buffer. It stops reading when either the partition
         // is fully read, or when stopReadingDisk() returns true.
-        protected void loadFromDisk(Slice.Bound start, Slice.Bound end, boolean includeFirst) throws IOException
+        protected void loadFromDisk(Bound start, Bound end, boolean includeFirst) throws IOException
         {
             buffer.reset();
 
@@ -161,7 +162,7 @@ public class SSTableReversedIterator extends AbstractSSTableIterator
             // If we have an open marker, it's either one from what we just skipped (if start != null), or it's from the previous index block.
             if (openMarker != null)
             {
-                RangeTombstone.Bound markerStart = start == null ? RangeTombstone.Bound.BOTTOM : RangeTombstone.Bound.fromSliceBound(start);
+                Bound markerStart = start == null ? Bound.BOTTOM : start;
                 buffer.add(new RangeTombstoneBoundMarker(markerStart, openMarker));
             }
 
@@ -184,7 +185,7 @@ public class SSTableReversedIterator extends AbstractSSTableIterator
             if (openMarker != null)
             {
                 // If we have no end and still an openMarker, this means we're indexed and the marker is closed in a following block.
-                RangeTombstone.Bound markerEnd = end == null ? RangeTombstone.Bound.TOP : RangeTombstone.Bound.fromSliceBound(end);
+                Bound markerEnd = end == null ? Bound.TOP : end;
                 buffer.add(new RangeTombstoneBoundMarker(markerEnd, getAndClearOpenMarker()));
             }
 
