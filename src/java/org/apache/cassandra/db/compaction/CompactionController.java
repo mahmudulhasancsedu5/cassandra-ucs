@@ -36,9 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OverlapIterator;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -88,6 +86,7 @@ public class CompactionController implements AutoCloseable
                           ? compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong()
                           : 0;
         refreshOverlaps();
+        logger.info("CompactionController created: tombstone option {} limiter {} number compacting {} overlaps {}", tombstoneOption, limiter, compacting.size(), overlappingSSTables.size());
     }
 
     public void maybeRefreshOverlaps()
@@ -105,7 +104,7 @@ public class CompactionController implements AutoCloseable
     private void refreshOverlaps()
     {
         if (this.overlappingSSTables != null)
-            overlappingSSTables.release();
+            close();
 
         if (compacting == null)
             overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
@@ -235,6 +234,7 @@ public class CompactionController implements AutoCloseable
     public void close()
     {
         FileUtils.closeQuietly(openDataFiles.values());
+        openDataFiles.clear();
         overlappingSSTables.release();
     }
 
