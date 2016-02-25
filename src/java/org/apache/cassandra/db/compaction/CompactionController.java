@@ -86,7 +86,8 @@ public class CompactionController implements AutoCloseable
                           ? compacting.stream().mapToLong(SSTableReader::getMinTimestamp).min().getAsLong()
                           : 0;
         refreshOverlaps();
-        logger.info("CompactionController created: tombstone option {} limiter {} number compacting {} overlaps {}", tombstoneOption, limiter, compacting.size(), overlappingSSTables.size());
+        logger.info("CompactionController created: tombstone option {} limiter {} number compacting {} overlaps {}",
+                tombstoneOption, limiter, compacting != null ? compacting.size() : 0, overlappingSSTables.size());
     }
 
     public void maybeRefreshOverlaps()
