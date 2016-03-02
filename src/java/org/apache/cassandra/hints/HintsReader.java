@@ -35,6 +35,7 @@ import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.utils.AbstractIterator;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CLibrary;
+import org.apache.rat.document.UnsuitableDocumentException;
 
 /**
  * A paged non-compressed hints reader that provides two iterators:
@@ -111,7 +112,8 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
 
     void seek(long newPosition)
     {
-        input.seek(newPosition);
+        throw new UnsupportedOperationException("Hints are not seekable.");
+//        input.seek(newPosition);
     }
 
     public Iterator<Page> iterator()
@@ -149,12 +151,12 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
         @SuppressWarnings("resource")
         protected Page computeNext()
         {
-            CLibrary.trySkipCache(input.getChannel().getFileDescriptor(), 0, input.getFilePointer(), input.getPath());
+            CLibrary.trySkipCache(input.getChannel().getFileDescriptor(), 0, input.getSourcePosition(), input.getPath());
 
             if (input.isEOF())
                 return endOfData();
 
-            return new Page(input.getFilePointer());
+            return new Page(input.getSourcePosition());
         }
     }
 
@@ -177,7 +179,7 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
 
             do
             {
-                long position = input.getFilePointer();
+                long position = input.getSourcePosition();
 
                 if (input.isEOF())
                     return endOfData(); // reached EOF
@@ -267,7 +269,7 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
 
             do
             {
-                long position = input.getFilePointer();
+                long position = input.getSourcePosition();
 
                 if (input.isEOF())
                     return endOfData(); // reached EOF

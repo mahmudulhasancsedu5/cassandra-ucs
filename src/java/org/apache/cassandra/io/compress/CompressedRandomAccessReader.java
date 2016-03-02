@@ -21,7 +21,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.zip.Checksum;
-import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
@@ -35,210 +34,237 @@ import org.apache.cassandra.utils.memory.BufferPool;
  * CRAR extends RAR to transparently uncompress blocks from the file into RAR.buffer.  Most of the RAR
  * "read bytes from the buffer, rebuffering when necessary" machinery works unchanged after that.
  */
-public class CompressedRandomAccessReader extends RandomAccessReader
+public class CompressedRandomAccessReader
 {
-    private final CompressionMetadata metadata;
-
-    // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
-    private ByteBuffer compressed;
-
-    // re-use single crc object
-    private final Checksum checksum;
-
-    // raw checksum bytes
-    private ByteBuffer checksumBytes;
-
     @VisibleForTesting
-    public double getCrcCheckChance()
+    public abstract static class CompressedRebufferer extends AbstractRebufferer
     {
-        return metadata.parameters.getCrcCheckChance();
+        final CompressionMetadata metadata;
+
+        final ByteBuffer uncompressed;
+        final BufferType bufferType;
+        final int bufferSize;
+
+        // re-use single crc object
+        final Checksum checksum;
+
+        public CompressedRebufferer(ChannelProxy channel, CompressionMetadata metadata)
+        {
+            super(channel, metadata.dataLength);
+            this.metadata = metadata;
+            checksum = metadata.checksumType.newInstance();
+            bufferType = metadata.compressor().preferredBufferType();
+            bufferSize = metadata.chunkLength();
+            uncompressed = RandomAccessReader.allocateBuffer(bufferSize, bufferType);
+            uncompressed.limit(0);
+        }
+
+        @Override
+        public void close()
+        {
+            BufferPool.put(uncompressed);
+        }
+
+        @Override
+        public ByteBuffer initialBuffer()
+        {
+            return uncompressed;
+        }
+
+        @VisibleForTesting
+        public double getCrcCheckChance()
+        {
+            return metadata.parameters.getCrcCheckChance();
+        }
+
+        @Override
+        public String toString()
+        {
+            return String.format("%s(%s - chunk length %d, data length %d)",
+                                 getClass().getSimpleName(),
+                                 channel.filePath(),
+                                 metadata.chunkLength(),
+                                 metadata.dataLength);
+        }
     }
 
-    protected CompressedRandomAccessReader(Builder builder)
+    static class StandardRebufferer extends CompressedRebufferer
     {
-        super(builder);
-        this.metadata = builder.metadata;
-        this.checksum = metadata.checksumType.newInstance();
+        // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
+        private ByteBuffer compressed;
 
-        if (regions == null)
+        // raw checksum bytes
+        final ByteBuffer checksumBytes;
+
+        public StandardRebufferer(ChannelProxy channel, CompressionMetadata metadata)
         {
-            compressed = allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()), bufferType);
+            super(channel, metadata);
+            compressed = RandomAccessReader.allocateBuffer(
+                     metadata.compressor().initialCompressedBufferLength(bufferSize),
+                     bufferType);
             checksumBytes = ByteBuffer.wrap(new byte[4]);
         }
-    }
 
-    @Override
-    protected void releaseBuffer()
-    {
-        try
+        @Override
+        public ByteBuffer rebuffer(long position)
         {
-            if (buffer != null)
-            {
-                BufferPool.put(buffer);
-                buffer = null;
-            }
-        }
-        finally
-        {
-            // this will always be null if using mmap access mode (unlike in parent, where buffer is set to a region)
-            if (compressed != null)
-            {
-                BufferPool.put(compressed);
-                compressed = null;
-            }
-        }
-    }
-
-    @Override
-    protected void reBufferStandard()
-    {
-        try
-        {
-            long position = current();
-            assert position < metadata.dataLength;
-
-            CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
-
-            if (compressed.capacity() < chunk.length)
-            {
-                BufferPool.put(compressed);
-                compressed = allocateBuffer(chunk.length, bufferType);
-            }
-            else
-            {
-                compressed.clear();
-            }
-
-            compressed.limit(chunk.length);
-            if (channel.read(compressed, chunk.offset) != chunk.length)
-                throw new CorruptBlockException(getPath(), chunk);
-
-            compressed.flip();
-            buffer.clear();
-
             try
             {
-                metadata.compressor().uncompress(compressed, buffer);
+                assert position < fileLength;
+
+                CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
+
+                if (compressed.capacity() < chunk.length)
+                {
+                    BufferPool.put(compressed);
+                    compressed = RandomAccessReader.allocateBuffer(chunk.length, bufferType);
+                }
+                else
+                {
+                    compressed.clear();
+                }
+
+                compressed.limit(chunk.length);
+                if (channel.read(compressed, chunk.offset) != chunk.length)
+                    throw new CorruptBlockException(channel.filePath(), chunk);
+
+                compressed.flip();
+                uncompressed.clear();
+
+                try
+                {
+                    metadata.compressor().uncompress(compressed, uncompressed);
+                }
+                catch (IOException e)
+                {
+                    throw new CorruptBlockException(channel.filePath(), chunk);
+                }
+                finally
+                {
+                    uncompressed.flip();
+                }
+
+                if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
+                {
+                    compressed.rewind();
+                    metadata.checksumType.update( checksum, compressed);
+
+                    if (checksum(chunk) != (int) checksum.getValue())
+                        throw new CorruptBlockException(channel.filePath(), chunk);
+
+                    // reset checksum object back to the original (blank) state
+                    checksum.reset();
+                }
+
+                // buffer offset is always aligned
+                bufferOffset = position & ~(uncompressed.capacity() - 1);
+                uncompressed.position((int) (position - bufferOffset));
+                // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
+                // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
+                assert bufferOffset + uncompressed.limit() <= fileLength;
+//                if (bufferOffset + buffer.limit() > fileLength)
+//                    buffer.limit((int)(fileLength - bufferOffset));
+                return uncompressed;
+            }
+            catch (CorruptBlockException e)
+            {
+                throw new CorruptSSTableException(e, channel.filePath());
             }
             catch (IOException e)
             {
-                throw new CorruptBlockException(getPath(), chunk);
+                throw new FSReadError(e, channel.filePath());
             }
-            finally
-            {
-                buffer.flip();
-            }
-
-            if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
-            {
-                compressed.rewind();
-                metadata.checksumType.update( checksum, (compressed));
-
-                if (checksum(chunk) != (int) checksum.getValue())
-                    throw new CorruptBlockException(getPath(), chunk);
-
-                // reset checksum object back to the original (blank) state
-                checksum.reset();
-            }
-
-            // buffer offset is always aligned
-            bufferOffset = position & ~(buffer.capacity() - 1);
-            buffer.position((int) (position - bufferOffset));
-            // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
-            // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
-            if (bufferOffset + buffer.limit() > length())
-                buffer.limit((int)(length() - bufferOffset));
         }
-        catch (CorruptBlockException e)
+
+        private int checksum(CompressionMetadata.Chunk chunk) throws IOException
         {
-            throw new CorruptSSTableException(e, getPath());
+            long position = chunk.offset + chunk.length;
+            checksumBytes.clear();
+            if (channel.read(checksumBytes, position) != checksumBytes.capacity())
+                throw new CorruptBlockException(channel.filePath(), chunk);
+            return checksumBytes.getInt(0);
         }
-        catch (IOException e)
+
+        @Override
+        public void close()
         {
-            throw new FSReadError(e, getPath());
+            super.close();
+            BufferPool.put(compressed);
         }
     }
 
-    @Override
-    protected void reBufferMmap()
+    static class MemmapRebufferer extends CompressedRebufferer
     {
-        try
+        protected final MmappedRegions regions;
+
+        public MemmapRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
         {
-            long position = current();
-            assert position < metadata.dataLength;
+            super(channel, metadata);
+            this.regions = regions;
+        }
 
-            CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
-
-            MmappedRegions.Region region = regions.floor(chunk.offset);
-            long segmentOffset = region.bottom();
-            int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
-            ByteBuffer compressedChunk = region.buffer.duplicate(); // TODO: change to slice(chunkOffset) when we upgrade LZ4-java
-
-            compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
-
-            buffer.clear();
-
+        @Override
+        public ByteBuffer rebuffer(long position)
+        {
             try
             {
-                metadata.compressor().uncompress(compressedChunk, buffer);
-            }
-            catch (IOException e)
-            {
-                throw new CorruptBlockException(getPath(), chunk);
-            }
-            finally
-            {
-                buffer.flip();
-            }
+                assert position < fileLength;
 
-            if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
-            {
+                CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
+
+                MmappedRegions.Region region = regions.floor(chunk.offset);
+                long segmentOffset = region.bottom();
+                int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
+                ByteBuffer compressedChunk = region.buffer.duplicate();
+
+                // FIXME: what if it's crossing a boundary?
                 compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
-                metadata.checksumType.update( checksum, compressedChunk);
+                uncompressed.clear();
 
-                compressedChunk.limit(compressedChunk.capacity());
-                if (compressedChunk.getInt() != (int) checksum.getValue())
-                    throw new CorruptBlockException(getPath(), chunk);
+                try
+                {
+                    metadata.compressor().uncompress(compressedChunk, uncompressed);
+                }
+                catch (IOException e)
+                {
+                    throw new CorruptBlockException(channel.filePath(), chunk);
+                }
+                finally
+                {
+                    uncompressed.flip();
+                }
 
-                // reset checksum object back to the original (blank) state
-                checksum.reset();
+                if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
+                {
+                    compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
+
+                    metadata.checksumType.update( checksum, compressedChunk);
+
+                    compressedChunk.limit(compressedChunk.capacity());
+                    if (compressedChunk.getInt() != (int) checksum.getValue())
+                        throw new CorruptBlockException(channel.filePath(), chunk);
+
+                    // reset checksum object back to the original (blank) state
+                    checksum.reset();
+                }
+
+                // buffer offset is always aligned
+                bufferOffset = position & ~(uncompressed.capacity() - 1);
+                uncompressed.position((int) (position - bufferOffset));
+                // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
+                // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
+                assert bufferOffset + uncompressed.limit() <= fileLength;
+//              if (bufferOffset + buffer.limit() > fileLength)
+//                  buffer.limit((int)(fileLength - bufferOffset));
+                return uncompressed;
+            }
+            catch (CorruptBlockException e)
+            {
+                throw new CorruptSSTableException(e, channel.filePath());
             }
 
-            // buffer offset is always aligned
-            bufferOffset = position & ~(buffer.capacity() - 1);
-            buffer.position((int) (position - bufferOffset));
-            // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
-            // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
-            if (bufferOffset + buffer.limit() > length())
-                buffer.limit((int)(length() - bufferOffset));
         }
-        catch (CorruptBlockException e)
-        {
-            throw new CorruptSSTableException(e, getPath());
-        }
-
-    }
-
-    private int checksum(CompressionMetadata.Chunk chunk) throws IOException
-    {
-        long position = chunk.offset + chunk.length;
-        checksumBytes.clear();
-        if (channel.read(checksumBytes, position) != checksumBytes.capacity())
-            throw new CorruptBlockException(getPath(), chunk);
-        return checksumBytes.getInt(0);
-    }
-
-    @Override
-    public long length()
-    {
-        return metadata.dataLength;
-    }
-
-    @Override
-    public String toString()
-    {
-        return String.format("%s - chunk length %d, data length %d.", getPath(), metadata.chunkLength(), metadata.dataLength);
     }
 
     public final static class Builder extends RandomAccessReader.Builder
@@ -248,39 +274,24 @@ public class CompressedRandomAccessReader extends RandomAccessReader
         public Builder(ICompressedFile file)
         {
             super(file.channel());
-            this.metadata = applyMetadata(file.getMetadata());
-            this.regions = file.regions();
+            metadata = file.getMetadata();
+            regions = file.regions();
+            assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
         }
 
         public Builder(ChannelProxy channel, CompressionMetadata metadata)
         {
             super(channel);
-            this.metadata = applyMetadata(metadata);
-        }
-
-        private CompressionMetadata applyMetadata(CompressionMetadata metadata)
-        {
-            this.overrideLength = metadata.compressedFileLength;
-            this.bufferSize = metadata.chunkLength();
-            this.bufferType = metadata.compressor().preferredBufferType();
-
-            assert Integer.bitCount(this.bufferSize) == 1; //must be a power of two
-
-            return metadata;
+            this.metadata = metadata;
+            assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
         }
 
         @Override
-        protected ByteBuffer createBuffer()
+        protected Rebufferer createRebufferer()
         {
-            buffer = allocateBuffer(bufferSize, bufferType);
-            buffer.limit(0);
-            return buffer;
-        }
-
-        @Override
-        public RandomAccessReader build()
-        {
-            return new CompressedRandomAccessReader(this);
+            return regions != null
+                    ? new MemmapRebufferer(channel, metadata, regions)
+                    : new StandardRebufferer(channel, metadata);
         }
     }
 }
