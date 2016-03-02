@@ -18,6 +18,7 @@
  *
  */
 package org.apache.cassandra.io.util;
+import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.SyncUtil;
 
@@ -428,7 +429,7 @@ public class BufferedRandomAccessFileTest
 
         r.close(); // closing to test read after close
 
-        expectException(() -> r.read(), NullPointerException.class);
+        expectException(() -> r.read(), FSReadError.class);
 
         //Used to throw ClosedChannelException, but now that it extends BDOSP it just NPEs on the buffer
         //Writing to a BufferedOutputStream that is closed generates no error

@@ -19,13 +19,15 @@ package org.apache.cassandra.io.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.util.DataIntegrityMetadata.ChecksumValidator;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Throwables;
 
-public class ChecksummedRandomAccessReader extends RandomAccessReader
+public class ChecksummedRandomAccessReader
 {
     @SuppressWarnings("serial")
     public static class CorruptFileException extends RuntimeException
@@ -39,67 +41,47 @@ public class ChecksummedRandomAccessReader extends RandomAccessReader
         }
     }
 
-    private final DataIntegrityMetadata.ChecksumValidator validator;
-
-    private ChecksummedRandomAccessReader(Builder builder)
+    static class ChecksummedRebufferer extends RandomAccessReader.StandardRebufferer
     {
-        super(builder);
-        this.validator = builder.validator;
-    }
+        private final DataIntegrityMetadata.ChecksumValidator validator;
 
-    @SuppressWarnings("resource")
-    @Override
-    protected void reBufferStandard()
-    {
-        long desiredPosition = current();
-        // align with buffer size, as checksums were computed in chunks of buffer size each.
-        bufferOffset = (desiredPosition / buffer.capacity()) * buffer.capacity();
-
-        buffer.clear();
-
-        long position = bufferOffset;
-        while (buffer.hasRemaining())
+        public ChecksummedRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize, ChecksumValidator validator)
         {
-            int n = channel.read(buffer, position);
-            if (n < 0)
-                break;
-            position += n;
+            super(channel, fileLength, bufferType, bufferSize);
+            this.validator = validator;
         }
 
-        buffer.flip();
-
-        try
+        @SuppressWarnings("resource")
+        @Override
+        public ByteBuffer rebuffer(long desiredPosition)
         {
-            validator.validate(ByteBufferUtil.getArray(buffer), 0, buffer.remaining());
+            if (desiredPosition != bufferOffset + buffer.position())
+                validator.seek(desiredPosition);
+
+            // align with buffer size, as checksums were computed in chunks of buffer size each.
+            long position = (desiredPosition / buffer.capacity()) * buffer.capacity();
+            ByteBuffer buffer = super.rebuffer(position);
+
+            try
+            {
+                validator.validate(ByteBufferUtil.getArray(buffer), 0, buffer.remaining());
+            }
+            catch (IOException e)
+            {
+                throw new CorruptFileException(e, channel.filePath());
+            }
+
+            buffer.position((int) (desiredPosition - bufferOffset));
+            return buffer;
         }
-        catch (IOException e)
+
+        @Override
+        public void close()
         {
-            throw new CorruptFileException(e, channel.filePath());
+            Throwables.perform(channel.filePath(), Throwables.FileOpType.READ,
+                               super::close,
+                               validator::close);
         }
-
-        buffer.position((int) (desiredPosition - bufferOffset));
-    }
-
-    @Override
-    protected void reBufferMmap()
-    {
-        throw new AssertionError("Unsupported operation");
-    }
-
-    @Override
-    public void seek(long newPosition)
-    {
-        validator.seek(newPosition);
-        super.seek(newPosition);
-    }
-
-    @Override
-    public void close()
-    {
-        Throwables.perform(channel.filePath(), Throwables.FileOpType.READ,
-                           super::close,
-                           validator::close,
-                           channel::close);
     }
 
     public static final class Builder extends RandomAccessReader.Builder
@@ -119,9 +101,15 @@ public class ChecksummedRandomAccessReader extends RandomAccessReader
         }
 
         @Override
+        protected Rebufferer createRebufferer()
+        {
+            return new ChecksummedRebufferer(channel, overrideLength, bufferType, bufferSize, validator);
+        }
+
+        @Override
         public RandomAccessReader build()
         {
-            return new ChecksummedRandomAccessReader(this);
+            return buildWithChannel();
         }
     }
 }

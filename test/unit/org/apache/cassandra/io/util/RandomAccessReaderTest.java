@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class RandomAccessReaderTest
@@ -479,5 +480,10 @@ public class RandomAccessReaderTest
                 executor.awaitTermination(1, TimeUnit.MINUTES);
             }
         }
+    }
+
+    public static double getCrcCheckChance(RandomAccessReader reader)
+    {
+        return ((CompressedRandomAccessReader.CompressedRebufferer) (reader.rebufferer)).getCrcCheckChance();
     }
 }

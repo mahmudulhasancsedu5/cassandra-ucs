@@ -21,10 +21,10 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
-import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 
@@ -41,60 +41,21 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     //       and because our BufferPool currently has a maximum allocation size of this.
     public static final int MAX_BUFFER_SIZE = 1 << 16; // 64k
 
-    // the IO channel to the file, we do not own a reference to this due to
-    // performance reasons (CASSANDRA-9379) so it's up to the owner of the RAR to
-    // ensure that the channel stays open and that it is closed afterwards
-    protected final ChannelProxy channel;
-
-    // optional memory mapped regions for the channel
-    protected final MmappedRegions regions;
-
-    // An optional limiter that will throttle the amount of data we read
-    protected final RateLimiter limiter;
-
-    // the file length, this can be overridden at construction to a value shorter
-    // than the true length of the file; if so, it acts as an imposed limit on reads,
-    // required when opening sstables early not to read past the mark
-    private final long fileLength;
-
-    // the buffer size for buffered readers
-    protected final int bufferSize;
-
-    // the buffer type for buffered readers
-    protected final BufferType bufferType;
-
-    // offset from the beginning of the file
-    protected long bufferOffset;
-
     // offset of the last file mark
     protected long markedPointer;
 
-    protected RandomAccessReader(Builder builder)
-    {
-        super(builder.createBuffer());
+    @VisibleForTesting
+    final Rebufferer rebufferer;
 
-        this.channel = builder.channel;
-        this.regions = builder.regions;
-        this.limiter = builder.limiter;
-        this.fileLength = builder.overrideLength <= 0 ? builder.channel.size() : builder.overrideLength;
-        this.bufferSize = builder.bufferSize;
-        this.bufferType = builder.bufferType;
-        this.buffer = builder.buffer;
+    protected RandomAccessReader(Rebufferer rebufferer)
+    {
+        super(rebufferer.initialBuffer());
+        this.rebufferer = rebufferer;
     }
 
-    protected static ByteBuffer allocateBuffer(int size, BufferType bufferType)
+    public static ByteBuffer allocateBuffer(int size, BufferType bufferType)
     {
         return BufferPool.get(size, bufferType).order(ByteOrder.BIG_ENDIAN);
-    }
-
-    protected void releaseBuffer()
-    {
-        if (buffer != null)
-        {
-            if (regions == null)
-                BufferPool.put(buffer);
-            buffer = null;
-        }
     }
 
     /**
@@ -105,58 +66,83 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (isEOF())
             return;
 
-        if (regions == null)
-            reBufferStandard();
-        else
-            reBufferMmap();
-
-        if (limiter != null)
-            limiter.acquire(buffer.remaining());
+        buffer = rebufferer.rebuffer(current());
 
         assert buffer.order() == ByteOrder.BIG_ENDIAN : "Buffer must have BIG ENDIAN byte ordering";
     }
 
-    protected void reBufferStandard()
+    static class StandardRebufferer extends AbstractRebufferer
     {
-        bufferOffset += buffer.position();
-        assert bufferOffset < fileLength;
+        final ByteBuffer buffer;
 
-        buffer.clear();
-        long position = bufferOffset;
-        long limit = bufferOffset;
-
-        long pageAligedPos = position & ~4095;
-        // Because the buffer capacity is a multiple of the page size, we read less
-        // the first time and then we should read at page boundaries only,
-        // unless the user seeks elsewhere
-        long upperLimit = Math.min(fileLength, pageAligedPos + buffer.capacity());
-        buffer.limit((int)(upperLimit - position));
-        while (buffer.hasRemaining() && limit < upperLimit)
+        public StandardRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize)
         {
-            int n = channel.read(buffer, position);
-            if (n < 0)
-                throw new FSReadError(new IOException("Unexpected end of file"), channel.filePath());
-
-            position += n;
-            limit = bufferOffset + buffer.position();
+            super(channel, fileLength);
+            buffer = RandomAccessReader.allocateBuffer(bufferSize, bufferType);
+            buffer.limit(0);
         }
 
-        buffer.flip();
+        @Override
+        public ByteBuffer rebuffer(long position)
+        {
+            assert position <= fileLength;
+            long pageAlignedPos = position & ~4095;
+
+            buffer.clear();
+
+            buffer.limit(Ints.checkedCast(Math.min(fileLength - pageAlignedPos, buffer.capacity())));
+            channel.read(buffer, pageAlignedPos);
+
+            buffer.flip();
+            buffer.position(Ints.checkedCast(position - pageAlignedPos));
+            bufferOffset = pageAlignedPos;
+            return buffer;
+        }
+
+        @Override
+        public void close()
+        {
+            BufferPool.put(buffer);
+        }
+
+        @Override
+        public ByteBuffer initialBuffer()
+        {
+            return buffer;
+        }
     }
 
-    protected void reBufferMmap()
+    static class MemmapRebufferer extends AbstractRebufferer
     {
-        long position = bufferOffset + buffer.position();
-        assert position < fileLength;
+        protected final MmappedRegions regions;
 
-        MmappedRegions.Region region = regions.floor(position);
-        bufferOffset = region.bottom();
-        buffer = region.buffer.duplicate();
-        buffer.position(Ints.checkedCast(position - bufferOffset));
+        public MemmapRebufferer(ChannelProxy channel, long fileLength, MmappedRegions regions)
+        {
+            super(channel, fileLength);
+            this.regions = regions;
+        }
 
-        if (limiter != null && bufferSize < buffer.remaining())
-        { // ensure accurate throttling
-            buffer.limit(buffer.position() + bufferSize);
+        @Override
+        public ByteBuffer rebuffer(long position)
+        {
+            MmappedRegions.Region region = regions.floor(position);
+            bufferOffset = region.bottom();
+            ByteBuffer buffer = region.buffer.duplicate();
+            buffer.position(Ints.checkedCast(position - bufferOffset));
+            return buffer;
+        }
+
+        @Override
+        public void close()
+        {
+            // nothing -- regions managed elsewhere
+        }
+
+        @Override
+        public ByteBuffer initialBuffer()
+        {
+            // Note: this will not read anything unless we do access the buffer.
+            return rebuffer(0);
         }
     }
 
@@ -168,17 +154,17 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     protected long current()
     {
-        return bufferOffset + (buffer == null ? 0 : buffer.position());
+        return rebufferer.bufferOffset() + buffer.position();
     }
 
     public String getPath()
     {
-        return channel.filePath();
+        return getChannel().filePath();
     }
 
     public ChannelProxy getChannel()
     {
-        return channel;
+        return rebufferer.channel();
     }
 
     @Override
@@ -242,12 +228,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     @Override
     public void close()
     {
-	    //make idempotent
-        if (buffer == null)
-            return;
-
-        bufferOffset += buffer.position();
-        releaseBuffer();
+        rebufferer.close();
 
         //For performance reasons we don't keep a reference to the file
         //channel so we don't close it
@@ -256,7 +237,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     @Override
     public String toString()
     {
-        return getClass().getSimpleName() + "(filePath='" + channel + "')";
+        return getClass().getSimpleName() + ':' + rebufferer.toString();
     }
 
     /**
@@ -278,28 +259,21 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition < 0)
             throw new IllegalArgumentException("new position should not be negative");
 
-        if (buffer == null)
+        if (rebufferer == null)
             throw new IllegalStateException("Attempted to seek in a closed RAR");
 
-        if (newPosition >= length()) // it is save to call length() in read-only mode
-        {
-            if (newPosition > length())
-                throw new IllegalArgumentException(String.format("Unable to seek to position %d in %s (%d bytes) in read-only mode",
-                                                             newPosition, getPath(), length()));
-            buffer.limit(0);
-            bufferOffset = newPosition;
-            return;
-        }
+        long bufferOffset = rebufferer.bufferOffset();
 
         if (newPosition >= bufferOffset && newPosition < bufferOffset + buffer.limit())
         {
             buffer.position((int) (newPosition - bufferOffset));
             return;
         }
-        // Set current location to newPosition and clear buffer so reBuffer calculates from newPosition
-        bufferOffset = newPosition;
-        buffer.clear();
-        reBuffer();
+
+        if (newPosition > length())
+            throw new IllegalArgumentException(String.format("Unable to seek to position %d in %s (%d bytes) in read-only mode",
+                                                         newPosition, getPath(), length()));
+        buffer = rebufferer.rebuffer(newPosition);
         assert current() == newPosition;
     }
 
@@ -353,7 +327,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     public long length()
     {
-        return fileLength;
+        return rebufferer.fileLength();
     }
 
     public long getPosition()
@@ -371,7 +345,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         public long overrideLength;
 
         // The size of the buffer for buffered readers
-        public int bufferSize;
+        protected int bufferSize;
 
         // The type of the buffer for buffered readers
         public BufferType bufferType;
@@ -400,32 +374,26 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
          * buffer size unless we are throttling, in which case we may as well read the maximum
          * directly since the intention is to read the full file, see CASSANDRA-8630.
          * */
-        private void setBufferSize()
+        private int adjustedBufferSize()
         {
             if (limiter != null)
-            {
-                bufferSize = MAX_BUFFER_SIZE;
-                return;
-            }
+                return MAX_BUFFER_SIZE;
 
-            if ((bufferSize & ~4095) != bufferSize)
-            { // should already be a page size multiple but if that's not case round it up
-                bufferSize = (bufferSize + 4095) & ~4095;
-            }
-
-            bufferSize = Math.min(MAX_BUFFER_SIZE, bufferSize);
+            // should already be a page size multiple but if that's not case round it up
+            int wholePageSize = (bufferSize + 4095) & ~4095;
+            return Math.min(MAX_BUFFER_SIZE, wholePageSize);
         }
 
-        protected ByteBuffer createBuffer()
+        protected Rebufferer createRebufferer()
         {
-            setBufferSize();
+            int adjustedSize = adjustedBufferSize();
+            Rebufferer rebufferer = regions == null
+                    ? new StandardRebufferer(channel, overrideLength, bufferType, adjustedSize)
+                    : new MemmapRebufferer(channel, overrideLength, regions);
+            if (limiter != null)
+                rebufferer = new LimitingRebufferer(rebufferer, limiter, adjustedSize);
 
-            buffer = regions == null
-                     ? allocateBuffer(bufferSize, bufferType)
-                     : regions.floor(0).buffer.duplicate();
-
-            buffer.limit(0);
-            return buffer;
+            return rebufferer;
         }
 
         public Builder overrideLength(long overrideLength)
@@ -463,12 +431,12 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         public RandomAccessReader build()
         {
-            return new RandomAccessReader(this);
+            return new RandomAccessReader(createRebufferer());
         }
 
         public RandomAccessReader buildWithChannel()
         {
-            return new RandomAccessReaderWithOwnChannel(this);
+            return new RandomAccessReaderWithOwnChannel(createRebufferer());
         }
     }
 
@@ -479,9 +447,9 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     // not have a shared channel.
     public static class RandomAccessReaderWithOwnChannel extends RandomAccessReader
     {
-        protected RandomAccessReaderWithOwnChannel(Builder builder)
+        protected RandomAccessReaderWithOwnChannel(Rebufferer rebufferer)
         {
-            super(builder);
+            super(rebufferer);
         }
 
         @Override
@@ -489,11 +457,11 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         {
             try
             {
-                super.close();
+                getChannel().close();
             }
             finally
             {
-                channel.close();
+                super.close();
             }
         }
     }
