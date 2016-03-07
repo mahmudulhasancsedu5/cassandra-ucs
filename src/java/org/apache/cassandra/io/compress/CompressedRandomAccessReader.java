@@ -208,7 +208,7 @@ public class CompressedRandomAccessReader
         {
             try
             {
-                assert position < fileLength;
+                assert position <= fileLength;
 
                 CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 

@@ -21,10 +21,16 @@ public class LimitingRebufferer implements Rebufferer
     public ByteBuffer rebuffer(long position)
     {
         ByteBuffer buffer = wrapped.rebuffer(position);
-        if (buffer.remaining() > limitQuant)
-            buffer.limit(buffer.position() + limitQuant);
+        int remaining = buffer.remaining();
+        if (remaining == 0)
+            return buffer;
 
-        limiter.acquire(buffer.remaining());
+        if (remaining > limitQuant)
+        {
+            buffer.limit(buffer.position() + limitQuant);
+            remaining = limitQuant;
+        }
+        limiter.acquire(remaining);
         return buffer;
     }
 
