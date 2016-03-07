@@ -260,7 +260,7 @@ public class MmappedRegions extends SharedCloseableImpl
 
         private Region floor(long position)
         {
-            assert 0 <= position && position < length : String.format("%d >= %d", position, length);
+            assert 0 <= position && position <= length : String.format("%d > %d", position, length);
 
             int idx = Arrays.binarySearch(offsets, 0, last +1, position);
             assert idx != -1 : String.format("Bad position %d for regions %s, last %d in %s", position, Arrays.toString(offsets), last, channel);
