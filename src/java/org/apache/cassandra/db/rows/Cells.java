@@ -247,32 +247,31 @@ public abstract class Cells
             builder.addCell(existing);
     }
 
-    public static long addNonShadowedComplex(ColumnDefinition column, Iterator<Cell> existing, Iterator<Cell> update,
+    public static void addNonShadowedComplex(ColumnDefinition column, Iterator<Cell> existing, Iterator<Cell> update,
             DeletionTime deletion, Row.Builder builder, int nowInSec)
     {
         Comparator<CellPath> comparator = column.cellPathComparator();
         Cell nextExisting = getNext(existing);
         Cell nextUpdate = getNext(update);
-        long timeDelta = Long.MAX_VALUE;
-        while (nextExisting != null || nextUpdate != null)
+        while (nextExisting != null)
         {
-            int cmp = nextExisting == null ? 1
-                    : (nextUpdate == null ? -1 : comparator.compare(nextExisting.path(), nextUpdate.path()));
+            int cmp = nextUpdate == null ? -1 : comparator.compare(nextExisting.path(), nextUpdate.path());
             if (cmp < 0)
             {
                 addNonShadowed(nextExisting, null, deletion, builder, nowInSec);
                 nextExisting = getNext(existing);
-            } else if (cmp == 0)
+            }
+            else if (cmp == 0)
             {
                 addNonShadowed(nextExisting, nextUpdate, deletion, builder, nowInSec);
                 nextExisting = getNext(existing);
                 nextUpdate = getNext(update);
-            } else
+            }
+            else
             {
                 nextUpdate = getNext(update);
             }
         }
-        return timeDelta;
     }
 
     private static Cell getNext(Iterator<Cell> iterator)
