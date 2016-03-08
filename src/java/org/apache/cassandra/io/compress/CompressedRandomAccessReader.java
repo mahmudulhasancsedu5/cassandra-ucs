@@ -255,6 +255,7 @@ public class CompressedRandomAccessReader
             super(file.channel());
             metadata = file.getMetadata();
             regions = file.regions();
+            readerCache = file.cache();
             assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
         }
 
@@ -268,12 +269,19 @@ public class CompressedRandomAccessReader
         @Override
         protected Rebufferer createRebufferer()
         {
-            return new CachingRebufferer(regions != null
-                                                    ? new MmapRebufferer(channel, metadata, regions)
-                                                    : new StandardRebufferer(channel, metadata),
-                                                metadata.compressor().preferredBufferType(),
-                                                metadata.chunkLength(),
-                                                1000);
+            if (readerCache != null)
+                return readerCache.newRebufferer();
+            else
+                return new BufferManagingRebufferer(bufferlessRebufferer(),
+                                                    metadata.compressor().preferredBufferType(),
+                                                    metadata.chunkLength());
+        }
+
+        public Rebufferer bufferlessRebufferer()
+        {
+            return regions != null
+                   ? new MmapRebufferer(channel, metadata, regions)
+                   : new StandardRebufferer(channel, metadata);
         }
     }
 }
