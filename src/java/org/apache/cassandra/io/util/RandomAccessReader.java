@@ -66,84 +66,9 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (isEOF())
             return;
 
-        buffer = rebufferer.rebuffer(current());
+        buffer = rebufferer.rebuffer(current(), null);
 
         assert buffer.order() == ByteOrder.BIG_ENDIAN : "Buffer must have BIG ENDIAN byte ordering";
-    }
-
-    static class StandardRebufferer extends AbstractRebufferer
-    {
-        final ByteBuffer buffer;
-
-        public StandardRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize)
-        {
-            super(channel, fileLength);
-            buffer = RandomAccessReader.allocateBuffer(bufferSize, bufferType);
-            buffer.limit(0);
-        }
-
-        @Override
-        public ByteBuffer rebuffer(long position)
-        {
-            assert position <= fileLength;
-            long pageAlignedPos = position & ~4095;
-
-            buffer.clear();
-
-            buffer.limit(Ints.checkedCast(Math.min(fileLength - pageAlignedPos, buffer.capacity())));
-            channel.read(buffer, pageAlignedPos);
-
-            buffer.flip();
-            buffer.position(Ints.checkedCast(position - pageAlignedPos));
-            bufferOffset = pageAlignedPos;
-            return buffer;
-        }
-
-        @Override
-        public void close()
-        {
-            BufferPool.put(buffer);
-        }
-
-        @Override
-        public ByteBuffer initialBuffer()
-        {
-            return buffer;
-        }
-    }
-
-    static class MemmapRebufferer extends AbstractRebufferer
-    {
-        protected final MmappedRegions regions;
-
-        public MemmapRebufferer(ChannelProxy channel, long fileLength, MmappedRegions regions)
-        {
-            super(channel, fileLength);
-            this.regions = regions;
-        }
-
-        @Override
-        public ByteBuffer rebuffer(long position)
-        {
-            MmappedRegions.Region region = regions.floor(position);
-            bufferOffset = region.bottom();
-            ByteBuffer buffer = region.buffer.duplicate();
-            buffer.position(Ints.checkedCast(position - bufferOffset));
-            return buffer;
-        }
-
-        @Override
-        public void close()
-        {
-            // nothing -- regions managed elsewhere
-        }
-
-        @Override
-        public ByteBuffer initialBuffer()
-        {
-            // Note: this will not read anything unless we do access the buffer.
-            return rebuffer(0);
-        }
     }
 
     @Override
@@ -273,7 +198,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition > length())
             throw new IllegalArgumentException(String.format("Unable to seek to position %d in %s (%d bytes) in read-only mode",
                                                          newPosition, getPath(), length()));
-        buffer = rebufferer.rebuffer(newPosition);
+        buffer = rebufferer.rebuffer(newPosition, null);
         assert current() == newPosition;
     }
 
@@ -388,8 +313,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         {
             int adjustedSize = adjustedBufferSize();
             Rebufferer rebufferer = regions == null
-                    ? new StandardRebufferer(channel, overrideLength, bufferType, adjustedSize)
-                    : new MemmapRebufferer(channel, overrideLength, regions);
+                    ? new BufferManagingRebufferer(new UncompressedReadRebufferer(channel, overrideLength), bufferType, adjustedSize)
+                    : new UncompressedMmapRebufferer(channel, overrideLength, regions);
             if (limiter != null)
                 rebufferer = new LimitingRebufferer(rebufferer, limiter, adjustedSize);
 

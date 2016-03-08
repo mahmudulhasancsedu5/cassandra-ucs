@@ -200,19 +200,13 @@ public class CompressorTest
             new Random().nextBytes(srcData);
 
             final int inOffset = 2;
-            final int inSlice = 3;
-            ByteBuffer src = typeIn.allocate(inOffset + inSlice + n + inOffset);
-            src.position(inSlice);
-            src = src.slice();
+            ByteBuffer src = typeIn.allocate(inOffset + n + inOffset);
             src.position(inOffset);
             src.put(srcData, 0, n);
             src.flip().position(inOffset);
 
             int outOffset = 5;
-            int outSlice = 4;
-            ByteBuffer compressed = typeComp.allocate(outOffset + outSlice + compressor.initialCompressedBufferLength(srcData.length) + outOffset);
-            compressed.position(outSlice);
-            compressed = compressed.slice();
+            ByteBuffer compressed = typeComp.allocate(outOffset + compressor.initialCompressedBufferLength(srcData.length) + outOffset);
             byte[] garbage = new byte[compressed.capacity()];
             new Random().nextBytes(garbage);
             compressed.put(garbage);
@@ -225,9 +219,7 @@ public class CompressorTest
             compressed.flip().position(outOffset);
             int len = compressed.remaining();
 
-            ByteBuffer result = typeOut.allocate(inOffset + inSlice + n + inOffset + inSlice);
-            result.position(inSlice);
-            result = result.slice();
+            ByteBuffer result = typeOut.allocate(inOffset + n + inOffset);
             result.position(inOffset).limit(result.capacity() - inOffset);
             compressor.uncompress(compressed, result);
             assertEquals(outOffset + len, compressed.position());

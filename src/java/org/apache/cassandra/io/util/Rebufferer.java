@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 public interface Rebufferer extends AutoCloseable
 {
 
-    ByteBuffer rebuffer(long position);
+    ByteBuffer rebuffer(long position, ByteBuffer buffer);
 
     void close();
 

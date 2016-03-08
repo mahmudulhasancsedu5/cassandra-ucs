@@ -1,5 +1,7 @@
 package org.apache.cassandra.io.util;
 
+import java.nio.ByteBuffer;
+
 public abstract class AbstractRebufferer implements Rebufferer
 {
     protected final ChannelProxy channel;
@@ -34,5 +36,17 @@ public abstract class AbstractRebufferer implements Rebufferer
     public String toString()
     {
         return getClass().getSimpleName() + "(filePath='" + channel + "')";
+    }
+
+    @Override
+    public void close()
+    {
+        // nothing in base class
+    }
+
+    @Override
+    public ByteBuffer initialBuffer()
+    {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " cannot be used directly.");
     }
 }
