@@ -312,14 +312,12 @@ public abstract class Rows
     }
 
     /**
-     * Merges two rows into the given builder, mainly for merging memtable rows. In addition to reconciling the cells
-     * in each row, the liveness info, and deletion times for the row and complex columns are also merged.
-     * <p>
-     * Note that this method assumes that the provided rows can meaningfully be reconciled together. That is,
-     * that the rows share the same clustering value, and belong to the same partition.
-     *
-     * @param existing
-     * @param update
+     * Returns a row that is obtained from the given existing row by removing everything that is shadowed by data in
+     * the update row. In other words, produces the smallest result row such that
+     * {@code merge(result, update, nowInSec) == merge(existing, update, nowInSec)} after filtering by rangeDeletion.
+     * 
+     * @param existing source row
+     * @param update shadowing row
      * @param rangeDeletion extra {@code DeletionTime} from covering tombstone  
      * @param nowInSec the current time in seconds (which plays a role during reconciliation
      * because deleted cells always have precedence on timestamp equality and deciding if a

@@ -49,11 +49,10 @@ public class GarbageCollect extends NodeToolCmd
         {
             try
             {
-                System.out.println("Garbage collecting in keyspace " + keyspace + " with option " + tombstoneOption);
                 probe.garbageCollect(System.out, tombstoneOption, keyspace, tableNames);
             } catch (Exception e)
             {
-                throw new RuntimeException("Error occurred during verifying", e);
+                throw new RuntimeException("Error occurred during garbage collection", e);
             }
         }
     }
