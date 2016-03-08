@@ -364,11 +364,13 @@ public abstract class Rows
     
                     DeletionTime existingDt = existingData.complexDeletion();
                     DeletionTime updateDt = updateData == null ? DeletionTime.LIVE : updateData.complexDeletion();
-                    DeletionTime maxDt = existingDt.supersedes(updateDt) ? existingDt : updateDt;
-                    if (maxDt.supersedes(deletion))
-                        builder.addComplexDeletion(column, maxDt);
-                    else
-                        maxDt = deletion;
+
+                    DeletionTime maxDt = updateDt.supersedes(deletion) ? updateDt : deletion;
+                    if (existingDt.supersedes(maxDt))
+                    {
+                        builder.addComplexDeletion(column, existingDt);
+                        maxDt = existingDt;
+                    }
     
                     Iterator<Cell> existingCells = existingData.iterator();
                     Iterator<Cell> updateCells = updateData == null ? null : updateData.iterator();
