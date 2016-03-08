@@ -90,6 +90,16 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         return channel.filePath();
     }
 
+    public long dataLength()
+    {
+        return channel.size();
+    }
+
+    public Rebufferer cacheRebufferer()
+    {
+        return null;
+    }
+
     protected static class Cleanup implements RefCounted.Tidy
     {
         final ChannelProxy channel;
@@ -310,5 +320,5 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         return getClass().getSimpleName() + "(path='" + path() + '\'' +
                ", length=" + length +
                ')';
-}
+    }
 }

@@ -6,38 +6,81 @@ import java.util.concurrent.ExecutionException;
 import com.google.common.cache.*;
 import com.google.common.primitives.Ints;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ReaderCache extends CacheLoader<Long, ByteBuffer> implements RemovalListener<Long, ByteBuffer>
+public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implements RemovalListener<ReaderCache.Key, ByteBuffer>
 {
+    public static ReaderCache instance = DatabaseDescriptor.getFileCacheSizeInMB() > 0 ? new ReaderCache() : null;
+
     static ByteBuffer EMPTY = ByteBuffer.allocate(0);
 
-    private final Rebufferer rebufferer;
-    private final LoadingCache<Long, ByteBuffer> cache;
+    private final LoadingCache<Key, ByteBuffer> cache;
+    private final int alignmentMask;
     private final int bufferSize;
 
-    public ReaderCache(Rebufferer wrapped, int bufferSize, long maxMemory)
+    static class Key
     {
-        this.rebufferer = wrapped;
-        this.bufferSize = bufferSize;
+        final SegmentedFile file;
+        final long position;
+
+        public Key(SegmentedFile file, long position)
+        {
+            super();
+            this.file = file;
+            this.position = position;
+        }
+
+        public int hashCode()
+        {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + file.path().hashCode();
+            result = prime * result + Long.hashCode(position);
+            return result;
+        }
+
+        public boolean equals(Object obj)
+        {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+
+            Key other = (Key) obj;
+            return (position == other.position)
+                    && file.path() == other.file.path();
+        }
+    }
+
+    public ReaderCache()
+    {
+        bufferSize = BufferPool.CHUNK_SIZE;
         assert Integer.bitCount(bufferSize) == 1;
+        alignmentMask = -bufferSize;
         cache = CacheBuilder.newBuilder()
-                .maximumSize(maxMemory / bufferSize)
+                .maximumSize(BufferPool.sizeInBytes() * 15 / (16 * bufferSize))
                 .removalListener(this)
                 .build(this);
     }
 
     @Override
-    public ByteBuffer load(Long position) throws Exception
+    public ByteBuffer load(Key key) throws Exception
     {
-        ByteBuffer result = rebufferer.rebuffer(position, BufferPool.get(bufferSize));
-        assert rebufferer.bufferOffset() == position;
-        return result;
+        Rebufferer rebufferer = key.file.cacheRebufferer();
+        synchronized (rebufferer)
+        {
+            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(bufferSize));
+            assert rebufferer.bufferOffset() == key.position;
+//            assert buffer.remaining() == bufferSize;
+            // FIXME: Stale data? When sstable limits move, should invalidate last chunk.
+            return buffer;
+        }
     }
 
     @Override
-    public void onRemoval(RemovalNotification<Long, ByteBuffer> removal)
+    public void onRemoval(RemovalNotification<Key, ByteBuffer> removal)
     {
         BufferPool.put(removal.getValue());
     }
@@ -45,26 +88,21 @@ public class ReaderCache extends CacheLoader<Long, ByteBuffer> implements Remova
     public void close()
     {
         cache.invalidateAll();
-        rebufferer.close();
-    }
-    
-    public Rebufferer newRebufferer()
-    {
-        return new CachingRebufferer(this);
     }
 
-    static class CachingRebufferer implements Rebufferer
+    public Rebufferer newRebufferer(SegmentedFile file)
     {
-        private final Rebufferer source;
-        private final LoadingCache<Long, ByteBuffer> cache;
-        private final int alignmentMask;
+        return new CachingRebufferer(file);
+    }
+
+    class CachingRebufferer implements Rebufferer
+    {
+        private final SegmentedFile source;
         long bufferOffset = 0;
 
-        public CachingRebufferer(ReaderCache readerCache)
+        public CachingRebufferer(SegmentedFile file)
         {
-            cache = readerCache.cache;
-            source = readerCache.rebufferer;
-            alignmentMask = -readerCache.bufferSize;
+            source = file;
         }
 
         @Override
@@ -75,7 +113,8 @@ public class ReaderCache extends CacheLoader<Long, ByteBuffer> implements Remova
                 assert buffer == null;
                 long pageAlignedPos = position & alignmentMask;
                 bufferOffset = pageAlignedPos;
-                buffer = cache.get(pageAlignedPos).duplicate();
+                buffer = cache.get(new Key(source, pageAlignedPos)).duplicate();
+                bufferOffset = pageAlignedPos;
                 buffer.position(Ints.checkedCast(position - bufferOffset));
                 return buffer;
             }
@@ -99,13 +138,13 @@ public class ReaderCache extends CacheLoader<Long, ByteBuffer> implements Remova
         @Override
         public ChannelProxy channel()
         {
-            return source.channel();
+            return source.channel;
         }
 
         @Override
         public long fileLength()
         {
-            return source.fileLength();
+            return source.dataLength();
         }
 
         @Override

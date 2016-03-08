@@ -34,11 +34,10 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 {
     private static final Logger logger = LoggerFactory.getLogger(CompressedSegmentedFile.class);
     private static final boolean useMmap = DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap;
-    private static final long pageCacheSize = (DatabaseDescriptor.getFileCacheSizeInMB() - 1) * 1024 * 1024 / 32;    // this needs to be shared!
 
     public final CompressionMetadata metadata;
     private final MmappedRegions regions;
-    private final ReaderCache cache;
+    private final Rebufferer cacheRebufferer;
 
     public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata)
     {
@@ -52,25 +51,25 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
     {
-        this(channel, bufferSize, metadata, regions, createCache(channel, bufferSize, metadata, regions));
+        this(channel, bufferSize, metadata, regions, createCacheRebufferer(channel, bufferSize, metadata, regions));
     }
 
-    private static ReaderCache createCache(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
+    private static Rebufferer createCacheRebufferer(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
     {
-        if (pageCacheSize <= 0)
+        if (ReaderCache.instance == null)
             return null;
 
         CompressedRandomAccessReader.Builder builder = new CompressedRandomAccessReader.Builder(channel, metadata);
         builder.regions(regions);
-        return new ReaderCache(builder.bufferlessRebufferer(), metadata.chunkLength(), pageCacheSize);
+        return builder.bufferlessRebufferer();
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions, ReaderCache cache)
+    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cache)
     {
         super(new Cleanup(channel, metadata, regions, cache), channel, bufferSize, metadata.dataLength, metadata.compressedFileLength);
         this.metadata = metadata;
         this.regions = regions;
-        this.cache = cache;
+        this.cacheRebufferer = cache;
     }
 
     private CompressedSegmentedFile(CompressedSegmentedFile copy)
@@ -78,7 +77,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         super(copy);
         this.metadata = copy.metadata;
         this.regions = copy.regions;
-        this.cache = copy.cache;
+        this.cacheRebufferer = copy.cacheRebufferer;
     }
 
     public ChannelProxy channel()
@@ -91,23 +90,23 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return regions;
     }
 
-    public ReaderCache cache()
+    public Rebufferer cacheRebufferer()
     {
-        return cache;
+        return cacheRebufferer;
     }
 
     private static final class Cleanup extends SegmentedFile.Cleanup
     {
         final CompressionMetadata metadata;
         private final MmappedRegions regions;
-        final ReaderCache cache;
+        final Rebufferer cacheRebufferer;
 
-        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, ReaderCache cache)
+        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cacheRebufferer)
         {
             super(channel);
             this.metadata = metadata;
             this.regions = regions;
-            this.cache = cache;
+            this.cacheRebufferer = cacheRebufferer;
         }
         public void tidy()
         {
@@ -120,7 +119,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
                 logger.error("Error while closing mmapped regions", err);
             }
 
-            cache.close();
+            cacheRebufferer.close();
             metadata.close();
 
             super.tidy();
@@ -180,5 +179,10 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     public CompressionMetadata getMetadata()
     {
         return metadata;
+    }
+
+    public long dataLength()
+    {
+        return metadata.dataLength;
     }
 }

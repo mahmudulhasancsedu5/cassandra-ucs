@@ -255,7 +255,7 @@ public class CompressedRandomAccessReader
             super(file.channel());
             metadata = file.getMetadata();
             regions = file.regions();
-            readerCache = file.cache();
+            cacheSource = file instanceof SegmentedFile ? (SegmentedFile) file : null;
             assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
         }
 
@@ -269,8 +269,8 @@ public class CompressedRandomAccessReader
         @Override
         protected Rebufferer createRebufferer()
         {
-            if (readerCache != null)
-                return readerCache.newRebufferer();
+            if (cacheSource != null && ReaderCache.instance != null)
+                return ReaderCache.instance.newRebufferer(cacheSource);
             else
                 return new BufferManagingRebufferer(bufferlessRebufferer(),
                                                     metadata.compressor().preferredBufferType(),
