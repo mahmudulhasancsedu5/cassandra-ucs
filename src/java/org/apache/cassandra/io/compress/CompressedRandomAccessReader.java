@@ -41,10 +41,6 @@ public class CompressedRandomAccessReader
     {
         final CompressionMetadata metadata;
 
-        final ByteBuffer uncompressed;
-        final BufferType bufferType;
-        final int bufferSize;
-
         // re-use single crc object
         final Checksum checksum;
 
@@ -53,22 +49,6 @@ public class CompressedRandomAccessReader
             super(channel, metadata.dataLength);
             this.metadata = metadata;
             checksum = metadata.checksumType.newInstance();
-            bufferType = metadata.compressor().preferredBufferType();
-            bufferSize = metadata.chunkLength();
-            uncompressed = RandomAccessReader.allocateBuffer(bufferSize, bufferType);
-            uncompressed.limit(0);
-        }
-
-        @Override
-        public void close()
-        {
-            BufferPool.put(uncompressed);
-        }
-
-        @Override
-        public ByteBuffer initialBuffer()
-        {
-            return uncompressed;
         }
 
         @VisibleForTesting
@@ -87,7 +67,7 @@ public class CompressedRandomAccessReader
                                  metadata.dataLength);
         }
     }
-
+    
     static class StandardRebufferer extends CompressedRebufferer
     {
         // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
@@ -100,13 +80,13 @@ public class CompressedRandomAccessReader
         {
             super(channel, metadata);
             compressed = RandomAccessReader.allocateBuffer(
-                     metadata.compressor().initialCompressedBufferLength(bufferSize),
-                     bufferType);
+                     metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()),
+                     metadata.compressor().preferredBufferType());
             checksumBytes = ByteBuffer.wrap(new byte[4]);
         }
 
         @Override
-        public ByteBuffer rebuffer(long position)
+        public ByteBuffer rebuffer(long position, ByteBuffer uncompressed)
         {
             try
             {
@@ -117,7 +97,7 @@ public class CompressedRandomAccessReader
                 if (compressed.capacity() < chunk.length)
                 {
                     BufferPool.put(compressed);
-                    compressed = RandomAccessReader.allocateBuffer(chunk.length, bufferType);
+                    compressed = RandomAccessReader.allocateBuffer(chunk.length, metadata.compressor().preferredBufferType());
                 }
                 else
                 {
@@ -193,18 +173,18 @@ public class CompressedRandomAccessReader
         }
     }
 
-    static class MemmapRebufferer extends CompressedRebufferer
+    static class MmapRebufferer extends CompressedRebufferer
     {
         protected final MmappedRegions regions;
 
-        public MemmapRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+        public MmapRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
         {
             super(channel, metadata);
             this.regions = regions;
         }
 
         @Override
-        public ByteBuffer rebuffer(long position)
+        public ByteBuffer rebuffer(long position, ByteBuffer uncompressed)
         {
             try
             {
@@ -217,7 +197,6 @@ public class CompressedRandomAccessReader
                 int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
                 ByteBuffer compressedChunk = region.buffer.duplicate();
 
-                // FIXME: what if it's crossing a boundary?
                 compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
                 uncompressed.clear();
@@ -289,9 +268,12 @@ public class CompressedRandomAccessReader
         @Override
         protected Rebufferer createRebufferer()
         {
-            return regions != null
-                    ? new MemmapRebufferer(channel, metadata, regions)
-                    : new StandardRebufferer(channel, metadata);
+            return new CachingRebufferer(regions != null
+                                                    ? new MmapRebufferer(channel, metadata, regions)
+                                                    : new StandardRebufferer(channel, metadata),
+                                                metadata.compressor().preferredBufferType(),
+                                                metadata.chunkLength(),
+                                                1000);
         }
     }
 }

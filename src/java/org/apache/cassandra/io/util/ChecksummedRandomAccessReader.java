@@ -41,26 +41,28 @@ public class ChecksummedRandomAccessReader
         }
     }
 
-    static class ChecksummedRebufferer extends RandomAccessReader.StandardRebufferer
+    static class ChecksummedRebufferer extends BufferManagingRebufferer
     {
         private final DataIntegrityMetadata.ChecksumValidator validator;
 
         public ChecksummedRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize, ChecksumValidator validator)
         {
-            super(channel, fileLength, bufferType, bufferSize);
+            super(new UncompressedReadRebufferer(channel, fileLength), bufferType, bufferSize);
             this.validator = validator;
         }
 
         @SuppressWarnings("resource")
         @Override
-        public ByteBuffer rebuffer(long desiredPosition)
+        public ByteBuffer rebuffer(long desiredPosition, ByteBuffer buffer)
         {
-            if (desiredPosition != bufferOffset + buffer.position())
+            assert buffer == null;
+            buffer = ownedBuffer;
+            if (desiredPosition != rebufferer.bufferOffset() + buffer.position())
                 validator.seek(desiredPosition);
 
             // align with buffer size, as checksums were computed in chunks of buffer size each.
             long position = (desiredPosition / buffer.capacity()) * buffer.capacity();
-            ByteBuffer buffer = super.rebuffer(position);
+            buffer = rebufferer.rebuffer(position, buffer);
 
             try
             {
@@ -68,19 +70,24 @@ public class ChecksummedRandomAccessReader
             }
             catch (IOException e)
             {
-                throw new CorruptFileException(e, channel.filePath());
+                throw new CorruptFileException(e, channel().filePath());
             }
 
-            buffer.position((int) (desiredPosition - bufferOffset));
+            buffer.position((int) (desiredPosition - rebufferer.bufferOffset()));
             return buffer;
         }
 
         @Override
         public void close()
         {
-            Throwables.perform(channel.filePath(), Throwables.FileOpType.READ,
+            Throwables.perform(channel().filePath(), Throwables.FileOpType.READ,
                                super::close,
                                validator::close);
+        }
+
+        public ChannelProxy channel()
+        {
+            return ((UncompressedReadRebufferer) rebufferer).channel;
         }
     }
 
