@@ -1,7 +1,7 @@
 keyspace: ks
 
 keyspace_definition: |
-  CREATE KEYSPACE ks WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': 1 };
+  CREATE KEYSPACE ks WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': 2 };
 
 table: users
 
@@ -18,15 +18,15 @@ table_definition: |
   
 columnspec:
   - name: id
-    population: uniform(1000000..1999900)
+    population: uniform(10000000..19999000)
   - name: subid
-    population: uniform(10000..10199)
+    population: uniform(100000..101999)
     cluster: gaussian(5..15)
   - name: username
     size: uniform(8..20)
     population: uniform(1..1M)
   - name: email
-    size: uniform(100..200)
+    size: uniform(1000..2000)
     population: uniform(1..1M)
   - name: age
     population: gaussian(10..100)
