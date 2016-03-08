@@ -245,7 +245,6 @@ public abstract class Cells
         Cell reconciled = reconcile(existing, update, nowInSec);
         if (reconciled != update)
             builder.addCell(existing);
-        return;
     }
 
     public static long addNonShadowedComplex(ColumnDefinition column, Iterator<Cell> existing, Iterator<Cell> update,

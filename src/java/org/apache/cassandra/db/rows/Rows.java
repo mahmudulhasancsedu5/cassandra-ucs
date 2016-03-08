@@ -345,14 +345,14 @@ public abstract class Rows
         Iterator<ColumnData> a = existing.iterator();
         Iterator<ColumnData> b = update.iterator();
         ColumnData nexta = a.hasNext() ? a.next() : null, nextb = b.hasNext() ? b.next() : null;
-        while (nexta != null | nextb != null)
+        while (nexta != null)
         {
-            int comparison = nexta == null ? 1 : nextb == null ? -1 : nexta.column.compareTo(nextb.column);
+            int comparison = nextb == null ? -1 : nexta.column.compareTo(nextb.column);
             if (comparison <= 0)
             {
                 ColumnData cura = nexta;
                 ColumnDefinition column = cura.column;
-                ColumnData curb = comparison >= 0 ? nextb : null;
+                ColumnData curb = comparison == 0 ? nextb : null;
                 if (column.isSimple())
                 {
                     Cells.addNonShadowed((Cell) cura, (Cell) curb, deletion, builder, nowInSec);
@@ -362,7 +362,7 @@ public abstract class Rows
                     ComplexColumnData existingData = (ComplexColumnData) cura;
                     ComplexColumnData updateData = (ComplexColumnData) curb;
     
-                    DeletionTime existingDt = existingData == null ? DeletionTime.LIVE : existingData.complexDeletion();
+                    DeletionTime existingDt = existingData.complexDeletion();
                     DeletionTime updateDt = updateData == null ? DeletionTime.LIVE : updateData.complexDeletion();
                     DeletionTime maxDt = existingDt.supersedes(updateDt) ? existingDt : updateDt;
                     if (maxDt.supersedes(deletion))
@@ -370,7 +370,7 @@ public abstract class Rows
                     else
                         maxDt = deletion;
     
-                    Iterator<Cell> existingCells = existingData == null ? null : existingData.iterator();
+                    Iterator<Cell> existingCells = existingData.iterator();
                     Iterator<Cell> updateCells = updateData == null ? null : updateData.iterator();
                     Cells.addNonShadowedComplex(column, existingCells, updateCells, maxDt, builder, nowInSec);
                 }
