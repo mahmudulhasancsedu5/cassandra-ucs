@@ -281,6 +281,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         // The mmap segments for mmap readers
         public MmappedRegions regions;
 
+        public ReaderCache readerCache;
+
         // An optional limiter that will throttle the amount of data we read
         public RateLimiter limiter;
 
@@ -292,6 +294,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
             this.bufferType = BufferType.OFF_HEAP;
             this.regions = null;
             this.limiter = null;
+            this.readerCache = null;
         }
 
         /** The buffer size is typically already page aligned but if that is not the case
@@ -311,6 +314,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         protected Rebufferer createRebufferer()
         {
+            if (readerCache != null)
+                return readerCache.newRebufferer();
             int adjustedSize = adjustedBufferSize();
             Rebufferer rebufferer = regions == null
                     ? new BufferManagingRebufferer(new UncompressedReadRebufferer(channel, overrideLength), bufferType, adjustedSize)
@@ -345,6 +350,12 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         public Builder regions(MmappedRegions regions)
         {
             this.regions = regions;
+            return this;
+        }
+        
+        public Builder readerCache(ReaderCache cache)
+        {
+            this.readerCache = cache;
             return this;
         }
 
