@@ -95,6 +95,11 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         return channel.size();
     }
 
+    public int chunkSize()
+    {
+        return Integer.highestOneBit(bufferSize);
+    }
+
     public Rebufferer cacheRebufferer()
     {
         return null;
