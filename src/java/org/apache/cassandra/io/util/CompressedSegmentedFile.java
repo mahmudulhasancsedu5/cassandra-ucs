@@ -39,22 +39,21 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     private final MmappedRegions regions;
     private final Rebufferer cacheRebufferer;
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata)
     {
         this(channel,
-             bufferSize,
              metadata,
              useMmap
              ? MmappedRegions.map(channel, metadata)
              : null);
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        this(channel, bufferSize, metadata, regions, createCacheRebufferer(channel, bufferSize, metadata, regions));
+        this(channel, metadata, regions, createCacheRebufferer(channel, metadata, regions));
     }
 
-    private static Rebufferer createCacheRebufferer(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
+    private static Rebufferer createCacheRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
         if (ReaderCache.instance == null)
             return null;
@@ -64,9 +63,9 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return builder.bufferlessRebufferer();
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cache)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cache)
     {
-        super(new Cleanup(channel, metadata, regions, cache), channel, bufferSize, metadata.dataLength, metadata.compressedFileLength);
+        super(new Cleanup(channel, metadata, regions, cache), channel, metadata.chunkLength(), metadata.dataLength, metadata.compressedFileLength);
         this.metadata = metadata;
         this.regions = regions;
         this.cacheRebufferer = cache;
@@ -119,7 +118,11 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
                 logger.error("Error while closing mmapped regions", err);
             }
 
-            cacheRebufferer.close();
+            if (ReaderCache.instance != null)
+            {
+                cacheRebufferer.close();
+                ReaderCache.instance.invalidateFile(name());
+            }
             metadata.close();
 
             super.tidy();
@@ -155,7 +158,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
         public SegmentedFile complete(ChannelProxy channel, int bufferSize, long overrideLength)
         {
-            return new CompressedSegmentedFile(channel, bufferSize, metadata(channel.filePath(), overrideLength));
+            return new CompressedSegmentedFile(channel, metadata(channel.filePath(), overrideLength));
         }
     }
 

@@ -58,6 +58,7 @@ public class BigTableWriter extends SSTableWriter
     protected final SequentialWriter dataFile;
     private DecoratedKey lastWrittenKey;
     private FileMark dataMark;
+    private long lastEarlyOpenLength = 0;
 
     public BigTableWriter(Descriptor descriptor, 
                           Long keyCount, 
@@ -247,6 +248,7 @@ public class BigTableWriter extends SSTableWriter
         IndexSummary indexSummary = iwriter.summary.build(metadata.partitioner, boundary);
         SegmentedFile ifile = iwriter.builder.buildIndex(descriptor, indexSummary, boundary);
         SegmentedFile dfile = dbuilder.buildData(descriptor, stats, boundary);
+        invalidateCacheAtBoundary(dfile);
         SSTableReader sstable = SSTableReader.internalOpen(descriptor,
                                                            components, metadata,
                                                            ifile, dfile, indexSummary,
@@ -256,6 +258,13 @@ public class BigTableWriter extends SSTableWriter
         sstable.first = getMinimalKey(first);
         sstable.last = getMinimalKey(boundary.lastKey);
         return sstable;
+    }
+
+    void invalidateCacheAtBoundary(SegmentedFile dfile)
+    {
+        if (ReaderCache.instance != null && lastEarlyOpenLength != 0 && dfile.length > lastEarlyOpenLength)
+            ReaderCache.instance.invalidatePosition(dfile, lastEarlyOpenLength);
+        lastEarlyOpenLength = dfile.length;
     }
 
     public SSTableReader openFinalEarly()
@@ -278,6 +287,7 @@ public class BigTableWriter extends SSTableWriter
         IndexSummary indexSummary = iwriter.summary.build(this.metadata.partitioner);
         SegmentedFile ifile = iwriter.builder.buildIndex(desc, indexSummary);
         SegmentedFile dfile = dbuilder.buildData(desc, stats);
+        invalidateCacheAtBoundary(dfile);
         SSTableReader sstable = SSTableReader.internalOpen(desc,
                                                            components,
                                                            this.metadata,

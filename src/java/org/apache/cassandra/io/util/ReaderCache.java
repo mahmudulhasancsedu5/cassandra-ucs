@@ -4,10 +4,10 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.cache.*;
+import com.google.common.collect.Iterables;
 import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implements RemovalListener<ReaderCache.Key, ByteBuffer>
@@ -17,8 +17,6 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
     static ByteBuffer EMPTY = ByteBuffer.allocate(0);
 
     private final LoadingCache<Key, ByteBuffer> cache;
-    private final int alignmentMask;
-    private final int bufferSize;
 
     static class Key
     {
@@ -50,17 +48,15 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
 
             Key other = (Key) obj;
             return (position == other.position)
-                    && file.path() == other.file.path();
+                    && file.path().equals(other.file.path());
         }
     }
 
     public ReaderCache()
     {
-        bufferSize = BufferPool.CHUNK_SIZE;
-        assert Integer.bitCount(bufferSize) == 1;
-        alignmentMask = -bufferSize;
         cache = CacheBuilder.newBuilder()
-                .maximumSize(BufferPool.sizeInBytes() * 15 / (16 * bufferSize))
+                .maximumWeight(BufferPool.MEMORY_USAGE_THRESHOLD * 15 / 16)
+                .weigher((key, buffer) -> ((ByteBuffer) buffer).capacity())
                 .removalListener(this)
                 .build(this);
     }
@@ -71,10 +67,9 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         Rebufferer rebufferer = key.file.cacheRebufferer();
         synchronized (rebufferer)
         {
-            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(bufferSize));
+            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
+            assert buffer != null;
             assert rebufferer.bufferOffset() == key.position;
-//            assert buffer.remaining() == bufferSize;
-            // FIXME: Stale data? When sstable limits move, should invalidate last chunk.
             return buffer;
         }
     }
@@ -95,14 +90,31 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         return new CachingRebufferer(file);
     }
 
+    public void invalidatePosition(SegmentedFile file, long position)
+    {
+        long pageAlignedPos = position & -file.chunkSize();
+        cache.invalidate(new Key(file, pageAlignedPos));
+    }
+    
+    public void invalidateFile(String fileName)
+    {
+        cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.file.path().equals(fileName)));
+    }
+
+    // TODO: Invalidate caches for obsoleted/MOVED_START tables?
+
     class CachingRebufferer implements Rebufferer
     {
         private final SegmentedFile source;
+        final long alignmentMask;
         long bufferOffset = 0;
 
         public CachingRebufferer(SegmentedFile file)
         {
             source = file;
+            int chunkSize = file.chunkSize();
+            assert Integer.bitCount(chunkSize) == 1;    // Must be power of two
+            alignmentMask = -chunkSize;
         }
 
         @Override
@@ -112,7 +124,6 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
             {
                 assert buffer == null;
                 long pageAlignedPos = position & alignmentMask;
-                bufferOffset = pageAlignedPos;
                 buffer = cache.get(new Key(source, pageAlignedPos)).duplicate();
                 bufferOffset = pageAlignedPos;
                 buffer.position(Ints.checkedCast(position - bufferOffset));
