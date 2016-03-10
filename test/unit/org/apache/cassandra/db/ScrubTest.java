@@ -56,6 +56,7 @@ import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.big.BigTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.ReaderCache;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -417,6 +418,8 @@ public class ScrubTest
         file.seek(startPosition);
         file.writeBytes(StringUtils.repeat('z', (int) (endPosition - startPosition)));
         file.close();
+        if (ReaderCache.instance != null)
+            ReaderCache.instance.invalidateFile(sstable.getFilename());
     }
 
     private static void assertOrderedAll(ColumnFamilyStore cfs, int expectedSize)

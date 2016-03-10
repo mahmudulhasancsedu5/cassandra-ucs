@@ -57,4 +57,9 @@ public class BufferManagingRebufferer implements Rebufferer
         return ownedBuffer;
     }
 
+    @Override
+    public double getCrcCheckChance()
+    {
+        return rebufferer.getCrcCheckChance();
+    }
 }

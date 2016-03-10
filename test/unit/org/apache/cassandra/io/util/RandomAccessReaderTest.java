@@ -481,9 +481,4 @@ public class RandomAccessReaderTest
             }
         }
     }
-
-    public static double getCrcCheckChance(RandomAccessReader reader)
-    {
-        return ((CompressedRandomAccessReader.CompressedRebufferer) (reader.rebufferer)).getCrcCheckChance();
-    }
 }

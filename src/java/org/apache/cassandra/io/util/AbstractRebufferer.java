@@ -49,4 +49,10 @@ public abstract class AbstractRebufferer implements Rebufferer
     {
         throw new UnsupportedOperationException(getClass().getSimpleName() + " cannot be used directly.");
     }
+
+    @Override
+    public double getCrcCheckChance()
+    {
+        return 0; // Only valid for compressed files.
+    }
 }
