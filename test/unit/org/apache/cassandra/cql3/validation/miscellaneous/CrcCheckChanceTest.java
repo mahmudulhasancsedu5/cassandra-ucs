@@ -158,12 +158,12 @@ public class CrcCheckChanceTest extends CQLTester
         try (RandomAccessReader baseDataReader = baseSSTable.openDataReader();
              RandomAccessReader idxDataReader = idxSSTable.openDataReader())
         {
-            Assert.assertEquals(0.03, RandomAccessReaderTest.getCrcCheckChance(baseDataReader));
-            Assert.assertEquals(0.03, RandomAccessReaderTest.getCrcCheckChance(idxDataReader));
+            Assert.assertEquals(0.03, baseDataReader.getCrcCheckChance());
+            Assert.assertEquals(0.03, idxDataReader.getCrcCheckChance());
 
             cfs.setCrcCheckChance(0.31);
-            Assert.assertEquals(0.31, RandomAccessReaderTest.getCrcCheckChance(baseDataReader));
-            Assert.assertEquals(0.31, RandomAccessReaderTest.getCrcCheckChance(idxDataReader));
+            Assert.assertEquals(0.31, baseDataReader.getCrcCheckChance());
+            Assert.assertEquals(0.31, idxDataReader.getCrcCheckChance());
         }
     }
 

@@ -26,6 +26,7 @@ import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 public class RandomAccessReader extends RebufferingInputStream implements FileDataInput
@@ -46,6 +47,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     @VisibleForTesting
     final Rebufferer rebufferer;
+    boolean closed = false;
 
     protected RandomAccessReader(Rebufferer rebufferer)
     {
@@ -153,7 +155,12 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     @Override
     public void close()
     {
+        // close needs to be idempotent.
+        if (closed)
+            return;
+
         rebufferer.close();
+        closed = true;
 
         //For performance reasons we don't keep a reference to the file
         //channel so we don't close it
@@ -258,6 +265,11 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     public long getPosition()
     {
         return current();
+    }
+
+    public double getCrcCheckChance()
+    {
+        return rebufferer.getCrcCheckChance();
     }
 
     public static class Builder

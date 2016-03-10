@@ -17,4 +17,9 @@ public interface Rebufferer extends AutoCloseable
 
     ByteBuffer initialBuffer();
 
+    /**
+     * Needed for tests. Returns the table's CRC check chance, which is only set for compressed tables.
+     */
+    double getCrcCheckChance();
+
 }

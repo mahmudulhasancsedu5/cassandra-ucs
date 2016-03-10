@@ -66,4 +66,9 @@ public class LimitingRebufferer implements Rebufferer
         return buffer;
     }
 
+    @Override
+    public double getCrcCheckChance()
+    {
+        return wrapped.getCrcCheckChance();
+    }
 }

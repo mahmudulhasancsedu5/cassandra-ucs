@@ -37,6 +37,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.ReaderCache;
 import org.apache.cassandra.schema.KeyspaceParams;
 
 import static org.junit.Assert.assertEquals;
@@ -148,6 +149,8 @@ public class BlacklistingCompactionsTest
                 byte[] corruption = new byte[corruptionSize];
                 Arrays.fill(corruption, (byte)0xFF);
                 raf.write(corruption);
+                if (ReaderCache.instance != null)
+                    ReaderCache.instance.invalidateFile(sstable.getFilename());
 
             }
             finally
