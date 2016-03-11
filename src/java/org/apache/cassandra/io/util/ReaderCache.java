@@ -66,12 +66,11 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
     @Override
     public ByteBuffer load(Key key) throws Exception
     {
-        Rebufferer rebufferer = key.file.cacheRebufferer();
+        BufferlessRebufferer rebufferer = key.file.cacheRebufferer();
         synchronized (rebufferer)
         {
             ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
             assert buffer != null;
-            assert rebufferer.bufferOffset() == key.position;
             return buffer;
         }
     }
@@ -97,7 +96,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         long pageAlignedPos = position & -file.chunkSize();
         cache.invalidate(new Key(file, pageAlignedPos));
     }
-    
+
     public void invalidateFile(String fileName)
     {
         cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.file.path().equals(fileName)));
@@ -109,7 +108,6 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
     {
         private final SegmentedFile source;
         final long alignmentMask;
-        long bufferOffset = 0;
 
         public CachingRebufferer(SegmentedFile file)
         {
@@ -120,15 +118,13 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         }
 
         @Override
-        public ByteBuffer rebuffer(long position, ByteBuffer buffer)
+        public ByteBuffer rebuffer(long position)
         {
             try
             {
-                assert buffer == null;
                 long pageAlignedPos = position & alignmentMask;
-                buffer = cache.get(new Key(source, pageAlignedPos)).duplicate();
-                bufferOffset = pageAlignedPos;
-                buffer.position(Ints.checkedCast(position - bufferOffset));
+                ByteBuffer buffer = cache.get(new Key(source, pageAlignedPos)).duplicate();
+                buffer.position(Ints.checkedCast(position - pageAlignedPos));
                 return buffer;
             }
             catch (Throwable t)
@@ -136,6 +132,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
                 Throwables.propagateIfInstanceOf(t.getCause(), CorruptSSTableException.class);
                 throw Throwables.propagate(t);
             }
+            // TODO: Deal with being evicted while still in use.
         }
 
         @Override
@@ -144,9 +141,9 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         }
 
         @Override
-        public long bufferOffset()
+        public long bufferOffset(long position)
         {
-            return bufferOffset;
+            return position & alignmentMask;
         }
 
         @Override

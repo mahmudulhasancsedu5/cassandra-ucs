@@ -37,7 +37,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     public final CompressionMetadata metadata;
     private final MmappedRegions regions;
-    private final Rebufferer cacheRebufferer;
+    private final BufferlessRebufferer cacheRebufferer;
 
     public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata)
     {
@@ -53,7 +53,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         this(channel, metadata, regions, createCacheRebufferer(channel, metadata, regions));
     }
 
-    private static Rebufferer createCacheRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    private static BufferlessRebufferer createCacheRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
         if (ReaderCache.instance == null)
             return null;
@@ -63,7 +63,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return builder.bufferlessRebufferer();
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cache)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BufferlessRebufferer cache)
     {
         super(new Cleanup(channel, metadata, regions, cache), channel, metadata.chunkLength(), metadata.dataLength, metadata.compressedFileLength);
         this.metadata = metadata;
@@ -89,7 +89,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return regions;
     }
 
-    public Rebufferer cacheRebufferer()
+    public BufferlessRebufferer cacheRebufferer()
     {
         return cacheRebufferer;
     }
@@ -98,9 +98,9 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     {
         final CompressionMetadata metadata;
         private final MmappedRegions regions;
-        final Rebufferer cacheRebufferer;
+        final BufferlessRebufferer cacheRebufferer;
 
-        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, Rebufferer cacheRebufferer)
+        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BufferlessRebufferer cacheRebufferer)
         {
             super(channel);
             this.metadata = metadata;

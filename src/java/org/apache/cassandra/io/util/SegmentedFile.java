@@ -100,7 +100,7 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         return Integer.highestOneBit(bufferSize);
     }
 
-    public Rebufferer cacheRebufferer()
+    public BufferlessRebufferer cacheRebufferer()
     {
         return null;
     }

@@ -18,9 +18,9 @@ public class LimitingRebufferer implements Rebufferer
     }
 
     @Override
-    public ByteBuffer rebuffer(long position, ByteBuffer buffer)
+    public ByteBuffer rebuffer(long position)
     {
-        buffer = wrapped.rebuffer(position, buffer);
+        ByteBuffer buffer = wrapped.rebuffer(position);
         int remaining = buffer.remaining();
         if (remaining == 0)
             return buffer;
@@ -41,9 +41,9 @@ public class LimitingRebufferer implements Rebufferer
     }
 
     @Override
-    public long bufferOffset()
+    public long bufferOffset(long position)
     {
-        return wrapped.bufferOffset();
+        return wrapped.bufferOffset(position);
     }
 
     @Override
