@@ -26,7 +26,6 @@ import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.io.compress.BufferType;
-import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 public class RandomAccessReader extends RebufferingInputStream implements FileDataInput
@@ -47,6 +46,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     @VisibleForTesting
     final Rebufferer rebufferer;
+    long bufferOffset = 0;
     boolean closed = false;
 
     protected RandomAccessReader(Rebufferer rebufferer)
@@ -68,7 +68,10 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (isEOF())
             return;
 
-        buffer = rebufferer.rebuffer(current(), null);
+        long currentPosition = current();
+        bufferOffset = rebufferer.bufferOffset(currentPosition);
+        buffer = rebufferer.rebuffer(currentPosition);
+        assert current() == currentPosition;
 
         assert buffer.order() == ByteOrder.BIG_ENDIAN : "Buffer must have BIG ENDIAN byte ordering";
     }
@@ -81,7 +84,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     protected long current()
     {
-        return rebufferer.bufferOffset() + buffer.position();
+        return bufferOffset + buffer.position();
     }
 
     public String getPath()
@@ -191,10 +194,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition < 0)
             throw new IllegalArgumentException("new position should not be negative");
 
-        if (rebufferer == null)
+        if (closed)
             throw new IllegalStateException("Attempted to seek in a closed RAR");
-
-        long bufferOffset = rebufferer.bufferOffset();
 
         if (newPosition >= bufferOffset && newPosition < bufferOffset + buffer.limit())
         {
@@ -205,7 +206,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition > length())
             throw new IllegalArgumentException(String.format("Unable to seek to position %d in %s (%d bytes) in read-only mode",
                                                          newPosition, getPath(), length()));
-        buffer = rebufferer.rebuffer(newPosition, null);
+        bufferOffset = rebufferer.bufferOffset(newPosition);
+        buffer = rebufferer.rebuffer(newPosition);
         assert current() == newPosition;
     }
 
@@ -330,7 +332,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
                 return ReaderCache.instance.newRebufferer(cacheSource);
             int adjustedSize = adjustedBufferSize();
             Rebufferer rebufferer = regions == null
-                    ? new BufferManagingRebufferer(new UncompressedReadRebufferer(channel, overrideLength), bufferType, adjustedSize)
+                    ? new BufferManagingRebufferer.Unaligned(new SimpleReadRebufferer(channel, overrideLength), bufferType, adjustedSize)
                     : new UncompressedMmapRebufferer(channel, overrideLength, regions);
             if (limiter != null)
                 rebufferer = new LimitingRebufferer(rebufferer, limiter, adjustedSize);

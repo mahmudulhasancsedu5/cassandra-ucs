@@ -44,25 +44,23 @@ public class ChecksummedRandomAccessReader
     static class ChecksummedRebufferer extends BufferManagingRebufferer
     {
         private final DataIntegrityMetadata.ChecksumValidator validator;
+        long bufferOffset;
 
         public ChecksummedRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize, ChecksumValidator validator)
         {
-            super(new UncompressedReadRebufferer(channel, fileLength), bufferType, bufferSize);
+            super(new SimpleReadRebufferer(channel, fileLength), bufferType, bufferSize);
             this.validator = validator;
         }
 
         @SuppressWarnings("resource")
         @Override
-        public ByteBuffer rebuffer(long desiredPosition, ByteBuffer buffer)
+        public ByteBuffer rebuffer(long desiredPosition)
         {
-            assert buffer == null;
-            buffer = ownedBuffer;
-            if (desiredPosition != rebufferer.bufferOffset() + buffer.position())
+            if (desiredPosition != bufferOffset + buffer.position())
                 validator.seek(desiredPosition);
 
-            // align with buffer size, as checksums were computed in chunks of buffer size each.
-            long position = (desiredPosition / buffer.capacity()) * buffer.capacity();
-            buffer = rebufferer.rebuffer(position, buffer);
+            long position = bufferOffset(desiredPosition);
+            rebufferer.rebuffer(position, buffer);
 
             try
             {
@@ -73,21 +71,28 @@ public class ChecksummedRandomAccessReader
                 throw new CorruptFileException(e, channel().filePath());
             }
 
-            buffer.position((int) (desiredPosition - rebufferer.bufferOffset()));
+            buffer.position((int) (desiredPosition - position));
             return buffer;
+        }
+
+        @Override
+        public long bufferOffset(long position)
+        {
+            // align with buffer size, as checksums were computed in chunks of buffer size each.
+            return (position / buffer.capacity()) * buffer.capacity();
         }
 
         @Override
         public void close()
         {
-            Throwables.perform(channel().filePath(), Throwables.FileOpType.READ,
-                               super::close,
-                               validator::close);
-        }
-
-        public ChannelProxy channel()
-        {
-            return ((UncompressedReadRebufferer) rebufferer).channel;
+            try
+            {
+                super.close();
+            }
+            finally
+            {
+                validator.close();
+            }
         }
     }
 
@@ -116,6 +121,7 @@ public class ChecksummedRandomAccessReader
         @Override
         public RandomAccessReader build()
         {
+            // Always own and close the channel.
             return buildWithChannel();
         }
     }

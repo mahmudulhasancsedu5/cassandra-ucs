@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 
 import com.google.common.primitives.Ints;
 
-class UncompressedMmapRebufferer extends AbstractRebufferer
+class UncompressedMmapRebufferer extends AbstractRebufferer implements Rebufferer
 {
     protected final MmappedRegions regions;
 
@@ -15,13 +15,19 @@ class UncompressedMmapRebufferer extends AbstractRebufferer
     }
 
     @Override
-    public ByteBuffer rebuffer(long position, ByteBuffer buffer)
+    public ByteBuffer rebuffer(long position)
     {
         MmappedRegions.Region region = regions.floor(position);
-        bufferOffset = region.bottom();
-        buffer = region.buffer.duplicate();
+        long bufferOffset = region.bottom();
+        ByteBuffer buffer = region.buffer.duplicate();
         buffer.position(Ints.checkedCast(position - bufferOffset));
         return buffer;
+    }
+
+    @Override
+    public long bufferOffset(long position)
+    {
+        return regions.floor(position).bottom();
     }
 
     @Override
@@ -34,6 +40,6 @@ class UncompressedMmapRebufferer extends AbstractRebufferer
     public ByteBuffer initialBuffer()
     {
         // Note: this will not read anything unless we do access the buffer.
-        return rebuffer(0, null);
+        return rebuffer(0);
     }
 }

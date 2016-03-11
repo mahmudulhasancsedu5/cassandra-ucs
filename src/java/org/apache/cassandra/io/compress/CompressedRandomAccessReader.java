@@ -37,7 +37,7 @@ import org.apache.cassandra.utils.memory.BufferPool;
 public class CompressedRandomAccessReader
 {
     @VisibleForTesting
-    public abstract static class CompressedRebufferer extends AbstractRebufferer
+    public abstract static class CompressedRebufferer extends AbstractRebufferer implements BufferlessRebufferer
     {
         final CompressionMetadata metadata;
 
@@ -90,7 +90,9 @@ public class CompressedRandomAccessReader
         {
             try
             {
-                assert position < fileLength;
+                // accesses must always be aligned
+                assert (position & -uncompressed.capacity()) == position;
+                assert position <= fileLength;
 
                 CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 
@@ -135,15 +137,6 @@ public class CompressedRandomAccessReader
                     // reset checksum object back to the original (blank) state
                     checksum.reset();
                 }
-
-                // buffer offset is always aligned
-                bufferOffset = position & ~(uncompressed.capacity() - 1);
-                uncompressed.position((int) (position - bufferOffset));
-                // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
-                // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
-                assert bufferOffset + uncompressed.limit() <= fileLength;
-//                if (bufferOffset + buffer.limit() > fileLength)
-//                    buffer.limit((int)(fileLength - bufferOffset));
                 return uncompressed;
             }
             catch (CorruptBlockException e)
@@ -188,6 +181,8 @@ public class CompressedRandomAccessReader
         {
             try
             {
+                // accesses must always be aligned
+                assert (position & -uncompressed.capacity()) == position;
                 assert position <= fileLength;
 
                 CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
@@ -227,15 +222,6 @@ public class CompressedRandomAccessReader
                     // reset checksum object back to the original (blank) state
                     checksum.reset();
                 }
-
-                // buffer offset is always aligned
-                bufferOffset = position & ~(uncompressed.capacity() - 1);
-                uncompressed.position((int) (position - bufferOffset));
-                // the length() can be provided at construction time, to override the true (uncompressed) length of the file;
-                // this is permitted to occur within a compressed segment, so we truncate validBufferBytes if we cross the imposed length
-                assert bufferOffset + uncompressed.limit() <= fileLength;
-//              if (bufferOffset + buffer.limit() > fileLength)
-//                  buffer.limit((int)(fileLength - bufferOffset));
                 return uncompressed;
             }
             catch (CorruptBlockException e)
@@ -272,12 +258,12 @@ public class CompressedRandomAccessReader
             if (cacheSource != null && ReaderCache.instance != null)
                 return ReaderCache.instance.newRebufferer(cacheSource);
             else
-                return new BufferManagingRebufferer(bufferlessRebufferer(),
-                                                    metadata.compressor().preferredBufferType(),
-                                                    metadata.chunkLength());
+                return new BufferManagingRebufferer.Aligned(bufferlessRebufferer(),
+                                                            metadata.compressor().preferredBufferType(),
+                                                            metadata.chunkLength());
         }
 
-        public Rebufferer bufferlessRebufferer()
+        public BufferlessRebufferer bufferlessRebufferer()
         {
             return regions != null
                    ? new MmapRebufferer(channel, metadata, regions)

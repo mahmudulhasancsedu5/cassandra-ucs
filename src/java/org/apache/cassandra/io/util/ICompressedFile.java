@@ -24,6 +24,6 @@ public interface ICompressedFile
     ChannelProxy channel();
     CompressionMetadata getMetadata();
     MmappedRegions regions();
-    Rebufferer cacheRebufferer();
+    RebuffererData cacheRebufferer();
 
 }
