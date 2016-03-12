@@ -19,13 +19,11 @@ package org.apache.cassandra.io.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
 
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.DataIntegrityMetadata.ChecksumValidator;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Throwables;
 
 public class ChecksummedRandomAccessReader
 {
@@ -44,7 +42,6 @@ public class ChecksummedRandomAccessReader
     static class ChecksummedRebufferer extends BufferManagingRebufferer
     {
         private final DataIntegrityMetadata.ChecksumValidator validator;
-        long bufferOffset;
 
         public ChecksummedRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize, ChecksumValidator validator)
         {
@@ -52,15 +49,15 @@ public class ChecksummedRandomAccessReader
             this.validator = validator;
         }
 
-        @SuppressWarnings("resource")
         @Override
-        public ByteBuffer rebuffer(long desiredPosition)
+        public BufferHolder rebuffer(long desiredPosition)
         {
-            if (desiredPosition != bufferOffset + buffer.position())
+            if (desiredPosition != offset + buffer.position())
                 validator.seek(desiredPosition);
 
-            long position = bufferOffset(desiredPosition);
-            rebufferer.rebuffer(position, buffer);
+            // align with buffer size, as checksums were computed in chunks of buffer size each.
+            offset = alignedPosition(desiredPosition);
+            rebufferer.rebuffer(offset, buffer);
 
             try
             {
@@ -71,15 +68,7 @@ public class ChecksummedRandomAccessReader
                 throw new CorruptFileException(e, channel().filePath());
             }
 
-            buffer.position((int) (desiredPosition - position));
-            return buffer;
-        }
-
-        @Override
-        public long bufferOffset(long position)
-        {
-            // align with buffer size, as checksums were computed in chunks of buffer size each.
-            return (position / buffer.capacity()) * buffer.capacity();
+            return this;
         }
 
         @Override
@@ -93,6 +82,12 @@ public class ChecksummedRandomAccessReader
             {
                 validator.close();
             }
+        }
+
+        @Override
+        long alignedPosition(long desiredPosition)
+        {
+            return (desiredPosition / buffer.capacity()) * buffer.capacity();
         }
     }
 

@@ -2,15 +2,16 @@ package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
 
-import com.google.common.primitives.Ints;
-
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public abstract class BufferManagingRebufferer implements Rebufferer
+public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
     protected final BufferlessRebufferer rebufferer;
     protected final ByteBuffer buffer;
+    protected long offset = 0;
+
+    abstract long alignedPosition(long position);
 
     public BufferManagingRebufferer(BufferlessRebufferer wrapped, BufferType bufferType, int bufferSize)
     {
@@ -27,6 +28,12 @@ public abstract class BufferManagingRebufferer implements Rebufferer
     }
 
     @Override
+    public void release()
+    {
+        // nothing to do, we don't delete buffers before we're closed.
+    }
+
+    @Override
     public ChannelProxy channel()
     {
         return rebufferer.channel();
@@ -39,9 +46,21 @@ public abstract class BufferManagingRebufferer implements Rebufferer
     }
 
     @Override
-    public ByteBuffer initialBuffer()
+    public BufferHolder rebuffer(long position)
+    {
+        offset = alignedPosition(position);
+        rebufferer.rebuffer(offset, buffer);
+        return this;
+    }
+
+    public ByteBuffer buffer()
     {
         return buffer;
+    }
+    
+    public long offset()
+    {
+        return offset;
     }
 
     @Override
@@ -58,14 +77,7 @@ public abstract class BufferManagingRebufferer implements Rebufferer
         }
 
         @Override
-        public ByteBuffer rebuffer(long position)
-        {
-            rebufferer.rebuffer(position, buffer);
-            return buffer;
-        }
-
-        @Override
-        public long bufferOffset(long position)
+        long alignedPosition(long position)
         {
             return position;
         }
@@ -80,16 +92,7 @@ public abstract class BufferManagingRebufferer implements Rebufferer
         }
 
         @Override
-        public ByteBuffer rebuffer(long position)
-        {
-            long pageAlignedPos = bufferOffset(position);
-            rebufferer.rebuffer(pageAlignedPos, buffer);
-            buffer.position(Ints.checkedCast(position - pageAlignedPos));
-            return buffer;
-        }
-
-        @Override
-        public long bufferOffset(long position)
+        long alignedPosition(long position)
         {
             return position & -buffer.capacity();
         }
