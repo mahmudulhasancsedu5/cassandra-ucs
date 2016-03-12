@@ -4,9 +4,11 @@ import java.nio.ByteBuffer;
 
 import com.google.common.primitives.Ints;
 
-class UncompressedMmapRebufferer extends AbstractRebufferer implements Rebufferer
+class UncompressedMmapRebufferer extends AbstractRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
     protected final MmappedRegions regions;
+    ByteBuffer buffer;
+    long offset = 0;
 
     public UncompressedMmapRebufferer(ChannelProxy channel, long fileLength, MmappedRegions regions)
     {
@@ -15,31 +17,35 @@ class UncompressedMmapRebufferer extends AbstractRebufferer implements Rebuffere
     }
 
     @Override
-    public ByteBuffer rebuffer(long position)
+    public BufferHolder rebuffer(long position)
     {
         MmappedRegions.Region region = regions.floor(position);
-        long bufferOffset = region.bottom();
-        ByteBuffer buffer = region.buffer.duplicate();
-        buffer.position(Ints.checkedCast(position - bufferOffset));
+        offset = region.bottom();
+        buffer = region.buffer.duplicate();
+        return this;
+    }
+
+    @Override
+    public ByteBuffer buffer()
+    {
         return buffer;
     }
 
     @Override
-    public long bufferOffset(long position)
+    public long offset()
     {
-        return regions.floor(position).bottom();
+        return offset;
+    }
+
+    @Override
+    public void release()
+    {
+        // nothing to do, we don't delete buffers before we're closed.
     }
 
     @Override
     public void close()
     {
         // nothing -- regions managed elsewhere
-    }
-
-    @Override
-    public ByteBuffer initialBuffer()
-    {
-        // Note: this will not read anything unless we do access the buffer.
-        return rebuffer(0);
     }
 }

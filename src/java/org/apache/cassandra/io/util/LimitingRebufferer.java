@@ -2,6 +2,7 @@ package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
 
+import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
 public class LimitingRebufferer implements Rebufferer
@@ -18,12 +19,13 @@ public class LimitingRebufferer implements Rebufferer
     }
 
     @Override
-    public ByteBuffer rebuffer(long position)
+    public BufferHolder rebuffer(long position)
     {
-        ByteBuffer buffer = wrapped.rebuffer(position);
-        int remaining = buffer.remaining();
+        BufferHolder bufferHolder = wrapped.rebuffer(position);
+        ByteBuffer buffer = bufferHolder.buffer();
+        int remaining = Ints.checkedCast(buffer.limit() + bufferHolder.offset() - position);
         if (remaining == 0)
-            return buffer;
+            return bufferHolder;
 
         if (remaining > limitQuant)
         {
@@ -31,19 +33,13 @@ public class LimitingRebufferer implements Rebufferer
             remaining = limitQuant;
         }
         limiter.acquire(remaining);
-        return buffer;
+        return bufferHolder;
     }
 
     @Override
     public void close()
     {
         wrapped.close();
-    }
-
-    @Override
-    public long bufferOffset(long position)
-    {
-        return wrapped.bufferOffset(position);
     }
 
     @Override
@@ -56,14 +52,6 @@ public class LimitingRebufferer implements Rebufferer
     public long fileLength()
     {
         return wrapped.fileLength();
-    }
-
-    @Override
-    public ByteBuffer initialBuffer()
-    {
-        ByteBuffer buffer = wrapped.initialBuffer();
-        buffer.limit(0);    // To ensure we do acquire quant on first reads.
-        return buffer;
     }
 
     @Override

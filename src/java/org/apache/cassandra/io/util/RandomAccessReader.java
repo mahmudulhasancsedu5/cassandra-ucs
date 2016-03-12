@@ -26,6 +26,7 @@ import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.util.Rebufferer.BufferHolder;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 public class RandomAccessReader extends RebufferingInputStream implements FileDataInput
@@ -46,12 +47,11 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
     @VisibleForTesting
     final Rebufferer rebufferer;
-    long bufferOffset = 0;
-    boolean closed = false;
+    BufferHolder bufferHolder = Rebufferer.EMPTY;
 
     protected RandomAccessReader(Rebufferer rebufferer)
     {
-        super(rebufferer.initialBuffer());
+        super(Rebufferer.EMPTY.buffer());
         this.rebufferer = rebufferer;
     }
 
@@ -68,10 +68,15 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (isEOF())
             return;
 
-        long currentPosition = current();
-        bufferOffset = rebufferer.bufferOffset(currentPosition);
-        buffer = rebufferer.rebuffer(currentPosition);
-        assert current() == currentPosition;
+        reBufferAt(current());
+    }
+
+    public void reBufferAt(long position)
+    {
+        bufferHolder.release();
+        bufferHolder = rebufferer.rebuffer(position);
+        buffer = bufferHolder.buffer();
+        buffer.position(Ints.checkedCast(position - bufferHolder.offset()));
 
         assert buffer.order() == ByteOrder.BIG_ENDIAN : "Buffer must have BIG ENDIAN byte ordering";
     }
@@ -79,12 +84,14 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     @Override
     public long getFilePointer()
     {
+        if (buffer == null)     // closed already
+            return rebufferer.fileLength();
         return current();
     }
 
     protected long current()
     {
-        return bufferOffset + buffer.position();
+        return bufferHolder.offset() + buffer.position();
     }
 
     public String getPath()
@@ -159,11 +166,13 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
     public void close()
     {
         // close needs to be idempotent.
-        if (closed)
+        if (buffer == null)
             return;
 
+        bufferHolder.release();
         rebufferer.close();
-        closed = true;
+        buffer = null;
+        bufferHolder = null;
 
         //For performance reasons we don't keep a reference to the file
         //channel so we don't close it
@@ -194,9 +203,10 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition < 0)
             throw new IllegalArgumentException("new position should not be negative");
 
-        if (closed)
+        if (buffer == null)
             throw new IllegalStateException("Attempted to seek in a closed RAR");
 
+        long bufferOffset = bufferHolder.offset();
         if (newPosition >= bufferOffset && newPosition < bufferOffset + buffer.limit())
         {
             buffer.position((int) (newPosition - bufferOffset));
@@ -206,9 +216,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         if (newPosition > length())
             throw new IllegalArgumentException(String.format("Unable to seek to position %d in %s (%d bytes) in read-only mode",
                                                          newPosition, getPath(), length()));
-        bufferOffset = rebufferer.bufferOffset(newPosition);
-        buffer = rebufferer.rebuffer(newPosition);
-        assert current() == newPosition;
+        reBufferAt(newPosition);
     }
 
     /**

@@ -1,24 +1,24 @@
 package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Throwables;
 import com.google.common.cache.*;
 import com.google.common.collect.Iterables;
-import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implements RemovalListener<ReaderCache.Key, ByteBuffer>
+public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer> implements RemovalListener<ReaderCache.Key, ReaderCache.Buffer>
 {
-    public static ReaderCache instance = DatabaseDescriptor.getFileCacheSizeInMB() > 0 ? new ReaderCache() : null;
+    public static final int RESERVED_POOL_SPACE_IN_MB = 32;
+    public static final long cacheSize = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
 
-    static ByteBuffer EMPTY = ByteBuffer.allocate(0);
+    public static final ReaderCache instance = cacheSize > 0 ? new ReaderCache() : null;
 
-    private final LoadingCache<Key, ByteBuffer> cache;
+    private final LoadingCache<Key, Buffer> cache;
 
     static class Key
     {
@@ -53,32 +53,71 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
                     && file.path().equals(other.file.path());
         }
     }
+    
+    static class Buffer implements Rebufferer.BufferHolder
+    {
+        final ByteBuffer buffer;
+        final long offset;
+        final AtomicInteger references = new AtomicInteger(0);
+
+        public Buffer(ByteBuffer buffer, long offset)
+        {
+            this.buffer = buffer;
+            this.offset = offset;
+        }
+
+        Buffer reference()
+        {
+            references.incrementAndGet();
+            return this;
+        }
+
+        @Override
+        public ByteBuffer buffer()
+        {
+            assert references.get() > 0;
+            return buffer.duplicate();
+        }
+
+        @Override
+        public long offset()
+        {
+            return offset;
+        }
+
+        @Override
+        public void release()
+        {
+            if (references.decrementAndGet() == 0)
+                BufferPool.put(buffer);
+        }
+    }
 
     public ReaderCache()
     {
         cache = CacheBuilder.newBuilder()
-                .maximumWeight(BufferPool.MEMORY_USAGE_THRESHOLD * 15 / 16)
-                .weigher((key, buffer) -> ((ByteBuffer) buffer).capacity())
+                .maximumWeight(cacheSize)
+                .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
                 .removalListener(this)
                 .build(this);
     }
 
     @Override
-    public ByteBuffer load(Key key) throws Exception
+    public Buffer load(Key key) throws Exception
     {
         BufferlessRebufferer rebufferer = key.file.cacheRebufferer();
         synchronized (rebufferer)
         {
             ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
             assert buffer != null;
-            return buffer;
+            return new Buffer(buffer, key.position).reference();
         }
     }
 
     @Override
-    public void onRemoval(RemovalNotification<Key, ByteBuffer> removal)
+    public void onRemoval(RemovalNotification<Key, Buffer> removal)
     {
-        BufferPool.put(removal.getValue());
+        removal.getValue().release();
     }
 
     public void close()
@@ -118,14 +157,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         }
 
         @Override
-        public ByteBuffer rebuffer(long position)
+        public Buffer rebuffer(long position)
         {
             try
             {
                 long pageAlignedPos = position & alignmentMask;
-                ByteBuffer buffer = cache.get(new Key(source, pageAlignedPos)).duplicate();
-                buffer.position(Ints.checkedCast(position - pageAlignedPos));
-                return buffer;
+                return cache.get(new Key(source, pageAlignedPos)).reference();
             }
             catch (Throwable t)
             {
@@ -141,12 +178,6 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         }
 
         @Override
-        public long bufferOffset(long position)
-        {
-            return position & alignmentMask;
-        }
-
-        @Override
         public ChannelProxy channel()
         {
             return source.channel;
@@ -156,12 +187,6 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ByteBuffer> implem
         public long fileLength()
         {
             return source.dataLength();
-        }
-
-        @Override
-        public ByteBuffer initialBuffer()
-        {
-            return EMPTY;
         }
 
         @Override
