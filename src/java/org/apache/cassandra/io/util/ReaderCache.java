@@ -53,12 +53,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
                     && file.path().equals(other.file.path());
         }
     }
-    
+
     static class Buffer implements Rebufferer.BufferHolder
     {
-        final ByteBuffer buffer;
-        final long offset;
-        final AtomicInteger references = new AtomicInteger(0);
+        private final ByteBuffer buffer;
+        private final long offset;
+        private final AtomicInteger references = new AtomicInteger(0);
 
         public Buffer(ByteBuffer buffer, long offset)
         {

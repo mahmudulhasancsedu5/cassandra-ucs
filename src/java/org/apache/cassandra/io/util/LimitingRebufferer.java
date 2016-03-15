@@ -23,13 +23,14 @@ public class LimitingRebufferer implements Rebufferer
     {
         BufferHolder bufferHolder = wrapped.rebuffer(position);
         ByteBuffer buffer = bufferHolder.buffer();
-        int remaining = Ints.checkedCast(buffer.limit() + bufferHolder.offset() - position);
+        int posInBuffer = Ints.checkedCast(position - bufferHolder.offset());
+        int remaining = buffer.limit() - posInBuffer;
         if (remaining == 0)
             return bufferHolder;
 
         if (remaining > limitQuant)
         {
-            buffer.limit(buffer.position() + limitQuant);
+            buffer.limit(posInBuffer + limitQuant); // certainly below current limit
             remaining = limitQuant;
         }
         limiter.acquire(remaining);
