@@ -58,17 +58,26 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
     {
         private final ByteBuffer buffer;
         private final long offset;
-        private final AtomicInteger references = new AtomicInteger(0);
+        private final AtomicInteger references;
 
         public Buffer(ByteBuffer buffer, long offset)
         {
             this.buffer = buffer;
             this.offset = offset;
+            references = new AtomicInteger(1);  // start referenced.
         }
 
         Buffer reference()
         {
-            references.incrementAndGet();
+            int refCount;
+            do
+            {
+                refCount = references.get();
+                if (refCount == 0)
+                    // Buffer was released before we managed to reference it. 
+                    return null;
+            } while (!references.compareAndSet(refCount, refCount + 1));
+
             return this;
         }
 
@@ -110,7 +119,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         {
             ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
             assert buffer != null;
-            return new Buffer(buffer, key.position).reference();
+            return new Buffer(buffer, key.position);
         }
     }
 
@@ -162,14 +171,18 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
             try
             {
                 long pageAlignedPos = position & alignmentMask;
-                return cache.get(new Key(source, pageAlignedPos)).reference();
+                Buffer buf;
+                do
+                    buf = cache.get(new Key(source, pageAlignedPos)).reference();
+                while (buf == null);
+
+                return buf;
             }
             catch (Throwable t)
             {
                 Throwables.propagateIfInstanceOf(t.getCause(), CorruptSSTableException.class);
                 throw Throwables.propagate(t);
             }
-            // TODO: Deal with being evicted while still in use.
         }
 
         @Override
