@@ -43,9 +43,9 @@ public class ChecksummedRandomAccessReader
     {
         private final DataIntegrityMetadata.ChecksumValidator validator;
 
-        public ChecksummedRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize, ChecksumValidator validator)
+        public ChecksummedRebufferer(ChannelProxy channel, long fileLength, ChecksumValidator validator)
         {
-            super(new SimpleReadRebufferer(channel, fileLength), bufferType, bufferSize);
+            super(new SimpleReadRebufferer(channel, fileLength, BufferType.ON_HEAP, validator.chunkSize));
             this.validator = validator;
         }
 
@@ -76,7 +76,7 @@ public class ChecksummedRandomAccessReader
         {
             try
             {
-                super.close();
+                rebufferer.close();
             }
             finally
             {
@@ -102,15 +102,12 @@ public class ChecksummedRandomAccessReader
             this.validator = new DataIntegrityMetadata.ChecksumValidator(ChecksumType.CRC32,
                                                                          RandomAccessReader.open(crcFile),
                                                                          file.getPath());
-
-            super.bufferSize(validator.chunkSize)
-                 .bufferType(BufferType.ON_HEAP);
         }
 
         @Override
         protected Rebufferer createRebufferer()
         {
-            return new ChecksummedRebufferer(channel, overrideLength, bufferType, bufferSize, validator);
+            return new ChecksummedRebufferer(channel, overrideLength, validator);
         }
 
         @Override

@@ -1,6 +1,6 @@
 package org.apache.cassandra.io.util;
 
-public interface RebuffererData extends AutoCloseable
+public interface BaseRebufferer extends AutoCloseable
 {
     void close();               // no checked exceptions
 

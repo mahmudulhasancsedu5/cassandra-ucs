@@ -25,7 +25,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
-import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.Rebufferer.BufferHolder;
 import org.apache.cassandra.utils.memory.BufferPool;
@@ -171,7 +170,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
             return;
 
         bufferHolder.release();
-        rebufferer.close();
+        rebufferer.closeReader();
         buffer = null;
         bufferHolder = null;
 
@@ -301,10 +300,7 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         // The buffer
         public ByteBuffer buffer;
 
-        // The mmap segments for mmap readers
-        public MmappedRegions regions;
-
-        public SegmentedFile cacheSource;
+        public BaseRebufferer fileRebufferer;
 
         // An optional limiter that will throttle the amount of data we read
         public RateLimiter limiter;
@@ -315,9 +311,18 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
             this.overrideLength = -1L;
             this.bufferSize = DEFAULT_BUFFER_SIZE;
             this.bufferType = BufferType.OFF_HEAP;
-            this.regions = null;
             this.limiter = null;
-            this.cacheSource = null;
+            this.fileRebufferer = null;
+        }
+
+        public Builder(SegmentedFile file)
+        {
+            this.channel = file.channel;
+            this.overrideLength = file.dataLength();
+            this.bufferSize = DEFAULT_BUFFER_SIZE;
+            this.bufferType = BufferType.OFF_HEAP;
+            this.limiter = null;
+            this.fileRebufferer = file.rebufferer();
         }
 
         /** The buffer size is typically already page aligned but if that is not the case
@@ -337,16 +342,30 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         protected Rebufferer createRebufferer()
         {
-            if (cacheSource != null && ReaderCache.instance != null)
-                return ReaderCache.instance.newRebufferer(cacheSource);
-            int adjustedSize = adjustedBufferSize();
-            Rebufferer rebufferer = regions == null
-                    ? new BufferManagingRebufferer.Unaligned(new SimpleReadRebufferer(channel, overrideLength), bufferType, adjustedSize)
-                    : new UncompressedMmapRebufferer(channel, overrideLength, regions);
+            Rebufferer rebufferer;
+            if (fileRebufferer instanceof Rebufferer)
+                rebufferer = (Rebufferer) fileRebufferer;
+            else
+            {
+                BufferlessRebufferer bufferless;
+                if (fileRebufferer instanceof BufferlessRebufferer)
+                    bufferless = (BufferlessRebufferer) fileRebufferer;
+                else
+                    bufferless = bufferlessRebufferer();
+
+                rebufferer = BufferManagingRebufferer.on(bufferless);
+            }
+
             if (limiter != null)
-                rebufferer = new LimitingRebufferer(rebufferer, limiter, adjustedSize);
+                rebufferer = new LimitingRebufferer(rebufferer, limiter, MAX_BUFFER_SIZE);
 
             return rebufferer;
+        }
+
+        public BufferlessRebufferer bufferlessRebufferer()
+        {
+            int adjustedSize = adjustedBufferSize();
+            return new SimpleReadRebufferer(channel, overrideLength, bufferType, adjustedSize);
         }
 
         public Builder overrideLength(long overrideLength)
@@ -372,7 +391,8 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         public Builder regions(MmappedRegions regions)
         {
-            this.regions = regions;
+            assert fileRebufferer == null;
+            fileRebufferer = new MmapRebufferer(channel, overrideLength, regions);
             return this;
         }
 
@@ -410,11 +430,18 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         {
             try
             {
-                getChannel().close();
+                super.close();
             }
             finally
             {
-                super.close();
+                try
+                {
+                    rebufferer.close();
+                }
+                finally
+                {
+                    getChannel().close();
+                }
             }
         }
     }

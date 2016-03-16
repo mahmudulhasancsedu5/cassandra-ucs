@@ -67,12 +67,6 @@ public class RandomAccessReaderTest
             this.maxSegmentSize = maxSegmentSize;
             return this;
         }
-
-        public Parameters expected(byte[] expected)
-        {
-            this.expected = expected;
-            return this;
-        }
     }
 
     @Test
@@ -108,6 +102,7 @@ public class RandomAccessReaderTest
     @Test
     public void testMultipleSegments() throws IOException
     {
+        // FIXME: This is the same as above.
         testReadFully(new Parameters(8192, 4096).mmappedRegions(true).maxSegmentSize(1024));
     }
 
@@ -273,8 +268,12 @@ public class RandomAccessReaderTest
             RandomAccessReader.Builder builder = new RandomAccessReader.Builder(channel)
                                                  .bufferType(params.bufferType)
                                                  .bufferSize(params.bufferSize);
+            MmappedRegions regions = null;
             if (params.mmappedRegions)
-                builder.regions(MmappedRegions.map(channel, f.length()));
+            {
+                regions = MmappedRegions.map(channel, f.length());
+                builder.regions(regions);
+            }
 
             try(RandomAccessReader reader = builder.build())
             {
@@ -296,8 +295,8 @@ public class RandomAccessReaderTest
                 assertEquals(0, reader.bytesRemaining());
             }
 
-            if (builder.regions != null)
-                assertNull(builder.regions.close(null));
+            if (regions != null)
+                assertNull(regions.close(null));
         }
     }
 

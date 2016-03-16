@@ -4,11 +4,18 @@ import java.nio.ByteBuffer;
 
 import com.google.common.primitives.Ints;
 
+import org.apache.cassandra.io.compress.BufferType;
+
 class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebufferer
 {
-    public SimpleReadRebufferer(ChannelProxy channel, long fileLength)
+    private final int bufferSize;
+    private final BufferType bufferType;
+
+    public SimpleReadRebufferer(ChannelProxy channel, long fileLength, BufferType bufferType, int bufferSize)
     {
         super(channel, fileLength);
+        this.bufferSize = bufferSize;
+        this.bufferType = bufferType;
     }
 
     @Override
@@ -21,5 +28,23 @@ class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebuf
         channel.read(buffer, position);
         buffer.flip();
         return buffer;
+    }
+
+    @Override
+    public int chunkSize()
+    {
+        return bufferSize;
+    }
+
+    @Override
+    public BufferType preferredBufferType()
+    {
+        return bufferType;
+    }
+
+    @Override
+    public boolean alignmentRequired()
+    {
+        return false;
     }
 }

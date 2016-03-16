@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 /**
  * Rebufferer for reading data by a RandomAccessReader.
  */
-public interface Rebufferer extends RebuffererData
+public interface Rebufferer extends BaseRebufferer
 {
     /**
      * Rebuffer (move on or seek to) a given position, and return a buffer that can be used there.
@@ -14,6 +14,11 @@ public interface Rebufferer extends RebuffererData
      * {@code offset <= position < offset + bh.buffer().limit()}, but will not be positioned there.
      */
     BufferHolder rebuffer(long position);
+
+    /**
+     * Called when a reader is closed. Should clean up reader-specific data.
+     */
+    void closeReader();
 
     public interface BufferHolder
     {

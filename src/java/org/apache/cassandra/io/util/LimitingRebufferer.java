@@ -38,12 +38,6 @@ public class LimitingRebufferer implements Rebufferer
     }
 
     @Override
-    public void close()
-    {
-        wrapped.close();
-    }
-
-    @Override
     public ChannelProxy channel()
     {
         return wrapped.channel();
@@ -59,5 +53,17 @@ public class LimitingRebufferer implements Rebufferer
     public double getCrcCheckChance()
     {
         return wrapped.getCrcCheckChance();
+    }
+
+    @Override
+    public void close()
+    {
+        wrapped.close();
+    }
+
+    @Override
+    public void closeReader()
+    {
+        wrapped.closeReader();
     }
 }

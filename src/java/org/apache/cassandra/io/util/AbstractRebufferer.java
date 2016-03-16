@@ -1,6 +1,6 @@
 package org.apache.cassandra.io.util;
 
-public abstract class AbstractRebufferer implements RebuffererData
+public abstract class AbstractRebufferer implements BaseRebufferer
 {
     protected final ChannelProxy channel;
     protected final long fileLength;

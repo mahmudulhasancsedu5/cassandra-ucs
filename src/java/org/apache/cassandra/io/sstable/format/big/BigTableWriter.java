@@ -283,9 +283,9 @@ public class BigTableWriter extends SSTableWriter
 
     void invalidateCacheAtBoundary(SegmentedFile dfile)
     {
-        if (ReaderCache.instance != null && lastEarlyOpenLength != 0 && dfile.length > lastEarlyOpenLength)
+        if (ReaderCache.instance != null && lastEarlyOpenLength != 0 && dfile.dataLength() > lastEarlyOpenLength)
             ReaderCache.instance.invalidatePosition(dfile, lastEarlyOpenLength);
-        lastEarlyOpenLength = dfile.length;
+        lastEarlyOpenLength = dfile.dataLength();
     }
 
     public SSTableReader openFinalEarly()
