@@ -2,12 +2,14 @@ package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.io.compress.BufferType;
+
 /**
  * Rebuffering component that does not need to use its own buffer.
  * A caching or buffer-managing rebufferer will reference one of these to do the actual reading.
  * Note: Implementations of this interface must be thread-safe!
  */
-public interface BufferlessRebufferer extends RebuffererData
+public interface BufferlessRebufferer extends BaseRebufferer
 {
     /**
      * Rebuffer (i.e. read) at the given position, attempting to fill the capacity of the given buffer.
@@ -18,4 +20,19 @@ public interface BufferlessRebufferer extends RebuffererData
      * @return buffer
      */
     ByteBuffer rebuffer(long position, ByteBuffer buffer);
+
+    /**
+     * Buffer size required for this rebufferer. Must be power of 2.
+     */
+    int chunkSize();
+
+    /**
+     * Specifies type of buffer the caller should attempt to give.
+     */
+    BufferType preferredBufferType();
+
+    /**
+     * If true, positions passed to this rebufferer must be aligned to chunkSize.
+     */
+    boolean alignmentRequired();
 }

@@ -10,10 +10,7 @@ import com.google.common.collect.Iterables;
 import com.codahale.metrics.Timer;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
-import org.apache.cassandra.io.util.BufferlessRebufferer;
-import org.apache.cassandra.io.util.ChannelProxy;
-import org.apache.cassandra.io.util.Rebufferer;
-import org.apache.cassandra.io.util.SegmentedFile;
+import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
@@ -30,21 +27,24 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
 
     static class Key
     {
-        final SegmentedFile file;
+        final BufferlessRebufferer file;
+        final String path;
         final long position;
 
-        public Key(SegmentedFile file, long position)
+        public Key(BufferlessRebufferer file, long position)
         {
             super();
             this.file = file;
             this.position = position;
+            this.path = file.channel().filePath();
         }
 
         public int hashCode()
         {
             final int prime = 31;
             int result = 1;
-            result = prime * result + file.path().hashCode();
+            result = prime * result + path.hashCode();
+            result = prime * result + file.getClass().hashCode();
             result = prime * result + Long.hashCode(position);
             return result;
         }
@@ -58,7 +58,8 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
 
             Key other = (Key) obj;
             return (position == other.position)
-                    && file.path().equals(other.file.path());
+                    && file.getClass() == other.file.getClass()
+                    && path.equals(other.path);
         }
     }
 
@@ -123,11 +124,10 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
     @Override
     public Buffer load(Key key) throws Exception
     {
-        BufferlessRebufferer rebufferer = key.file.cacheRebufferer();
+        BufferlessRebufferer rebufferer = key.file;
         metrics.misses.mark();
         try (Timer.Context ctx = metrics.missLatency.time())
         {
-            metrics.misses.mark();
             ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
             assert buffer != null;
             return new Buffer(buffer, key.position);
@@ -145,30 +145,40 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         cache.invalidateAll();
     }
 
-    public Rebufferer newRebufferer(SegmentedFile file)
+    public Rebufferer wrap(BufferlessRebufferer file)
     {
         return new CachingRebufferer(file);
     }
 
-    public void invalidatePosition(SegmentedFile file, long position)
+    public static BaseRebufferer maybeWrap(BufferlessRebufferer file)
     {
-        long pageAlignedPos = position & -file.chunkSize();
-        cache.invalidate(new Key(file, pageAlignedPos));
+        if (instance == null)
+            return file;
+
+        return instance.wrap(file);
+    }
+
+    public void invalidatePosition(SegmentedFile dfile, long position)
+    {
+        if (!(dfile.rebufferer() instanceof CachingRebufferer))
+            return;
+
+        ((CachingRebufferer) dfile.rebufferer()).invalidate(position);
     }
 
     public void invalidateFile(String fileName)
     {
-        cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.file.path().equals(fileName)));
+        cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.path.equals(fileName)));
     }
 
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
 
     class CachingRebufferer implements Rebufferer
     {
-        private final SegmentedFile source;
+        private final BufferlessRebufferer source;
         final long alignmentMask;
 
-        public CachingRebufferer(SegmentedFile file)
+        public CachingRebufferer(BufferlessRebufferer file)
         {
             source = file;
             int chunkSize = file.chunkSize();
@@ -197,27 +207,40 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
             }
         }
 
+        public void invalidate(long position)
+        {
+            long pageAlignedPos = position & alignmentMask;
+            cache.invalidate(new Key(source, pageAlignedPos));
+        }
+
         @Override
         public void close()
         {
+            source.close();
+        }
+
+        @Override
+        public void closeReader()
+        {
+            // Instance is shared among readers. Nothing to release.
         }
 
         @Override
         public ChannelProxy channel()
         {
-            return source.channel;
+            return source.channel();
         }
 
         @Override
         public long fileLength()
         {
-            return source.dataLength();
+            return source.fileLength();
         }
 
         @Override
         public double getCrcCheckChance()
         {
-            return source.cacheRebufferer().getCrcCheckChance();
+            return source.getCrcCheckChance();
         }
     }
 

@@ -1636,7 +1636,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
      */
     public long uncompressedLength()
     {
-        return dfile.length;
+        return dfile.dataLength();
     }
 
     /**

@@ -2,7 +2,6 @@ package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
 
-import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer.BufferHolder
@@ -11,19 +10,33 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
     protected final ByteBuffer buffer;
     protected long offset = 0;
 
+    public static BufferManagingRebufferer on(BufferlessRebufferer wrapped)
+    {
+        return wrapped.alignmentRequired()
+             ? new Aligned(wrapped)
+             : new Unaligned(wrapped);
+    }
+
     abstract long alignedPosition(long position);
 
-    public BufferManagingRebufferer(BufferlessRebufferer wrapped, BufferType bufferType, int bufferSize)
+    public BufferManagingRebufferer(BufferlessRebufferer wrapped)
     {
         this.rebufferer = wrapped;
-        buffer = RandomAccessReader.allocateBuffer(bufferSize, bufferType);
+        buffer = RandomAccessReader.allocateBuffer(wrapped.chunkSize(), wrapped.preferredBufferType());
         buffer.limit(0);
+    }
+
+    @Override
+    public void closeReader()
+    {
+        BufferPool.put(buffer);
+        offset = -1;
     }
 
     @Override
     public void close()
     {
-        BufferPool.put(buffer);
+        assert offset == -1;    // reader must be closed at this point.
         rebufferer.close();
     }
 
@@ -71,9 +84,9 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
 
     public static class Unaligned extends BufferManagingRebufferer implements Rebufferer
     {
-        public Unaligned(BufferlessRebufferer wrapped, BufferType bufferType, int bufferSize)
+        public Unaligned(BufferlessRebufferer wrapped)
         {
-            super(wrapped, bufferType, bufferSize);
+            super(wrapped);
         }
 
         @Override
@@ -85,10 +98,10 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
 
     public static class Aligned extends BufferManagingRebufferer implements Rebufferer
     {
-        public Aligned(BufferlessRebufferer wrapped, BufferType bufferType, int bufferSize)
+        public Aligned(BufferlessRebufferer wrapped)
         {
-            super(wrapped, bufferType, bufferSize);
-            assert Integer.bitCount(bufferSize) == 1;
+            super(wrapped);
+            assert Integer.bitCount(wrapped.chunkSize()) == 1;
         }
 
         @Override

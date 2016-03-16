@@ -19,26 +19,19 @@ package org.apache.cassandra.io.util;
 
 import com.google.common.util.concurrent.RateLimiter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.compress.CompressionMetadata;
-import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.concurrent.Ref;
 
 public class CompressedSegmentedFile extends SegmentedFile implements ICompressedFile
 {
-    private static final Logger logger = LoggerFactory.getLogger(CompressedSegmentedFile.class);
     private static final boolean useMmap = DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap;
 
     public final CompressionMetadata metadata;
-    private final MmappedRegions regions;
-    private final BufferlessRebufferer cacheRebufferer;
 
     public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata)
     {
@@ -51,33 +44,24 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        this(channel, metadata, regions, createCacheRebufferer(channel, metadata, regions));
+        this(channel, metadata, regions, createRebufferer(channel, metadata, regions));
     }
 
-    private static BufferlessRebufferer createCacheRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    private static BaseRebufferer createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        if (ReaderCache.instance == null)
-            return null;
-
-        CompressedRandomAccessReader.Builder builder = new CompressedRandomAccessReader.Builder(channel, metadata);
-        builder.regions(regions);
-        return builder.bufferlessRebufferer();
+        return ReaderCache.maybeWrap(CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions));
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BufferlessRebufferer cache)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
     {
-        super(new Cleanup(channel, metadata, regions, cache), channel, metadata.chunkLength(), metadata.dataLength, metadata.compressedFileLength);
+        super(new Cleanup(channel, metadata, regions, rebufferer), channel, rebufferer, metadata.compressedFileLength);
         this.metadata = metadata;
-        this.regions = regions;
-        this.cacheRebufferer = cache;
     }
 
     private CompressedSegmentedFile(CompressedSegmentedFile copy)
     {
         super(copy);
         this.metadata = copy.metadata;
-        this.regions = copy.regions;
-        this.cacheRebufferer = copy.cacheRebufferer;
     }
 
     public ChannelProxy channel()
@@ -85,43 +69,19 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return channel;
     }
 
-    public MmappedRegions regions()
-    {
-        return regions;
-    }
-
-    public BufferlessRebufferer cacheRebufferer()
-    {
-        return cacheRebufferer;
-    }
-
     private static final class Cleanup extends SegmentedFile.Cleanup
     {
         final CompressionMetadata metadata;
-        private final MmappedRegions regions;
-        final BufferlessRebufferer cacheRebufferer;
 
-        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BufferlessRebufferer cacheRebufferer)
+        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
         {
-            super(channel);
+            super(channel, rebufferer);
             this.metadata = metadata;
-            this.regions = regions;
-            this.cacheRebufferer = cacheRebufferer;
         }
         public void tidy()
         {
-            Throwable err = regions == null ? null : regions.close(null);
-            if (err != null)
-            {
-                JVMStabilityInspector.inspectThrowable(err);
-
-                // This is not supposed to happen
-                logger.error("Error while closing mmapped regions", err);
-            }
-
             if (ReaderCache.instance != null)
             {
-                cacheRebufferer.close();
                 ReaderCache.instance.invalidateFile(name());
             }
             metadata.close();

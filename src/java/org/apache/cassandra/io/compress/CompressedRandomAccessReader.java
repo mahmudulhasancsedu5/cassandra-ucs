@@ -24,7 +24,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
-import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
 
@@ -59,6 +58,24 @@ public class CompressedRandomAccessReader
                                  channel.filePath(),
                                  metadata.chunkLength(),
                                  metadata.dataLength);
+        }
+
+        @Override
+        public int chunkSize()
+        {
+            return metadata.chunkLength();
+        }
+
+        @Override
+        public boolean alignmentRequired()
+        {
+            return true;
+        }
+
+        @Override
+        public BufferType preferredBufferType()
+        {
+            return metadata.compressor().preferredBufferType();
         }
     }
     
@@ -142,12 +159,6 @@ public class CompressedRandomAccessReader
                 throw new CorruptSSTableException(e, channel.filePath());
             }
         }
-
-        @Override
-        public void close()
-        {
-            super.close();
-        }
     }
 
     static class MmapRebufferer extends CompressedRebufferer
@@ -172,9 +183,9 @@ public class CompressedRandomAccessReader
                 CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
 
                 MmappedRegions.Region region = regions.floor(chunk.offset);
-                long segmentOffset = region.bottom();
+                long segmentOffset = region.offset();
                 int chunkOffset = Ints.checkedCast(chunk.offset - segmentOffset);
-                ByteBuffer compressedChunk = region.buffer.duplicate();
+                ByteBuffer compressedChunk = region.buffer();
 
                 compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
@@ -211,18 +222,29 @@ public class CompressedRandomAccessReader
             }
 
         }
+
+        public void close()
+        {
+            regions.closeQuietly();
+            super.close();
+        }
+    }
+
+    public static BufferlessRebufferer bufferlessRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    {
+        return regions != null
+               ? new MmapRebufferer(channel, metadata, regions)
+               : new StandardRebufferer(channel, metadata);
     }
 
     public final static class Builder extends RandomAccessReader.Builder
     {
         private final CompressionMetadata metadata;
 
-        public Builder(ICompressedFile file)
+        public Builder(CompressedSegmentedFile file)
         {
-            super(file.channel());
+            super(file);
             metadata = file.getMetadata();
-            regions = file.regions();
-            cacheSource = file instanceof SegmentedFile ? (SegmentedFile) file : null;
             assert Integer.bitCount(metadata.chunkLength()) == 1; //must be a power of two
         }
 
@@ -234,21 +256,16 @@ public class CompressedRandomAccessReader
         }
 
         @Override
-        protected Rebufferer createRebufferer()
+        public Builder regions(MmappedRegions regions)
         {
-            if (cacheSource != null && ReaderCache.instance != null)
-                return ReaderCache.instance.newRebufferer(cacheSource);
-            else
-                return new BufferManagingRebufferer.Aligned(bufferlessRebufferer(),
-                                                            metadata.compressor().preferredBufferType(),
-                                                            metadata.chunkLength());
+            assert fileRebufferer == null;
+            fileRebufferer = CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions);
+            return this;
         }
 
         public BufferlessRebufferer bufferlessRebufferer()
         {
-            return regions != null
-                   ? new MmapRebufferer(channel, metadata, regions)
-                   : new StandardRebufferer(channel, metadata);
+            return CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, null);
         }
     }
 }
