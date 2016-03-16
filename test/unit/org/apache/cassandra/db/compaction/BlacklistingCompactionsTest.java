@@ -33,11 +33,11 @@ import static org.junit.Assert.assertNotNull;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.ReaderCache;
 import org.apache.cassandra.schema.KeyspaceParams;
 
 import static org.junit.Assert.assertEquals;

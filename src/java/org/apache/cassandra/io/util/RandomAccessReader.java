@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
+import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.Rebufferer.BufferHolder;
 import org.apache.cassandra.utils.memory.BufferPool;

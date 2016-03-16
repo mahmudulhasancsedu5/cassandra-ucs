@@ -117,6 +117,19 @@ public class Info extends NodeToolCmd
                 probe.getCacheMetric("CounterCache", "HitRate"),
                 cacheService.getCounterCacheSavePeriodInSeconds());
 
+        // Chunk Cache: Hits, Requests, RecentHitRate, SavePeriodInSeconds
+        System.out.printf("%-23s: entries %d, size %s, capacity %s, %d misses, %d requests, %.3f recent hit rate, %.3f[%.3f] %s miss latency%n",
+                "Chunk Cache",
+                probe.getCacheMetric("ChunkCache", "Entries"),
+                FileUtils.stringifyFileSize((long) probe.getCacheMetric("ChunkCache", "Size")),
+                FileUtils.stringifyFileSize((long) probe.getCacheMetric("ChunkCache", "Capacity")),
+                probe.getCacheMetric("ChunkCache", "Misses"),
+                probe.getCacheMetric("ChunkCache", "Requests"),
+                probe.getCacheMetric("ChunkCache", "HitRate"),
+                probe.getCacheMetric("ChunkCache", "MissLatency"),
+                probe.getCacheMetric("ChunkCache", "LockedMissLatency"),
+                probe.getCacheMetric("ChunkCache", "MissLatencyUnit"));
+
         // check if node is already joined, before getting tokens, since it throws exception if not.
         if (probe.isJoined())
         {
