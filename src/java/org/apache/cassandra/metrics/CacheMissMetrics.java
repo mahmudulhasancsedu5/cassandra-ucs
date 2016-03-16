@@ -36,10 +36,8 @@ public class CacheMissMetrics
     public final Meter misses;
     /** Total number of cache requests */
     public final Meter requests;
-    /** Aggregate latency of all misses */
+    /** Latency of misses */
     public final Timer missLatency;
-    /** Aggregate latency of all misses */
-    public final Timer lockedMissLatency;
     /** all time cache hit rate */
     public final Gauge<Double> hitRate;
     /** 1m hit rate */
@@ -67,7 +65,6 @@ public class CacheMissMetrics
         misses = Metrics.meter(factory.createMetricName("Misses"));
         requests = Metrics.meter(factory.createMetricName("Requests"));
         missLatency = Metrics.timer(factory.createMetricName("MissLatency"));
-        lockedMissLatency = Metrics.timer(factory.createMetricName("LockedMissLatency"));
         hitRate = Metrics.register(factory.createMetricName("HitRate"), new RatioGauge()
         {
             @Override

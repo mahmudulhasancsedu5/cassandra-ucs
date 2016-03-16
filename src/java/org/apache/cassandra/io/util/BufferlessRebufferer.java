@@ -5,8 +5,7 @@ import java.nio.ByteBuffer;
 /**
  * Rebuffering component that does not need to use its own buffer.
  * A caching or buffer-managing rebufferer will reference one of these to do the actual reading.
- *
- * TODO: Make thread-safe and use singleton per SegmentedFile.
+ * Note: Implementations of this interface must be thread-safe!
  */
 public interface BufferlessRebufferer extends RebuffererData
 {
