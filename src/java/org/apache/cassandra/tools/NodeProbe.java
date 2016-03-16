@@ -1184,7 +1184,6 @@ public class NodeProbe implements AutoCloseable
                             new ObjectName("org.apache.cassandra.metrics:type=Cache,scope=" + cacheType + ",name=" + metricName),
                             CassandraMetricsRegistry.JmxMeterMBean.class).getCount();
                 case "MissLatency":
-                case "LockedMissLatency":
                     return JMX.newMBeanProxy(mbeanServerConn,
                             new ObjectName("org.apache.cassandra.metrics:type=Cache,scope=" + cacheType + ",name=" + metricName),
                             CassandraMetricsRegistry.JmxTimerMBean.class).getMean();

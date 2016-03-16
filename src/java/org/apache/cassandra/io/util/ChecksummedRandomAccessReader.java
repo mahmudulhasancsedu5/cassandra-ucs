@@ -19,11 +19,11 @@ package org.apache.cassandra.io.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.zip.CRC32;
 
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.DataIntegrityMetadata.ChecksumValidator;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.ChecksumType;
 
 public class ChecksummedRandomAccessReader
 {
@@ -99,7 +99,7 @@ public class ChecksummedRandomAccessReader
         public Builder(File file, File crcFile) throws IOException
         {
             super(new ChannelProxy(file));
-            this.validator = new DataIntegrityMetadata.ChecksumValidator(new CRC32(),
+            this.validator = new DataIntegrityMetadata.ChecksumValidator(ChecksumType.CRC32,
                                                                          RandomAccessReader.open(crcFile),
                                                                          file.getPath());
 

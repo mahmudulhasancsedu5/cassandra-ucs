@@ -127,16 +127,10 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         metrics.misses.mark();
         try (Timer.Context ctx = metrics.missLatency.time())
         {
-            synchronized (rebufferer)
-            {
-                metrics.misses.mark();
-                try (Timer.Context ctx2 = metrics.lockedMissLatency.time())
-                {
-                    ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
-                    assert buffer != null;
-                    return new Buffer(buffer, key.position);
-                }
-            }
+            metrics.misses.mark();
+            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
+            assert buffer != null;
+            return new Buffer(buffer, key.position);
         }
     }
 

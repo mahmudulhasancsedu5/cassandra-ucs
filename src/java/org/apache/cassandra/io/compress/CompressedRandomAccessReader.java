@@ -20,16 +20,13 @@ package org.apache.cassandra.io.compress;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.zip.Checksum;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.cache.ReaderCache;
-import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
-import org.apache.cassandra.utils.memory.BufferPool;
 
 /**
  * CRAR extends RAR to transparently uncompress blocks from the file into RAR.buffer.  Most of the RAR
@@ -42,14 +39,10 @@ public class CompressedRandomAccessReader
     {
         final CompressionMetadata metadata;
 
-        // re-use single crc object
-        final Checksum checksum;
-
         public CompressedRebufferer(ChannelProxy channel, CompressionMetadata metadata)
         {
             super(channel, metadata.dataLength);
             this.metadata = metadata;
-            checksum = metadata.checksumType.newInstance();
         }
 
         @VisibleForTesting
@@ -72,18 +65,22 @@ public class CompressedRandomAccessReader
     static class StandardRebufferer extends CompressedRebufferer
     {
         // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
-        private ByteBuffer compressed;
-
-        // raw checksum bytes
-        final ByteBuffer checksumBytes;
+        private final ThreadLocal<ByteBuffer> compressedHolder;
 
         public StandardRebufferer(ChannelProxy channel, CompressionMetadata metadata)
         {
             super(channel, metadata);
-            compressed = RandomAccessReader.allocateBuffer(
-                     metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()),
-                     metadata.compressor().preferredBufferType());
-            checksumBytes = ByteBuffer.wrap(new byte[4]);
+            compressedHolder = ThreadLocal.withInitial(this::allocateBuffer);
+        }
+
+        public ByteBuffer allocateBuffer()
+        {
+            return allocateBuffer(metadata.compressor().initialCompressedBufferLength(metadata.chunkLength()));
+        }
+
+        public ByteBuffer allocateBuffer(int size)
+        {
+            return metadata.compressor().preferredBufferType().allocate(size);
         }
 
         @Override
@@ -96,11 +93,12 @@ public class CompressedRandomAccessReader
                 assert position <= fileLength;
 
                 CompressionMetadata.Chunk chunk = metadata.chunkFor(position);
+                ByteBuffer compressed = compressedHolder.get();
 
                 if (compressed.capacity() < chunk.length)
                 {
-                    BufferPool.put(compressed);
-                    compressed = RandomAccessReader.allocateBuffer(chunk.length, metadata.compressor().preferredBufferType());
+                    compressed = allocateBuffer(chunk.length);
+                    compressedHolder.set(compressed);
                 }
                 else
                 {
@@ -130,13 +128,12 @@ public class CompressedRandomAccessReader
                 if (getCrcCheckChance() > ThreadLocalRandom.current().nextDouble())
                 {
                     compressed.rewind();
-                    metadata.checksumType.update( checksum, compressed);
+                    int checksum = (int) metadata.checksumType.of(compressed);
 
-                    if (checksum(chunk) != (int) checksum.getValue())
+                    compressed.clear().limit(Integer.BYTES);
+                    if (channel.read(compressed, chunk.offset + chunk.length) != Integer.BYTES
+                        || compressed.getInt(0) != checksum)
                         throw new CorruptBlockException(channel.filePath(), chunk);
-
-                    // reset checksum object back to the original (blank) state
-                    checksum.reset();
                 }
                 return uncompressed;
             }
@@ -144,26 +141,12 @@ public class CompressedRandomAccessReader
             {
                 throw new CorruptSSTableException(e, channel.filePath());
             }
-            catch (IOException e)
-            {
-                throw new FSReadError(e, channel.filePath());
-            }
-        }
-
-        private int checksum(CompressionMetadata.Chunk chunk) throws IOException
-        {
-            long position = chunk.offset + chunk.length;
-            checksumBytes.clear();
-            if (channel.read(checksumBytes, position) != checksumBytes.capacity())
-                throw new CorruptBlockException(channel.filePath(), chunk);
-            return checksumBytes.getInt(0);
         }
 
         @Override
         public void close()
         {
             super.close();
-            BufferPool.put(compressed);
         }
     }
 
@@ -214,14 +197,11 @@ public class CompressedRandomAccessReader
                 {
                     compressedChunk.position(chunkOffset).limit(chunkOffset + chunk.length);
 
-                    metadata.checksumType.update( checksum, compressedChunk);
+                    int checksum = (int) metadata.checksumType.of(compressedChunk);
 
                     compressedChunk.limit(compressedChunk.capacity());
-                    if (compressedChunk.getInt() != (int) checksum.getValue())
+                    if (compressedChunk.getInt() != checksum)
                         throw new CorruptBlockException(channel.filePath(), chunk);
-
-                    // reset checksum object back to the original (blank) state
-                    checksum.reset();
                 }
                 return uncompressed;
             }
