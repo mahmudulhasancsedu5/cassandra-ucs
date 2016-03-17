@@ -31,6 +31,7 @@ import com.google.common.collect.Maps;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.exceptions.CassandraException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.schema.TriggerMetadata;
 import org.apache.cassandra.schema.Triggers;
@@ -230,6 +231,10 @@ public class TriggerExecutor
                     tmutations.addAll(temp);
             }
             return tmutations;
+        }
+        catch (CassandraException ex)
+        {
+            throw ex;
         }
         catch (Exception ex)
         {
