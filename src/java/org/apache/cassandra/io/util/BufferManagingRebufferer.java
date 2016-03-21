@@ -4,6 +4,10 @@ import java.nio.ByteBuffer;
 
 import org.apache.cassandra.utils.memory.BufferPool;
 
+/**
+ * Buffer provider for bufferless rebufferers. Instances of this class are reader-specific and thus do not need to be
+ * thread-safe since the reader itself isn't.
+ */
 public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
     protected final BufferlessRebufferer rebufferer;

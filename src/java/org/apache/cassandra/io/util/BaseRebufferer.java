@@ -1,5 +1,9 @@
 package org.apache.cassandra.io.util;
 
+/**
+ * Base class for RandomAccessReader rebufferers. There are two kinds of this, and a SegmentedFile must provide a
+ * threadsafe instance of one of the.
+ */
 public interface BaseRebufferer extends AutoCloseable
 {
     void close();               // no checked exceptions
