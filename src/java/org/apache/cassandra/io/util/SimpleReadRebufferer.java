@@ -47,4 +47,14 @@ class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebuf
     {
         return false;
     }
+
+    @Override
+    public String toString()
+    {
+        return String.format("%s(%s - chunk length %d, data length %d)",
+                             getClass().getSimpleName(),
+                             channel.filePath(),
+                             bufferSize,
+                             fileLength());
+    }
 }

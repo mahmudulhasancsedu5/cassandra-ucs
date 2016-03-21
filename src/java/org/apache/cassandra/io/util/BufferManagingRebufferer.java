@@ -86,6 +86,12 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
         return rebufferer.getCrcCheckChance();
     }
 
+    @Override
+    public String toString()
+    {
+        return "BufferManagingRebufferer." + getClass().getSimpleName() + ":" + rebufferer.toString();
+    }
+
     public static class Unaligned extends BufferManagingRebufferer implements Rebufferer
     {
         public Unaligned(BufferlessRebufferer wrapped)

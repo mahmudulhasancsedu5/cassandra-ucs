@@ -29,4 +29,13 @@ class MmapRebufferer extends AbstractRebufferer implements Rebufferer
     {
         // Instance is shared among readers. Nothing to release.
     }
+
+    @Override
+    public String toString()
+    {
+        return String.format("%s(%s - data length %d)",
+                             getClass().getSimpleName(),
+                             channel.filePath(),
+                             fileLength());
+    }
 }
