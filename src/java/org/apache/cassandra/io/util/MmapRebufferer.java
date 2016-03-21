@@ -1,37 +1,12 @@
 package org.apache.cassandra.io.util;
 
-import java.nio.ByteBuffer;
-
+/**
+ * Rebufferer for memory-mapped files. Thread-safe and shared among reader instances.
+ * This is simply a thin wrapper around MmappedRegions as the buffers there can be used directly after duplication.
+ */
 class MmapRebufferer extends AbstractRebufferer implements Rebufferer
 {
     protected final MmappedRegions regions;
-
-    static class Buffer implements BufferHolder
-    {
-        private final ByteBuffer buffer;
-        private final long offset;
-
-        public Buffer(ByteBuffer buffer, long offset)
-        {
-            this.buffer = buffer;
-            this.offset = offset;
-        }
-
-        public ByteBuffer buffer()
-        {
-            return buffer.duplicate();
-        }
-
-        public long offset()
-        {
-            return offset;
-        }
-
-        public void release()
-        {
-            // nothing to do
-        }
-    }
 
     public MmapRebufferer(ChannelProxy channel, long fileLength, MmappedRegions regions)
     {

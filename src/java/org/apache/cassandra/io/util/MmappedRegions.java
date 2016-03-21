@@ -217,16 +217,6 @@ public class MmappedRegions extends SharedCloseableImpl
             this.buffer = buffer;
         }
 
-        public long bottom()
-        {
-            return offset;
-        }
-
-        public long top()
-        {
-            return offset + buffer.capacity();
-        }
-
         public ByteBuffer buffer()
         {
             return buffer.duplicate();
@@ -237,9 +227,14 @@ public class MmappedRegions extends SharedCloseableImpl
             return offset;
         }
 
+        public long end()
+        {
+            return offset + buffer.capacity();
+        }
+
         public void release()
         {
-            // only released after no readers are available
+            // only released after no readers are present
         }
     }
 
