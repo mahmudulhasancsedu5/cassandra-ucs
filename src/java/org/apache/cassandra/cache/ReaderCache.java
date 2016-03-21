@@ -3,6 +3,7 @@ package org.apache.cassandra.cache;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.cache.*;
 import com.google.common.collect.Iterables;
@@ -20,7 +21,8 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
     public static final int RESERVED_POOL_SPACE_IN_MB = 32;
     public static final long cacheSize = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
 
-    public static final ReaderCache instance = cacheSize > 0 ? new ReaderCache() : null;
+    private static boolean enabled = cacheSize > 0;
+    public static final ReaderCache instance = enabled ? new ReaderCache() : null;
 
     private final LoadingCache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
@@ -152,7 +154,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
 
     public static BaseRebufferer maybeWrap(BufferlessRebufferer file)
     {
-        if (instance == null)
+        if (!enabled)
             return file;
 
         return instance.wrap(file);
@@ -171,8 +173,20 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.path.equals(fileName)));
     }
 
+    @VisibleForTesting
+    public void enable(boolean enabled)
+    {
+        ReaderCache.enabled = enabled;
+        cache.invalidateAll();
+        metrics.reset();
+    }
+
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
 
+    /**
+     * Rebufferer providing cached chunks where data is obtained from the specified BufferlessRebufferer.
+     * Thread-safe. One instance per SegmentedFile, created by ReaderCache.maybeWrap if the cache is enabled.
+     */
     class CachingRebufferer implements Rebufferer
     {
         private final BufferlessRebufferer source;
@@ -241,6 +255,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         public double getCrcCheckChance()
         {
             return source.getCrcCheckChance();
+        }
+
+        @Override
+        public String toString()
+        {
+            return "CachingRebufferer:" + source.toString();
         }
     }
 

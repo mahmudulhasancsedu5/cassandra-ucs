@@ -5,11 +5,20 @@ import java.nio.ByteBuffer;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
-public class LimitingRebufferer implements Rebufferer
+/**
+ * Rebufferer wrapper that applies rate limiting.
+ *
+ * Instantiated once per RandomAccessReader, thread-unsafe.
+ */
+public class LimitingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
     final private Rebufferer wrapped;
     final private RateLimiter limiter;
     final private int limitQuant;
+
+    private BufferHolder bufferHolder;
+    private ByteBuffer buffer;
+    private long offset;
 
     public LimitingRebufferer(Rebufferer wrapped, RateLimiter limiter, int limitQuant)
     {
@@ -21,41 +30,41 @@ public class LimitingRebufferer implements Rebufferer
     @Override
     public BufferHolder rebuffer(long position)
     {
-        BufferHolder bufferHolder = wrapped.rebuffer(position);
-        ByteBuffer buffer = bufferHolder.buffer();
-        int posInBuffer = Ints.checkedCast(position - bufferHolder.offset());
+        bufferHolder = wrapped.rebuffer(position);
+        buffer = bufferHolder.buffer();
+        offset = bufferHolder.offset();
+        int posInBuffer = Ints.checkedCast(position - offset);
         int remaining = buffer.limit() - posInBuffer;
         if (remaining == 0)
-            return bufferHolder;
-        if (remaining <= limitQuant)
+            return this;
+
+        if (remaining > limitQuant)
         {
-            limiter.acquire(remaining);
-            return bufferHolder;
+            buffer.limit(posInBuffer + limitQuant); // certainly below current limit
+            remaining = limitQuant;
         }
+        limiter.acquire(remaining);
+        return this;
+    }
 
-        limiter.acquire(limitQuant);
-        buffer.limit(posInBuffer + limitQuant); // certainly below current limit
+    // BufferHolder methods
 
-        return new BufferHolder()
-        {
-            @Override
-            public ByteBuffer buffer()
-            {
-                return buffer;
-            }
+    @Override
+    public ByteBuffer buffer()
+    {
+        return buffer;
+    }
 
-            @Override
-            public long offset()
-            {
-                return bufferHolder.offset();
-            }
+    @Override
+    public long offset()
+    {
+        return offset;
+    }
 
-            @Override
-            public void release()
-            {
-                bufferHolder.release();
-            }
-        };
+    @Override
+    public void release()
+    {
+        bufferHolder.release();
     }
 
     @Override
@@ -86,5 +95,11 @@ public class LimitingRebufferer implements Rebufferer
     public void closeReader()
     {
         wrapped.closeReader();
+    }
+
+    @Override
+    public String toString()
+    {
+        return "LimitingRebufferer[" + limiter.toString() + "]:" + wrapped.toString();
     }
 }
