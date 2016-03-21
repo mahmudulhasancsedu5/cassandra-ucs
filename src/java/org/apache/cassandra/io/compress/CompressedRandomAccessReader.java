@@ -53,9 +53,10 @@ public class CompressedRandomAccessReader
         @Override
         public String toString()
         {
-            return String.format("%s(%s - chunk length %d, data length %d)",
+            return String.format("%s(%s - %s, chunk length %d, data length %d)",
                                  getClass().getSimpleName(),
                                  channel.filePath(),
+                                 metadata.compressor().getClass().getSimpleName(),
                                  metadata.chunkLength(),
                                  metadata.dataLength);
         }
@@ -78,7 +79,7 @@ public class CompressedRandomAccessReader
             return metadata.compressor().preferredBufferType();
         }
     }
-    
+
     static class StandardRebufferer extends CompressedRebufferer
     {
         // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.

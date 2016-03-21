@@ -105,4 +105,10 @@ public class CacheMissMetrics
         size = Metrics.register(factory.createMetricName("Size"), (Gauge<Long>) cache::weightedSize);
         entries = Metrics.register(factory.createMetricName("Entries"), (Gauge<Integer>) cache::size);
     }
+
+    public void reset()
+    {
+        requests.mark(-requests.getCount());
+        misses.mark(-misses.getCount());
+    }
 }

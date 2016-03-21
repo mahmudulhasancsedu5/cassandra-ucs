@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.config.Config;
+import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
@@ -29,15 +30,13 @@ import org.apache.cassandra.utils.concurrent.Ref;
 
 public class CompressedSegmentedFile extends SegmentedFile implements ICompressedFile
 {
-    private static final boolean useMmap = DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap;
-
     public final CompressionMetadata metadata;
 
-    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, Config.DiskAccessMode mode)
     {
         this(channel,
              metadata,
-             useMmap
+             mode == DiskAccessMode.mmap
              ? MmappedRegions.map(channel, metadata)
              : null);
     }
@@ -104,9 +103,12 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     public static class Builder extends SegmentedFile.Builder
     {
         final CompressedSequentialWriter writer;
+        final Config.DiskAccessMode mode;
+
         public Builder(CompressedSequentialWriter writer)
         {
             this.writer = writer;
+            this.mode = DatabaseDescriptor.getDiskAccessMode();
         }
 
         protected CompressionMetadata metadata(String path, long overrideLength)
@@ -119,7 +121,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
         public SegmentedFile complete(ChannelProxy channel, int bufferSize, long overrideLength)
         {
-            return new CompressedSegmentedFile(channel, metadata(channel.filePath(), overrideLength));
+            return new CompressedSegmentedFile(channel, metadata(channel.filePath(), overrideLength), mode);
         }
     }
 
