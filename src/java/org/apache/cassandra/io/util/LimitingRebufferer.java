@@ -27,14 +27,35 @@ public class LimitingRebufferer implements Rebufferer
         int remaining = buffer.limit() - posInBuffer;
         if (remaining == 0)
             return bufferHolder;
-
-        if (remaining > limitQuant)
+        if (remaining <= limitQuant)
         {
-            buffer.limit(posInBuffer + limitQuant); // certainly below current limit
-            remaining = limitQuant;
+            limiter.acquire(remaining);
+            return bufferHolder;
         }
-        limiter.acquire(remaining);
-        return bufferHolder;
+
+        limiter.acquire(limitQuant);
+        buffer.limit(posInBuffer + limitQuant); // certainly below current limit
+
+        return new BufferHolder()
+        {
+            @Override
+            public ByteBuffer buffer()
+            {
+                return buffer;
+            }
+
+            @Override
+            public long offset()
+            {
+                return bufferHolder.offset();
+            }
+
+            @Override
+            public void release()
+            {
+                bufferHolder.release();
+            }
+        };
     }
 
     @Override
