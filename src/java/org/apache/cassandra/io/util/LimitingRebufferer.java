@@ -9,6 +9,7 @@ import com.google.common.util.concurrent.RateLimiter;
  * Rebufferer wrapper that applies rate limiting.
  *
  * Instantiated once per RandomAccessReader, thread-unsafe.
+ * The instances reuse themselves as the BufferHolder to avoid having to return a new object for each rebuffer call.
  */
 public class LimitingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
@@ -47,26 +48,6 @@ public class LimitingRebufferer implements Rebufferer, Rebufferer.BufferHolder
         return this;
     }
 
-    // BufferHolder methods
-
-    @Override
-    public ByteBuffer buffer()
-    {
-        return buffer;
-    }
-
-    @Override
-    public long offset()
-    {
-        return offset;
-    }
-
-    @Override
-    public void release()
-    {
-        bufferHolder.release();
-    }
-
     @Override
     public ChannelProxy channel()
     {
@@ -101,5 +82,25 @@ public class LimitingRebufferer implements Rebufferer, Rebufferer.BufferHolder
     public String toString()
     {
         return "LimitingRebufferer[" + limiter.toString() + "]:" + wrapped.toString();
+    }
+
+    // BufferHolder methods
+
+    @Override
+    public ByteBuffer buffer()
+    {
+        return buffer;
+    }
+
+    @Override
+    public long offset()
+    {
+        return offset;
+    }
+
+    @Override
+    public void release()
+    {
+        bufferHolder.release();
     }
 }
