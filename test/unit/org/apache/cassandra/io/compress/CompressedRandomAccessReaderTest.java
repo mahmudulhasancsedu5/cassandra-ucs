@@ -146,12 +146,13 @@ public class CompressedRandomAccessReaderTest
                                                  ? new CompressedRandomAccessReader.Builder(channel, compressionMetadata)
                                                  : new RandomAccessReader.Builder(channel);
 
+            MmappedRegions regions = null;
             if (usemmap)
             {
-                if (compressed)
-                    builder.regions(MmappedRegions.map(channel, compressionMetadata));
-                else
-                    builder.regions(MmappedRegions.map(channel, f.length()));
+                regions = compressed
+                        ? MmappedRegions.map(channel, compressionMetadata)
+                        : MmappedRegions.map(channel, f.length());
+                builder.regions(regions);
             }
 
             try(RandomAccessReader reader = builder.build())
@@ -163,8 +164,8 @@ public class CompressedRandomAccessReaderTest
                 assert new String(b).equals(expected) : "Expecting '" + expected + "', got '" + new String(b) + '\'';
             }
 
-            if (usemmap)
-                builder.regions.close();
+            if (regions != null)
+                regions.close();
         }
         finally
         {

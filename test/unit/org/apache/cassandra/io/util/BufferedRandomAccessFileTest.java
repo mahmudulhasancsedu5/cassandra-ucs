@@ -18,6 +18,7 @@
  *
  */
 package org.apache.cassandra.io.util;
+import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.SyncUtil;
 

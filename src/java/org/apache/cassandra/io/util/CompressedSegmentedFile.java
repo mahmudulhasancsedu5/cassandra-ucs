@@ -19,47 +19,48 @@ package org.apache.cassandra.io.util;
 
 import com.google.common.util.concurrent.RateLimiter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.config.Config;
+import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.compress.CompressionMetadata;
-import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.concurrent.Ref;
 
 public class CompressedSegmentedFile extends SegmentedFile implements ICompressedFile
 {
-    private static final Logger logger = LoggerFactory.getLogger(CompressedSegmentedFile.class);
-    private static final boolean useMmap = DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap;
-
     public final CompressionMetadata metadata;
-    private final MmappedRegions regions;
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, Config.DiskAccessMode mode)
     {
         this(channel,
-             bufferSize,
              metadata,
-             useMmap
+             mode == DiskAccessMode.mmap
              ? MmappedRegions.map(channel, metadata)
              : null);
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, int bufferSize, CompressionMetadata metadata, MmappedRegions regions)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        super(new Cleanup(channel, metadata, regions), channel, bufferSize, metadata.dataLength, metadata.compressedFileLength);
+        this(channel, metadata, regions, createRebufferer(channel, metadata, regions));
+    }
+
+    private static BaseRebufferer createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    {
+        return ReaderCache.maybeWrap(CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions));
+    }
+
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
+    {
+        super(new Cleanup(channel, metadata, regions, rebufferer), channel, rebufferer, metadata.compressedFileLength);
         this.metadata = metadata;
-        this.regions = regions;
     }
 
     private CompressedSegmentedFile(CompressedSegmentedFile copy)
     {
         super(copy);
         this.metadata = copy.metadata;
-        this.regions = copy.regions;
     }
 
     public ChannelProxy channel()
@@ -67,33 +68,21 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         return channel;
     }
 
-    public MmappedRegions regions()
-    {
-        return regions;
-    }
-
     private static final class Cleanup extends SegmentedFile.Cleanup
     {
         final CompressionMetadata metadata;
-        private final MmappedRegions regions;
 
-        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+        protected Cleanup(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
         {
-            super(channel);
+            super(channel, rebufferer);
             this.metadata = metadata;
-            this.regions = regions;
         }
         public void tidy()
         {
-            Throwable err = regions == null ? null : regions.close(null);
-            if (err != null)
+            if (ReaderCache.instance != null)
             {
-                JVMStabilityInspector.inspectThrowable(err);
-
-                // This is not supposed to happen
-                logger.error("Error while closing mmapped regions", err);
+                ReaderCache.instance.invalidateFile(name());
             }
-
             metadata.close();
 
             super.tidy();
@@ -114,9 +103,12 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     public static class Builder extends SegmentedFile.Builder
     {
         final CompressedSequentialWriter writer;
+        final Config.DiskAccessMode mode;
+
         public Builder(CompressedSequentialWriter writer)
         {
             this.writer = writer;
+            this.mode = DatabaseDescriptor.getDiskAccessMode();
         }
 
         protected CompressionMetadata metadata(String path, long overrideLength)
@@ -129,7 +121,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
         public SegmentedFile complete(ChannelProxy channel, int bufferSize, long overrideLength)
         {
-            return new CompressedSegmentedFile(channel, bufferSize, metadata(channel.filePath(), overrideLength));
+            return new CompressedSegmentedFile(channel, metadata(channel.filePath(), overrideLength), mode);
         }
     }
 
@@ -153,5 +145,10 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     public CompressionMetadata getMetadata()
     {
         return metadata;
+    }
+
+    public long dataLength()
+    {
+        return metadata.dataLength;
     }
 }
