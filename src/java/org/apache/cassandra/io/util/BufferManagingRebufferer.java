@@ -7,6 +7,8 @@ import org.apache.cassandra.utils.memory.BufferPool;
 /**
  * Buffer provider for bufferless rebufferers. Instances of this class are reader-specific and thus do not need to be
  * thread-safe since the reader itself isn't.
+ *
+ * The instances reuse themselves as the BufferHolder to avoid having to return a new object for each rebuffer call.
  */
 public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
@@ -45,12 +47,6 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
     }
 
     @Override
-    public void release()
-    {
-        // nothing to do, we don't delete buffers before we're closed.
-    }
-
-    @Override
     public ChannelProxy channel()
     {
         return rebufferer.channel();
@@ -70,16 +66,6 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
         return this;
     }
 
-    public ByteBuffer buffer()
-    {
-        return buffer;
-    }
-    
-    public long offset()
-    {
-        return offset;
-    }
-
     @Override
     public double getCrcCheckChance()
     {
@@ -90,6 +76,24 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
     public String toString()
     {
         return "BufferManagingRebufferer." + getClass().getSimpleName() + ":" + rebufferer.toString();
+    }
+
+    // BufferHolder methods
+
+    public ByteBuffer buffer()
+    {
+        return buffer;
+    }
+
+    public long offset()
+    {
+        return offset;
+    }
+
+    @Override
+    public void release()
+    {
+        // nothing to do, we don't delete buffers before we're closed.
     }
 
     public static class Unaligned extends BufferManagingRebufferer implements Rebufferer
