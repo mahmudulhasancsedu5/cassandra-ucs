@@ -23,7 +23,7 @@ import com.google.common.base.Charsets;
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.UpdateBuilder;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.Verifier;
@@ -31,7 +31,6 @@ import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
@@ -314,8 +313,7 @@ public class VerifyTest
         file.seek(startPosition);
         file.writeBytes(StringUtils.repeat('z', (int) 2));
         file.close();
-        if (ReaderCache.instance != null)
-            ReaderCache.instance.invalidateFile(sstable.getFilename());
+        ChunkCache.instance.invalidateFile(sstable.getFilename());
 
         // Update the Digest to have the right Checksum
         writeChecksum(simpleFullChecksum(sstable.getFilename()), sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));

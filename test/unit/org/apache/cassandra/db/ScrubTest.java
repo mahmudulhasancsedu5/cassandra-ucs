@@ -29,7 +29,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.apache.cassandra.*;
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.Operator;
@@ -51,7 +51,6 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.*;
-import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.big.BigTableWriter;
@@ -418,8 +417,7 @@ public class ScrubTest
         file.seek(startPosition);
         file.writeBytes(StringUtils.repeat('z', (int) (endPosition - startPosition)));
         file.close();
-        if (ReaderCache.instance != null)
-            ReaderCache.instance.invalidateFile(sstable.getFilename());
+        ChunkCache.instance.invalidateFile(sstable.getFilename());
     }
 
     private static void assertOrderedAll(ColumnFamilyStore cfs, int expectedSize)

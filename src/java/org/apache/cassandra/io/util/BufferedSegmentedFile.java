@@ -17,7 +17,7 @@
  */
 package org.apache.cassandra.io.util;
 
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.io.compress.BufferType;
 
 public class BufferedSegmentedFile extends SegmentedFile
@@ -39,7 +39,7 @@ public class BufferedSegmentedFile extends SegmentedFile
 
     private static BaseRebufferer createRebufferer(ChannelProxy channel, long length, int bufferSize)
     {
-        return ReaderCache.maybeWrap(new SimpleReadRebufferer(channel, length, BufferType.OFF_HEAP, bufferSize));
+        return ChunkCache.instance.wrap(new SimpleReadRebufferer(channel, length, BufferType.OFF_HEAP, bufferSize));
     }
 
     public static class Builder extends SegmentedFile.Builder

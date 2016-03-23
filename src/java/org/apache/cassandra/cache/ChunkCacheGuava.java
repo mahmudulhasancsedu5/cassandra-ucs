@@ -3,29 +3,22 @@ package org.apache.cassandra.cache;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.cache.*;
 import com.google.common.collect.Iterables;
 
 import com.codahale.metrics.Timer;
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer>
-        implements RemovalListener<ReaderCache.Key, ReaderCache.Buffer>, CacheSize
+public class ChunkCacheGuava
+        implements ChunkCache.ChunkCacheType, CacheSize, RemovalListener<ChunkCacheGuava.Key, ChunkCacheGuava.Buffer> 
 {
-    public static final int RESERVED_POOL_SPACE_IN_MB = 32;
-    public static final long cacheSize = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
-
-    private static boolean enabled = cacheSize > 0;
-    public static final ReaderCache instance = enabled ? new ReaderCache() : null;
-
-    private final LoadingCache<Key, Buffer> cache;
+    private final Cache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
+    private final long cacheSize;
 
     static class Key
     {
@@ -113,27 +106,15 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         }
     }
 
-    public ReaderCache()
+    public ChunkCacheGuava(long cacheSize)
     {
+        this.cacheSize = cacheSize;
         cache = CacheBuilder.newBuilder()
                 .maximumWeight(cacheSize)
                 .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
                 .removalListener(this)
-                .build(this);
+                .build();
         metrics = new CacheMissMetrics("ChunkCache", this);
-    }
-
-    @Override
-    public Buffer load(Key key) throws Exception
-    {
-        BufferlessRebufferer rebufferer = key.file;
-        metrics.misses.mark();
-        try (Timer.Context ctx = metrics.missLatency.time())
-        {
-            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
-            assert buffer != null;
-            return new Buffer(buffer, key.position);
-        }
     }
 
     @Override
@@ -142,24 +123,20 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         removal.getValue().release();
     }
 
+    @Override
     public void close()
     {
         cache.invalidateAll();
+        metrics.close();
     }
 
+    @Override
     public Rebufferer wrap(BufferlessRebufferer file)
     {
         return new CachingRebufferer(file);
     }
 
-    public static BaseRebufferer maybeWrap(BufferlessRebufferer file)
-    {
-        if (!enabled)
-            return file;
-
-        return instance.wrap(file);
-    }
-
+    @Override
     public void invalidatePosition(SegmentedFile dfile, long position)
     {
         if (!(dfile.rebufferer() instanceof CachingRebufferer))
@@ -168,17 +145,16 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         ((CachingRebufferer) dfile.rebufferer()).invalidate(position);
     }
 
+    @Override
     public void invalidateFile(String fileName)
     {
         cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.path.equals(fileName)));
     }
 
-    @VisibleForTesting
-    public void enable(boolean enabled)
+    @Override
+    public CacheMissMetrics metrics()
     {
-        ReaderCache.enabled = enabled;
-        cache.invalidateAll();
-        metrics.reset();
+        return metrics;
     }
 
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
@@ -208,8 +184,25 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
                 metrics.requests.mark();
                 long pageAlignedPos = position & alignmentMask;
                 Buffer buf;
+                Key key = new Key(source, pageAlignedPos);
                 do
-                    buf = cache.get(new Key(source, pageAlignedPos)).reference();
+                    try (Timer.Context ctxReq = metrics.reqLatency.time())
+                    {
+                        buf = cache.getIfPresent(key);
+                        if (buf != null)
+                            buf = buf.reference();
+                        if (buf == null)
+                        {
+                            metrics.misses.mark();
+                            try (Timer.Context ctx = metrics.missLatency.time())
+                            {
+                                ByteBuffer buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
+                                assert buffer != null;
+                                buf = new Buffer(buffer, key.position).reference();     // two refs, one for caller one for cache
+                            }
+                            cache.put(key, buf);
+                        }
+                    }
                 while (buf == null);
 
                 return buf;
@@ -263,6 +256,8 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
             return "CachingRebufferer:" + source.toString();
         }
     }
+
+    // CacheSize methods
 
     @Override
     public long capacity()

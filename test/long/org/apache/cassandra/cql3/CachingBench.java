@@ -33,19 +33,22 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.codahale.metrics.Snapshot;
+import com.codahale.metrics.Timer;
 import junit.framework.Assert;
+import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.cache.ChunkCacheGuava;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.Config.DiskAccessMode;
-import org.apache.cassandra.cache.ReaderCache;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class CachingBench extends CQLTester
@@ -55,7 +58,7 @@ public class CachingBench extends CQLTester
     private static final int DEL_SECTIONS = 1000;
     private static final int FLUSH_FREQ = 10000;
     private static final int SCAN_FREQUENCY_INV = 12000;
-    static final int COUNT = 90000;
+    static final int COUNT = 9000;
     static final int ITERS = 9;
 
     static final int KEY_RANGE = 30;
@@ -74,7 +77,7 @@ public class CachingBench extends CQLTester
         DatabaseDescriptor.setCommitLogSyncPeriod(100);
         CQLTester.setUpClass();
     }
-    
+
     String hashQuery;
 
     @Before
@@ -194,7 +197,7 @@ public class CachingBench extends CQLTester
     {
         id.set(0);
         compactionTimeNanos = 0;
-        ReaderCache.instance.enable(cacheEnabled);
+        ChunkCache.switchTo(cacheEnabled ? new ChunkCacheGuava(16 * 1024 * 1024) : null);
         DatabaseDescriptor.setDiskAccessMode(mode);
         alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "'  };");
         alterTable("ALTER TABLE %s WITH compression = { 'sstable_compression' : '" + compressorClass + "'  };");
@@ -225,50 +228,51 @@ public class CachingBench extends CQLTester
             task.get();
 
         flush();
+
+        System.out.println();
+        verifyHashes(getHashes());
+
         long onEndTime = System.currentTimeMillis();
         int startRowCount = countRows(cfs);
         int startTombCount = countTombstoneMarkers(cfs);
         int startRowDeletions = countRowDeletions(cfs);
         int startTableCount = cfs.getLiveSSTables().size();
         long startSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
-        System.out.println("\nCompession: " + cfs.getCompressionParameters().toString());
+        System.out.println("Compession: " + cfs.getCompressionParameters().toString());
         System.out.println("Reader " + cfs.getLiveSSTables().iterator().next().getFileDataInput(0).toString());
+        printLatency("Total read", cfs.metric.readLatency.latency);
         if (cacheEnabled)
-            System.out.format("Cache size %s requests %,d hit ratio %f\n",
-                FileUtils.stringifyFileSize(ReaderCache.instance.metrics.size.getValue()),
-                ReaderCache.instance.metrics.requests.getCount(),
-                ReaderCache.instance.metrics.hitRate.getValue());
-        else
         {
-            Assert.assertTrue("Chunk cache had requests: " + ReaderCache.instance.metrics.requests.getCount(), ReaderCache.instance.metrics.requests.getCount() < COUNT);
+            CacheMissMetrics metrics = ChunkCache.instance.metrics();
+            printLatency("Request", metrics.reqLatency);
+            printLatency("Miss", metrics.missLatency);
+            double cacheLatency = metrics.reqLatency.getSnapshot().getMean() -
+                    metrics.missLatency.getSnapshot().getMean() * metrics.missLatency.getCount() / metrics.reqLatency.getCount();
+            System.out.format("Mean cache latency: %.0fns\n", cacheLatency);
+            System.out.format("Cache size %s requests %,d hit ratio %f\n",
+                    FileUtils.stringifyFileSize(metrics.size.getValue()),
+                    metrics.requests.getCount(),
+                    metrics.hitRate.getValue());
+        } else
+        {
+            Assert.assertEquals(ChunkCache.NoCache.class, ChunkCache.instance.getClass());
             System.out.println("Cache disabled");
         }
-        System.out.println(String.format("Operations completed in %.3fs", (onEndTime - onStartTime) * 1e-3));
+        System.out.print(String.format("Operations completed in %.3fs", (onEndTime - onStartTime) * 1e-3));
         if (!CONCURRENT_COMPACTIONS)
             System.out.println(String.format(", out of which %.3f for non-concurrent compaction", compactionTimeNanos * 1e-9));
         else
             System.out.println();
 
-        String hashesBefore = getHashes();
-        long startTime = System.currentTimeMillis();
-        CompactionManager.instance.performMaximal(cfs, true);
-        long endTime = System.currentTimeMillis();
-
-        int endRowCount = countRows(cfs);
-        int endTombCount = countTombstoneMarkers(cfs);
-        int endRowDeletions = countRowDeletions(cfs);
-        int endTableCount = cfs.getLiveSSTables().size();
-        long endSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
-
-        System.out.println(String.format("Major compaction completed in %.3fs",
-                (endTime - startTime) * 1e-3));
-        System.out.println(String.format("At start: %,12d tables %12s %,12d rows %,12d deleted rows %,12d tombstone markers",
+        System.out.println(String.format("%,12d tables %12s %,12d rows %,12d deleted rows %,12d tombstone markers\n",
                 startTableCount, FileUtils.stringifyFileSize(startSize), startRowCount, startRowDeletions, startTombCount));
-        System.out.println(String.format("At end:   %,12d tables %12s %,12d rows %,12d deleted rows %,12d tombstone markers",
-                endTableCount, FileUtils.stringifyFileSize(endSize), endRowCount, endRowDeletions, endTombCount));
-        String hashesAfter = getHashes();
+    }
 
-        Assert.assertEquals(hashesBefore, hashesAfter);
+    private void printLatency(String name, Timer latency)
+    {
+        Snapshot s = latency.getSnapshot();
+        System.out.format("%s latency: mean %,.0f median %,.0f min %,d max %,d 99pct %,.0f ns\n",
+                name, s.getMean(), s.getMedian(), s.getMin(), s.getMax(), s.get99thPercentile());
     }
 
     private String getHashes() throws Throwable
@@ -278,6 +282,17 @@ public class CachingBench extends CQLTester
         long endTime = System.currentTimeMillis();
         System.out.println(String.format("Hashes: %s, retrieved in %.3fs", hashes, (endTime - startTime) * 1e-3));
         return hashes;
+    }
+
+    static String calculatedHashes = null;
+
+    public void verifyHashes(String hashes)
+    {
+        // Hashes calculated after each run must be the same.
+        if (calculatedHashes == null)
+            calculatedHashes = hashes;
+        else
+            Assert.assertEquals(calculatedHashes, hashes);
     }
 
     @Test

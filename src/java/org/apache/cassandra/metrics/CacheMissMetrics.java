@@ -17,13 +17,15 @@
  */
 package org.apache.cassandra.metrics;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.RatioGauge;
-import com.codahale.metrics.Timer;
 import org.apache.cassandra.cache.CacheSize;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
+
+import java.util.Set;
+
+import com.google.common.collect.ImmutableSet;
+
+import com.codahale.metrics.*;
 
 /**
  * Metrics for {@code ICache}.
@@ -38,6 +40,8 @@ public class CacheMissMetrics
     public final Meter requests;
     /** Latency of misses */
     public final Timer missLatency;
+    /** Latency of gets */
+    public final Timer reqLatency;
     /** all time cache hit rate */
     public final Gauge<Double> hitRate;
     /** 1m hit rate */
@@ -65,6 +69,7 @@ public class CacheMissMetrics
         misses = Metrics.meter(factory.createMetricName("Misses"));
         requests = Metrics.meter(factory.createMetricName("Requests"));
         missLatency = Metrics.timer(factory.createMetricName("MissLatency"));
+        reqLatency = Metrics.timer(factory.createMetricName("RequestLatency"));
         hitRate = Metrics.register(factory.createMetricName("HitRate"), new RatioGauge()
         {
             @Override
@@ -110,5 +115,13 @@ public class CacheMissMetrics
     {
         requests.mark(-requests.getCount());
         misses.mark(-misses.getCount());
+    }
+
+    public void close()
+    {
+        Set<Metric> metrics = ImmutableSet.of(capacity, misses, requests, missLatency,
+                                              hitRate, oneMinuteHitRate, fiveMinuteHitRate, fifteenMinuteHitRate,
+                                              size, entries);
+        Metrics.removeMatching((name, metric) -> metrics.contains(metric));
     }
 }

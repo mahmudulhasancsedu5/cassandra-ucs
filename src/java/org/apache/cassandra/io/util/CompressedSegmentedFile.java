@@ -19,7 +19,7 @@ package org.apache.cassandra.io.util;
 
 import com.google.common.util.concurrent.RateLimiter;
 
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -48,7 +48,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     private static BaseRebufferer createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        return ReaderCache.maybeWrap(CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions));
+        return ChunkCache.instance.wrap(CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions));
     }
 
     public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
@@ -79,10 +79,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         }
         public void tidy()
         {
-            if (ReaderCache.instance != null)
-            {
-                ReaderCache.instance.invalidateFile(name());
-            }
+            ChunkCache.instance.invalidateFile(name());
             metadata.close();
 
             super.tidy();

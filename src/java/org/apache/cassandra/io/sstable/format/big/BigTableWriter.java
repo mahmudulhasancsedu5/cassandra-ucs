@@ -32,7 +32,7 @@ import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.rows.*;
@@ -264,8 +264,8 @@ public class BigTableWriter extends SSTableWriter
 
     void invalidateCacheAtBoundary(SegmentedFile dfile)
     {
-        if (ReaderCache.instance != null && lastEarlyOpenLength != 0 && dfile.dataLength() > lastEarlyOpenLength)
-            ReaderCache.instance.invalidatePosition(dfile, lastEarlyOpenLength);
+        if (lastEarlyOpenLength != 0 && dfile.dataLength() > lastEarlyOpenLength)
+            ChunkCache.instance.invalidatePosition(dfile, lastEarlyOpenLength);
         lastEarlyOpenLength = dfile.dataLength();
     }
 
