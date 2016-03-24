@@ -1,24 +1,34 @@
 package org.apache.cassandra.cache;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.StreamSupport;
 
 import com.google.common.base.Throwables;
-import com.google.common.cache.*;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
 
 import com.codahale.metrics.Timer;
+import net.sf.ehcache.*;
+import net.sf.ehcache.event.CacheEventListener;
+import net.sf.ehcache.store.Policy;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ChunkCacheGuava
-        implements ChunkCache.ChunkCacheType, CacheSize, RemovalListener<ChunkCacheGuava.Key, ChunkCacheGuava.Buffer> 
+public class ChunkCacheEHCache
+        implements ChunkCache.ChunkCacheType, CacheSize, CacheEventListener 
 {
-    private final Cache<Key, Buffer> cache;
+    private final Cache cache;
     public final CacheMissMetrics metrics;
     private final long cacheSize;
+    final AtomicLong currentSize = new AtomicLong(0);
+    private CacheManager manager;
 
     static class Key
     {
@@ -106,27 +116,23 @@ public class ChunkCacheGuava
         }
     }
 
-    public ChunkCacheGuava(long cacheSize)
+    public ChunkCacheEHCache(long cacheSize, Policy policy)
     {
         this.cacheSize = cacheSize;
-        cache = CacheBuilder.newBuilder()
-                .maximumWeight(cacheSize)
-                .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
-                .removalListener(this)
-                .build();
+        manager = CacheManager.create();
+        cache = new Cache("ChunkCache" + policy.getName(), (int) (cacheSize / 65536), false, false, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        cache.getCacheEventNotificationService().registerListener(this);
+        manager.addCache(cache);
+        cache.setMemoryStoreEvictionPolicy(policy);
         metrics = new CacheMissMetrics("ChunkCache", this);
-    }
-
-    @Override
-    public void onRemoval(RemovalNotification<Key, Buffer> removal)
-    {
-        removal.getValue().release();
     }
 
     @Override
     public void close()
     {
-        cache.invalidateAll();
+        for (Object o : cache.getKeys())
+            cache.remove(o);
+//        manager.shutdown();
         metrics.close();
     }
 
@@ -148,28 +154,16 @@ public class ChunkCacheGuava
     @Override
     public void invalidateFile(String fileName)
     {
-        cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.path.equals(fileName)));
+        cache.removeAll(ImmutableSet.copyOf(
+                Iterables.filter(
+                        cache.getKeys(),
+                        x -> ((Key)x).path.equals(fileName))));
     }
 
     @Override
     public CacheMissMetrics metrics()
     {
         return metrics;
-    }
-
-    Buffer getAndReference(Key key)
-    {
-        Buffer buf = cache.getIfPresent(key);
-        if (buf == null)
-            return null;
-        return buf.reference();
-    }
-
-    Buffer put(ByteBuffer buffer, Key key)
-    {
-        Buffer buf = new Buffer(buffer, key.position).reference(); // two refs, one for caller one for cache
-        cache.put(key, buf);
-        return buf;
     }
 
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
@@ -198,22 +192,24 @@ public class ChunkCacheGuava
             {
                 metrics.requests.mark();
                 long pageAlignedPos = position & alignmentMask;
-                Buffer buf;
+                Buffer buf = null;
                 Key key = new Key(source, pageAlignedPos);
                 do
                     try (Timer.Context ctxReq = metrics.reqLatency.time())
                     {
-                        buf = getAndReference(key);
+                        Element element = cache.get(key);
+                        if (element != null)
+                            buf = ((Buffer) element.getObjectValue()).reference();
                         if (buf == null)
                         {
                             metrics.misses.mark();
-                            ByteBuffer buffer;
                             try (Timer.Context ctx = metrics.missLatency.time())
                             {
-                                buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
+                                ByteBuffer buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
                                 assert buffer != null;
+                                buf = new Buffer(buffer, key.position);     // two refs, one for caller one for cache
                             }
-                            buf = put(buffer, key);
+                            cache.putIfAbsent(new Element(key, buf));
                         }
                     }
                 while (buf == null);
@@ -230,7 +226,7 @@ public class ChunkCacheGuava
         public void invalidate(long position)
         {
             long pageAlignedPos = position & alignmentMask;
-            cache.invalidate(new Key(source, pageAlignedPos));
+            cache.remove(new Key(source, pageAlignedPos));
         }
 
         @Override
@@ -287,12 +283,71 @@ public class ChunkCacheGuava
     @Override
     public int size()
     {
-        return cache.asMap().size();
+        return cache.getSize();
     }
 
     @Override
     public long weightedSize()
     {
-        return cache.asMap().values().stream().mapToLong(buf -> buf.buffer.capacity()).sum();
+        return currentSize.get();
+    }
+
+    @Override
+    public void notifyElementRemoved(Ehcache cache, Element element) throws CacheException
+    {
+        Buffer buf = (Buffer) element.getObjectValue();
+        if (buf != null)
+        {
+            currentSize.addAndGet(-buf.buffer.capacity());
+            buf.release();
+        }
+    }
+
+    @Override
+    public void notifyElementPut(Ehcache cache, Element element) throws CacheException
+    {
+        Buffer buf = (Buffer) element.getObjectValue();
+        currentSize.addAndGet(buf.buffer.capacity());
+        buf.reference();
+    }
+
+    @Override
+    public void notifyElementUpdated(Ehcache cache, Element element) throws CacheException
+    {
+        throw new AssertionError();
+    }
+
+    @Override
+    public void notifyElementExpired(Ehcache cache, Element element)
+    {
+        throw new AssertionError();
+    }
+
+    @Override
+    public void notifyElementEvicted(Ehcache cache, Element element)
+    {
+        Buffer buf = (Buffer) element.getObjectValue();
+        currentSize.addAndGet(-buf.buffer.capacity());
+        buf.release();
+    }
+
+    @Override
+    public void notifyRemoveAll(Ehcache cache)
+    {
+        // Don't know what to do.
+        // We should be empty at this point.
+//        for (Object o : cache.getKeys())
+//            cache.remove(o);
+//        assert cache.getSize() == 0;
+    }
+
+    @Override
+    public void dispose()
+    {
+    }
+    
+    public Object clone()
+    {
+        throw new AssertionError();
     }
 }

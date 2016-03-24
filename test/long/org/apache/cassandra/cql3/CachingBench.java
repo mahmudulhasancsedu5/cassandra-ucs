@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import com.google.common.collect.Iterables;
@@ -36,8 +37,14 @@ import org.junit.Test;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import junit.framework.Assert;
+import net.sf.ehcache.store.FifoPolicy;
+import net.sf.ehcache.store.LfuPolicy;
+import net.sf.ehcache.store.LruPolicy;
 import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.cache.ChunkCache.ChunkCacheType;
+import org.apache.cassandra.cache.ChunkCacheEHCache;
 import org.apache.cassandra.cache.ChunkCacheGuava;
+import org.apache.cassandra.cache.ChunkCacheICache;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -58,7 +65,7 @@ public class CachingBench extends CQLTester
     private static final int DEL_SECTIONS = 1000;
     private static final int FLUSH_FREQ = 10000;
     private static final int SCAN_FREQUENCY_INV = 12000;
-    static final int COUNT = 9000;
+    static final int COUNT = 29000;
     static final int ITERS = 9;
 
     static final int KEY_RANGE = 30;
@@ -66,6 +73,8 @@ public class CachingBench extends CQLTester
 
     static final int EXTRA_SIZE = 1025;
     static final boolean CONCURRENT_COMPACTIONS = true;
+    
+    static final long CACHE_SIZE = 96 * 1024 * 1024;
 
     // The name of this method is important!
     // CommitLog settings must be applied before CQLTester sets up; by using the same name as its @BeforeClass method we
@@ -83,6 +92,7 @@ public class CachingBench extends CQLTester
     @Before
     public void before() throws Throwable
     {
+        ChunkCache.switchTo(null);
         createTable("CREATE TABLE %s(" +
                     "  key int," +
                     "  column int," +
@@ -193,11 +203,11 @@ public class CachingBench extends CQLTester
         }
     }
 
-    public void testSetup(String compactionClass, String compressorClass, DiskAccessMode mode, boolean cacheEnabled) throws Throwable
+    public void testSetup(String compactionClass, String compressorClass, DiskAccessMode mode, ChunkCacheType cache) throws Throwable
     {
         id.set(0);
         compactionTimeNanos = 0;
-        ChunkCache.switchTo(cacheEnabled ? new ChunkCacheGuava(16 * 1024 * 1024) : null);
+        ChunkCache.switchTo(cache);
         DatabaseDescriptor.setDiskAccessMode(mode);
         alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "'  };");
         alterTable("ALTER TABLE %s WITH compression = { 'sstable_compression' : '" + compressorClass + "'  };");
@@ -232,16 +242,16 @@ public class CachingBench extends CQLTester
         System.out.println();
         verifyHashes(getHashes());
 
-        long onEndTime = System.currentTimeMillis();
         int startRowCount = countRows(cfs);
         int startTombCount = countTombstoneMarkers(cfs);
         int startRowDeletions = countRowDeletions(cfs);
         int startTableCount = cfs.getLiveSSTables().size();
         long startSize = SSTableReader.getTotalBytes(cfs.getLiveSSTables());
+        long onEndTime = System.currentTimeMillis();
         System.out.println("Compession: " + cfs.getCompressionParameters().toString());
         System.out.println("Reader " + cfs.getLiveSSTables().iterator().next().getFileDataInput(0).toString());
         printLatency("Total read", cfs.metric.readLatency.latency);
-        if (cacheEnabled)
+        if (cache != null)
         {
             CacheMissMetrics metrics = ChunkCache.instance.metrics();
             printLatency("Request", metrics.reqLatency);
@@ -249,7 +259,8 @@ public class CachingBench extends CQLTester
             double cacheLatency = metrics.reqLatency.getSnapshot().getMean() -
                     metrics.missLatency.getSnapshot().getMean() * metrics.missLatency.getCount() / metrics.reqLatency.getCount();
             System.out.format("Mean cache latency: %.0fns\n", cacheLatency);
-            System.out.format("Cache size %s requests %,d hit ratio %f\n",
+            System.out.format("%s size %s requests %,d hit ratio %f\n",
+                    ChunkCache.instance.getClass().getSimpleName(),
                     FileUtils.stringifyFileSize(metrics.size.getValue()),
                     metrics.requests.getCount(),
                     metrics.hitRate.getValue());
@@ -258,14 +269,15 @@ public class CachingBench extends CQLTester
             Assert.assertEquals(ChunkCache.NoCache.class, ChunkCache.instance.getClass());
             System.out.println("Cache disabled");
         }
+        System.out.println(String.format("%,12d tables %12s %,12d rows %,12d deleted rows %,12d tombstone markers",
+                startTableCount, FileUtils.stringifyFileSize(startSize), startRowCount, startRowDeletions, startTombCount));
+
         System.out.print(String.format("Operations completed in %.3fs", (onEndTime - onStartTime) * 1e-3));
         if (!CONCURRENT_COMPACTIONS)
             System.out.println(String.format(", out of which %.3f for non-concurrent compaction", compactionTimeNanos * 1e-9));
         else
             System.out.println();
-
-        System.out.println(String.format("%,12d tables %12s %,12d rows %,12d deleted rows %,12d tombstone markers\n",
-                startTableCount, FileUtils.stringifyFileSize(startSize), startRowCount, startRowDeletions, startTombCount));
+        System.out.println();
     }
 
     private void printLatency(String name, Timer latency)
@@ -294,54 +306,83 @@ public class CachingBench extends CQLTester
         else
             Assert.assertEquals(calculatedHashes, hashes);
     }
+    
+    void testCache(Function<Long, ChunkCacheType> cacheSupplier) throws Throwable
+    {
+        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, cacheSupplier.apply(CACHE_SIZE));
+    }
 
     @Test
     public void testWarmup() throws Throwable
     {
-        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, false);
+        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, null);
+    }
+
+    @Test
+    public void testLZ4CachedICacheMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheICache(size));
     }
 
     @Test
     public void testLZ4CachedMmap() throws Throwable
     {
-        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, true);
+        testCache(size -> new ChunkCacheGuava(size));
     }
 
-    @Test
-    public void testLZ4CachedStandard() throws Throwable
-    {
-        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.standard, true);
-    }
-
-    @Test
-    public void testLZ4UncachedMmap() throws Throwable
-    {
-        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, false);
-    }
-
-    @Test
-    public void testLZ4UncachedStandard() throws Throwable
-    {
-        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.standard, false);
-    }
-
-    @Test
-    public void testCachedStandard() throws Throwable
-    {
-        testSetup(STRATEGY, "", DiskAccessMode.standard, true);
-    }
-
-    @Test
-    public void testUncachedStandard() throws Throwable
-    {
-        testSetup(STRATEGY, "", DiskAccessMode.standard, false);
-    }
-
-    @Test
-    public void testMmapped() throws Throwable
-    {
-        testSetup(STRATEGY, "", DiskAccessMode.mmap, false /* doesn't matter */);
-    }
+//    @Test
+//    public void testLZ4EhLfuCachedMmap() throws Throwable
+//    {
+//        testCache(size -> new ChunkCacheEHCache(size, new LfuPolicy()));
+//    }
+//
+//    @Test
+//    public void testLZ4EhLruCachedMmap() throws Throwable
+//    {
+//        testCache(size -> new ChunkCacheEHCache(size, new LruPolicy()));
+//    }
+//
+//    @Test
+//    public void testLZ4EhFifoCachedMmap() throws Throwable
+//    {
+//        testCache(size -> new ChunkCacheEHCache(size, new FifoPolicy()));
+//    }
+//
+//    @Test
+//    public void testLZ4CachedStandard() throws Throwable
+//    {
+//        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.standard, new ChunkCacheGuava(16 * 1024 * 1024));
+//    }
+//
+//    @Test
+//    public void testLZ4UncachedMmap() throws Throwable
+//    {
+//        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, null);
+//    }
+//
+//    @Test
+//    public void testLZ4UncachedStandard() throws Throwable
+//    {
+//        testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.standard, null);
+//    }
+//
+//    @Test
+//    public void testCachedStandard() throws Throwable
+//    {
+//        testSetup(STRATEGY, "", DiskAccessMode.standard, new ChunkCacheGuava(16 * 1024 * 1024));
+//    }
+//
+//    @Test
+//    public void testUncachedStandard() throws Throwable
+//    {
+//        testSetup(STRATEGY, "", DiskAccessMode.standard, null);
+//    }
+//
+//    @Test
+//    public void testMmapped() throws Throwable
+//    {
+//        testSetup(STRATEGY, "", DiskAccessMode.mmap, null /* doesn't matter */);
+//    }
 
     int countTombstoneMarkers(ColumnFamilyStore cfs)
     {

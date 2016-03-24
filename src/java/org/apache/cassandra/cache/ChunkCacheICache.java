@@ -1,11 +1,10 @@
 package org.apache.cassandra.cache;
 
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Throwables;
-import com.google.common.cache.*;
-import com.google.common.collect.Iterables;
 
 import com.codahale.metrics.Timer;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -13,12 +12,11 @@ import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ChunkCacheGuava
-        implements ChunkCache.ChunkCacheType, CacheSize, RemovalListener<ChunkCacheGuava.Key, ChunkCacheGuava.Buffer> 
+public class ChunkCacheICache
+        implements ChunkCache.ChunkCacheType, CacheImpl.RemovalListener<ChunkCacheICache.Key, ChunkCacheICache.Buffer> 
 {
-    private final Cache<Key, Buffer> cache;
+    private final ICache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
-    private final long cacheSize;
 
     static class Key
     {
@@ -106,27 +104,22 @@ public class ChunkCacheGuava
         }
     }
 
-    public ChunkCacheGuava(long cacheSize)
+    public ChunkCacheICache(long cacheSize)
     {
-        this.cacheSize = cacheSize;
-        cache = CacheBuilder.newBuilder()
-                .maximumWeight(cacheSize)
-                .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
-                .removalListener(this)
-                .build();
-        metrics = new CacheMissMetrics("ChunkCache", this);
+        cache = CacheImpl.create(this, (key, buffer) -> ((Buffer) buffer).buffer.capacity(), cacheSize);
+        metrics = new CacheMissMetrics("ChunkCache", cache);
     }
 
     @Override
-    public void onRemoval(RemovalNotification<Key, Buffer> removal)
+    public void remove(Key key, Buffer buffer)
     {
-        removal.getValue().release();
+        buffer.release();
     }
 
     @Override
     public void close()
     {
-        cache.invalidateAll();
+        cache.clear();
         metrics.close();
     }
 
@@ -148,28 +141,18 @@ public class ChunkCacheGuava
     @Override
     public void invalidateFile(String fileName)
     {
-        cache.invalidateAll(Iterables.filter(cache.asMap().keySet(), x -> x.path.equals(fileName)));
+        for (Iterator<Key> it = cache.keyIterator(); it.hasNext();)
+        {
+            Key key = it.next();
+            if (key.path.equals(fileName))
+                cache.remove(key);
+        }
     }
 
     @Override
     public CacheMissMetrics metrics()
     {
         return metrics;
-    }
-
-    Buffer getAndReference(Key key)
-    {
-        Buffer buf = cache.getIfPresent(key);
-        if (buf == null)
-            return null;
-        return buf.reference();
-    }
-
-    Buffer put(ByteBuffer buffer, Key key)
-    {
-        Buffer buf = new Buffer(buffer, key.position).reference(); // two refs, one for caller one for cache
-        cache.put(key, buf);
-        return buf;
     }
 
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
@@ -203,17 +186,19 @@ public class ChunkCacheGuava
                 do
                     try (Timer.Context ctxReq = metrics.reqLatency.time())
                     {
-                        buf = getAndReference(key);
+                        buf = cache.get(key);
+                        if (buf != null)
+                            buf = buf.reference();
                         if (buf == null)
                         {
                             metrics.misses.mark();
-                            ByteBuffer buffer;
                             try (Timer.Context ctx = metrics.missLatency.time())
                             {
-                                buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
+                                ByteBuffer buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
                                 assert buffer != null;
+                                buf = new Buffer(buffer, key.position).reference();     // two refs, one for caller one for cache
                             }
-                            buf = put(buffer, key);
+                            cache.put(key, buf);
                         }
                     }
                 while (buf == null);
@@ -230,7 +215,7 @@ public class ChunkCacheGuava
         public void invalidate(long position)
         {
             long pageAlignedPos = position & alignmentMask;
-            cache.invalidate(new Key(source, pageAlignedPos));
+            cache.remove(new Key(source, pageAlignedPos));
         }
 
         @Override
@@ -268,31 +253,5 @@ public class ChunkCacheGuava
         {
             return "CachingRebufferer:" + source.toString();
         }
-    }
-
-    // CacheSize methods
-
-    @Override
-    public long capacity()
-    {
-        return cacheSize;
-    }
-
-    @Override
-    public void setCapacity(long capacity)
-    {
-        throw new UnsupportedOperationException("Chunk cache size cannot be changed.");
-    }
-
-    @Override
-    public int size()
-    {
-        return cache.asMap().size();
-    }
-
-    @Override
-    public long weightedSize()
-    {
-        return cache.asMap().values().stream().mapToLong(buf -> buf.buffer.capacity()).sum();
     }
 }
