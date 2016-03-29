@@ -21,7 +21,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
     enum State
     {
-        TRANSITIONING,
+        LOCKED,
         HIR,
         HIR_RESIDENT,
         HIR_RESIDENT_NON_LIR,
@@ -29,55 +29,25 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         REMOVED;
     }
 
-    static class Entry<Key, Value> implements CacheImpl.Entry<Key, Value>
+    static class Entry<Key, Value>
     {
         final Key key;
-        final AtomicReference<Value> value;
-        final AtomicReference<QueueEntry<Key, Value>> hirQueueEntry = new AtomicReference<>();
-        final AtomicReference<QueueEntry<Key, Value>> lirQueueEntry = new AtomicReference<>();
-        final AtomicReference<State> state = new AtomicReference<>(State.TRANSITIONING);
+        Value value;
+        QueueEntry<Entry<Key, Value>> hirQueueEntry = null;
+        QueueEntry<Entry<Key, Value>> lirQueueEntry = null;
+        final AtomicReference<State> state = new AtomicReference<>(State.LOCKED);
 
         public Entry(Key key, Value value)
         {
             this.key = key;
-            this.value = new AtomicReference<>(value);
-        }
-
-        @Override
-        public Key key()
-        {
-            return key;
-        }
-
-        @Override
-        public Value value()
-        {
-            return value.get();
-        }
-
-        @Override
-        public boolean casValue(Value old, Value v)
-        {
-            return value.compareAndSet(old, v);
+            this.value = value;
         }
     }
 
-    static class QueueEntry<Key, Value>
-    {
-        AtomicReference<QueueEntry<Key, Value>> next;
-        volatile Entry<Key, Value> content;     // set at construction, changes to null to mark deleted
-
-        public QueueEntry(Entry<Key, Value> content)
-        {
-            this.next = new AtomicReference<>(null);
-            this.content = content;
-        }
-    }
-
-    final QueueEntry<Key, Value> lirHead = new QueueEntry<>(null);
-    volatile QueueEntry<Key, Value> lirTail = lirHead;
-    final QueueEntry<Key, Value> hirHead = new QueueEntry<>(null);
-    volatile QueueEntry<Key, Value> hirTail = hirHead;
+    final QueueEntry<Entry<Key, Value>> lirHead = new QueueEntry<>(null);
+    volatile QueueEntry<Entry<Key, Value>> lirTail = lirHead;
+    final QueueEntry<Entry<Key, Value>> hirHead = new QueueEntry<>(null);
+    volatile QueueEntry<Entry<Key, Value>> hirTail = hirHead;
 
     public static<Key, Value>
     LirsCache<Key, Value> create(RemovalListener<Key, Value> removalListener,
@@ -148,9 +118,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 //                if (e == null)
 //                {
 //                    // Note: e must be new and non-shared
-//                    QueueEntry<Key, Value> qe = new QueueEntry<>(ne);
-//                    assert ne.hirsQueueEntry.get() == null;
-//                    ne.hirsQueueEntry.set(qe);
+//                    QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(ne);
+//                    assert ne.hirsQueueEntry == null;
+//                    ne.hirsQueueEntry = qe;
 //
 //                    addToHir(qe);
 //                    remainingSize.addAndGet(-weigher.weight(key, value));
@@ -187,13 +157,13 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             e = map.putIfAbsent(key, ne);
             if (e == null)
             {
-                QueueEntry<Key, Value> qe = new QueueEntry<>(ne);
-                ne.hirQueueEntry.set(qe);
+                QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(ne);
+                ne.hirQueueEntry = qe;
                 addToHir(qe);
                 qe = new QueueEntry<>(ne);
-                ne.lirQueueEntry.set(qe);
+                ne.lirQueueEntry = qe;
                 addToLir(qe);
-                assert ne.state.get() == State.TRANSITIONING;
+                assert ne.state.get() == State.LOCKED;
                 ne.state.set(State.HIR_RESIDENT);
 
                 remainingSize.addAndGet(-weigher.weight(key, value));
@@ -203,7 +173,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
             for ( ; ; )
             {
-                Value v = e.value();
+                Value v = e.value;
                 if (v != null)
                     return false;
                 switch (e.state.get())
@@ -215,19 +185,19 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                     return false;
                 case HIR:
                     // HIR status means removed. We must add, only fail if concurrently added.
-                    if (e.state.compareAndSet(State.HIR, State.TRANSITIONING))
+                    if (e.state.compareAndSet(State.HIR, State.LOCKED))
                     {
                         // Successfully claimed slot. Now do the queues transition.
-                        assert e.value.get() == null;
-                        e.value.set(value);
-                        assert e.hirQueueEntry.get() == null;
-                        QueueEntry<Key, Value> qe = e.lirQueueEntry.get();
-                        qe.content = null;
+                        assert e.value == null;
+                        e.value = value;
+                        assert e.hirQueueEntry == null;
+                        QueueEntry<Entry<Key, Value>> qe = e.lirQueueEntry;
+                        qe.delete();
     
                         qe = new QueueEntry<>(e);
-                        e.lirQueueEntry.set(qe);
+                        e.lirQueueEntry = qe;
                         addToLir(qe);
-                        assert e.state.get() == State.TRANSITIONING;
+                        assert e.state.get() == State.LOCKED;
                         e.state.set(State.LIR_RESIDENT);
                         long weight = -weigher.weight(key, value);
                         remainingLirSize.addAndGet(weight);
@@ -240,7 +210,8 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                         return true;
                     }
                     // Otherwise wait for new state.
-                case TRANSITIONING:
+                case LOCKED:
+                    Thread.yield();
                     continue;
                 case REMOVED:
                     // If the value was removed, retry adding as the caller may have seen it as removed.
@@ -254,66 +225,67 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
     {
         for ( ; ; )
         {
-            QueueEntry<Key, Value> qe = discardNextDeleted(lirHead);
+            QueueEntry<Entry<Key, Value>> qe = lirHead.discardNextDeleted();
             if (qe == null)
                 return;
 
-            Entry<Key, Value> en = qe.content;
+            Entry<Key, Value> en = qe.content();
             if (en == null)
                 continue;
 
             switch (en.state.get())
             {
             case HIR:
-                if (!en.state.compareAndSet(State.HIR, State.TRANSITIONING))
+                if (!en.state.compareAndSet(State.HIR, State.LOCKED))
                     continue;       // retry
 
-                qe = en.lirQueueEntry.get();    // reload qe, it may have changed before we locked
-                assert en.hirQueueEntry.get() == null;
+                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
+                assert en.hirQueueEntry == null;
 
                 boolean success = map.remove(en.key, en);     // must succeed
                 assert success;
                 // fall through
-                en.lirQueueEntry.set(null);
-                qe.content = null;
-                assert en.state.get() == State.TRANSITIONING;
+                en.lirQueueEntry = null;
+                qe.delete();
+                assert en.state.get() == State.LOCKED;
                 en.state.set(State.REMOVED);
-                continue;
+                break;
             case HIR_RESIDENT:
-                if (!en.state.compareAndSet(State.HIR_RESIDENT, State.TRANSITIONING))
+                if (!en.state.compareAndSet(State.HIR_RESIDENT, State.LOCKED))
                     continue;
-                qe = en.lirQueueEntry.get();    // reload qe, it may have changed before we locked
-                assert en.hirQueueEntry.get() != null;
+                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
+                assert en.hirQueueEntry != null;
 
-                en.lirQueueEntry.set(null);
-                qe.content = null;
-                assert en.state.get() == State.TRANSITIONING;
+                en.lirQueueEntry = null;
+                qe.delete();
+                assert en.state.get() == State.LOCKED;
                 en.state.set(State.HIR_RESIDENT_NON_LIR);
-                continue;
-            case TRANSITIONING:
+                break;
+            case LOCKED:
             case HIR_RESIDENT_NON_LIR:
             case REMOVED:
-                continue;
+                break;
             case LIR_RESIDENT:
-                if (!en.state.compareAndSet(State.LIR_RESIDENT, State.TRANSITIONING))
+                if (!en.state.compareAndSet(State.LIR_RESIDENT, State.LOCKED))
                     continue;
 
-                qe = en.lirQueueEntry.get();    // reload qe, it may have changed before we locked
-                assert en.hirQueueEntry.get() == null;
+                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
+                assert en.hirQueueEntry == null;
 
-                en.lirQueueEntry.set(null);
-                qe.content = null;
+                en.lirQueueEntry = null;
+                qe.delete();
 
                 qe = new QueueEntry<>(en);
-                en.hirQueueEntry.set(qe);
+                en.hirQueueEntry = qe;
                 addToHir(qe);
 
-                assert en.state.get() == State.TRANSITIONING;
+                assert en.state.get() == State.LOCKED;
                 en.state.set(State.HIR_RESIDENT_NON_LIR);
 
-                remainingLirSize.addAndGet(weigher.weight(en.key, en.value()));
+                remainingLirSize.addAndGet(weigher.weight(en.key, en.value));
                 return;
             }
+            Thread.yield();
         }
     }
 
@@ -344,7 +316,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         if (e == null)
             return null;
         access(e);
-        return e.value();
+        return e.value;
     }
 
     @Override
@@ -364,41 +336,41 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             s = e.state.get();
             if (s == State.HIR || s == State.REMOVED)
                 return; // Someone else removed this as well. We are done.
-            if (s == State.TRANSITIONING)
-                continue; // Wait for completion of pending operation.
-            if (e.state.compareAndSet(s, State.TRANSITIONING))
+            if (s != State.LOCKED && e.state.compareAndSet(s, State.LOCKED))
                 break;
+            // Wait for completion of pending operation.
+            Thread.yield();
         }
 
-        Value old = e.value.get();
+        Value old = e.value;
         Key key = e.key;
         assert old != null;
         long weight = weigher.weight(key, old);
         remainingSize.addAndGet(weight);
-        e.value.set(null);
+        e.value = null;
         switch (s)
         {
         case LIR_RESIDENT:
             remainingLirSize.addAndGet(weight);
-            assert e.hirQueueEntry.get() == null;
-            assert e.state.get() == State.TRANSITIONING;
+            assert e.hirQueueEntry == null;
+            assert e.state.get() == State.LOCKED;
             e.state.set(State.HIR);
             break;
         case HIR_RESIDENT:
-            QueueEntry<Key, Value> qe;
-            qe = e.hirQueueEntry.get();
-            qe.content = null;
-            e.hirQueueEntry.set(null);
-            assert e.state.get() == State.TRANSITIONING;
+            QueueEntry<Entry<Key, Value>> qe;
+            qe = e.hirQueueEntry;
+            qe.delete();
+            e.hirQueueEntry = null;
+            assert e.state.get() == State.LOCKED;
             e.state.set(State.HIR);
             break;
         case HIR_RESIDENT_NON_LIR:
             map.remove(key, e);
-            qe = e.hirQueueEntry.get();
-            qe.content = null;
-            e.hirQueueEntry.set(null);
-            assert e.lirQueueEntry.get() == null;
-            assert e.state.get() == State.TRANSITIONING;
+            qe = e.hirQueueEntry;
+            qe.delete();
+            e.hirQueueEntry = null;
+            assert e.lirQueueEntry == null;
+            assert e.state.get() == State.LOCKED;
             e.state.set(State.REMOVED);
             break;
         default:
@@ -423,19 +395,23 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
     {
         while (remainingSize.get() < 0)
         {
-            Entry<Key, Value> e = chooseForEviction();
-            if (e == null)
+            QueueEntry<Entry<Key, Value>> first = hirHead.discardNextDeleted();
+            if (first == null)
                 return;
-            remove(e);
+            Entry<Key, Value> e = first.content();
+            if (e != null)
+                remove(e);
+            else
+                // Another thread is racing against us. Ease off.
+                Thread.yield();
         }
     }
 
     @Override
     public void clear()
     {
-        while (!map.isEmpty())
-            for (Key k : map.keySet())
-                remove(k);
+        for (Key k : map.keySet())
+            remove(k);
     }
 
     public void checkState()
@@ -463,46 +439,45 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         {
             switch (e.state.get())
             {
-            case TRANSITIONING:
+            case LOCKED:
                 // Concurrent access. Will now move/has just moved to top anyway.
                 return;
             case LIR_RESIDENT:
-                if (e.state.compareAndSet(State.LIR_RESIDENT, State.TRANSITIONING))
+                if (e.state.compareAndSet(State.LIR_RESIDENT, State.LOCKED))
                 {
-                    assert e.hirQueueEntry.get() == null;
-                    QueueEntry<Key, Value> oqe = e.lirQueueEntry.get();
+                    assert e.hirQueueEntry == null;
+                    QueueEntry<Entry<Key, Value>> oqe = e.lirQueueEntry;
                     assert oqe != null;
-                    assert oqe.content == e;
-                    oqe.content = null;
+                    oqe.delete();
 
-                    QueueEntry<Key, Value> nqe = new QueueEntry<>(e);
-                    e.lirQueueEntry.set(nqe);
+                    QueueEntry<Entry<Key, Value>> nqe = new QueueEntry<>(e);
+                    e.lirQueueEntry = nqe;
                     addToLir(nqe);
 
-                    assert e.state.get() == State.TRANSITIONING;
+                    assert e.state.get() == State.LOCKED;
                     e.state.set(State.LIR_RESIDENT);
                     return;
                 }
                 else
-                    continue;
+                    break;
             case HIR_RESIDENT:
-                if (e.state.compareAndSet(State.HIR_RESIDENT, State.TRANSITIONING))
+                if (e.state.compareAndSet(State.HIR_RESIDENT, State.LOCKED))
                 {
                     // Move to LIR.
-                    assert e.value.get() != null;
-                    QueueEntry<Key, Value> qe = e.hirQueueEntry.get();
-                    qe.content = null;
-                    e.hirQueueEntry.set(null);
-                    qe = e.lirQueueEntry.get();
-                    qe.content = null;
+                    assert e.value != null;
+                    QueueEntry<Entry<Key, Value>> qe = e.hirQueueEntry;
+                    qe.delete();
+                    e.hirQueueEntry = null;
+                    qe = e.lirQueueEntry;
+                    qe.delete();
 
                     qe = new QueueEntry<>(e);
-                    e.lirQueueEntry.set(qe);
+                    e.lirQueueEntry = qe;
                     addToLir(qe);
-                    assert e.state.get() == State.TRANSITIONING;
+                    assert e.state.get() == State.LOCKED;
                     e.state.set(State.LIR_RESIDENT);
 
-                    remainingLirSize.addAndGet(-weigher.weight(e.key, e.value()));
+                    remainingLirSize.addAndGet(-weigher.weight(e.key, e.value));
 
                     while (remainingLirSize.get() < 0)
                         demoteFromLirQueue();
@@ -511,134 +486,49 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 }
                 else
                     // status changed. retry
-                    continue;
+                    break;
             case HIR_RESIDENT_NON_LIR:
                 // need to give it a new LIR entry.
-                if (e.state.compareAndSet(State.HIR_RESIDENT_NON_LIR, State.TRANSITIONING))
+                if (e.state.compareAndSet(State.HIR_RESIDENT_NON_LIR, State.LOCKED))
                 {
                     // Move to LIR.
-                    assert e.value.get() != null;
-                    assert e.lirQueueEntry.get() == null;
-                    QueueEntry<Key, Value> qe = e.hirQueueEntry.get();
-                    qe.content = null;
+                    assert e.value != null;
+                    assert e.lirQueueEntry == null;
+                    QueueEntry<Entry<Key, Value>> qe = e.hirQueueEntry;
+                    qe.delete();
 
                     qe = new QueueEntry<>(e);
-                    e.hirQueueEntry.set(qe);
+                    e.hirQueueEntry = qe;
                     addToHir(qe);
 
                     qe = new QueueEntry<>(e);
-                    e.lirQueueEntry.set(qe);
+                    e.lirQueueEntry = qe;
                     addToLir(qe);
-                    assert e.state.get() == State.TRANSITIONING;
+                    assert e.state.get() == State.LOCKED;
                     e.state.set(State.HIR_RESIDENT);
 
                     return;
                 }
                 else
                     // status changed. retry
-                    continue;
+                    break;
             case HIR:
             case REMOVED:
                 // We lost entry. Can't fix now.
                 return;
             }
+            Thread.yield();
         }
     }
 
-    private void addToHir(QueueEntry<Key, Value> qe)
+    private void addToHir(QueueEntry<Entry<Key, Value>> qe)
     {
-        hirTail = addToQueue(qe, hirTail);
+        hirTail = qe.addToQueue(hirTail);
     }
 
-    private void addToLir(QueueEntry<Key, Value> qe)
+    private void addToLir(QueueEntry<Entry<Key, Value>> qe)
     {
-        lirTail = addToQueue(qe, lirTail);
-    }
-
-    private QueueEntry<Key, Value> addToQueue(QueueEntry<Key, Value> entry, QueueEntry<Key, Value> queue)
-    {
-        do
-        {
-            QueueEntry<Key, Value> next = queue.next.get();
-            while (next != null)
-            {
-                queue = next;
-                next = next.next.get();
-            }
-        }
-        while (!queue.next.compareAndSet(null, entry));
-        return queue;
-    }
-
-    private void release(QueueEntry<Key, Value> qe)
-    {
-        // mark deleted
-        qe.content = null;
-
-        discardNextDeleted(qe);
-    }
-
-    public QueueEntry<Key, Value> discardNextDeleted(QueueEntry<Key, Value> qe)
-    {
-        // Remove nexts while they don't have content, but make sure to point to a trailing entry to make sure we don't
-        // skip over something that is just being added.
-        QueueEntry<Key, Value> next = qe.next.get();
-        if (next == null)
-            return qe;
-        if (next.content != null)
-            return next;
-
-        QueueEntry<Key, Value> nextnext = next.next.get();
-        if (nextnext == null)
-            return next;        // still no change wanted
-
-        do
-        {
-            next = nextnext;
-            nextnext = next.next.get();
-            if (nextnext == null)
-                break;
-        }
-        while (next.content == null);
-
-        assert next != null;
-        qe.next.lazySet(next);
-        return next;
-    }
-
-    public Entry<Key, Value> chooseForEviction()
-    {
-//        // evict all (or as many as necessary) hir entries at the head of the lir queue.
-//        // they would be often empty
-//        for ( ; ; )
-//        {
-//            QueueEntry<Key, Value> first = discardNextDeleted(lirHead);
-//            if (first == null)
-//                break;
-//            Entry<Key, Value> content = first.content;
-//            if (content != null)
-//            {
-//                if (content.lir)
-//                    break;
-//                return content;
-//            }
-//            // something removed entry, get another
-//        }
-
-        // remove first resident hir
-        for ( ; ; )
-        {
-            QueueEntry<Key, Value> first = discardNextDeleted(hirHead);
-            if (first == null)
-                return null;
-            Entry<Key, Value> content = first.content;
-            if (content != null)
-            {
-//                assert !content.lir;
-                return content;
-            }
-            // something removed entry, get another
-        }
+        lirTail = qe.addToQueue(lirTail);
     }
 
     @Override
@@ -646,29 +536,5 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
     {
         // FIXME: maybe implement? won't be efficient as it needs walking in the opposite direction
         return Collections.emptyIterator();
-    }
-
-    class Iter implements Iterator<Entry<Key, Value>>
-    {
-        QueueEntry<Key, Value> qe = hirHead.next.get();
-
-        @Override
-        public boolean hasNext()
-        {
-            while (qe != null && qe.content == null)
-                qe = qe.next.get();
-            return qe != null;
-        }
-
-        @Override
-        public Entry<Key, Value> next()
-        {
-            if (!hasNext())
-                throw new AssertionError();
-            Entry<Key, Value> content = qe.content;
-            qe = qe.next.get();
-            return content;
-        }
-
     }
 }

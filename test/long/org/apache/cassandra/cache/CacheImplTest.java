@@ -8,6 +8,8 @@ import java.util.concurrent.*;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
 
 import org.junit.Test;
 
@@ -22,13 +24,29 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     static final int ENTRY_SIZE = 2;
     static final long CACHE_SIZE = 1_000_000;
     static final long KEY_RANGE = 5 * CACHE_SIZE;
-    static final int WORKING_SET_SIZE = 50_000;
     static final int SWITCH_PERIOD = 20;
     static final int THREAD_ITERS = 500_000;
     static final int THREADS_IN_PARALLEL = 50;
     static final int THREAD_RUNS = 200;
     static final int RELEASE_CHECKED_PERIOD = 1;
     static final int REMOVE_PERIOD = 1600;
+    
+    static final int[] WORKING_SET_SIZES = new int[] { 10_000, 100_000, (int) KEY_RANGE };
+    static final int[] WORKING_SET_CHANCES = new int[] { 10, 5, 1 };
+    static final int[] WORKING_SETS;
+    static {
+        int acc = 0;
+        for (int i = 0; i < WORKING_SET_CHANCES.length; ++i)
+            WORKING_SET_CHANCES[i] = acc += WORKING_SET_CHANCES[i];
+        WORKING_SETS = new int[acc];
+        int j = 0;
+        for (int i = 0; i < acc; ++i)
+        {
+            if (i == WORKING_SET_CHANCES[j])
+                ++j;
+            WORKING_SETS[i] = WORKING_SET_SIZES[j];
+        }
+    }
 
     class Data
     {
@@ -51,7 +69,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
             long v = convert(key, gen);
             int idx = r.nextInt(data.length);
             assertEquals(v, data[idx]);
-            if (/*removed |*/ released)
+            if (removed /*| released*/)
                 assertNotSame(this, cache.get(key));
         }
     }
@@ -73,11 +91,17 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     class TestRunnable implements Runnable
     {
         ThreadLocalRandom rand = ThreadLocalRandom.current();
+        final int wsSize;
+
+        TestRunnable(int wsSize)
+        {
+            this.wsSize = wsSize;
+        }
 
         @Override
         public void run()
         {
-            Long[] ws = new Long[WORKING_SET_SIZE];
+            Long[] ws = new Long[wsSize];
             for (int i = 0; i < ws.length; ++i)
                 ws[i] = rand.nextLong(KEY_RANGE);
             for (int i = 0; i < THREAD_ITERS; ++i)
@@ -233,8 +257,13 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         ExecutorService es = Executors.newFixedThreadPool(THREADS_IN_PARALLEL);
         List<Future<?>> tasks = new ArrayList<>(THREAD_RUNS);
         long startTime = System.currentTimeMillis();
+        Multiset<Integer> wsSizes = HashMultiset.create();
         for (int i = 0; i < THREAD_RUNS; ++i)
-            tasks.add(es.submit(new TestRunnable()));
+        {
+            int sz = WORKING_SETS[i % WORKING_SETS.length];
+            tasks.add(es.submit(new TestRunnable(sz)));
+            wsSizes.add(sz);
+        }
 
         for (Future<?> f : tasks)
         {
@@ -259,8 +288,9 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
                 FileUtils.stringifyFileSize(cache.weightedSize()),
                 reqCount,
                 hitRatio);
-        System.out.format("%,d threads [%d in parallel] of %,d lookups with working set size %d completed in %,d ms\n",
-                THREAD_RUNS, THREADS_IN_PARALLEL, THREAD_ITERS, WORKING_SET_SIZE, endTime - startTime);
+        System.out.format("%,d threads [%d in parallel] of %,d lookups completed in %,d ms\n",
+                THREAD_RUNS, THREADS_IN_PARALLEL, THREAD_ITERS, endTime - startTime);
+        System.out.format("Working set sizes: %s\n", wsSizes);
 
         if (cache instanceof CacheImpl)
             ((CacheImpl<?, ?, ?>) cache).checkState();
