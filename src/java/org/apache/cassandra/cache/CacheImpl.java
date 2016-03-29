@@ -282,4 +282,9 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
         }
         assert Sets.difference(map.keySet(), ss).isEmpty();
     }
+
+    public String toString()
+    {
+        return getClass().getSimpleName() + "-" + strategy.getClass().getSimpleName();
+    }
 }

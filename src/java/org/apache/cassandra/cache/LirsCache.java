@@ -559,4 +559,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         // FIXME: maybe implement? won't be efficient as it needs walking in the opposite direction
         return Collections.emptyIterator();
     }
+
+    public String toString()
+    {
+        return getClass().getSimpleName();
+    }
 }

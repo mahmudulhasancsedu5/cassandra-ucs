@@ -225,9 +225,21 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     Timer reqLatency;
 
     @Test
+    public void testWarmup() throws InterruptedException, ExecutionException
+    {
+        testCache(new GuavaCache(CACHE_SIZE * weight(null, null)));
+    }
+
+    @Test
     public void testLirs() throws InterruptedException, ExecutionException
     {
         testCache(LirsCache.create(this, this, CACHE_SIZE * weight(null, null)));
+    }
+
+    @Test
+    public void testLirsSync() throws InterruptedException, ExecutionException
+    {
+        testCache(LirsCacheSynchronized.create(this, this, CACHE_SIZE * weight(null, null)));
     }
 
     @Test
@@ -285,7 +297,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         double hitRatio = 1.0 * (reqCount - missCount) / reqCount;
         System.out.format("Mean cache latency: %.0fns\n", cacheLatency);
         System.out.format("%s size %,d(%s) requests %,d hit ratio %f\n",
-                cache.getClass().getSimpleName(),
+                cache.toString(),
                 cache.size(),
                 FileUtils.stringifyFileSize(cache.weightedSize()),
                 reqCount,
