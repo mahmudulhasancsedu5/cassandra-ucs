@@ -22,17 +22,17 @@ import org.apache.cassandra.metrics.EstimatedHistogramReservoir;
 public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplTest.Data>, Weigher<Long, CacheImplTest.Data>
 {
     static final int ENTRY_SIZE = 2;
-    static final long CACHE_SIZE = 1_000_000;
+    static final long CACHE_SIZE = 600_000;
     static final long KEY_RANGE = 5 * CACHE_SIZE;
-    static final int SWITCH_PERIOD = 20;
+    static final int SWITCH_PERIOD = 20_000;
     static final int THREAD_ITERS = 500_000;
     static final int THREADS_IN_PARALLEL = 50;
     static final int THREAD_RUNS = 200;
     static final int RELEASE_CHECKED_PERIOD = 1;
     static final int REMOVE_PERIOD = 1600;
     
-    static final int[] WORKING_SET_SIZES = new int[] { 10_000, 100_000, (int) KEY_RANGE };
-    static final int[] WORKING_SET_CHANCES = new int[] { 10, 5, 1 };
+    static final int[] WORKING_SET_SIZES = new int[] { 10_000, 30_000, 100_000, (int) KEY_RANGE };
+    static final int[] WORKING_SET_CHANCES = new int[] { 15, 10, 5, 1 };
     static final int[] WORKING_SETS;
     static {
         int acc = 0;
@@ -258,9 +258,10 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         List<Future<?>> tasks = new ArrayList<>(THREAD_RUNS);
         long startTime = System.currentTimeMillis();
         Multiset<Integer> wsSizes = HashMultiset.create();
+        Random seeded = new Random(1);
         for (int i = 0; i < THREAD_RUNS; ++i)
         {
-            int sz = WORKING_SETS[i % WORKING_SETS.length];
+            int sz = WORKING_SETS[seeded.nextInt(WORKING_SETS.length)];
             tasks.add(es.submit(new TestRunnable(sz)));
             wsSizes.add(sz);
         }

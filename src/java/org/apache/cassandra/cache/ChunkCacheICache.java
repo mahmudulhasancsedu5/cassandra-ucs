@@ -1,5 +1,6 @@
 package org.apache.cassandra.cache;
 
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
@@ -11,6 +12,21 @@ public class ChunkCacheICache extends ChunkCacheBase
 {
     private final ICache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
+
+    @SuppressWarnings("unchecked")
+    public ChunkCacheICache(long cacheSize, Class<?> cacheClass)
+    {
+        try
+        {
+            cache = (ICache<Key, Buffer>) cacheClass.getMethod("create", CacheImpl.RemovalListener.class, CacheImpl.Weigher.class, long.class)
+                .invoke(null, this, (CacheImpl.Weigher<Key, Buffer>) ((key, buffer) -> weight(buffer)), cacheSize);
+            metrics = new CacheMissMetrics("ChunkCache", cache);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
+                | SecurityException e)
+        {
+            throw new AssertionError(e);
+        }
+    }
 
     public ChunkCacheICache(long cacheSize)
     {
@@ -69,8 +85,10 @@ public class ChunkCacheICache extends ChunkCacheBase
     @Override
     Buffer put(ByteBuffer buffer, Key key)
     {
-        Buffer buf = new Buffer(buffer, key.position).reference(); // two refs, one for caller one for cache
-        cache.put(key, buf);
+        Buffer buf = new Buffer(buffer, key.position); // two refs, one for caller one for cache
+        if (cache.putIfAbsent(key, buf))
+            buf.reference();
+//        cache.put(key, buf);
         return buf;
     }
 

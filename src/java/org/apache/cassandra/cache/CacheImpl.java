@@ -131,15 +131,20 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
             }
 
             Value old;
-            do
+            for ( ; ; )
             {
                 old = e.value();
                 if (old == value)
                     return;     // someone's done our job
                 if (old == null)
-                    continue main;   // If the value is in the process of being removed, retry adding as the caller may have seen it as removed. 
+                {
+                    Thread.yield();
+                    continue main;   // If the value is in the process of being removed, retry adding as the caller may have seen it as removed.
+                }
+                if (e.casValue(old, value))
+                    break;
+                Thread.yield();
             }
-            while (!e.casValue(old, value));
             strategy.access(e);
             remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
             removalListener.remove(key, old);
@@ -163,6 +168,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
                 maybeEvict();
                 return true;
             }
+            Thread.yield();
         }
         while (e.value() == null); // If the value is in the process of being removed, retry adding as the caller may have seen it as removed.
 
@@ -210,13 +216,15 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     public void remove(Element e)
     {
         Value old;
-        do
+        for ( ; ; )
         {
             old = e.value();
             if (old == null)
                 return; // Someone else removed this as well. We are done.
+            if (e.casValue(old, null))
+                break;
+            Thread.yield();
         }
-        while (!e.casValue(old, null));
 
         Key key = e.key();
         remainingSize.addAndGet(weigher.weight(key, old));
