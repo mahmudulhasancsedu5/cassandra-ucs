@@ -74,7 +74,7 @@ public class CachingBench extends CQLTester
     static final int EXTRA_SIZE = 1025;
     static final boolean CONCURRENT_COMPACTIONS = true;
     
-    static final long CACHE_SIZE = 96 * 1024 * 1024;
+    static final long CACHE_SIZE = 296 * 1024 * 1024;
 
     // The name of this method is important!
     // CommitLog settings must be applied before CQLTester sets up; by using the same name as its @BeforeClass method we
@@ -330,11 +330,11 @@ public class CachingBench extends CQLTester
         testCache(size -> new ChunkCacheGuava(size));
     }
 
-//    @Test
-//    public void testLZ4EhLfuCachedMmap() throws Throwable
-//    {
-//        testCache(size -> new ChunkCacheEHCache(size, new LfuPolicy()));
-//    }
+    @Test
+    public void testLZ4EhLfuCachedMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheEHCache(size, new LfuPolicy()));
+    }
 //
 //    @Test
 //    public void testLZ4EhLruCachedMmap() throws Throwable

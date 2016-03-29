@@ -1,117 +1,26 @@
 package org.apache.cassandra.cache;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.base.Throwables;
 import com.google.common.cache.*;
 import com.google.common.collect.Iterables;
 
-import com.codahale.metrics.Timer;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
-import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ChunkCacheGuava
+public class ChunkCacheGuava extends ChunkCacheBase
         implements ChunkCache.ChunkCacheType, CacheSize, RemovalListener<ChunkCacheGuava.Key, ChunkCacheGuava.Buffer> 
 {
-    private final Cache<Key, Buffer> cache;
-    public final CacheMissMetrics metrics;
+    final Cache<Key, Buffer> cache;
     private final long cacheSize;
-
-    static class Key
-    {
-        final BufferlessRebufferer file;
-        final String path;
-        final long position;
-
-        public Key(BufferlessRebufferer file, long position)
-        {
-            super();
-            this.file = file;
-            this.position = position;
-            this.path = file.channel().filePath();
-        }
-
-        public int hashCode()
-        {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + path.hashCode();
-            result = prime * result + file.getClass().hashCode();
-            result = prime * result + Long.hashCode(position);
-            return result;
-        }
-
-        public boolean equals(Object obj)
-        {
-            if (this == obj)
-                return true;
-            if (obj == null)
-                return false;
-
-            Key other = (Key) obj;
-            return (position == other.position)
-                    && file.getClass() == other.file.getClass()
-                    && path.equals(other.path);
-        }
-    }
-
-    static class Buffer implements Rebufferer.BufferHolder
-    {
-        private final ByteBuffer buffer;
-        private final long offset;
-        private final AtomicInteger references;
-
-        public Buffer(ByteBuffer buffer, long offset)
-        {
-            this.buffer = buffer;
-            this.offset = offset;
-            references = new AtomicInteger(1);  // start referenced.
-        }
-
-        Buffer reference()
-        {
-            int refCount;
-            do
-            {
-                refCount = references.get();
-                if (refCount == 0)
-                    // Buffer was released before we managed to reference it. 
-                    return null;
-            } while (!references.compareAndSet(refCount, refCount + 1));
-
-            return this;
-        }
-
-        @Override
-        public ByteBuffer buffer()
-        {
-            assert references.get() > 0;
-            return buffer.duplicate();
-        }
-
-        @Override
-        public long offset()
-        {
-            return offset;
-        }
-
-        @Override
-        public void release()
-        {
-            if (references.decrementAndGet() == 0)
-                BufferPool.put(buffer);
-        }
-    }
+    private final CacheMissMetrics metrics;
 
     public ChunkCacheGuava(long cacheSize)
     {
         this.cacheSize = cacheSize;
         cache = CacheBuilder.newBuilder()
                 .maximumWeight(cacheSize)
-                .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
+                .weigher((key, buffer) -> weight((Buffer) buffer))
                 .removalListener(this)
                 .build();
         metrics = new CacheMissMetrics("ChunkCache", this);
@@ -131,9 +40,9 @@ public class ChunkCacheGuava
     }
 
     @Override
-    public Rebufferer wrap(BufferlessRebufferer file)
+    public CacheMissMetrics metrics()
     {
-        return new CachingRebufferer(file);
+        return metrics;
     }
 
     @Override
@@ -152,11 +61,6 @@ public class ChunkCacheGuava
     }
 
     @Override
-    public CacheMissMetrics metrics()
-    {
-        return metrics;
-    }
-
     Buffer getAndReference(Key key)
     {
         Buffer buf = cache.getIfPresent(key);
@@ -165,6 +69,7 @@ public class ChunkCacheGuava
         return buf.reference();
     }
 
+    @Override
     Buffer put(ByteBuffer buffer, Key key)
     {
         Buffer buf = new Buffer(buffer, key.position).reference(); // two refs, one for caller one for cache
@@ -172,103 +77,13 @@ public class ChunkCacheGuava
         return buf;
     }
 
-    // TODO: Invalidate caches for obsoleted/MOVED_START tables?
-
-    /**
-     * Rebufferer providing cached chunks where data is obtained from the specified BufferlessRebufferer.
-     * Thread-safe. One instance per SegmentedFile, created by ReaderCache.maybeWrap if the cache is enabled.
-     */
-    class CachingRebufferer implements Rebufferer
+    @Override
+    public void invalidate(Key key)
     {
-        private final BufferlessRebufferer source;
-        final long alignmentMask;
-
-        public CachingRebufferer(BufferlessRebufferer file)
-        {
-            source = file;
-            int chunkSize = file.chunkSize();
-            assert Integer.bitCount(chunkSize) == 1;    // Must be power of two
-            alignmentMask = -chunkSize;
-        }
-
-        @Override
-        public Buffer rebuffer(long position)
-        {
-            try
-            {
-                metrics.requests.mark();
-                long pageAlignedPos = position & alignmentMask;
-                Buffer buf;
-                Key key = new Key(source, pageAlignedPos);
-                do
-                    try (Timer.Context ctxReq = metrics.reqLatency.time())
-                    {
-                        buf = getAndReference(key);
-                        if (buf == null)
-                        {
-                            metrics.misses.mark();
-                            ByteBuffer buffer;
-                            try (Timer.Context ctx = metrics.missLatency.time())
-                            {
-                                buffer = source.rebuffer(pageAlignedPos, BufferPool.get(source.chunkSize()));
-                                assert buffer != null;
-                            }
-                            buf = put(buffer, key);
-                        }
-                    }
-                while (buf == null);
-
-                return buf;
-            }
-            catch (Throwable t)
-            {
-                Throwables.propagateIfInstanceOf(t.getCause(), CorruptSSTableException.class);
-                throw Throwables.propagate(t);
-            }
-        }
-
-        public void invalidate(long position)
-        {
-            long pageAlignedPos = position & alignmentMask;
-            cache.invalidate(new Key(source, pageAlignedPos));
-        }
-
-        @Override
-        public void close()
-        {
-            source.close();
-        }
-
-        @Override
-        public void closeReader()
-        {
-            // Instance is shared among readers. Nothing to release.
-        }
-
-        @Override
-        public ChannelProxy channel()
-        {
-            return source.channel();
-        }
-
-        @Override
-        public long fileLength()
-        {
-            return source.fileLength();
-        }
-
-        @Override
-        public double getCrcCheckChance()
-        {
-            return source.getCrcCheckChance();
-        }
-
-        @Override
-        public String toString()
-        {
-            return "CachingRebufferer:" + source.toString();
-        }
+        cache.invalidate(key);
     }
+
+    // TODO: Invalidate caches for obsoleted/MOVED_START tables?
 
     // CacheSize methods
 
@@ -293,6 +108,6 @@ public class ChunkCacheGuava
     @Override
     public long weightedSize()
     {
-        return cache.asMap().values().stream().mapToLong(buf -> buf.buffer.capacity()).sum();
+        return cache.asMap().values().stream().mapToLong(ChunkCacheBase::weight).sum();
     }
 }

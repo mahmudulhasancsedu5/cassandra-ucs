@@ -1,9 +1,13 @@
 package org.apache.cassandra.cache;
 
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.google.common.collect.Sets;
 
 public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> implements ICache<Key, Value>
 {
@@ -21,11 +25,12 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
         boolean casValue(Value old, Value v);
     }
 
-    interface EvictionStrategy<Key, Value, Element>
+    interface EvictionStrategy<Key, Value, Element> extends Iterable<Element>
     {
         Element elementFor(Key key, Value value);
+        void add(Element e);
         void access(Element e);
-        void remove(Element e);
+        boolean remove(Element e);
         Element chooseForEviction();
         Iterator<Key> hotKeyIterator(int n);
     }
@@ -42,15 +47,24 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
 
     public static<Key, Value>
     CacheImpl<Key, Value, ?> create(RemovalListener<Key, Value> removalListener,
-                                                                Weigher<Key, Value> weigher,
-                                                                long initialCapacity)
+                                    Weigher<Key, Value> weigher,
+                                    long initialCapacity)
     {
-        return new CacheImpl<Key, Value, LruEvictionStrategy.Entry<Key, Value>>
-                            (new ConcurrentHashMap<>(),
-                             new LruEvictionStrategy<>(),
-                             removalListener,
-                             weigher,
-                             initialCapacity);
+        return create(removalListener, weigher, initialCapacity,
+                      new EvictionStrategyLru<>());
+    }
+
+    public static<Key, Value, Element extends Entry<Key, Value>>
+    CacheImpl<Key, Value, Element> create(RemovalListener<Key, Value> removalListener,
+                                          Weigher<Key, Value> weigher, long initialCapacity,
+                                          EvictionStrategy<Key, Value, Element> evictionStrategy)
+    {
+        return new CacheImpl<Key, Value, Element>
+        (new ConcurrentHashMap<>(),
+         evictionStrategy,
+         removalListener,
+         weigher,
+         initialCapacity);
     }
 
     private CacheImpl(ConcurrentMap<Key, Element> map,
@@ -100,35 +114,37 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     @Override
     public void put(Key key, Value value)
     {
-        Element e = map.get(key);
-        if (e == null)
+    main:
+        for ( ; ; )
         {
-            Element ne = strategy.elementFor(key, value);
-            e = map.putIfAbsent(key, ne);
+            Element e = map.get(key);
             if (e == null)
             {
-                strategy.access(ne);
-                remainingSize.addAndGet(-weigher.weight(key, value));
-                maybeEvict();
-                return;
+                Element ne = strategy.elementFor(key, value);
+                e = map.putIfAbsent(key, ne);
+                if (e == null)
+                {
+                    strategy.add(ne);
+                    remainingSize.addAndGet(-weigher.weight(key, value));
+                    break main;
+                }
             }
-            strategy.remove(ne);
-        }
-        strategy.access(e);
-        Value old;
-        do
-        {
-            old = e.value();
-            if (old == null)
+
+            Value old;
+            do
             {
-                // Someone removed entry while we were trying to change it. Ok to fail now, treated as already put before removal.
-                removalListener.remove(key, value);
-                return;
+                old = e.value();
+                if (old == value)
+                    return;     // someone's done our job
+                if (old == null)
+                    continue main;   // If the value is in the process of being removed, retry adding as the caller may have seen it as removed. 
             }
+            while (!e.casValue(old, value));
+            strategy.access(e);
+            remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
+            removalListener.remove(key, old);
+            break main;
         }
-        while (!e.casValue(old, value));
-        remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
-        removalListener.remove(key, old);
         maybeEvict();
     }
 
@@ -136,16 +152,20 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     public boolean putIfAbsent(Key key, Value value)
     {
         Element ne = strategy.elementFor(key, value);
-        Element e = map.putIfAbsent(key, ne);
-        if (e == null)
+        Element e;
+        do
         {
-            strategy.access(ne);
-            remainingSize.addAndGet(-weigher.weight(key, value));
-            maybeEvict();
-            return true;
+            e = map.putIfAbsent(key, ne);
+            if (e == null)
+            {
+                strategy.add(ne);
+                remainingSize.addAndGet(-weigher.weight(key, value));
+                maybeEvict();
+                return true;
+            }
         }
+        while (e.value() == null); // If the value is in the process of being removed, retry adding as the caller may have seen it as removed.
 
-        strategy.remove(ne);
         return false;
     }
 
@@ -206,14 +226,6 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     }
 
     @Override
-    public void clear()
-    {
-        while (!map.isEmpty())
-            for (Key k : map.keySet())
-                remove(k);
-    }
-
-    @Override
     public Iterator<Key> keyIterator()
     {
         return map.keySet().iterator();
@@ -234,6 +246,32 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     private void maybeEvict()
     {
         while (remainingSize.get() < 0)
-            remove(strategy.chooseForEviction());
+        {
+            Element e = strategy.chooseForEviction();
+            if (e == null)
+                return;
+            remove(e);
+        }
+    }
+
+    @Override
+    public void clear()
+    {
+        while (!map.isEmpty())
+            for (Key k : map.keySet())
+                remove(k);
+    }
+
+    public void checkState()
+    {
+        // This must be called in isolation.
+        Set<Key> ss = new HashSet<>();
+        for (Element e : strategy)
+        {
+            assert e.value() != null;
+            assert e == map.get(e.key());
+            assert ss.add(e.key());
+        }
+        assert Sets.difference(map.keySet(), ss).isEmpty();
     }
 }
