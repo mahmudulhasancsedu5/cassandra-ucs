@@ -111,44 +111,42 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
     @Override
     public void put(Key key, Value value)
     {
-        throw new UnsupportedOperationException();
-//    main:
-//        for ( ; ; )
-//        {
-//            Entry<Key, Value> e = map.get(key);
-//            if (e == null)
-//            {
-//                Entry<Key, Value> ne = elementFor(key, value);
-//                e = map.putIfAbsent(key, ne);
-//                if (e == null)
-//                {
-//                    // Note: e must be new and non-shared
-//                    QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(ne);
-//                    assert ne.hirsQueueEntry == null;
-//                    ne.hirsQueueEntry = qe;
-//
-//                    addToHir(qe);
-//                    remainingSize.addAndGet(-weigher.weight(key, value));
-//                    break main;
-//                }
-//            }
-//
-//            Value old;
-//            do
-//            {
-//                old = e.value();
-//                if (old == value)
-//                    return;     // someone's done our job
-//                if (old == null)
-//                    continue main;   // If the value is in the process of being removed, retry adding as the caller may have seen it as removed. 
-//            }
-//            while (!e.casValue(old, value));
-//            access(e);
-//            remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
-//            removalListener.remove(key, old);
-//            break main;
-//        }
-//        maybeEvict();
+        Entry<Key, Value> ne = elementFor(key, value);
+        Entry<Key, Value> e;
+    putToMap:
+        for ( ; ; )
+        {
+            e = map.putIfAbsent(key, ne);
+            if (e == null)
+            {
+                putNewValue(ne, key, value);
+                return;
+            }
+
+            for ( ; ; )
+            {
+                State s = e.state.get();
+                switch (s)
+                {
+                case HIR:
+                case HIR_RESIDENT_NON_LIR:
+                case HIR_RESIDENT:
+                case LIR_RESIDENT:
+                    if (e.state.compareAndSet(s, State.LOCKED))
+                    {
+                        putValue(e, s, key, value);
+                        return;
+                    }
+                    // Otherwise wait for new state.
+                case LOCKED:
+                    Thread.yield();
+                    continue;
+                case REMOVED:
+                    // If the value was removed, retry adding as the caller may have seen it as removed.
+                    continue putToMap;
+                }
+            }
+        }
     }
 
     @Override
@@ -162,17 +160,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             e = map.putIfAbsent(key, ne);
             if (e == null)
             {
-                QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(ne);
-                ne.hirQueueEntry = qe;
-                addToHir(qe);
-                qe = new QueueEntry<>(ne);
-                ne.lirQueueEntry = qe;
-                addToLir(qe);
-                assert ne.state.get() == State.LOCKED;
-                ne.state.set(State.HIR_RESIDENT);
-
-                remainingSize.addAndGet(-weigher.weight(key, value));
-                maybeEvict();
+                putNewValue(ne, key, value);
                 return true;
             }
 
@@ -192,26 +180,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                     // HIR status means removed. We must add, only fail if concurrently added.
                     if (e.state.compareAndSet(State.HIR, State.LOCKED))
                     {
-                        // Successfully claimed slot. Now do the queues transition.
-                        assert e.value == null;
-                        e.value = value;
-                        assert e.hirQueueEntry == null;
-                        QueueEntry<Entry<Key, Value>> qe = e.lirQueueEntry;
-                        qe.delete();
-    
-                        qe = new QueueEntry<>(e);
-                        e.lirQueueEntry = qe;
-                        addToLir(qe);
-                        assert e.state.get() == State.LOCKED;
-                        e.state.set(State.LIR_RESIDENT);
-                        long weight = -weigher.weight(key, value);
-                        remainingLirSize.addAndGet(weight);
-    
-                        while (remainingLirSize.get() < 0)
-                            demoteFromLirQueue();
-    
-                        remainingSize.addAndGet(weight);
-                        maybeEvict();
+                        putValue(e, State.HIR, key, value);
                         return true;
                     }
                     // Otherwise wait for new state.
@@ -224,6 +193,66 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 }
             }
         }
+    }
+
+    private void putNewValue(Entry<Key, Value> entry, Key key, Value value)
+    {
+        addToHir(entry);
+        addToLir(entry);
+        assert entry.state.get() == State.LOCKED;
+        entry.state.set(State.HIR_RESIDENT);
+
+        remainingSize.addAndGet(-weigher.weight(key, value));
+        maybeEvict();
+    }
+
+    private void putValue(Entry<Key, Value> entry, State prevState, Key key, Value value)
+    {
+        Value oldValue = entry.value;
+        long oldWeight = oldValue != null ? weigher.weight(key, oldValue) : 0;
+        long weight = weigher.weight(key, value);
+        long sizeAdj = oldWeight - weight;
+        long lirSizeAdj;
+        State nextState;
+        entry.value = value;
+
+        deleteIfSet(entry.hirQueueEntry);
+        entry.hirQueueEntry = null;
+        deleteIfSet(entry.lirQueueEntry);
+        addToLir(entry);
+
+        switch (prevState)
+        {
+        case HIR:
+            assert oldValue == null;
+            // fall through
+        case HIR_RESIDENT:
+            nextState = State.LIR_RESIDENT;
+            lirSizeAdj = -weight;
+            break;
+        case LIR_RESIDENT:
+            nextState = State.LIR_RESIDENT;
+            lirSizeAdj = sizeAdj;
+            break;
+        case HIR_RESIDENT_NON_LIR:
+            nextState = State.HIR_RESIDENT;
+            lirSizeAdj = 0;
+            addToHir(entry);
+            break;
+        default:
+            throw new AssertionError();
+        }
+        assert entry.state.get() == State.LOCKED;
+        entry.state.set(nextState);
+        remainingLirSize.addAndGet(lirSizeAdj);
+
+        while (remainingLirSize.get() < 0)
+            demoteFromLirQueue();
+
+        remainingSize.addAndGet(sizeAdj);
+        maybeEvict();
+        if (oldValue != null)
+            removalListener.remove(key, oldValue);
     }
 
     private void demoteFromLirQueue()
@@ -244,15 +273,10 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 if (!en.state.compareAndSet(State.LIR_RESIDENT, State.LOCKED))
                     break;
 
-                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
-                assert en.hirQueueEntry == null;
-
+                en.lirQueueEntry.delete();
                 en.lirQueueEntry = null;
-                qe.delete();
-
-                qe = new QueueEntry<>(en);
-                en.hirQueueEntry = qe;
-                addToHir(qe);
+                assert en.hirQueueEntry == null;
+                addToHir(en);
 
                 assert en.state.get() == State.LOCKED;
                 en.state.set(State.HIR_RESIDENT_NON_LIR);
@@ -263,25 +287,24 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 if (!en.state.compareAndSet(State.HIR, State.LOCKED))
                     break;       // retry
 
-                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
+                en.lirQueueEntry.delete();    // reload qe, it may have changed before we locked
+                en.lirQueueEntry = null;
                 assert en.hirQueueEntry == null;
 
                 boolean success = map.remove(en.key, en);     // must succeed
                 assert success;
                 // fall through
-                en.lirQueueEntry = null;
-                qe.delete();
                 assert en.state.get() == State.LOCKED;
                 en.state.set(State.REMOVED);
                 continue;
             case HIR_RESIDENT:
                 if (!en.state.compareAndSet(State.HIR_RESIDENT, State.LOCKED))
                     break;
-                qe = en.lirQueueEntry;    // reload qe, it may have changed before we locked
+
+                en.lirQueueEntry.delete();    // reload qe, it may have changed before we locked
+                en.lirQueueEntry = null;
                 assert en.hirQueueEntry != null;
 
-                en.lirQueueEntry = null;
-                qe.delete();
                 assert en.state.get() == State.LOCKED;
                 en.state.set(State.HIR_RESIDENT_NON_LIR);
                 continue;
@@ -362,17 +385,15 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             e.state.set(State.HIR);
             break;
         case HIR_RESIDENT:
-            QueueEntry<Entry<Key, Value>> qe;
-            qe = e.hirQueueEntry;
-            qe.delete();
+            e.hirQueueEntry.delete();
             e.hirQueueEntry = null;
+            assert e.lirQueueEntry != null;
             assert e.state.get() == State.LOCKED;
             e.state.set(State.HIR);
             break;
         case HIR_RESIDENT_NON_LIR:
             map.remove(key, e);
-            qe = e.hirQueueEntry;
-            qe.delete();
+            e.hirQueueEntry.delete();
             e.hirQueueEntry = null;
             assert e.lirQueueEntry == null;
             assert e.state.get() == State.LOCKED;
@@ -382,6 +403,26 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             throw new AssertionError();
         }
         removalListener.remove(key, old);
+    }
+
+    private void addToLir(Entry<Key, Value> entry)
+    {
+        QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(entry);
+        entry.lirQueueEntry = qe;
+        lirTail = qe.addToQueue(lirTail);
+    }
+
+    private void addToHir(Entry<Key, Value> entry)
+    {
+        QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(entry);
+        entry.hirQueueEntry = qe;
+        hirTail = qe.addToQueue(hirTail);
+    }
+
+    private void deleteIfSet(QueueEntry<Entry<Key, Value>> qe)
+    {
+        if (qe != null)
+            qe.delete();
     }
 
     @Override
@@ -451,13 +492,8 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 if (e.state.compareAndSet(State.LIR_RESIDENT, State.LOCKED))
                 {
                     assert e.hirQueueEntry == null;
-                    QueueEntry<Entry<Key, Value>> oqe = e.lirQueueEntry;
-                    assert oqe != null;
-                    oqe.delete();
-
-                    QueueEntry<Entry<Key, Value>> nqe = new QueueEntry<>(e);
-                    e.lirQueueEntry = nqe;
-                    addToLir(nqe);
+                    e.lirQueueEntry.delete();
+                    addToLir(e);
 
                     assert e.state.get() == State.LOCKED;
                     e.state.set(State.LIR_RESIDENT);
@@ -470,15 +506,10 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 {
                     // Move to LIR.
                     assert e.value != null;
-                    QueueEntry<Entry<Key, Value>> qe = e.hirQueueEntry;
-                    qe.delete();
+                    e.hirQueueEntry.delete();
                     e.hirQueueEntry = null;
-                    qe = e.lirQueueEntry;
-                    qe.delete();
-
-                    qe = new QueueEntry<>(e);
-                    e.lirQueueEntry = qe;
-                    addToLir(qe);
+                    e.lirQueueEntry.delete();
+                    addToLir(e);
                     assert e.state.get() == State.LOCKED;
                     e.state.set(State.LIR_RESIDENT);
 
@@ -502,13 +533,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                     QueueEntry<Entry<Key, Value>> qe = e.hirQueueEntry;
                     qe.delete();
 
-                    qe = new QueueEntry<>(e);
-                    e.hirQueueEntry = qe;
-                    addToHir(qe);
+                    addToHir(e);
 
-                    qe = new QueueEntry<>(e);
-                    e.lirQueueEntry = qe;
-                    addToLir(qe);
+                    addToLir(e);
                     assert e.state.get() == State.LOCKED;
                     e.state.set(State.HIR_RESIDENT);
 
@@ -524,16 +551,6 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             }
             Thread.yield();
         }
-    }
-
-    private void addToHir(QueueEntry<Entry<Key, Value>> qe)
-    {
-        hirTail = qe.addToQueue(hirTail);
-    }
-
-    private void addToLir(QueueEntry<Entry<Key, Value>> qe)
-    {
-        lirTail = qe.addToQueue(lirTail);
     }
 
     @Override

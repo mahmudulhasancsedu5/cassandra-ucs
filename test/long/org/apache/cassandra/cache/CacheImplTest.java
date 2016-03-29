@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -28,7 +29,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     static final int THREAD_ITERS = 500_000;
     static final int THREADS_IN_PARALLEL = 50;
     static final int THREAD_RUNS = 200;
-    static final int RELEASE_CHECKED_PERIOD = 1;
+    static final int RELEASE_CHECKED_PERIOD = 0;
     static final int REMOVE_PERIOD = 1600;
     
     static final int[] WORKING_SET_SIZES = new int[] { 10_000, 30_000, 100_000, (int) KEY_RANGE };
@@ -296,6 +297,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         if (cache instanceof CacheImpl)
             ((CacheImpl<?, ?, ?>) cache).checkState();
         cache.clear();
+        assertEquals(0, aliveCount.get());
 
         System.gc();
         System.runFinalization();
@@ -348,9 +350,11 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
 //        }
 //        return d;
 //    }
+    AtomicLong aliveCount = new AtomicLong();
     
     public Data load(Random r, Long key)
     {
+        aliveCount.incrementAndGet();
         return (RELEASE_CHECKED_PERIOD > 0 && r.nextInt(RELEASE_CHECKED_PERIOD) == 0) ? new ReleaseChecked(r, key) : new Data(r, key);
     }
 
@@ -378,5 +382,6 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         value.check(ThreadLocalRandom.current(), key);
         assertFalse(value.released);
         value.released = true;
+        aliveCount.decrementAndGet();
     }
 }
