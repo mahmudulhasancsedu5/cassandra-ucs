@@ -34,7 +34,7 @@ public class MmappedSegmentedFile extends SegmentedFile
         this(channel, new MmapRebufferer(channel, length, regions), length);
     }
 
-    public MmappedSegmentedFile(ChannelProxy channel, Rebufferer rebufferer, long length)
+    public MmappedSegmentedFile(ChannelProxy channel, SharedRebufferer rebufferer, long length)
     {
         super(new Cleanup(channel, rebufferer), channel, rebufferer, length);
     }
