@@ -56,9 +56,12 @@ public abstract class SegmentedFile extends SharedCloseableImpl
     // SegmentIterator because offsets in the file are relative to the uncompressed size)
     public final long onDiskLength;
 
-    private final BaseRebufferer rebufferer;
+    /**
+     * Rebufferer to use to construct RandomAccessReaders.
+     */
+    private final SharedRebufferer rebufferer;
 
-    protected SegmentedFile(Cleanup cleanup, ChannelProxy channel, BaseRebufferer rebufferer, long onDiskLength)
+    protected SegmentedFile(Cleanup cleanup, ChannelProxy channel, SharedRebufferer rebufferer, long onDiskLength)
     {
         super(cleanup);
         this.rebufferer = rebufferer;

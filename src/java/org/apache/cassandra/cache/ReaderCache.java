@@ -147,12 +147,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         cache.invalidateAll();
     }
 
-    public Rebufferer wrap(BufferlessRebufferer file)
+    public SharedRebufferer wrap(BufferlessRebufferer file)
     {
         return new CachingRebufferer(file);
     }
 
-    public static BaseRebufferer maybeWrap(BufferlessRebufferer file)
+    public static SharedRebufferer maybeWrap(BufferlessRebufferer file)
     {
         if (!enabled)
             return file;
@@ -187,7 +187,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
      * Rebufferer providing cached chunks where data is obtained from the specified BufferlessRebufferer.
      * Thread-safe. One instance per SegmentedFile, created by ReaderCache.maybeWrap if the cache is enabled.
      */
-    class CachingRebufferer implements Rebufferer
+    class CachingRebufferer implements Rebufferer, SharedRebufferer
     {
         private final BufferlessRebufferer source;
         final long alignmentMask;

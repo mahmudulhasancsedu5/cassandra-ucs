@@ -46,12 +46,12 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         this(channel, metadata, regions, createRebufferer(channel, metadata, regions));
     }
 
-    private static BaseRebufferer createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    private static SharedRebufferer createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
         return ReaderCache.maybeWrap(CompressedRandomAccessReader.bufferlessRebufferer(channel, metadata, regions));
     }
 
-    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, BaseRebufferer rebufferer)
+    public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, SharedRebufferer rebufferer)
     {
         super(new Cleanup(channel, metadata, regions, rebufferer), channel, rebufferer, metadata.compressedFileLength);
         this.metadata = metadata;
