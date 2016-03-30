@@ -38,6 +38,7 @@
  * Fix paging on DISTINCT queries repeats result when first row in partition changes
    (CASSANDRA-10010)
 Merged from 2.1:
+ * Fix out-of-space error treatment in memtable flushing (CASSANDRA-11448).
  * Add a -j parameter to scrub/cleanup/upgradesstables to state how
    many threads to use (CASSANDRA-11179)
  * Backport CASSANDRA-10679 (CASSANDRA-9598)
