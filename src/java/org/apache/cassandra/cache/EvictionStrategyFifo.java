@@ -2,7 +2,7 @@ package org.apache.cassandra.cache;
 
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import org.apache.cassandra.cache.CacheImpl.EvictionStrategy;
 
@@ -11,13 +11,20 @@ public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, V
     static class Entry<Key, Value> implements CacheImpl.Entry<Key, Value>
     {
         final Key key;
-        final AtomicReference<Value> value;
-        AtomicReference<QueueEntry<Entry<Key, Value>>> currentQueueEntry = new AtomicReference<>();
+        volatile Value value;
+        volatile QueueEntry<Entry<Key, Value>> currentQueueEntry = null;
+
+        @SuppressWarnings("rawtypes")
+        static final AtomicReferenceFieldUpdater<Entry, Object> valueUpdater =
+                AtomicReferenceFieldUpdater.newUpdater(Entry.class, Object.class, "value");
+        @SuppressWarnings("rawtypes")
+        static final AtomicReferenceFieldUpdater<Entry, QueueEntry> currentQueueEntryUpdater =
+                AtomicReferenceFieldUpdater.newUpdater(Entry.class, QueueEntry.class, "currentQueueEntry");
 
         public Entry(Key key, Value value)
         {
             this.key = key;
-            this.value = new AtomicReference<>(value);
+            this.value = value;
         }
 
         @Override
@@ -29,13 +36,13 @@ public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, V
         @Override
         public Value value()
         {
-            return value.get();
+            return value;
         }
 
         @Override
         public boolean casValue(Value old, Value v)
         {
-            return value.compareAndSet(old, v);
+            return valueUpdater.compareAndSet(this, old, v);
         }
     }
 
@@ -59,8 +66,8 @@ public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, V
     {
         // Note: e must be new and non-shared
         QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(e);
-        assert e.currentQueueEntry.get() == null;
-        e.currentQueueEntry.set(qe);
+        assert e.currentQueueEntry == null;
+        e.currentQueueEntry = qe;
 
         tail = qe.addToQueue(tail);
     }
@@ -71,11 +78,11 @@ public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, V
         QueueEntry<Entry<Key, Value>> qe;
         do
         {
-            qe = e.currentQueueEntry.get();
+            qe = e.currentQueueEntry;
             if (qe == null)
                 return false; // already removed by another thread
         }
-        while (!e.currentQueueEntry.compareAndSet(qe, null));
+        while (!Entry.currentQueueEntryUpdater.compareAndSet(e, qe, null));
         assert qe.content() == e;
 
         qe.delete();

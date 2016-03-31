@@ -4,19 +4,34 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import org.apache.cassandra.cache.CacheImpl.RemovalListener;
 import org.apache.cassandra.cache.CacheImpl.Weigher;
+import sun.misc.Contended;
 
 public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
 {
-    final AtomicLong remainingSize;
-    final AtomicLong remainingLirSize;
-    final AtomicLong capacity;
+    @Contended
+    volatile long remainingSize;
+    @Contended
+    volatile long remainingLirSize;
+
+    volatile long capacity;
+
     final ConcurrentMap<Key, Entry<Key, Value>> map;
     final RemovalListener<Key, Value> removalListener;
     final Weigher<Key, Value> weigher;
+
+    @SuppressWarnings("rawtypes")
+    static final AtomicLongFieldUpdater<LirsCacheSynchronized> remainingSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(LirsCacheSynchronized.class, "remainingSize");
+    @SuppressWarnings("rawtypes")
+    static final AtomicLongFieldUpdater<LirsCacheSynchronized> remainingLirSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(LirsCacheSynchronized.class, "remainingLirSize");
+    @SuppressWarnings("rawtypes")
+    static final AtomicLongFieldUpdater<LirsCacheSynchronized> capacityUpdater =
+            AtomicLongFieldUpdater.newUpdater(LirsCacheSynchronized.class, "capacity");
 
     enum State
     {
@@ -72,24 +87,25 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
         this.map = map;
         this.removalListener = removalListener;
         this.weigher = weigher;
-        this.capacity = new AtomicLong(initialCapacity);
-        this.remainingSize = new AtomicLong(initialCapacity);
-        this.remainingLirSize = new AtomicLong(initialCapacity * 9 / 10);
+        this.capacity = initialCapacity;
+        this.remainingSize = initialCapacity;
+        this.remainingLirSize = initialCapacity * 9 / 10;
     }
 
     @Override
     public long capacity()
     {
-        return capacity.get();
+        return capacity;
     }
 
     @Override
     public void setCapacity(long newCapacity)
     {
-        long currentCapacity = capacity.get();
-        if (capacity.compareAndSet(currentCapacity, newCapacity))
+        long currentCapacity = capacity;
+        if (capacityUpdater.compareAndSet(this, currentCapacity, newCapacity))
         {
-            remainingSize.addAndGet(newCapacity - currentCapacity);
+            remainingSizeUpdater.addAndGet(this, newCapacity - currentCapacity);
+            remainingLirSizeUpdater.addAndGet(this, (newCapacity - currentCapacity) * 9 / 10);
             maybeEvict();
         }
     }
@@ -103,7 +119,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
     @Override
     public long weightedSize()
     {
-        return capacity.get() - remainingSize.get();
+        return capacity - remainingSize;
     }
 
     @Override
@@ -155,7 +171,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
             entry.state = State.HIR_RESIDENT;
         }
 
-        remainingSize.addAndGet(-weigher.weight(key, value));
+        remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value));
         maybeEvict();
     }
 
@@ -208,16 +224,19 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
             }
             entry.state = nextState;
         }
-        remainingLirSize.addAndGet(lirSizeAdj);
-
-        while (remainingLirSize.get() < 0)
-            demoteFromLirQueue();
-
-        remainingSize.addAndGet(sizeAdj);
+        remainingLirSizeUpdater.addAndGet(this, lirSizeAdj);
+        remainingSizeUpdater.addAndGet(this, sizeAdj);
+        maybeDemote();
         maybeEvict();
         if (oldValue != null)
             removalListener.remove(key, oldValue);
         return true;
+    }
+
+    private void maybeDemote()
+    {
+        while (remainingLirSize < 0)
+            demoteFromLirQueue();
     }
 
     private void demoteFromLirQueue()
@@ -243,7 +262,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
                     addToHir(en);
                     en.state = State.HIR_RESIDENT_NON_LIR;
 
-                    remainingLirSize.addAndGet(weigher.weight(en.key, en.value));
+                    remainingLirSizeUpdater.addAndGet(this, weigher.weight(en.key, en.value));
                     return;
                 case HIR:
                     en.lirQueueEntry.delete();    // reload qe, it may have changed before we locked
@@ -285,7 +304,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
 //        access(e);
 //        if (!e.casValue(old, value))
 //            return false;
-//        remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
+//        remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value) + weigher.weight(key, old));
 //        removalListener.remove(key, old);
 //        maybeEvict();
 //        return true;
@@ -323,12 +342,12 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
             old = e.value;
             assert old != null;
             long weight = weigher.weight(key, old);
-            remainingSize.addAndGet(weight);
+            remainingSizeUpdater.addAndGet(this, weight);
             e.value = null;
             switch (s)
             {
             case LIR_RESIDENT:
-                remainingLirSize.addAndGet(weight);
+                remainingLirSizeUpdater.addAndGet(this, weight);
                 assert e.hirQueueEntry == null;
                 e.state = State.HIR;
                 break;
@@ -386,7 +405,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
 
     private void maybeEvict()
     {
-        while (remainingSize.get() < 0)
+        while (remainingSize < 0)
         {
             QueueEntry<Entry<Key, Value>> first = hirHead.discardNextDeleted();
             if (first == null)
@@ -447,10 +466,9 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
                 addToLir(e);
                 e.state = State.LIR_RESIDENT;
 
-                remainingLirSize.addAndGet(-weigher.weight(e.key, e.value));
+                remainingLirSizeUpdater.addAndGet(this, -weigher.weight(e.key, e.value));
 
-                while (remainingLirSize.get() < 0)
-                    demoteFromLirQueue();
+                maybeDemote();
 
                 return;
             case HIR_RESIDENT_NON_LIR:

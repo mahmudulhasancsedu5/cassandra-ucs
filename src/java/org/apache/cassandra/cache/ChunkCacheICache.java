@@ -30,7 +30,7 @@ public class ChunkCacheICache extends ChunkCacheBase
 
     public ChunkCacheICache(long cacheSize)
     {
-        cache = LirsCache.create(this, (key, buffer) -> weight(buffer), cacheSize);
+        cache = LirsCacheSynchronized.create(this, (key, buffer) -> weight(buffer), cacheSize);
         metrics = new CacheMissMetrics("ChunkCache", cache);
     }
 

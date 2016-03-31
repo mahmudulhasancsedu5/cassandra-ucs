@@ -23,7 +23,7 @@ import java.lang.reflect.Field;
 
 public class Locks
 {
-    static final Unsafe unsafe;
+    static public final Unsafe unsafe;
 
     static
     {

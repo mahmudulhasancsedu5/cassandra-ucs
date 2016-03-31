@@ -3,16 +3,20 @@ package org.apache.cassandra.cache;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 class QueueEntry<Element>
 {
-    private AtomicReference<QueueEntry<Element>> next;
+    private volatile QueueEntry<Element> next;
     private volatile Element content;     // set at construction, changes to null to mark deleted
+
+    @SuppressWarnings("rawtypes")
+    static final AtomicReferenceFieldUpdater<QueueEntry, QueueEntry> nextUpdater =
+            AtomicReferenceFieldUpdater.newUpdater(QueueEntry.class, QueueEntry.class, "next");
 
     public QueueEntry(Element content)
     {
-        this.next = new AtomicReference<>(null);
+        this.next = null;
         this.content = content;
     }
 
@@ -38,14 +42,14 @@ class QueueEntry<Element>
     {
         do
         {
-            QueueEntry<Element> next = queue.next.get();
+            QueueEntry<Element> next = queue.next;
             while (next != null)
             {
                 queue = next;
-                next = next.next.get();
+                next = next.next;
             }
         }
-        while (!queue.next.compareAndSet(null, this));
+        while (!nextUpdater.compareAndSet(queue, null, this));
         return this;
     }
 
@@ -53,27 +57,27 @@ class QueueEntry<Element>
     {
         // Remove nexts while they don't have content, but make sure to point to a trailing entry to make sure we don't
         // skip over something that is just being added.
-        QueueEntry<Element> next = this.next.get();
+        QueueEntry<Element> next = this.next;
         if (next == null)
             return this;
         if (!next.deleted())
             return next;
 
-        QueueEntry<Element> nextnext = next.next.get();
+        QueueEntry<Element> nextnext = next.next;
         if (nextnext == null)
             return next;        // still no change wanted
 
         do
         {
             next = nextnext;
-            nextnext = next.next.get();
+            nextnext = next.next;
             if (nextnext == null)
                 break;
         }
         while (next.deleted());
 
         assert next != null;
-        this.next.lazySet(next);
+        this.next = next;
         return next;
     }
 
@@ -92,11 +96,11 @@ class QueueEntry<Element>
         String r = (content != null ? content.toString() : "#");
         if (!s.add(this))
             return r + "*Loop*";
-        QueueEntry<Element> next = this.next.get();
+        QueueEntry<Element> next = this.next;
         int nc = 0;
         while (next != null && next.content == null)
         {
-            next = next.next.get();
+            next = next.next;
             ++nc;
         }
         if (nc > 0)
@@ -120,7 +124,7 @@ class QueueEntry<Element>
         public boolean hasNext()
         {
             while (qe != null && qe.deleted())
-                qe = qe.next.get();
+                qe = qe.next;
             return qe != null;
         }
 
@@ -130,7 +134,7 @@ class QueueEntry<Element>
             if (!hasNext())
                 throw new AssertionError();
             Element content = qe.content();
-            qe = qe.next.get();
+            qe = qe.next;
             return content;
         }
     }

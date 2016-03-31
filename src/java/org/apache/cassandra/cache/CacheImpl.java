@@ -5,18 +5,29 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 import com.google.common.collect.Sets;
 
+import sun.misc.Contended;
+
 public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> implements ICache<Key, Value>
 {
+    @Contended
+    volatile long remainingSize;
+    volatile long capacity;
+
+    @SuppressWarnings("rawtypes")
+    static final AtomicLongFieldUpdater<CacheImpl> remainingSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(CacheImpl.class, "remainingSize");
+    @SuppressWarnings("rawtypes")
+    static final AtomicLongFieldUpdater<CacheImpl> capacityUpdater =
+            AtomicLongFieldUpdater.newUpdater(CacheImpl.class, "capacity");
+
     final ConcurrentMap<Key, Element> map;
     final EvictionStrategy<Key, Value, Element> strategy;
     final RemovalListener<Key, Value> removalListener;
     final Weigher<Key, Value> weigher;
-    final AtomicLong capacity;
-    final AtomicLong remainingSize;
 
     interface Entry<Key, Value>
     {
@@ -78,23 +89,23 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
         this.strategy = strategy;
         this.removalListener = removalListener;
         this.weigher = weigher;
-        this.capacity = new AtomicLong(initialCapacity);
-        this.remainingSize = new AtomicLong(initialCapacity);
+        this.capacity = initialCapacity;
+        this.remainingSize = initialCapacity;
     }
 
     @Override
     public long capacity()
     {
-        return capacity.get();
+        return capacity;
     }
 
     @Override
     public void setCapacity(long newCapacity)
     {
-        long currentCapacity = capacity.get();
-        if (capacity.compareAndSet(currentCapacity, newCapacity))
+        long currentCapacity = capacity;
+        if (capacityUpdater.compareAndSet(this, currentCapacity, newCapacity))
         {
-            remainingSize.addAndGet(newCapacity - currentCapacity);
+            remainingSizeUpdater.addAndGet(this, newCapacity - currentCapacity);
             maybeEvict();
         }
     }
@@ -108,7 +119,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
     @Override
     public long weightedSize()
     {
-        return capacity.get() - remainingSize.get();
+        return capacity - remainingSize;
     }
 
     @Override
@@ -125,7 +136,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
                 if (e == null)
                 {
                     strategy.add(ne);
-                    remainingSize.addAndGet(-weigher.weight(key, value));
+                    remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value));
                     break main;
                 }
             }
@@ -146,7 +157,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
                 Thread.yield();
             }
             strategy.access(e);
-            remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
+            remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value) + weigher.weight(key, old));
             removalListener.remove(key, old);
             break main;
         }
@@ -164,7 +175,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
             if (e == null)
             {
                 strategy.add(ne);
-                remainingSize.addAndGet(-weigher.weight(key, value));
+                remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value));
                 maybeEvict();
                 return true;
             }
@@ -188,7 +199,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
         strategy.access(e);
         if (!e.casValue(old, value))
             return false;
-        remainingSize.addAndGet(-weigher.weight(key, value) + weigher.weight(key, old));
+        remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value) + weigher.weight(key, old));
         removalListener.remove(key, old);
         maybeEvict();
         return true;
@@ -227,7 +238,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
         }
 
         Key key = e.key();
-        remainingSize.addAndGet(weigher.weight(key, old));
+        remainingSizeUpdater.addAndGet(this, weigher.weight(key, old));
         map.remove(key, e);
         strategy.remove(e);
         removalListener.remove(key, old);
@@ -253,7 +264,7 @@ public class CacheImpl<Key, Value, Element extends CacheImpl.Entry<Key, Value>> 
 
     private void maybeEvict()
     {
-        while (remainingSize.get() < 0)
+        while (remainingSize < 0)
         {
             Element e = strategy.chooseForEviction();
             if (e == null)

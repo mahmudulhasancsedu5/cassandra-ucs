@@ -322,6 +322,12 @@ public class CachingBench extends CQLTester
     }
 
     @Test
+    public void testLZ4CachedLirsSyncMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheICache(size, LirsCacheSynchronized.class));
+    }
+
+    @Test
     public void testLZ4CachedLruMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(size, CacheImpl.class));
