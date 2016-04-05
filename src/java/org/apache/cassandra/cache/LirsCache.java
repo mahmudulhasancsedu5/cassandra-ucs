@@ -55,6 +55,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         @SuppressWarnings("rawtypes")
         static final AtomicReferenceFieldUpdater<Entry, State> stateUpdater =
                 AtomicReferenceFieldUpdater.newUpdater(Entry.class, State.class, "state");
+        @SuppressWarnings("rawtypes")
+        static final AtomicReferenceFieldUpdater<Entry, QueueEntry> hirQueueEntryUpdater =
+                AtomicReferenceFieldUpdater.newUpdater(Entry.class, QueueEntry.class, "hirQueueEntry");
 
         public Entry(Key key, Value value)
         {
@@ -256,8 +259,10 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         State nextState;
         entry.value = value;
 
-        deleteIfSet(entry.hirQueueEntry);
-        entry.hirQueueEntry = null;
+        QueueEntry<Entry<Key, Value>> hqe = entry.hirQueueEntry;
+        if (hqe != null && hqe.tryDelete())
+            //TODO: check
+            entry.hirQueueEntry = null;
         QueueEntry<Entry<Key, Value>> lqe = entry.lirQueueEntry;
         if (lqe == null || lqe.tryDelete())
             addToLir(entry);
@@ -322,7 +327,6 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
                 // we have now claimed access
                 en.lirQueueEntry = null;
-                assert en.hirQueueEntry == null;
                 addToHir(en);
 
                 assert en.state == State.LOCKED;
@@ -438,7 +442,6 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         {
         case LIR_RESIDENT:
             remainingLirSizeUpdater.addAndGet(this, weight);
-            assert e.hirQueueEntry == null;
             assert e.state == State.LOCKED;
             e.state = State.HIR;
             break;
@@ -473,7 +476,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
     private void addToHir(Entry<Key, Value> entry)
     {
         QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(entry);
-        entry.hirQueueEntry = qe;
+        while (!Entry.hirQueueEntryUpdater.compareAndSet(entry, null, qe))
+            // Wait until access sets this to null.
+            Thread.yield();
         hirTail = qe.addToQueue(hirTail);
     }
 
@@ -547,22 +552,24 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 // Concurrent access. Will now move/has just moved to top anyway.
                 return;
             case LIR_RESIDENT:
-                QueueEntry<Entry<Key, Value>> lqe = e.lirQueueEntry;
-                if (lqe != null && lqe.tryDelete())
-                    addToLir(e);
-                // otherwise another thread accessed (or deleted etc.) this -- let them win
-                return;
+                {
+                    QueueEntry<Entry<Key, Value>> lqe = e.lirQueueEntry;
+                    if (lqe != null && lqe.tryDelete())
+                        addToLir(e);
+                    // otherwise another thread accessed (or deleted etc.) this -- let them win
+                    return;
+                }
             case HIR_RESIDENT:
-                if (e.casState(State.HIR_RESIDENT, State.LOCKED))
+                if (e.casState(State.HIR_RESIDENT, State.LIR_RESIDENT))
                 {
                     // Move to LIR.
-                    assert e.value != null;
-                    e.hirQueueEntry.delete();
-                    e.hirQueueEntry = null;
-                    e.lirQueueEntry.delete();
-                    addToLir(e);
-                    assert e.state == State.LOCKED;
-                    e.state = State.LIR_RESIDENT;
+                    QueueEntry<Entry<Key, Value>> lqe = e.lirQueueEntry;
+                    if (lqe != null && lqe.tryDelete())
+                        addToLir(e);
+                    QueueEntry<Entry<Key, Value>> hqe = e.hirQueueEntry;
+                    if (hqe != null && hqe.tryDelete())
+                        // potential sync problem point: others shouldn't act until hirQueueEntry is null
+                        e.hirQueueEntry = null;
 
                     remainingLirSizeUpdater.addAndGet(this, -weigher.weight(e.key, e.value));
 
@@ -582,6 +589,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                     assert e.lirQueueEntry == null;
                     QueueEntry<Entry<Key, Value>> qe = e.hirQueueEntry;
                     qe.delete();
+                    e.hirQueueEntry = null;
 
                     addToHir(e);
 
