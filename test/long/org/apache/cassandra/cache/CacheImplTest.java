@@ -224,7 +224,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     Timer missLatency;
     Timer reqLatency;
 
-    @Test
+//    @Test
     public void testWarmup() throws InterruptedException, ExecutionException
     {
         testCache(new GuavaCache(CACHE_SIZE * weight(null, null)));
@@ -242,7 +242,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         testCache(LirsCacheSynchronized.create(this, this, CACHE_SIZE * weight(null, null)));
     }
 
-    @Test
+//    @Test
     public void testFifo() throws InterruptedException, ExecutionException
     {
         testCache(CacheImpl.create(this, this, CACHE_SIZE * weight(null, null), new EvictionStrategyFifo<>()));
@@ -254,7 +254,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         testCache(CacheImpl.create(this, this, CACHE_SIZE * weight(null, null), new EvictionStrategyLru<>()));
     }
 
-    @Test
+//    @Test
     public void testGuava() throws InterruptedException, ExecutionException
     {
         testCache(new GuavaCache(CACHE_SIZE * weight(null, null)));

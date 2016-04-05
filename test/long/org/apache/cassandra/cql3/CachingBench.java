@@ -33,6 +33,7 @@ import com.google.common.collect.Iterables;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
@@ -40,6 +41,8 @@ import junit.framework.Assert;
 import net.sf.ehcache.store.FifoPolicy;
 import net.sf.ehcache.store.LfuPolicy;
 import net.sf.ehcache.store.LruPolicy;
+
+import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.cache.*;
 import org.apache.cassandra.cache.ChunkCache.ChunkCacheType;
 import org.apache.cassandra.config.Config.CommitLogSync;
@@ -55,6 +58,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.FBUtilities;
 
+@RunWith(OrderedJUnit4ClassRunner.class)
 public class CachingBench extends CQLTester
 {
     private static final String STRATEGY = "LeveledCompactionStrategy";
@@ -69,9 +73,9 @@ public class CachingBench extends CQLTester
     static final int CLUSTERING_RANGE = 210000;
 
     static final int EXTRA_SIZE = 1025;
-    static final boolean CONCURRENT_COMPACTIONS = true;
+    static final boolean CONCURRENT_COMPACTIONS = false;
     
-    static final long CACHE_SIZE = 24 * 1024 * 1024;
+    static final long CACHE_SIZE = 32 * 1024 * 1024;
 
     // The name of this method is important!
     // CommitLog settings must be applied before CQLTester sets up; by using the same name as its @BeforeClass method we
@@ -310,37 +314,37 @@ public class CachingBench extends CQLTester
     }
 
     @Test
-    public void testWarmup() throws Throwable
+    public void test0Warmup() throws Throwable
     {
         testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, null);
     }
 
     @Test
-    public void testLZ4CachedLirsMmap() throws Throwable
+    public void test1LZ4CachedLirsMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(size, LirsCache.class));
     }
 
     @Test
-    public void testLZ4CachedLirsSyncMmap() throws Throwable
+    public void test2LZ4CachedLirsSyncMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(size, LirsCacheSynchronized.class));
     }
 
     @Test
-    public void testLZ4CachedLruMmap() throws Throwable
+    public void test3LZ4CachedLruMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(size, CacheImpl.class));
     }
 
     @Test
-    public void testLZ4CachedMmap() throws Throwable
+    public void test4LZ4CachedMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheGuava(size));
     }
 
     @Test
-    public void testLZ4EhLfuCachedMmap() throws Throwable
+    public void test5LZ4EhLfuCachedMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheEHCache(size, new LfuPolicy()));
     }

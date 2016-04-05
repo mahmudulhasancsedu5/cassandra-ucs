@@ -49,8 +49,8 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         volatile State state = State.LOCKED;
         final Key key;
         Value value;
-        QueueEntry<Entry<Key, Value>> hirQueueEntry = null;
-        QueueEntry<Entry<Key, Value>> lirQueueEntry = null;
+        volatile QueueEntry<Entry<Key, Value>> hirQueueEntry = null;
+        volatile QueueEntry<Entry<Key, Value>> lirQueueEntry = null;
 
         @SuppressWarnings("rawtypes")
         static final AtomicReferenceFieldUpdater<Entry, State> stateUpdater =
@@ -102,7 +102,12 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         this.weigher = weigher;
         this.capacity = initialCapacity;
         this.remainingSize = initialCapacity;
-        this.remainingLirSize = initialCapacity * 9 / 10;
+        this.remainingLirSize = lirCapacity(initialCapacity);
+    }
+
+    protected long lirCapacity(long capacity)
+    {
+        return capacity * 98 / 100;
     }
 
     @Override
@@ -118,7 +123,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         if (capacityUpdater.compareAndSet(this, currentCapacity, newCapacity))
         {
             remainingSizeUpdater.addAndGet(this, newCapacity - currentCapacity);
-            remainingLirSizeUpdater.addAndGet(this, (newCapacity - currentCapacity) * 9 / 10);
+            remainingLirSizeUpdater.addAndGet(this, lirCapacity(newCapacity) - lirCapacity(currentCapacity));
             maybeEvict();
         }
     }
@@ -155,10 +160,18 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 State s = e.state;
                 switch (s)
                 {
+                case LIR_RESIDENT:
+                    if (e.casState(s, State.LOCKED))
+                    {
+                        awaitLirAccess(e);
+                        putValue(e, s, key, value);
+                        return;
+                    }
+                    Thread.yield();
+                    continue;
                 case HIR:
                 case HIR_RESIDENT_NON_LIR:
                 case HIR_RESIDENT:
-                case LIR_RESIDENT:
                     if (e.casState(s, State.LOCKED))
                     {
                         putValue(e, s, key, value);
@@ -245,8 +258,9 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
         deleteIfSet(entry.hirQueueEntry);
         entry.hirQueueEntry = null;
-        deleteIfSet(entry.lirQueueEntry);
-        addToLir(entry);
+        QueueEntry<Entry<Key, Value>> lqe = entry.lirQueueEntry;
+        if (lqe == null || lqe.tryDelete())
+            addToLir(entry);
 
         switch (prevState)
         {
@@ -303,7 +317,10 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 if (!en.casState(State.LIR_RESIDENT, State.LOCKED))
                     break;
 
-                en.lirQueueEntry.delete();
+                // We may have acted in the middle of an access, with a LIR entry waiting to be put
+                awaitLirAccess(en);
+
+                // we have now claimed access
                 en.lirQueueEntry = null;
                 assert en.hirQueueEntry == null;
                 addToHir(en);
@@ -345,6 +362,17 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
             }
             Thread.yield();
         }
+    }
+
+    protected QueueEntry<Entry<Key, Value>> awaitLirAccess(Entry<Key, Value> entry)
+    {
+        QueueEntry<Entry<Key, Value>> lqe = entry.lirQueueEntry;
+        while (lqe == null || !lqe.tryDelete())
+        {
+            Thread.yield();
+            lqe = entry.lirQueueEntry;
+        }
+        return lqe;
     }
 
     @Override
@@ -519,18 +547,11 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 // Concurrent access. Will now move/has just moved to top anyway.
                 return;
             case LIR_RESIDENT:
-                if (e.casState(State.LIR_RESIDENT, State.LOCKED))
-                {
-                    assert e.hirQueueEntry == null;
-                    e.lirQueueEntry.delete();
+                QueueEntry<Entry<Key, Value>> lqe = e.lirQueueEntry;
+                if (lqe != null && lqe.tryDelete())
                     addToLir(e);
-
-                    assert e.state == State.LOCKED;
-                    e.state = State.LIR_RESIDENT;
-                    return;
-                }
-                else
-                    break;
+                // otherwise another thread accessed (or deleted etc.) this -- let them win
+                return;
             case HIR_RESIDENT:
                 if (e.casState(State.HIR_RESIDENT, State.LOCKED))
                 {

@@ -89,7 +89,12 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
         this.weigher = weigher;
         this.capacity = initialCapacity;
         this.remainingSize = initialCapacity;
-        this.remainingLirSize = initialCapacity * 9 / 10;
+        this.remainingLirSize = lirCapacity(initialCapacity);
+    }
+
+    protected long lirCapacity(long capacity)
+    {
+        return capacity * 98 / 100;
     }
 
     @Override
@@ -105,7 +110,7 @@ public class LirsCacheSynchronized<Key, Value> implements ICache<Key, Value>
         if (capacityUpdater.compareAndSet(this, currentCapacity, newCapacity))
         {
             remainingSizeUpdater.addAndGet(this, newCapacity - currentCapacity);
-            remainingLirSizeUpdater.addAndGet(this, (newCapacity - currentCapacity) * 9 / 10);
+            remainingLirSizeUpdater.addAndGet(this, lirCapacity(newCapacity) - lirCapacity(currentCapacity));
             maybeEvict();
         }
     }

@@ -13,6 +13,9 @@ class QueueEntry<Element>
     @SuppressWarnings("rawtypes")
     static final AtomicReferenceFieldUpdater<QueueEntry, QueueEntry> nextUpdater =
             AtomicReferenceFieldUpdater.newUpdater(QueueEntry.class, QueueEntry.class, "next");
+    @SuppressWarnings("rawtypes")
+    static final AtomicReferenceFieldUpdater<QueueEntry, Object> contentUpdater =
+            AtomicReferenceFieldUpdater.newUpdater(QueueEntry.class, Object.class, "content");
 
     public QueueEntry(Element content)
     {
@@ -31,6 +34,16 @@ class QueueEntry<Element>
         content = null;
 
         discardNextDeleted();
+    }
+
+    public boolean tryDelete()
+    {
+        Element c = content;
+        if (c == null || !contentUpdater.compareAndSet(this, c, null))
+            return false;
+
+        discardNextDeleted();
+        return true;
     }
 
     public boolean deleted()
