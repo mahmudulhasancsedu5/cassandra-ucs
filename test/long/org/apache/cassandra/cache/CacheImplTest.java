@@ -16,11 +16,12 @@ import org.junit.Test;
 
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
-import org.apache.cassandra.cache.CacheImpl.Weigher;
+
+import org.apache.cassandra.cache.EvictionStrategy.Weigher;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.EstimatedHistogramReservoir;
 
-public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplTest.Data>, Weigher<Long, CacheImplTest.Data>
+public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListener<Long, CacheImplTest.Data>, Weigher
 {
     static final int ENTRY_SIZE = 2;
     static final long CACHE_SIZE = 600_000;
@@ -31,7 +32,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     static final int THREAD_RUNS = 200;
     static final int RELEASE_CHECKED_PERIOD = 0;
     static final int REMOVE_PERIOD = 1600;
-    
+
     static final int[] WORKING_SET_SIZES = new int[] { 10_000, 30_000, 100_000, (int) KEY_RANGE };
     static final int[] WORKING_SET_CHANCES = new int[] { 15, 10, 5, 1 };
     static final int[] WORKING_SETS;
@@ -129,7 +130,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
             cache = CacheBuilder.newBuilder()
                     .concurrencyLevel(THREADS_IN_PARALLEL)
                     .maximumWeight(size)
-                    .weigher((key, buffer) -> (int) weight(null, null))
+                    .weigher((key, buffer) -> (int) weigh(null, null))
                     .removalListener(this)
                     .build();
         }
@@ -155,7 +156,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
         @Override
         public long weightedSize()
         {
-            return cache.asMap().values().stream().mapToLong(x -> weight(null, x)).sum();
+            return cache.asMap().values().stream().mapToLong(x -> weigh(null, x)).sum();
         }
 
         @Override
@@ -227,37 +228,37 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
 //    @Test
     public void testWarmup() throws InterruptedException, ExecutionException
     {
-        testCache(new GuavaCache(CACHE_SIZE * weight(null, null)));
+        testCache(new GuavaCache(CACHE_SIZE * weigh(null, null)));
     }
 
     @Test
     public void testLirs() throws InterruptedException, ExecutionException
     {
-        testCache(LirsCache.create(this, this, CACHE_SIZE * weight(null, null)));
+        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyLirs(this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
-    public void testLirsSync() throws InterruptedException, ExecutionException
+    public void testLirsClass() throws InterruptedException, ExecutionException
     {
-        testCache(LirsCacheSynchronized.create(this, this, CACHE_SIZE * weight(null, null)));
+        testCache(LirsCache.create(this, this, CACHE_SIZE * weigh(null, null)));
     }
 
-//    @Test
+    @Test
     public void testFifo() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this, this, CACHE_SIZE * weight(null, null), new EvictionStrategyFifo<>()));
+        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyFifo(this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
     public void testLru() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this, this, CACHE_SIZE * weight(null, null), new EvictionStrategyLru<>()));
+        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyLru(this, CACHE_SIZE * weigh(null, null))));
     }
 
-//    @Test
+    @Test
     public void testGuava() throws InterruptedException, ExecutionException
     {
-        testCache(new GuavaCache(CACHE_SIZE * weight(null, null)));
+        testCache(new GuavaCache(CACHE_SIZE * weigh(null, null)));
     }
 
     public void testCache(ICache<Long, Data> cacheToTest) throws InterruptedException, ExecutionException
@@ -306,8 +307,6 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
                 THREAD_RUNS, THREADS_IN_PARALLEL, THREAD_ITERS, endTime - startTime);
         System.out.format("Working set sizes: %s\n", wsSizes);
 
-        if (cache instanceof CacheImpl)
-            ((CacheImpl<?, ?, ?>) cache).checkState();
         cache.clear();
         assertEquals(0, aliveCount.get());
 
@@ -383,7 +382,7 @@ public class CacheImplTest implements CacheImpl.RemovalListener<Long, CacheImplT
     }
 
     @Override
-    public long weight(Long key, Data value)
+    public long weigh(Object key, Object value)
     {
         return ENTRY_SIZE * Long.BYTES;
     }

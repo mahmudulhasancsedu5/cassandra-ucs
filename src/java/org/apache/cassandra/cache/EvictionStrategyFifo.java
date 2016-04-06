@@ -1,88 +1,137 @@
 package org.apache.cassandra.cache;
 
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
-import org.apache.cassandra.cache.CacheImpl.EvictionStrategy;
+import sun.misc.Contended;
 
-public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, Value, EvictionStrategyFifo.Entry<Key, Value>>
+public class EvictionStrategyFifo implements EvictionStrategy
 {
-    static class Entry<Key, Value> implements CacheImpl.Entry<Key, Value>
+    @Contended
+    volatile long remainingSize;
+    volatile long capacity;
+
+    final Weigher weigher;
+
+    static final AtomicLongFieldUpdater<EvictionStrategyFifo> remainingSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifo.class, "remainingSize");
+    static final AtomicLongFieldUpdater<EvictionStrategyFifo> capacityUpdater =
+            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifo.class, "capacity");
+
+    static final AtomicReferenceFieldUpdater<Element, Object> valueUpdater =
+            AtomicReferenceFieldUpdater.newUpdater(Element.class, Object.class, "value");
+    @SuppressWarnings("rawtypes")
+    static final AtomicReferenceFieldUpdater<Element, QueueEntry> currentQueueEntryUpdater =
+            AtomicReferenceFieldUpdater.newUpdater(Element.class, QueueEntry.class, "currentQueueEntry");
+
+    class Element implements EvictionStrategy.Entry
     {
-        final Key key;
-        volatile Value value;
-        volatile QueueEntry<Entry<Key, Value>> currentQueueEntry = null;
+        final Object key;
+        final EntryOwner owner;
+        volatile Object value = Specials.EMPTY;
+        volatile QueueEntry<Element> currentQueueEntry = null;
 
-        @SuppressWarnings("rawtypes")
-        static final AtomicReferenceFieldUpdater<Entry, Object> valueUpdater =
-                AtomicReferenceFieldUpdater.newUpdater(Entry.class, Object.class, "value");
-        @SuppressWarnings("rawtypes")
-        static final AtomicReferenceFieldUpdater<Entry, QueueEntry> currentQueueEntryUpdater =
-                AtomicReferenceFieldUpdater.newUpdater(Entry.class, QueueEntry.class, "currentQueueEntry");
 
-        public Entry(Key key, Value value)
+        public Element(Object key, EntryOwner owner)
         {
             this.key = key;
-            this.value = value;
+            this.owner = owner;
         }
 
         @Override
-        public Key key()
+        public Object key()
         {
             return key;
         }
 
         @Override
-        public Value value()
+        public Object value()
         {
             return value;
         }
 
         @Override
-        public boolean casValue(Value old, Value v)
+        public boolean casValue(Object old, Object v)
         {
-            return valueUpdater.compareAndSet(this, old, v);
+            assert old != Specials.DISCARDED;
+            assert v != Specials.DISCARDED;
+            assert v != Specials.EMPTY;
+            if (!valueUpdater.compareAndSet(this, old, v))
+                return false;
+
+            long remSizeChange = -weigher.weigh(key, v);
+            if (old == Specials.EMPTY)
+                addToQueue(this);
+            else
+            {
+                access();
+                remSizeChange += weigher.weigh(key, old);
+            }
+            remainingSizeUpdater.addAndGet(EvictionStrategyFifo.this, remSizeChange);
+            return true;
+        }
+
+        @Override
+        public void access()
+        {
+            EvictionStrategyFifo.this.access(this);
+        }
+
+        @Override
+        public Object remove()
+        {
+            Object old = value;
+            if (!valueUpdater.compareAndSet(this, old, Specials.DISCARDED))
+                return null;
+
+            if (!(old instanceof Specials))
+                remainingSizeUpdater.addAndGet(EvictionStrategyFifo.this, weigher.weigh(key, old));
+            removeFromQueue(this);
+            owner.removeMapping(this);
+            return old;
         }
     }
 
-    final QueueEntry<Entry<Key, Value>> head = new QueueEntry<>(null);
-    volatile QueueEntry<Entry<Key, Value>> tail = head;
+    final QueueEntry<Element> head = new QueueEntry<>(null);
+    volatile QueueEntry<Element> tail = head;
 
-    @Override
-    public Entry<Key, Value> elementFor(Key key, Value value)
+    public EvictionStrategyFifo(Weigher weigher, long capacity)
     {
-        return new Entry<>(key, value);
+        this.capacity = capacity;
+        this.remainingSize = capacity;
+        this.weigher = weigher;
+    }
+    
+    @Override
+    public Element elementFor(Object key, EntryOwner owner)
+    {
+        return new Element(key, owner);
     }
 
-    @Override
-    public void access(Entry<Key, Value> e)
+    public void access(Element e)
     {
         // FIFO strategy: do nothing on access, let entries flow through queue.
     }
 
-    @Override
-    public void add(Entry<Key, Value> e)
+    public void addToQueue(Element e)
     {
-        // Note: e must be new and non-shared
-        QueueEntry<Entry<Key, Value>> qe = new QueueEntry<>(e);
+        QueueEntry<Element> qe = new QueueEntry<>(e);
         assert e.currentQueueEntry == null;
         e.currentQueueEntry = qe;
 
         tail = qe.addToQueue(tail);
     }
 
-    @Override
-    public boolean remove(Entry<Key, Value> e)
+    public boolean removeFromQueue(Element e)
     {
-        QueueEntry<Entry<Key, Value>> qe;
+        QueueEntry<Element> qe;
         do
         {
             qe = e.currentQueueEntry;
             if (qe == null)
                 return false; // already removed by another thread
         }
-        while (!Entry.currentQueueEntryUpdater.compareAndSet(e, qe, null));
+        while (!currentQueueEntryUpdater.compareAndSet(e, qe, null));
         assert qe.content() == e;
 
         qe.delete();
@@ -90,30 +139,69 @@ public class EvictionStrategyFifo<Key, Value> implements EvictionStrategy<Key, V
     }
 
     @Override
-    public Entry<Key, Value> chooseForEviction()
+    public void maybeEvict()
+    {
+        while (remainingSize < 0)
+        {
+            Element e = takeFirst();
+            if (e == null)
+                return;
+            e.owner.evict(e);
+        }
+    }
+
+    public Element takeFirst()
     {
         for ( ; ; )
         {
-            QueueEntry<Entry<Key, Value>> first = head.discardNextDeleted();
-            if (first == null)
-                return null;
-            Entry<Key, Value> content = first.content();
+            QueueEntry<Element> first = head.discardNextDeleted();
+            Element content = first.content();
             if (content != null)
                 return content;
-            // something removed entry, get another
+            // we are either at an empty queue with null sentinel, or something removed our entry and we need to get another
+            if (first.discardNextDeleted() == first)
+                return null;
         }
     }
 
     @Override
-    public Iterator<Key> hotKeyIterator(int n)
+    public void clear()
     {
-        // FIXME: maybe implement? won't be efficient as it needs walking in the opposite direction
-        return Collections.emptyIterator();
+        while (true)
+        {
+            Element e = takeFirst();
+            if (e == null)
+                return;
+            e.owner.evict(e);
+        }
     }
 
     @Override
-    public Iterator<Entry<Key, Value>> iterator()
+    public long capacity()
     {
-        return head.iterator();
+        return capacity;
+    }
+
+    @Override
+    public void setCapacity(long newCapacity)
+    {
+        long currentCapacity = capacity;
+        if (capacityUpdater.compareAndSet(this, currentCapacity, newCapacity))
+        {
+            remainingSizeUpdater.addAndGet(this, newCapacity - currentCapacity);
+            maybeEvict();
+        }
+    }
+
+    @Override
+    public int size()
+    {
+        return (int) weightedSize();
+    }
+
+    @Override
+    public long weightedSize()
+    {
+        return capacity - remainingSize;
     }
 }

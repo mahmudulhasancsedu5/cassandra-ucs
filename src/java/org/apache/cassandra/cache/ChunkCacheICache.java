@@ -4,25 +4,28 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
+import com.sun.jdi.Value;
+
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 
 public class ChunkCacheICache extends ChunkCacheBase
-        implements ChunkCache.ChunkCacheType, CacheImpl.RemovalListener<ChunkCacheICache.Key, ChunkCacheICache.Buffer> 
+        implements ChunkCache.ChunkCacheType, SharedEvictionStrategyCache.RemovalListener<ChunkCacheICache.Key, ChunkCacheICache.Buffer> 
 {
     private final ICache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
 
     @SuppressWarnings("unchecked")
-    public ChunkCacheICache(long cacheSize, Class<?> cacheClass)
+    public ChunkCacheICache(Class<? extends EvictionStrategy> evictionStrategyClass, long cacheSize)
     {
         try
         {
-            cache = (ICache<Key, Buffer>) cacheClass.getMethod("create", CacheImpl.RemovalListener.class, CacheImpl.Weigher.class, long.class)
-                .invoke(null, this, (CacheImpl.Weigher<Key, Buffer>) ((key, buffer) -> weight(buffer)), cacheSize);
+            EvictionStrategy evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.Weigher.class, long.class)
+                    .newInstance((EvictionStrategy.Weigher) ((key, buffer) -> weight((Buffer) buffer)), cacheSize);
+            cache = SharedEvictionStrategyCache.create(Key.class, Buffer.class, this, evictionStrategy);
             metrics = new CacheMissMetrics("ChunkCache", cache);
-        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
-                | SecurityException e)
+        } catch (IllegalAccessException | IllegalArgumentException | InstantiationException | NoSuchMethodException
+                | SecurityException | InvocationTargetException e)
         {
             throw new AssertionError(e);
         }
@@ -30,7 +33,7 @@ public class ChunkCacheICache extends ChunkCacheBase
 
     public ChunkCacheICache(long cacheSize)
     {
-        cache = LirsCache.create(this, (key, buffer) -> weight(buffer), cacheSize);
+        cache = LirsCache.create(this, (key, buffer) -> weight((Buffer) buffer), cacheSize);
         metrics = new CacheMissMetrics("ChunkCache", cache);
     }
 

@@ -7,11 +7,12 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
-import org.apache.cassandra.cache.CacheImpl.RemovalListener;
-import org.apache.cassandra.cache.CacheImpl.Weigher;
+import org.apache.cassandra.cache.EvictionStrategy.Weigher;
+import org.apache.cassandra.cache.SharedEvictionStrategyCache.RemovalListener;
+
 import sun.misc.Contended;
 
-public class LirsCache<Key, Value> implements ICache<Key, Value>
+public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
 {
     @Contended
     volatile long remainingSize;
@@ -22,7 +23,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
     final ConcurrentMap<Key, Entry<Key, Value>> map;
     final RemovalListener<Key, Value> removalListener;
-    final Weigher<Key, Value> weigher;
+    final Weigher weigher;
 
     @SuppressWarnings("rawtypes")
     static final AtomicLongFieldUpdater<LirsCache> remainingSizeUpdater =
@@ -85,7 +86,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
     public static<Key, Value>
     LirsCache<Key, Value> create(RemovalListener<Key, Value> removalListener,
-                                 Weigher<Key, Value> weigher, long initialCapacity)
+                                 Weigher weigher, long initialCapacity)
     {
         return new LirsCache<Key, Value>
         (new ConcurrentHashMap<>(),
@@ -96,7 +97,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
 
     private LirsCache(ConcurrentMap<Key, Entry<Key, Value>> map,
                      RemovalListener<Key, Value> removalListener,
-                     Weigher<Key, Value> weigher,
+                     Weigher weigher,
                      long initialCapacity)
     {
         assert map.isEmpty();
@@ -245,15 +246,15 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         assert entry.state == State.LOCKED;
         entry.state = State.HIR_RESIDENT;
 
-        remainingSizeUpdater.addAndGet(this, -weigher.weight(key, value));
+        remainingSizeUpdater.addAndGet(this, -weigher.weigh(key, value));
         maybeEvict();
     }
 
     private void putValue(Entry<Key, Value> entry, State prevState, Key key, Value value)
     {
         Value oldValue = entry.value;
-        long oldWeight = oldValue != null ? weigher.weight(key, oldValue) : 0;
-        long weight = weigher.weight(key, value);
+        long oldWeight = oldValue != null ? weigher.weigh(key, oldValue) : 0;
+        long weight = weigher.weigh(key, value);
         long sizeAdj = oldWeight - weight;
         long lirSizeAdj;
         State nextState;
@@ -332,7 +333,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                 assert en.state == State.LOCKED;
                 en.state = State.HIR_RESIDENT_NON_LIR;
 
-                remainingLirSizeUpdater.addAndGet(this, weigher.weight(en.key, en.value));
+                remainingLirSizeUpdater.addAndGet(this, weigher.weigh(en.key, en.value));
                 return;
             case HIR:
                 if (!en.casState(State.HIR, State.LOCKED))
@@ -435,7 +436,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
         Value old = e.value;
         Key key = e.key;
         assert old != null;
-        long weight = weigher.weight(key, old);
+        long weight = weigher.weigh(key, old);
         remainingSizeUpdater.addAndGet(this, weight);
         e.value = null;
         switch (s)
@@ -571,7 +572,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>
                         // potential sync problem point: others shouldn't act until hirQueueEntry is null
                         e.hirQueueEntry = null;
 
-                    remainingLirSizeUpdater.addAndGet(this, -weigher.weight(e.key, e.value));
+                    remainingLirSizeUpdater.addAndGet(this, -weigher.weigh(e.key, e.value));
 
                     maybeDemote();
 
