@@ -30,7 +30,7 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
     private final boolean isForThrift;
     private final int nowInSec;
     private final boolean applyThriftTransformation;
-    private RangeTombstone.Bound lowerBound;
+    private ClusteringBound lowerBound;
     private boolean firstItemRetrieved;
 
     public UnfilteredRowIteratorWithLowerBound(DecoratedKey partitionKey,
@@ -60,11 +60,11 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
         // The partition index lower bound is more accurate than the sstable metadata lower bound but it is only
         // present if the iterator has already been initialized, which we only do when there are tombstones since in
         // this case we cannot use the sstable metadata clustering values
-        RangeTombstone.Bound ret = getPartitionIndexLowerBound();
+        ClusteringBound ret = getPartitionIndexLowerBound();
         return ret != null ? makeBound(ret) : makeBound(getMetadataLowerBound());
     }
 
-    private Unfiltered makeBound(RangeTombstone.Bound bound)
+    private Unfiltered makeBound(ClusteringBound bound)
     {
         if (bound == null)
             return null;
@@ -156,7 +156,7 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
     /**
      * @return the lower bound stored on the index entry for this partition, if available.
      */
-    private RangeTombstone.Bound getPartitionIndexLowerBound()
+    private ClusteringBound getPartitionIndexLowerBound()
     {
         // Creating the iterator ensures that rowIndexEntry is loaded if available (partitions bigger than
         // DatabaseDescriptor.column_index_size_in_kb)
@@ -178,7 +178,7 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
                           lowerBoundPrefix.getRawValues().length,
                           sstable.metadata.comparator.size(),
                           sstable.getFilename());
-        return RangeTombstone.Bound.inclusiveOpen(filter.isReversed(), lowerBoundPrefix.getRawValues());
+        return ClusteringBound.inclusiveOpen(filter.isReversed(), lowerBoundPrefix.getRawValues());
     }
 
     /**
@@ -195,7 +195,7 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
      * @return a global lower bound made from the clustering values stored in the sstable metadata, note that
      * this currently does not correctly compare tombstone bounds, especially ranges.
      */
-    private RangeTombstone.Bound getMetadataLowerBound()
+    private ClusteringBound getMetadataLowerBound()
     {
         if (!canUseMetadataLowerBound())
             return null;
@@ -207,6 +207,6 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
                       vals.size(),
                       sstable.metadata.comparator.size(),
                       sstable.getFilename());
-        return  RangeTombstone.Bound.inclusiveOpen(filter.isReversed(), vals.toArray(new ByteBuffer[vals.size()]));
+        return  ClusteringBound.inclusiveOpen(filter.isReversed(), vals.toArray(new ByteBuffer[vals.size()]));
     }
 }

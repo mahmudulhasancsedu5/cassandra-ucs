@@ -24,7 +24,7 @@ import java.util.NavigableSet;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.statements.Bound;
 import org.apache.cassandra.db.Clustering;
-import org.apache.cassandra.db.Slice;
+import org.apache.cassandra.db.ClusteringBound;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 
 /**
@@ -42,5 +42,5 @@ interface PrimaryKeyRestrictions extends Restriction, Restrictions
 
     public List<ByteBuffer> bounds(Bound b, QueryOptions options) throws InvalidRequestException;
 
-    public NavigableSet<Slice.Bound> boundsAsClustering(Bound bound, QueryOptions options) throws InvalidRequestException;
+    public NavigableSet<ClusteringBound> boundsAsClustering(Bound bound, QueryOptions options) throws InvalidRequestException;
 }
