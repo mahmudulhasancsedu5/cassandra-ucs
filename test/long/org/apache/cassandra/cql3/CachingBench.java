@@ -261,7 +261,7 @@ public class CachingBench extends CQLTester
                     metrics.missLatency.getSnapshot().getMean() * metrics.missLatency.getCount() / metrics.reqLatency.getCount();
             System.out.format("Mean cache latency: %.0fns\n", cacheLatency);
             System.out.format("%s size %s requests %,d hit ratio %f\n",
-                    ChunkCache.instance.getClass().getSimpleName(),
+                    ChunkCache.instance.toString(),
                     FileUtils.stringifyFileSize(metrics.size.getValue()),
                     metrics.requests.getCount(),
                     metrics.hitRate.getValue());
@@ -338,22 +338,10 @@ public class CachingBench extends CQLTester
     }
 
     @Test
-    public void testLZ4CachedLruMmap() throws Throwable
-    {
-        testCache(size -> new ChunkCacheICache(EvictionStrategyLru.class, size));
-    }
-
-    @Test
     public void testLZ4CachedLruSyncMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(EvictionStrategyLruSync.class, size));
     }
-
-//    @Test
-//    public void testLZ4CachedLirsMmap() throws Throwable
-//    {
-//        testCache(size -> new ChunkCacheICache(EvictionStrategyLirs.class, size));
-//    }
 
     @Test
     public void testLZ4CachedLirsSyncMmap() throws Throwable

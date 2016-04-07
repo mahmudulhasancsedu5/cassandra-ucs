@@ -1,20 +1,15 @@
 package org.apache.cassandra.cache;
 
-public class EvictionStrategyLru extends EvictionStrategyFifo
+public class EvictionStrategyLru<Key, Value> extends EvictionStrategyFifo<Key, Value>
 {
-    public EvictionStrategyLru(Weigher weigher, long capacity)
-    {
-        super(weigher, capacity);
-    }
-
     @Override
-    public void access(Element e)
+    public void access(Entry<Key, Value> e)
     {
-        QueueEntry<Element> oqe = e.currentQueueEntry;
+        QueueEntry<Entry<Key, Value>> oqe = e.currentQueueEntry;
         if (oqe == null)
             return;     // In the process of being removed, or not added yet. Can't access.
-        QueueEntry<Element> nqe = new QueueEntry<>(e);
-        if (!currentQueueEntryUpdater.compareAndSet(e, oqe, nqe))
+        QueueEntry<Entry<Key, Value>> nqe = new QueueEntry<>(e);
+        if (!Entry.currentQueueEntryUpdater.compareAndSet(e, oqe, nqe))
             return;     // something else moved e at the same time, that's sufficient
 
         assert oqe.content() == e;

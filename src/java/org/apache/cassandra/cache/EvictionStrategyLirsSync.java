@@ -86,7 +86,7 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
             Object old = value;
             value = Specials.EMPTY;
 
-            if (!(old instanceof Specials))
+            if (!EvictionStrategy.isSpecial(old))
             {
                 long remSizeChange = weigher.weigh(key, old);
                 remainingSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, remSizeChange);
@@ -109,7 +109,7 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
                 lirQueueEntry.delete();
                 addToLir(this);
 
-                if (!(value instanceof Specials))
+                if (!EvictionStrategy.isSpecial(value))
                 {
                     remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, -weigher.weigh(key, value));
                     maybeDemote();
@@ -124,7 +124,7 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
                 hirQueueEntry.delete();
                 hirQueueEntry = null;
 
-                if (!(value instanceof Specials))
+                if (!EvictionStrategy.isSpecial(value))
                 {
                     remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, -weigher.weigh(key, value));
                     maybeDemote();
@@ -200,7 +200,7 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
 
                 state = State.HIRQ_ONLY;
 
-                if (!(value instanceof Specials))
+                if (!EvictionStrategy.isSpecial(value))
                     remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, weigher.weigh(key, value));
                 return true;
             case LIRQ_ONLY:

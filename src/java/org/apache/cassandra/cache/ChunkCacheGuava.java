@@ -110,4 +110,11 @@ public class ChunkCacheGuava extends ChunkCacheBase
     {
         return cache.asMap().values().stream().mapToLong(ChunkCacheBase::weight).sum();
     }
+
+
+    @Override
+    public String toString()
+    {
+        return getClass().getSimpleName();
+    }
 }

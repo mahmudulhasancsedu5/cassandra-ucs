@@ -86,7 +86,7 @@ public class ChunkCacheICache extends ChunkCacheBase
     @Override
     Buffer put(ByteBuffer buffer, Key key)
     {
-        Buffer buf = new Buffer(buffer, key.position); // two refs, one for caller one for cache
+        Buffer buf = new Buffer(buffer, key.position);
         if (cache.putIfAbsent(key, buf))
             buf.reference();
 //        cache.put(key, buf);
@@ -97,5 +97,11 @@ public class ChunkCacheICache extends ChunkCacheBase
     public void invalidate(Key key)
     {
         cache.remove(key);
+    }
+
+    @Override
+    public String toString()
+    {
+        return cache.toString();
     }
 }

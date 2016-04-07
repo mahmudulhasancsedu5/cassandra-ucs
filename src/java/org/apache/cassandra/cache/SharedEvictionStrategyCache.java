@@ -26,7 +26,7 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
                                                    long initialCapacity)
     {
         return create(removalListener,
-                      new EvictionStrategyFifo(weigher, initialCapacity));
+                      new EvictionStrategyLirsSync(weigher, initialCapacity));
     }
 
     public static<Key, Value>
