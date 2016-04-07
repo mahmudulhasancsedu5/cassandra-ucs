@@ -4,8 +4,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
-import com.sun.jdi.Value;
-
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 
@@ -22,7 +20,7 @@ public class ChunkCacheICache extends ChunkCacheBase
         {
             EvictionStrategy evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.Weigher.class, long.class)
                     .newInstance((EvictionStrategy.Weigher) ((key, buffer) -> weight((Buffer) buffer)), cacheSize);
-            cache = SharedEvictionStrategyCache.create(Key.class, Buffer.class, this, evictionStrategy);
+            cache = SharedEvictionStrategyCache.create(this, evictionStrategy);
             metrics = new CacheMissMetrics("ChunkCache", cache);
         } catch (IllegalAccessException | IllegalArgumentException | InstantiationException | NoSuchMethodException
                 | SecurityException | InvocationTargetException e)

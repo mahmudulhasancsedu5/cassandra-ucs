@@ -24,11 +24,11 @@ import org.apache.cassandra.metrics.EstimatedHistogramReservoir;
 public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListener<Long, CacheImplTest.Data>, Weigher
 {
     static final int ENTRY_SIZE = 2;
-    static final long CACHE_SIZE = 600_000;
+    static final long CACHE_SIZE = 200_000;
     static final long KEY_RANGE = 5 * CACHE_SIZE;
     static final int SWITCH_PERIOD = 20_000;
-    static final int THREAD_ITERS = 500_000;
-    static final int THREADS_IN_PARALLEL = 50;
+    static final int THREAD_ITERS = 150_000;
+    static final int THREADS_IN_PARALLEL = 25;
     static final int THREAD_RUNS = 200;
     static final int RELEASE_CHECKED_PERIOD = 0;
     static final int REMOVE_PERIOD = 1600;
@@ -234,7 +234,13 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     @Test
     public void testLirs() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyLirs(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLirs(this, CACHE_SIZE * weigh(null, null))));
+    }
+
+    @Test
+    public void testLirsSync() throws InterruptedException, ExecutionException
+    {
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLirsSync(this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
@@ -246,13 +252,25 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     @Test
     public void testFifo() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyFifo(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyFifo(this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
     public void testLru() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(Long.class, Data.class, this, new EvictionStrategyLru(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLru(this, CACHE_SIZE * weigh(null, null))));
+    }
+
+    @Test
+    public void testFifoSync() throws InterruptedException, ExecutionException
+    {
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyFifoSync(this, CACHE_SIZE * weigh(null, null))));
+    }
+
+    @Test
+    public void testLruSync() throws InterruptedException, ExecutionException
+    {
+        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLruSync(this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test

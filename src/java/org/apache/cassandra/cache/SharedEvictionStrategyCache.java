@@ -14,8 +14,6 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
     final ConcurrentMap<Key, Entry> map;
     final EvictionStrategy strategy;
     final RemovalListener<Key, Value> removalListener;
-    final Class<Key> keyType;
-    final Class<Value> valueType;
 
     interface RemovalListener<Key, Value>
     {
@@ -23,34 +21,26 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
     }
 
     public static<Key, Value>
-    SharedEvictionStrategyCache<Key, Value> create(Class<Key> keyType,
-                                                   Class<Value> valueType,
-                                                   RemovalListener<Key, Value> removalListener,
+    SharedEvictionStrategyCache<Key, Value> create(RemovalListener<Key, Value> removalListener,
                                                    Weigher weigher,
                                                    long initialCapacity)
     {
-        return create(keyType, valueType,
-                      removalListener,
+        return create(removalListener,
                       new EvictionStrategyFifo(weigher, initialCapacity));
     }
 
     public static<Key, Value>
     SharedEvictionStrategyCache<Key, Value> create(
-            Class<Key> keyType,
-            Class<Value> valueType,
             RemovalListener<Key, Value> removalListener,
             EvictionStrategy evictionStrategy)
     {
         return new SharedEvictionStrategyCache<Key, Value>
-        (keyType, valueType,
-         new ConcurrentHashMap<>(),
+        (new ConcurrentHashMap<>(),
          evictionStrategy,
          removalListener);
     }
 
-    private SharedEvictionStrategyCache(Class<Key> keyType,
-                                        Class<Value> valueType,
-                                        ConcurrentMap<Key, Entry> map,
+    private SharedEvictionStrategyCache(ConcurrentMap<Key, Entry> map,
                                         EvictionStrategy strategy,
                                         RemovalListener<Key, Value> removalListener)
     {
@@ -58,10 +48,9 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
         this.map = map;
         this.strategy = strategy;
         this.removalListener = removalListener;
-        this.keyType = keyType;
-        this.valueType = valueType;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void put(Key key, Value value)
     {
@@ -92,8 +81,8 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
                     break;
                 Thread.yield();
             }
-            if (valueType.isInstance(old))
-                removalListener.remove(keyType.cast(key), valueType.cast(old));
+            if (!EvictionStrategy.isSpecial(old))
+                removalListener.remove((Key) key, (Value) old);
             break main;
         }
         strategy.maybeEvict();
@@ -110,19 +99,17 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
             if (e == null)
                 e = ne;
 
-            if (!e.casValue(Specials.EMPTY, value))
-            {
-                if (e.value() != Specials.DISCARDED)
-                    return false;
+            if (e.casValue(Specials.EMPTY, value))
+                break;
+            else if (e.value() != Specials.DISCARDED || e == ne)
+                return false;
 
-                // If the value is in the process of being removed, retry adding as the caller may have seen it as removed.
-                Thread.yield();
-                continue;
-            }
-
-            strategy.maybeEvict();
-            return true;
+            // If the value is in the process of being removed, retry adding as the caller may have seen it as removed.
+            Thread.yield();
         }
+
+        strategy.maybeEvict();
+        return true;
     }
 
     @Override
@@ -143,6 +130,7 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Value get(Key key)
     {
@@ -150,10 +138,10 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
         if (e == null)
             return null;
         Object v = e.value();
-        if (!valueType.isInstance(v))
+        if (EvictionStrategy.isSpecial(v))
             return null;
         e.access();
-        return valueType.cast(v);
+        return (Value) v;
     }
 
     @Override
@@ -162,18 +150,16 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
         Entry e = map.get(key);
         if (e == null)
             return;
-        // as evict below, except cast of key
-        Object old = e.remove();
-        if (valueType.isInstance(old))
-            removalListener.remove(key, valueType.cast(old));
+        evict(e);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void evict(Entry e)
     {
         Object old = e.remove();
-        if (valueType.isInstance(old))
-            removalListener.remove(keyType.cast(e.key()), valueType.cast(old));
+        if (!EvictionStrategy.isSpecial(old))
+            removalListener.remove((Key) e.key(), (Value) old);
     }
 
     @Override
@@ -198,13 +184,17 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
     @Override
     public boolean containsKey(Key key)
     {
-        return map.containsKey(key);
+        Entry e = map.get(key);
+        if (e == null)
+            return false;
+        return !EvictionStrategy.isSpecial(e.value());
     }
 
     @Override
     public void clear()
     {
         strategy.clear();
+        assert map.isEmpty();
     }
 
     public String toString()

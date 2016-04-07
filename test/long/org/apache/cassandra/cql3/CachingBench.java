@@ -314,13 +314,13 @@ public class CachingBench extends CQLTester
     }
 
     @Test
-    public void test0Warmup() throws Throwable
+    public void testWarmup() throws Throwable
     {
         testSetup(STRATEGY, "LZ4Compressor", DiskAccessMode.mmap, null);
     }
 
     @Test
-    public void test1LZ4CachedLirsMmap() throws Throwable
+    public void testLZ4CachedLirsClassMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(size));
     }
@@ -332,9 +332,33 @@ public class CachingBench extends CQLTester
 //    }
 
     @Test
-    public void test3LZ4CachedLruMmap() throws Throwable
+    public void testLZ4CachedFifoSyncMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheICache(EvictionStrategyFifoSync.class, size));
+    }
+
+    @Test
+    public void testLZ4CachedLruMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(EvictionStrategyLru.class, size));
+    }
+
+    @Test
+    public void testLZ4CachedLruSyncMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheICache(EvictionStrategyLruSync.class, size));
+    }
+
+//    @Test
+//    public void testLZ4CachedLirsMmap() throws Throwable
+//    {
+//        testCache(size -> new ChunkCacheICache(EvictionStrategyLirs.class, size));
+//    }
+
+    @Test
+    public void testLZ4CachedLirsSyncMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheICache(EvictionStrategyLirsSync.class, size));
     }
 
     @Test

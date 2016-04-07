@@ -17,12 +17,17 @@ interface EvictionStrategy extends CacheSize
 
     // strategy reserves space, thus evicts (and possibly calls remove)
     // during Entry.casValue
-    
+
     enum Specials
     {
         EMPTY,
         DISCARDED
     };
+
+    public static boolean isSpecial(Object v)
+    {
+        return v == Specials.EMPTY || v == Specials.DISCARDED;
+    }
 
     interface Entry
     {

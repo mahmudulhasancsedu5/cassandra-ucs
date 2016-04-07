@@ -3,6 +3,8 @@ package org.apache.cassandra.cache;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
+import org.apache.cassandra.cache.EvictionStrategy.Specials;
+
 import sun.misc.Contended;
 
 public class EvictionStrategyLirs implements EvictionStrategy
@@ -115,7 +117,7 @@ public class EvictionStrategyLirs implements EvictionStrategy
                 if (!valueUpdater.compareAndSet(this, old, Specials.EMPTY))
                 {
                     state = s;
-                    return null;
+                    return Specials.EMPTY;
                 }
 
                 if (!(old instanceof Specials))
@@ -140,18 +142,37 @@ public class EvictionStrategyLirs implements EvictionStrategy
                 case LOCKED:
                     // Concurrent access. Will now move/has just moved to top anyway.
                     return;
-                case LIRQ_ONLY:
-                    if (!stateUpdater.compareAndSet(this, State.LIRQ_ONLY, State.LIR_STATUS))
-                        break;
-                    // else fall through and act
                 case LIR_STATUS:
+                {
+                    QueueEntry<Element> lqe = lirQueueEntry;
+                    if (lqe != null && lqe.tryDelete())
+                        addToLir(this);
+                    // otherwise another thread accessed (or deleted etc.) this -- let them win
+                    return;
+                }
+                case LIRQ_ONLY:
+                    if (stateUpdater.compareAndSet(this, State.LIRQ_ONLY, State.LOCKED))
                     {
+                        // Move to LIR.
                         QueueEntry<Element> lqe = lirQueueEntry;
                         if (lqe != null && lqe.tryDelete())
                             addToLir(this);
-                        // otherwise another thread accessed (or deleted etc.) this -- let them win
+                        assert hirQueueEntry == null;
+
+                        if (!(value instanceof Specials))
+                        {
+                            remainingLirSizeUpdater.addAndGet(EvictionStrategyLirs.this, -weigher.weigh(key, value));
+                            maybeDemote();
+                        }
+
+                        assert state == State.LOCKED;
+                        state = State.LIR_STATUS;
+
                         return;
                     }
+                    else
+                        // status changed. retry
+                        break;
                 case BOTH_QUEUES:
                     if (stateUpdater.compareAndSet(this, State.BOTH_QUEUES, State.LOCKED))
                     {
@@ -162,8 +183,11 @@ public class EvictionStrategyLirs implements EvictionStrategy
                         hirQueueEntry.delete();
                         hirQueueEntry = null;
 
-                        remainingLirSizeUpdater.addAndGet(EvictionStrategyLirs.this, -weigher.weigh(key, value));
-                        maybeDemote();
+                        if (!(value instanceof Specials))
+                        {
+                            remainingLirSizeUpdater.addAndGet(EvictionStrategyLirs.this, -weigher.weigh(key, value));
+                            maybeDemote();
+                        }
 
                         assert state == State.LOCKED;
                         state = State.LIR_STATUS;
@@ -282,7 +306,8 @@ public class EvictionStrategyLirs implements EvictionStrategy
                 assert state == State.LOCKED;
                 state = State.HIRQ_ONLY;
 
-                remainingLirSizeUpdater.addAndGet(EvictionStrategyLirs.this, weigher.weigh(key, value));
+                if (!(value instanceof Specials))
+                    remainingLirSizeUpdater.addAndGet(EvictionStrategyLirs.this, -weigher.weigh(key, value));
                 return true;
             case LIRQ_ONLY:
                 if (!stateUpdater.compareAndSet(this, State.LIRQ_ONLY, State.LOCKED))

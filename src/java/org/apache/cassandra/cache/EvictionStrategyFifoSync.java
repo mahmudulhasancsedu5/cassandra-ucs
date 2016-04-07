@@ -1,11 +1,10 @@
 package org.apache.cassandra.cache;
 
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import sun.misc.Contended;
 
-public class EvictionStrategyFifo implements EvictionStrategy
+public class EvictionStrategyFifoSync implements EvictionStrategy
 {
     @Contended
     volatile long remainingSize;
@@ -13,16 +12,10 @@ public class EvictionStrategyFifo implements EvictionStrategy
 
     final Weigher weigher;
 
-    static final AtomicLongFieldUpdater<EvictionStrategyFifo> remainingSizeUpdater =
-            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifo.class, "remainingSize");
-    static final AtomicLongFieldUpdater<EvictionStrategyFifo> capacityUpdater =
-            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifo.class, "capacity");
-
-    static final AtomicReferenceFieldUpdater<Element, Object> valueUpdater =
-            AtomicReferenceFieldUpdater.newUpdater(Element.class, Object.class, "value");
-    @SuppressWarnings("rawtypes")
-    static final AtomicReferenceFieldUpdater<Element, QueueEntry> currentQueueEntryUpdater =
-            AtomicReferenceFieldUpdater.newUpdater(Element.class, QueueEntry.class, "currentQueueEntry");
+    static final AtomicLongFieldUpdater<EvictionStrategyFifoSync> remainingSizeUpdater =
+            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifoSync.class, "remainingSize");
+    static final AtomicLongFieldUpdater<EvictionStrategyFifoSync> capacityUpdater =
+            AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifoSync.class, "capacity");
 
     class Element implements EvictionStrategy.Entry
     {
@@ -51,13 +44,14 @@ public class EvictionStrategyFifo implements EvictionStrategy
         }
 
         @Override
-        public boolean casValue(Object old, Object v)
+        public synchronized boolean casValue(Object old, Object v)
         {
             assert old != Specials.DISCARDED;
             assert v != Specials.DISCARDED;
             assert v != Specials.EMPTY;
-            if (!valueUpdater.compareAndSet(this, old, v))
+            if (value != old)
                 return false;
+            value = v;
 
             long remSizeChange = -weigher.weigh(key, v);
             if (old == Specials.EMPTY)
@@ -67,31 +61,28 @@ public class EvictionStrategyFifo implements EvictionStrategy
                 access();
                 remSizeChange += weigher.weigh(key, old);
             }
-            remainingSizeUpdater.addAndGet(EvictionStrategyFifo.this, remSizeChange);
+            remainingSizeUpdater.addAndGet(EvictionStrategyFifoSync.this, remSizeChange);
             return true;
         }
 
         @Override
-        public void access()
+        public synchronized void access()
         {
-            EvictionStrategyFifo.this.access(this);
+            EvictionStrategyFifoSync.this.access(this);
         }
 
         @Override
-        public Object remove()
+        public synchronized Object remove()
         {
-            Object old;
-            do
-            {
-                old = value;
-                if (old == Specials.DISCARDED)
-                    return old;
-            }
-            while (!valueUpdater.compareAndSet(this, old, Specials.DISCARDED));
+            Object old = value;
+            if (old == Specials.DISCARDED)
+                return old;
+
+            value = Specials.DISCARDED;
             removeFromQueue(this);
 
             if (!(old instanceof Specials))
-                remainingSizeUpdater.addAndGet(EvictionStrategyFifo.this, weigher.weigh(key, old));
+                remainingSizeUpdater.addAndGet(EvictionStrategyFifoSync.this, weigher.weigh(key, old));
             owner.removeMapping(this);
             return old;
         }
@@ -105,7 +96,7 @@ public class EvictionStrategyFifo implements EvictionStrategy
     final QueueEntry<Element> head = new QueueEntry<>(null);
     volatile QueueEntry<Element> tail = head;
 
-    public EvictionStrategyFifo(Weigher weigher, long capacity)
+    public EvictionStrategyFifoSync(Weigher weigher, long capacity)
     {
         this.capacity = capacity;
         this.remainingSize = capacity;
@@ -135,13 +126,9 @@ public class EvictionStrategyFifo implements EvictionStrategy
     public boolean removeFromQueue(Element e)
     {
         QueueEntry<Element> qe;
-        do
-        {
-            qe = e.currentQueueEntry;
-            if (qe == null)
-                return false; // already removed by another thread
-        }
-        while (!currentQueueEntryUpdater.compareAndSet(e, qe, null));
+        qe = e.currentQueueEntry;
+        assert qe != null;
+        e.currentQueueEntry = null;
         assert qe.content() == e;
 
         qe.delete();
