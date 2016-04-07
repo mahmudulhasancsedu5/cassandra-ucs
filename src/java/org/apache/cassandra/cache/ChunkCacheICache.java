@@ -102,6 +102,6 @@ public class ChunkCacheICache extends ChunkCacheBase
     @Override
     public String toString()
     {
-        return cache.toString();
+        return getClass().getSimpleName() + ":" + cache.toString();
     }
 }

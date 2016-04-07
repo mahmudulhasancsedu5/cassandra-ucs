@@ -193,8 +193,8 @@ public class SharedEvictionStrategyCache<Key, Value> implements ICache<Key, Valu
     @Override
     public void clear()
     {
-        strategy.clear();
-        assert map.isEmpty();
+        for (Entry e : map.values())
+            evict(e);
     }
 
     public String toString()

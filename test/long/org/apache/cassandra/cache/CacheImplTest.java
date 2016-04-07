@@ -17,6 +17,7 @@ import org.junit.Test;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 
+import org.apache.cassandra.cache.CacheImplTest.Data;
 import org.apache.cassandra.cache.EvictionStrategy.Weigher;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.EstimatedHistogramReservoir;
@@ -258,13 +259,13 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     @Test
     public void testFifo() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyFifo()));
+        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyFifo<Long, Data>()));
     }
 
     @Test
     public void testLru() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyLru()));
+        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyLru<Long, Data>()));
     }
 
     @Test

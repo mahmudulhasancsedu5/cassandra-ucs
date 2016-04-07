@@ -13,7 +13,7 @@ public class ChunkCache
     static final int RESERVED_POOL_SPACE_IN_MB = 32;
     static final long INITIAL_CACHE_SIZE = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
 
-    static public ChunkCacheType instance = INITIAL_CACHE_SIZE > 0 ? new ChunkCacheICache(INITIAL_CACHE_SIZE) : new NoCache();
+    static public ChunkCacheType instance = INITIAL_CACHE_SIZE > 0 ? new ChunkCacheOwnMap(INITIAL_CACHE_SIZE) : new NoCache();
 
     @VisibleForTesting
     public static void switchTo(ChunkCacheType newInstance)

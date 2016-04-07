@@ -331,7 +331,7 @@ public class CachingBench extends CQLTester
 //        testCache(size -> new ChunkCacheICache(size, LirsCacheSynchronized.class));
 //    }
 
-    @Test
+//    @Test
     public void testLZ4CachedFifoSyncMmap() throws Throwable
     {
         testCache(size -> new ChunkCacheICache(EvictionStrategyFifoSync.class, size));
@@ -348,6 +348,18 @@ public class CachingBench extends CQLTester
     {
         testCache(size -> new ChunkCacheICache(EvictionStrategyLirsSync.class, size));
     }
+    @Test
+    public void testLZ4CachedLruOwnMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheOwnMap(EvictionStrategyLruSync.class, size));
+    }
+
+    @Test
+    public void testLZ4CachedLirsOwnMmap() throws Throwable
+    {
+        testCache(size -> new ChunkCacheOwnMap(EvictionStrategyLirsSync.class, size));
+    }
+
 
     @Test
     public void test4LZ4CachedMmap() throws Throwable
