@@ -10,7 +10,6 @@ import com.google.common.base.Throwables;
 
 import com.codahale.metrics.Timer;
 import org.apache.cassandra.cache.ChunkCache.ChunkCacheType;
-import org.apache.cassandra.cache.ChunkCacheBase.Buffer;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.util.BufferlessRebufferer;
 import org.apache.cassandra.io.util.ChannelProxy;
@@ -19,20 +18,23 @@ import org.apache.cassandra.io.util.SegmentedFile;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ChunkCacheOwnMap implements ChunkCacheType, SharedEvictionStrategyCache.RemovalListener<Long, ChunkCacheOwnMap.Buffer>
+public class ChunkCacheOwnMap implements ChunkCacheType, EvictionStrategy.RemovalListener
 {
     private final Map<FileSelector, ICache<Long, Buffer>> caches;
     private final EvictionStrategy evictionStrategy;
     public final CacheMissMetrics metrics;
 
-    @SuppressWarnings("unchecked")
     public ChunkCacheOwnMap(Class<? extends EvictionStrategy> evictionStrategyClass, long cacheSize)
     {
         try
         {
             caches = new HashMap<>();
-            evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.Weigher.class, long.class)
-                    .newInstance((EvictionStrategy.Weigher) ((pos, buffer) -> weight((Buffer) buffer)), cacheSize);
+            evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.RemovalListener.class,
+                                                                    EvictionStrategy.Weigher.class,
+                                                                    long.class)
+                    .newInstance((EvictionStrategy.RemovalListener) this,
+                                 (EvictionStrategy.Weigher) ((key, buffer) -> weight((Buffer) buffer)),
+                                 cacheSize);
             metrics = new CacheMissMetrics("ChunkCache", evictionStrategy);
         } catch (IllegalAccessException | IllegalArgumentException | InstantiationException | NoSuchMethodException
                 | SecurityException | InvocationTargetException e)
@@ -44,7 +46,7 @@ public class ChunkCacheOwnMap implements ChunkCacheType, SharedEvictionStrategyC
     public ChunkCacheOwnMap(long cacheSize)
     {
         caches = new HashMap<>();
-        evictionStrategy = new EvictionStrategyLirsSync((pos, buffer) -> weight((Buffer) buffer), cacheSize);
+        evictionStrategy = new EvictionStrategyLirsSync(this, (pos, buffer) -> weight((Buffer) buffer), cacheSize);
         metrics = new CacheMissMetrics("ChunkCache", evictionStrategy);
     }
 
@@ -54,9 +56,9 @@ public class ChunkCacheOwnMap implements ChunkCacheType, SharedEvictionStrategyC
     }
 
     @Override
-    public void remove(Long position, Buffer buffer)
+    public void onRemove(Object position, Object buffer)
     {
-        buffer.release();
+        ((Buffer) buffer).release();
     }
 
     @Override
@@ -199,7 +201,7 @@ public class ChunkCacheOwnMap implements ChunkCacheType, SharedEvictionStrategyC
             synchronized (caches)
             {
                 cache = caches.computeIfAbsent(new FileSelector(file),
-                                               fs -> SharedEvictionStrategyCache.create(ChunkCacheOwnMap.this, evictionStrategy));
+                                               fs -> SharedEvictionStrategyCache.create(evictionStrategy));
             }
             int chunkSize = file.chunkSize();
             assert Integer.bitCount(chunkSize) == 1;    // Must be power of two

@@ -8,19 +8,22 @@ import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 
 public class ChunkCacheICache extends ChunkCacheBase
-        implements ChunkCache.ChunkCacheType, SharedEvictionStrategyCache.RemovalListener<ChunkCacheICache.Key, ChunkCacheICache.Buffer> 
+        implements ChunkCache.ChunkCacheType, EvictionStrategy.RemovalListener
 {
     private final ICache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
 
-    @SuppressWarnings("unchecked")
     public ChunkCacheICache(Class<? extends EvictionStrategy> evictionStrategyClass, long cacheSize)
     {
         try
         {
-            EvictionStrategy evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.Weigher.class, long.class)
-                    .newInstance((EvictionStrategy.Weigher) ((key, buffer) -> weight((Buffer) buffer)), cacheSize);
-            cache = SharedEvictionStrategyCache.create(this, evictionStrategy);
+            EvictionStrategy evictionStrategy = evictionStrategyClass.getConstructor(EvictionStrategy.RemovalListener.class,
+                                                                                     EvictionStrategy.Weigher.class,
+                                                                                     long.class)
+                    .newInstance((EvictionStrategy.RemovalListener) this,
+                                 (EvictionStrategy.Weigher) ((key, buffer) -> weight((Buffer) buffer)),
+                                 cacheSize);
+            cache = SharedEvictionStrategyCache.create(evictionStrategy);
             metrics = new CacheMissMetrics("ChunkCache", cache);
         } catch (IllegalAccessException | IllegalArgumentException | InstantiationException | NoSuchMethodException
                 | SecurityException | InvocationTargetException e)
@@ -36,9 +39,9 @@ public class ChunkCacheICache extends ChunkCacheBase
     }
 
     @Override
-    public void remove(Key key, Buffer buffer)
+    public void onRemove(Object key, Object buffer)
     {
-        buffer.release();
+        ((Buffer) buffer).release();
     }
 
     @Override

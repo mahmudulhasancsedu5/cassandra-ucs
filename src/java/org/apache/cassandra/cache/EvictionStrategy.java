@@ -12,7 +12,6 @@ interface EvictionStrategy extends CacheSize
     // if add to map fails, discard element (not calling remove)
     Entry elementFor(Object key, EntryOwner owner);
 
-    void maybeEvict();
     void clear();
 
     // strategy reserves space, thus evicts (and possibly calls remove)
@@ -39,7 +38,7 @@ interface EvictionStrategy extends CacheSize
         // Entails access
         boolean casValue(Object old, Object v);
 
-        // Sets value to EMPTY. Returns old value on success.
+        // Sets value to EMPTY. Returns old value (could already be EMPTY).
         Object remove();
 
         void access();
@@ -47,8 +46,6 @@ interface EvictionStrategy extends CacheSize
 
     interface EntryOwner
     {
-        void evict(Entry entry);
-
         // entry's value is DISCARDED
         boolean removeMapping(Entry entry);
     }
@@ -56,5 +53,10 @@ interface EvictionStrategy extends CacheSize
     interface Weigher
     {
         long weigh(Object key, Object value);
+    }
+
+    interface RemovalListener
+    {
+        void onRemove(Object key, Object value);
     }
 }

@@ -2,9 +2,9 @@ package org.apache.cassandra.cache;
 
 public class EvictionStrategyLruSync extends EvictionStrategyFifoSync
 {
-    public EvictionStrategyLruSync(Weigher weigher, long capacity)
+    public EvictionStrategyLruSync(RemovalListener removalListener, Weigher weigher, long capacity)
     {
-        super(weigher, capacity);
+        super(removalListener, weigher, capacity);
     }
 
     @Override

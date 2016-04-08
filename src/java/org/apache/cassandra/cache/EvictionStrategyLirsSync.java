@@ -14,6 +14,7 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
     volatile long capacity;
 
     final Weigher weigher;
+    final RemovalListener removalListener;
 
     static final AtomicLongFieldUpdater<EvictionStrategyLirsSync> remainingSizeUpdater =
             AtomicLongFieldUpdater.newUpdater(EvictionStrategyLirsSync.class, "remainingSize");
@@ -22,19 +23,8 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
     static final AtomicLongFieldUpdater<EvictionStrategyLirsSync> capacityUpdater =
             AtomicLongFieldUpdater.newUpdater(EvictionStrategyLirsSync.class, "capacity");
 
-    enum State
-    {
-        NO_QUEUES,       // new
-        HIRQ_ONLY,       // removed on eviction
-        LIRQ_ONLY,       // not resident
-        BOTH_QUEUES,     // resident, HIR status
-        LIR_STATUS,      // lir status
-        REMOVED;
-    }
-
     class Element implements Entry
     {
-        volatile State state = State.NO_QUEUES;
         final Object key;
         volatile Object value = Specials.EMPTY;
         final EntryOwner owner;
@@ -72,11 +62,16 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
 
             long remSizeChange = -weigher.weigh(key, v);
             if (old != Specials.EMPTY)
+            {
                 remSizeChange += weigher.weigh(key, old);
+                removalListener.onRemove(key, old);
+            }
             remainingSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, remSizeChange);
-            if (state == State.LIR_STATUS)
+            if (lirQueueEntry != null && hirQueueEntry == null)
                 remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, remSizeChange);
             access();
+            maybeDemote();
+            maybeEvict();
             return true;
         }
 
@@ -89,8 +84,9 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
             if (!EvictionStrategy.isSpecial(old))
             {
                 long remSizeChange = weigher.weigh(key, old);
+                removalListener.onRemove(key, old);
                 remainingSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, remSizeChange);
-                if (state == State.LIR_STATUS)
+                if (lirQueueEntry != null && hirQueueEntry == null)
                     remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, remSizeChange);
             }
             return old;
@@ -99,129 +95,84 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
         @Override
         public synchronized void access()
         {
-            switch (state)
+            if (EvictionStrategy.isSpecial(value))
+                // Lost value. No point promoting.
+                return;
+
+            if (lirQueueEntry != null)
             {
-            case LIR_STATUS:
                 lirQueueEntry.delete();
                 addToLir(this);
-                return;
-            case LIRQ_ONLY:
-                lirQueueEntry.delete();
-                addToLir(this);
-
-                if (!EvictionStrategy.isSpecial(value))
+                if (hirQueueEntry != null)
                 {
+                    // HIR-resident-to-LIR promotion
+                    hirQueueEntry.delete();
+                    hirQueueEntry = null;
+
                     remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, -weigher.weigh(key, value));
                     maybeDemote();
                 }
-
-                state = State.LIR_STATUS;
                 return;
-            case BOTH_QUEUES:
-                // Move to LIR.
-                lirQueueEntry.delete();
-                addToLir(this);
-                hirQueueEntry.delete();
-                hirQueueEntry = null;
+            }
+            else
+            {
+                if (hirQueueEntry != null)
+                    hirQueueEntry.delete();
 
-                if (!EvictionStrategy.isSpecial(value))
-                {
-                    remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, -weigher.weigh(key, value));
-                    maybeDemote();
-                }
-
-                state = State.LIR_STATUS;
-                return;
-            case HIRQ_ONLY:
-                // we expect value to be non-null here
-                // Move to LIR.
-                assert lirQueueEntry == null;
+                // new value (or resident HIR not seen recently) goes to tail of both queues
                 addToLir(this);
-                hirQueueEntry.delete();
                 addToHir(this);
-
-                state = State.BOTH_QUEUES;
-                return;
-            case NO_QUEUES:
-                // we expect value to be non-null here
-                // Move to LIR.
-                assert lirQueueEntry == null;
-                addToLir(this);
-                assert hirQueueEntry == null;
-                addToHir(this);
-
-                state = State.BOTH_QUEUES;
-                return;
-            case REMOVED:
-                // We lost entry. Can't fix now.
-                return;
             }
         }
 
         public String toString()
         {
-            return state + ":" + key.toString();
+            return (lirQueueEntry != null ? "L" : "") +
+                   (hirQueueEntry != null ? "H" : "") +
+                   (EvictionStrategy.isSpecial(value) ? "" : "R") +
+                   ":" + key.toString();
         }
 
         public synchronized boolean evict()
         {
-            switch (state)
+            if (hirQueueEntry == null)
+                return false;       // concurrent change, yield and retry
+
+            remove();
+            hirQueueEntry.delete();
+            hirQueueEntry = null;
+            if (lirQueueEntry == null)
             {
-            case BOTH_QUEUES:
-                hirQueueEntry.delete();
-                hirQueueEntry = null;
-
-                state = State.LIRQ_ONLY;
-                owner.evict(this);
-                return true;
-            case HIRQ_ONLY:
-                hirQueueEntry.delete();
-                hirQueueEntry = null;
-
-                state = State.NO_QUEUES;
-                owner.evict(this);
                 value = Specials.DISCARDED;
                 owner.removeMapping(this);
-                return true;
-            default:
-                return false;       // concurrent change, yield and retry
             }
+            return true;
         }
 
         public synchronized boolean demote()
         {
-            switch (state)
-            {
-            case LIR_STATUS:
-                lirQueueEntry.delete();
-                lirQueueEntry = null;
-                assert hirQueueEntry == null;
-                addToHir(this);
-
-                state = State.HIRQ_ONLY;
-
-                if (!EvictionStrategy.isSpecial(value))
-                    remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, weigher.weigh(key, value));
-                return true;
-            case LIRQ_ONLY:
-                lirQueueEntry.delete();
-                lirQueueEntry = null;
-                assert hirQueueEntry == null;
-
-                state = State.NO_QUEUES;
-                value = Specials.DISCARDED;
-                owner.removeMapping(this);
-                return true;
-            case BOTH_QUEUES:
-                lirQueueEntry.delete();    // reload qe, it may have changed before we locked
-                lirQueueEntry = null;
-                assert hirQueueEntry != null;
-
-                state = State.HIRQ_ONLY;
-                return true;
-            default:
+            if (lirQueueEntry == null)
                 return false;       // concurrent change, yield and retry
+
+            lirQueueEntry.delete();
+            lirQueueEntry = null;
+            if (hirQueueEntry == null)
+            {
+                if (value != Specials.EMPTY)
+                {
+                    // LIR-to-HIR transition
+                    remainingLirSizeUpdater.addAndGet(EvictionStrategyLirsSync.this, weigher.weigh(key, value));
+                    addToHir(this);
+                }
+                else
+                {
+                    // HIR non-resident removal
+                    value = Specials.DISCARDED;
+                    owner.removeMapping(this);
+                }
             }
+            // else resident hit loses LIRQ
+            return true;
         }
     }
 
@@ -232,9 +183,10 @@ public class EvictionStrategyLirsSync implements EvictionStrategy
     @Contended
     volatile QueueEntry<Element> hirTail = hirHead;
 
-    public EvictionStrategyLirsSync(Weigher weigher, long initialCapacity)
+    public EvictionStrategyLirsSync(RemovalListener removalListener, Weigher weigher, long initialCapacity)
     {
         this.weigher = weigher;
+        this.removalListener = removalListener;
         this.capacity = initialCapacity;
         this.remainingSize = initialCapacity;
         this.remainingLirSize = lirCapacity(initialCapacity);

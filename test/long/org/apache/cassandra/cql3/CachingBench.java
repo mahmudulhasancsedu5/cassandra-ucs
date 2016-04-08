@@ -75,7 +75,7 @@ public class CachingBench extends CQLTester
     static final int EXTRA_SIZE = 1025;
     static final boolean CONCURRENT_COMPACTIONS = false;
     
-    static final long CACHE_SIZE = 32 * 1024 * 1024;
+    static final long CACHE_SIZE = 96 * 1024 * 1024;
 
     // The name of this method is important!
     // CommitLog settings must be applied before CQLTester sets up; by using the same name as its @BeforeClass method we

@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import org.apache.cassandra.cache.EvictionStrategy.Weigher;
-import org.apache.cassandra.cache.SharedEvictionStrategyCache.RemovalListener;
+import org.apache.cassandra.cache.EvictionStrategy.RemovalListener;
 
 import sun.misc.Contended;
 
@@ -22,7 +22,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
     volatile long capacity;
 
     final ConcurrentMap<Key, Entry<Key, Value>> map;
-    final RemovalListener<Key, Value> removalListener;
+    final RemovalListener removalListener;
     final Weigher weigher;
 
     @SuppressWarnings("rawtypes")
@@ -85,7 +85,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
     volatile QueueEntry<Entry<Key, Value>> hirTail = hirHead;
 
     public static<Key, Value>
-    LirsCache<Key, Value> create(RemovalListener<Key, Value> removalListener,
+    LirsCache<Key, Value> create(RemovalListener removalListener,
                                  Weigher weigher, long initialCapacity)
     {
         return new LirsCache<Key, Value>
@@ -96,7 +96,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
     }
 
     private LirsCache(ConcurrentMap<Key, Entry<Key, Value>> map,
-                     RemovalListener<Key, Value> removalListener,
+                     RemovalListener removalListener,
                      Weigher weigher,
                      long initialCapacity)
     {
@@ -296,7 +296,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
         maybeDemote();
         maybeEvict();
         if (oldValue != null)
-            removalListener.remove(key, oldValue);
+            removalListener.onRemove(key, oldValue);
     }
 
     private void maybeDemote()
@@ -464,7 +464,7 @@ public class LirsCache<Key, Value> implements ICache<Key, Value>, CacheSize
         default:
             throw new AssertionError();
         }
-        removalListener.remove(key, old);
+        removalListener.onRemove(key, old);
     }
 
     private void addToLir(Entry<Key, Value> entry)

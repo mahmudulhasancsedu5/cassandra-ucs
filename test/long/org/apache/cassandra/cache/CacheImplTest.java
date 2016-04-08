@@ -17,19 +17,18 @@ import org.junit.Test;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 
-import org.apache.cassandra.cache.CacheImplTest.Data;
 import org.apache.cassandra.cache.EvictionStrategy.Weigher;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.EstimatedHistogramReservoir;
 
-public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListener<Long, CacheImplTest.Data>, Weigher
+public class CacheImplTest implements EvictionStrategy.RemovalListener, Weigher
 {
     static final int ENTRY_SIZE = 2;
-    static final long CACHE_SIZE = 600_000;
+    static final long CACHE_SIZE = 60_000;
     static final long KEY_RANGE = 5 * CACHE_SIZE;
     static final int SWITCH_PERIOD = 20_000;
     static final int THREAD_ITERS = 150_000;
-    static final int THREADS_IN_PARALLEL = 50;
+    static final int THREADS_IN_PARALLEL = 5;
     static final int THREAD_RUNS = 200;
     static final int RELEASE_CHECKED_PERIOD = 0;
     static final int REMOVE_PERIOD = 1600;
@@ -217,7 +216,7 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
         @Override
         public void onRemoval(RemovalNotification<Long, Data> removed)
         {
-            CacheImplTest.this.remove(removed.getKey(), removed.getValue());
+            CacheImplTest.this.onRemove(removed.getKey(), removed.getValue());
         }
     }
 
@@ -235,7 +234,7 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     @Test
     public void testLirsSync() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLirsSync(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(new EvictionStrategyLirsSync(this, this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
@@ -247,25 +246,25 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     @Test
     public void testFifoSync() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyFifoSync(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(new EvictionStrategyFifoSync(this, this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
     public void testLruSync() throws InterruptedException, ExecutionException
     {
-        testCache(SharedEvictionStrategyCache.create(this, new EvictionStrategyLruSync(this, CACHE_SIZE * weigh(null, null))));
+        testCache(SharedEvictionStrategyCache.create(new EvictionStrategyLruSync(this, this, CACHE_SIZE * weigh(null, null))));
     }
 
     @Test
     public void testFifo() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyFifo<Long, Data>()));
+        testCache(CacheImpl.create((key, value) -> onRemove(key, value), this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyFifo<Long, Data>()));
     }
 
     @Test
     public void testLru() throws InterruptedException, ExecutionException
     {
-        testCache(CacheImpl.create(this::remove, this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyLru<Long, Data>()));
+        testCache(CacheImpl.create((key, value) -> onRemove(key, value), this::weigh, CACHE_SIZE * weigh(null, null), new EvictionStrategyLru<Long, Data>()));
     }
 
     @Test
@@ -356,7 +355,7 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
                 ctx.close();
 //                cache.put(key, d);
                 if (!cache.putIfAbsent(key, d))
-                    remove(key, d);
+                    onRemove(key, d);
             }
         }
         ctxReq.close();
@@ -401,8 +400,10 @@ public class CacheImplTest implements SharedEvictionStrategyCache.RemovalListene
     }
 
     @Override
-    public void remove(Long key, Data value)
+    public void onRemove(Object k, Object v)
     {
+        Long key = (Long) k;
+        Data value = (Data) v;
         value.check(ThreadLocalRandom.current(), key);
         assertFalse(value.released);
         value.released = true;

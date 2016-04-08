@@ -11,6 +11,7 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
     volatile long capacity;
 
     final Weigher weigher;
+    final RemovalListener removalListener;
 
     static final AtomicLongFieldUpdater<EvictionStrategyFifoSync> remainingSizeUpdater =
             AtomicLongFieldUpdater.newUpdater(EvictionStrategyFifoSync.class, "remainingSize");
@@ -60,8 +61,10 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
             {
                 access();
                 remSizeChange += weigher.weigh(key, old);
+                removalListener.onRemove(key, old);
             }
             remainingSizeUpdater.addAndGet(EvictionStrategyFifoSync.this, remSizeChange);
+            maybeEvict();
             return true;
         }
 
@@ -82,7 +85,10 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
             removeFromQueue(this);
 
             if (!(old instanceof Specials))
+            {
                 remainingSizeUpdater.addAndGet(EvictionStrategyFifoSync.this, weigher.weigh(key, old));
+                removalListener.onRemove(key, old);
+            }
             owner.removeMapping(this);
             return old;
         }
@@ -96,11 +102,12 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
     final QueueEntry<Element> head = new QueueEntry<>(null);
     volatile QueueEntry<Element> tail = head;
 
-    public EvictionStrategyFifoSync(Weigher weigher, long capacity)
+    public EvictionStrategyFifoSync(RemovalListener removalListener, Weigher weigher, long capacity)
     {
         this.capacity = capacity;
         this.remainingSize = capacity;
         this.weigher = weigher;
+        this.removalListener = removalListener;
     }
 
     @Override
@@ -135,7 +142,6 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
         return true;
     }
 
-    @Override
     public void maybeEvict()
     {
         while (remainingSize < 0)
@@ -143,7 +149,7 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
             Element e = takeFirst();
             if (e == null)
                 return;
-            e.owner.evict(e);
+            e.remove();
         }
     }
 
@@ -169,7 +175,7 @@ public class EvictionStrategyFifoSync implements EvictionStrategy
             Element e = takeFirst();
             if (e == null)
                 return;
-            e.owner.evict(e);
+            e.remove();
         }
     }
 
