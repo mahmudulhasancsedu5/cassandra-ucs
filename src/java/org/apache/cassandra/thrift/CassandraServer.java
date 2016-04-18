@@ -433,7 +433,7 @@ public class CassandraServer implements Cassandra.Iface
             builder.slice(def, start.hasRemaining() ? CellPath.create(start) : CellPath.BOTTOM, finish.hasRemaining() ? CellPath.create(finish) : CellPath.TOP);
 
             // We also want to add any staticly defined column if it's within the range
-            AbstractType<?> cmp = metadata.thriftColumnNameType();
+            AbstractType cmp = metadata.thriftColumnNameType();
             for (ColumnDefinition column : metadata.partitionColumns())
             {
                 if (CompactTables.isSuperColumnMapColumn(column))

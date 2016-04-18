@@ -116,7 +116,7 @@ public final class UDHelper
      * @param abstractTypes list with UDF argument types
      * @return array with argument types as {@link com.datastax.driver.core.DataType}
      */
-    public static DataType[] driverTypes(List<AbstractType<?>> abstractTypes)
+    public static DataType[] driverTypes(List<AbstractType> abstractTypes)
     {
         DataType[] argDataTypes = new DataType[abstractTypes.size()];
         for (int i = 0; i < argDataTypes.length; i++)
@@ -171,7 +171,7 @@ public final class UDHelper
         return codec.getJavaType().getRawType();
     }
 
-    public static boolean isNullOrEmpty(AbstractType<?> type, ByteBuffer bb)
+    public static boolean isNullOrEmpty(AbstractType type, ByteBuffer bb)
     {
         return bb == null ||
                (bb.remaining() == 0 && type.isEmptyValueMeaningless());

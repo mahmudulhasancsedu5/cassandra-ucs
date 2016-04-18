@@ -26,7 +26,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
 
 public class OnDiskIndexIterator extends RangeIterator<DataTerm, CombinedTerm>
 {
-    private final AbstractType<?> comparator;
+    private final AbstractType comparator;
     private final Iterator<DataTerm> terms;
 
     public OnDiskIndexIterator(OnDiskIndex index)

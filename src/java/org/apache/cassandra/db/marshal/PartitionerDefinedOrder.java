@@ -31,17 +31,17 @@ import org.apache.cassandra.utils.FBUtilities;
 
 /** for sorting columns representing row keys in the row ordering as determined by a partitioner.
  * Not intended for user-defined CFs, and will in fact error out if used with such. */
-public class PartitionerDefinedOrder extends AbstractType<ByteBuffer>
+public class PartitionerDefinedOrder extends ConcreteType<ByteBuffer>
 {
     private final IPartitioner partitioner;
 
     public PartitionerDefinedOrder(IPartitioner partitioner)
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, ByteBuffer.class);
         this.partitioner = partitioner;
     }
 
-    public static AbstractType<?> getInstance(TypeParser parser)
+    public static AbstractType getInstance(TypeParser parser)
     {
         IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
         Iterator<String> argIterator = parser.getKeyValueParameters().keySet().iterator();
@@ -60,7 +60,7 @@ public class PartitionerDefinedOrder extends AbstractType<ByteBuffer>
     }
 
     @Override
-    public ByteBuffer decompose(ByteBuffer bytes)
+    public ByteBuffer decompose(Object bytes)
     {
         throw new UnsupportedOperationException("You can't do this with a local partitioner.");
     }

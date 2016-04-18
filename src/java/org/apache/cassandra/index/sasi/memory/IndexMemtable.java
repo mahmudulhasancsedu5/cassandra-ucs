@@ -47,7 +47,7 @@ public class IndexMemtable
         if (value == null || value.remaining() == 0)
             return 0;
 
-        AbstractType<?> validator = index.columnIndex.getValidator();
+        AbstractType validator = index.columnIndex.getValidator();
         if (!TypeUtil.isValid(value, validator))
         {
             int size = value.remaining();

@@ -318,19 +318,19 @@ public class Slice
 
     public static class Serializer
     {
-        public void serialize(Slice slice, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
+        public void serialize(Slice slice, DataOutputPlus out, int version, List<AbstractType> types) throws IOException
         {
             Bound.serializer.serialize(slice.start, out, version, types);
             Bound.serializer.serialize(slice.end, out, version, types);
         }
 
-        public long serializedSize(Slice slice, int version, List<AbstractType<?>> types)
+        public long serializedSize(Slice slice, int version, List<AbstractType> types)
         {
             return Bound.serializer.serializedSize(slice.start, version, types)
                  + Bound.serializer.serializedSize(slice.end, version, types);
         }
 
-        public Slice deserialize(DataInputPlus in, int version, List<AbstractType<?>> types) throws IOException
+        public Slice deserialize(DataInputPlus in, int version, List<AbstractType> types) throws IOException
         {
             Bound start = Bound.serializer.deserialize(in, version, types);
             Bound end = Bound.serializer.deserialize(in, version, types);
@@ -523,27 +523,27 @@ public class Slice
          */
         public static class Serializer
         {
-            public void serialize(Slice.Bound bound, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
+            public void serialize(Slice.Bound bound, DataOutputPlus out, int version, List<AbstractType> types) throws IOException
             {
                 out.writeByte(bound.kind().ordinal());
                 out.writeShort(bound.size());
                 ClusteringPrefix.serializer.serializeValuesWithoutSize(bound, out, version, types);
             }
 
-            public long serializedSize(Slice.Bound bound, int version, List<AbstractType<?>> types)
+            public long serializedSize(Slice.Bound bound, int version, List<AbstractType> types)
             {
                 return 1 // kind ordinal
                      + TypeSizes.sizeof((short)bound.size())
                      + ClusteringPrefix.serializer.valuesWithoutSizeSerializedSize(bound, version, types);
             }
 
-            public Slice.Bound deserialize(DataInputPlus in, int version, List<AbstractType<?>> types) throws IOException
+            public Slice.Bound deserialize(DataInputPlus in, int version, List<AbstractType> types) throws IOException
             {
                 Kind kind = Kind.values()[in.readByte()];
                 return deserializeValues(in, kind, version, types);
             }
 
-            public Slice.Bound deserializeValues(DataInputPlus in, Kind kind, int version, List<AbstractType<?>> types) throws IOException
+            public Slice.Bound deserializeValues(DataInputPlus in, Kind kind, int version, List<AbstractType> types) throws IOException
             {
                 int size = in.readUnsignedShort();
                 if (size == 0)

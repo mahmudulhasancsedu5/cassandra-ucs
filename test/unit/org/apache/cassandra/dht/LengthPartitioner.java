@@ -152,12 +152,12 @@ public class LengthPartitioner implements IPartitioner
         return allTokens;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return IntegerType.instance;
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return new PartitionerDefinedOrder(this);
     }

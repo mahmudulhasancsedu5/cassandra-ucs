@@ -77,7 +77,7 @@ public class Util
         return testPartitioner().decorateKey(ByteBufferUtil.bytes(key));
     }
 
-    public static DecoratedKey dk(String key, AbstractType<?> type)
+    public static DecoratedKey dk(String key, AbstractType type)
     {
         return testPartitioner().decorateKey(type.fromString(key));
     }
@@ -449,7 +449,7 @@ public class Util
     public static CBuilder getCBuilderForCFM(CFMetaData cfm)
     {
         List<ColumnDefinition> clusteringColumns = cfm.clusteringColumns();
-        List<AbstractType<?>> types = new ArrayList<>(clusteringColumns.size());
+        List<AbstractType> types = new ArrayList<>(clusteringColumns.size());
         for (ColumnDefinition def : clusteringColumns)
             types.add(def.type);
         return CBuilder.create(new ClusteringComparator(types));

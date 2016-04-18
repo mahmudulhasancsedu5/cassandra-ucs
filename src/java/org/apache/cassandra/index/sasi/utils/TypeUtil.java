@@ -24,7 +24,7 @@ import org.apache.cassandra.serializers.MarshalException;
 
 public class TypeUtil
 {
-    public static boolean isValid(ByteBuffer term, AbstractType<?> validator)
+    public static boolean isValid(ByteBuffer term, AbstractType validator)
     {
         try
         {
@@ -37,7 +37,7 @@ public class TypeUtil
         }
     }
 
-    public static ByteBuffer tryUpcast(ByteBuffer term, AbstractType<?> validator)
+    public static ByteBuffer tryUpcast(ByteBuffer term, AbstractType validator)
     {
         if (term.remaining() == 0)
             return null;

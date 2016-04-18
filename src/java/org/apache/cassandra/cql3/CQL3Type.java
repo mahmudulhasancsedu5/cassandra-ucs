@@ -49,7 +49,7 @@ public interface CQL3Type
         return false;
     }
 
-    public AbstractType<?> getType();
+    public AbstractType getType();
 
     /**
      * Generates CQL literal from a binary value of this type.
@@ -84,14 +84,14 @@ public interface CQL3Type
         VARCHAR     (UTF8Type.instance),
         VARINT      (IntegerType.instance);
 
-        private final AbstractType<?> type;
+        private final AbstractType type;
 
-        private Native(AbstractType<?> type)
+        private Native(AbstractType type)
         {
             this.type = type;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -117,9 +117,9 @@ public interface CQL3Type
 
     public static class Custom implements CQL3Type
     {
-        private final AbstractType<?> type;
+        private final AbstractType type;
 
-        public Custom(AbstractType<?> type)
+        public Custom(AbstractType type)
         {
             this.type = type;
         }
@@ -129,7 +129,7 @@ public interface CQL3Type
             this(TypeParser.parse(className));
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -172,7 +172,7 @@ public interface CQL3Type
             this.type = type;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -191,16 +191,16 @@ public interface CQL3Type
             buffer = buffer.duplicate();
             int size = CollectionSerializer.readCollectionSize(buffer, version);
 
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST:
-                    CQL3Type elements = ((ListType) type).getElementsType().asCQL3Type();
+                    CQL3Type elements = ((ListType<?>) type).getElementsType().asCQL3Type();
                     target.append('[');
                     generateSetOrListCQLLiteral(buffer, version, target, size, elements);
                     target.append(']');
                     break;
                 case SET:
-                    elements = ((SetType) type).getElementsType().asCQL3Type();
+                    elements = ((SetType<?>) type).getElementsType().asCQL3Type();
                     target.append('{');
                     generateSetOrListCQLLiteral(buffer, version, target, size, elements);
                     target.append('}');
@@ -216,8 +216,8 @@ public interface CQL3Type
 
         private void generateMapCQLLiteral(ByteBuffer buffer, int version, StringBuilder target, int size)
         {
-            CQL3Type keys = ((MapType) type).getKeysType().asCQL3Type();
-            CQL3Type values = ((MapType) type).getValuesType().asCQL3Type();
+            CQL3Type keys = ((MapType<?, ?>) type).getKeysType().asCQL3Type();
+            CQL3Type values = ((MapType<?, ?>) type).getValuesType().asCQL3Type();
             for (int i = 0; i < size; i++)
             {
                 if (i > 0)
@@ -262,19 +262,19 @@ public interface CQL3Type
         {
             boolean isFrozen = !this.type.isMultiCell();
             StringBuilder sb = new StringBuilder(isFrozen ? "frozen<" : "");
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST:
-                    AbstractType<?> listType = ((ListType)type).getElementsType();
+                    AbstractType listType = ((ListType<?>)type).getElementsType();
                     sb.append("list<").append(listType.asCQL3Type());
                     break;
                 case SET:
-                    AbstractType<?> setType = ((SetType)type).getElementsType();
+                    AbstractType setType = ((SetType<?>)type).getElementsType();
                     sb.append("set<").append(setType.asCQL3Type());
                     break;
                 case MAP:
-                    AbstractType<?> keysType = ((MapType)type).getKeysType();
-                    AbstractType<?> valuesType = ((MapType)type).getValuesType();
+                    AbstractType keysType = ((MapType<?, ?>)type).getKeysType();
+                    AbstractType valuesType = ((MapType<?, ?>)type).getValuesType();
                     sb.append("map<").append(keysType.asCQL3Type()).append(", ").append(valuesType.asCQL3Type());
                     break;
                 default:
@@ -309,7 +309,7 @@ public interface CQL3Type
             return true;
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -397,7 +397,7 @@ public interface CQL3Type
             return new Tuple(type);
         }
 
-        public AbstractType<?> getType()
+        public AbstractType getType()
         {
             return type;
         }
@@ -664,7 +664,7 @@ public interface CQL3Type
                         throwNestedNonFrozenError(keys);
                 }
 
-                AbstractType<?> valueType = values.prepare(keyspace, udts).getType();
+                AbstractType valueType = values.prepare(keyspace, udts).getType();
                 switch (kind)
                 {
                     case LIST:
@@ -808,7 +808,7 @@ public interface CQL3Type
                 if (!frozen)
                     freeze();
 
-                List<AbstractType<?>> ts = new ArrayList<>(types.size());
+                List<AbstractType> ts = new ArrayList<>(types.size());
                 for (CQL3Type.Raw t : types)
                 {
                     if (t.isCounter())

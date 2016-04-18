@@ -50,7 +50,7 @@ public class PrefixTermTree extends RangeTermTree
                           Trie<ByteBuffer, Set<SSTableIndex>> trie,
                           IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> ranges,
                           OnDiskIndexBuilder.Mode mode,
-                          AbstractType<?> comparator)
+                          AbstractType comparator)
     {
         super(min, max, ranges, comparator);
 
@@ -72,7 +72,7 @@ public class PrefixTermTree extends RangeTermTree
     {
         private final PatriciaTrie<ByteBuffer, Set<SSTableIndex>> trie;
 
-        protected Builder(OnDiskIndexBuilder.Mode mode, final AbstractType<?> comparator)
+        protected Builder(OnDiskIndexBuilder.Mode mode, final AbstractType comparator)
         {
             super(mode, comparator);
             trie = new PatriciaTrie<>(new ByteBufferKeyAnalyzer(comparator));
@@ -103,9 +103,9 @@ public class PrefixTermTree extends RangeTermTree
 
     private static class ByteBufferKeyAnalyzer implements KeyAnalyzer<ByteBuffer>
     {
-        private final AbstractType<?> comparator;
+        private final AbstractType comparator;
 
-        public ByteBufferKeyAnalyzer(AbstractType<?> comparator)
+        public ByteBufferKeyAnalyzer(AbstractType comparator)
         {
             this.comparator = comparator;
         }

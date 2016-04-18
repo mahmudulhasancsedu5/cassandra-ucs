@@ -93,7 +93,7 @@ public final class DropAggregateStatement extends SchemaAlteringStatement
         {
             if (Schema.instance.getKSMetaData(functionName.keyspace) != null)
             {
-                List<AbstractType<?>> argTypes = new ArrayList<>(argRawTypes.size());
+                List<AbstractType> argTypes = new ArrayList<>(argRawTypes.size());
                 for (CQL3Type.Raw rawType : argRawTypes)
                     argTypes.add(prepareType("arguments", rawType));
 
@@ -136,7 +136,7 @@ public final class DropAggregateStatement extends SchemaAlteringStatement
 
     }
 
-    private AbstractType<?> prepareType(String typeName, CQL3Type.Raw rawType)
+    private AbstractType prepareType(String typeName, CQL3Type.Raw rawType)
     {
         if (rawType.isFrozen())
             throw new InvalidRequestException(String.format("The function %s should not be frozen; remove the frozen<> modifier", typeName));
@@ -146,7 +146,7 @@ public final class DropAggregateStatement extends SchemaAlteringStatement
         if (!rawType.canBeNonFrozen())
             rawType.freeze();
 
-        AbstractType<?> type = rawType.prepare(functionName.keyspace).getType();
+        AbstractType type = rawType.prepare(functionName.keyspace).getType();
         return type;
     }
 }

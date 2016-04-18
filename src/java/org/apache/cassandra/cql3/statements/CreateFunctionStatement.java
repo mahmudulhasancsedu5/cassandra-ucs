@@ -52,8 +52,8 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
     private final CQL3Type.Raw rawReturnType;
     private final boolean calledOnNullInput;
 
-    private List<AbstractType<?>> argTypes;
-    private AbstractType<?> returnType;
+    private List<AbstractType> argTypes;
+    private AbstractType returnType;
 
     public CreateFunctionStatement(FunctionName functionName,
                                    String language,
@@ -168,7 +168,7 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
                                       udFunction.name().keyspace, udFunction.name().name, AbstractType.asCQLTypeStringList(udFunction.argTypes()));
     }
 
-    private AbstractType<?> prepareType(String typeName, CQL3Type.Raw rawType)
+    private AbstractType prepareType(String typeName, CQL3Type.Raw rawType)
     {
         if (rawType.isFrozen())
             throw new InvalidRequestException(String.format("The function %s should not be frozen; remove the frozen<> modifier", typeName));
@@ -178,7 +178,7 @@ public final class CreateFunctionStatement extends SchemaAlteringStatement
         if (!rawType.canBeNonFrozen())
             rawType.freeze();
 
-        AbstractType<?> type = rawType.prepare(functionName.keyspace).getType();
+        AbstractType type = rawType.prepare(functionName.keyspace).getType();
         return type;
     }
 }

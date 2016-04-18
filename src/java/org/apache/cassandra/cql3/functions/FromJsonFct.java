@@ -33,9 +33,9 @@ public class FromJsonFct extends NativeScalarFunction
 {
     public static final FunctionName NAME = FunctionName.nativeFunction("fromjson");
 
-    private static final Map<AbstractType<?>, FromJsonFct> instances = new ConcurrentHashMap<>();
+    private static final Map<AbstractType, FromJsonFct> instances = new ConcurrentHashMap<>();
 
-    public static FromJsonFct getInstance(AbstractType<?> returnType)
+    public static FromJsonFct getInstance(AbstractType returnType)
     {
         FromJsonFct func = instances.get(returnType);
         if (func == null)
@@ -46,7 +46,7 @@ public class FromJsonFct extends NativeScalarFunction
         return func;
     }
 
-    private FromJsonFct(AbstractType<?> returnType)
+    private FromJsonFct(AbstractType returnType)
     {
         super("fromjson", returnType, UTF8Type.instance);
     }

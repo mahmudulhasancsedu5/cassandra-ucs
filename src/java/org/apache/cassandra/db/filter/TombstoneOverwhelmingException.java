@@ -40,7 +40,7 @@ public class TombstoneOverwhelmingException extends RuntimeException
             sb.append("(");
 
         // TODO: We should probably make that a lot easier/transparent for partition keys
-        AbstractType<?> pkType = metadata.getKeyValidator();
+        AbstractType pkType = metadata.getKeyValidator();
         if (pkType instanceof CompositeType)
         {
             CompositeType ct = (CompositeType)pkType;

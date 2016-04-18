@@ -49,7 +49,7 @@ public class TypeCast extends Term.Raw
 
     public AssignmentTestable.TestResult testAssignment(String keyspace, ColumnSpecification receiver)
     {
-        AbstractType<?> castedType = type.prepare(keyspace).getType();
+        AbstractType castedType = type.prepare(keyspace).getType();
         if (receiver.type.equals(castedType))
             return AssignmentTestable.TestResult.EXACT_MATCH;
         else if (receiver.type.isValueCompatibleWith(castedType))

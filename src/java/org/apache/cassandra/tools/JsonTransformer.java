@@ -95,7 +95,7 @@ public final class JsonTransformer
 
     private void serializePartitionKey(DecoratedKey key)
     {
-        AbstractType<?> keyValidator = metadata.getKeyValidator();
+        AbstractType keyValidator = metadata.getKeyValidator();
         objectIndenter.setCompact(true);
         try
         {
@@ -119,7 +119,7 @@ public final class JsonTransformer
                 int i = 0;
                 while (keyBytes.remaining() > 0 && i < compositeType.getComponents().size())
                 {
-                    AbstractType<?> colType = compositeType.getComponents().get(i);
+                    AbstractType colType = compositeType.getComponents().get(i);
 
                     ByteBuffer value = ByteBufferUtil.readBytesWithShortLength(keyBytes);
                     String colValue = colType.getString(value);
@@ -366,7 +366,7 @@ public final class JsonTransformer
             json.writeStartObject();
             objectIndenter.setCompact(true);
             json.writeFieldName("name");
-            AbstractType<?> type = cell.column().type;
+            AbstractType type = cell.column().type;
             json.writeString(cell.column().name.toCQLString());
 
             if (cell.path() != null && cell.path().size() > 0)

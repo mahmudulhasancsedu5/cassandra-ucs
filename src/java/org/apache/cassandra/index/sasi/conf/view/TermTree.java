@@ -34,10 +34,10 @@ public interface TermTree
     abstract class Builder
     {
         protected final OnDiskIndexBuilder.Mode mode;
-        protected final AbstractType<?> comparator;
+        protected final AbstractType comparator;
         protected ByteBuffer min, max;
 
-        protected Builder(OnDiskIndexBuilder.Mode mode, AbstractType<?> comparator)
+        protected Builder(OnDiskIndexBuilder.Mode mode, AbstractType comparator)
         {
             this.mode = mode;
             this.comparator = comparator;

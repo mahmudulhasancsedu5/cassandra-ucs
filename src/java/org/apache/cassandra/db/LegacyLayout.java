@@ -61,7 +61,7 @@ public abstract class LegacyLayout
 
     private LegacyLayout() {}
 
-    public static AbstractType<?> makeLegacyComparator(CFMetaData metadata)
+    public static AbstractType makeLegacyComparator(CFMetaData metadata)
     {
         ClusteringComparator comparator = metadata.comparator;
         if (!metadata.isCompound())
@@ -71,7 +71,7 @@ public abstract class LegacyLayout
         }
 
         boolean hasCollections = metadata.hasCollectionColumns() || metadata.hasDroppedCollectionColumns();
-        List<AbstractType<?>> types = new ArrayList<>(comparator.size() + (metadata.isDense() ? 0 : 1) + (hasCollections ? 1 : 0));
+        List<AbstractType> types = new ArrayList<>(comparator.size() + (metadata.isDense() ? 0 : 1) + (hasCollections ? 1 : 0));
 
         types.addAll(comparator.subtypes());
 
@@ -891,7 +891,7 @@ public abstract class LegacyLayout
 
                 if (c1.collectionElement != null)
                 {
-                    AbstractType<?> colCmp = ((CollectionType)c1.column.type).nameComparator();
+                    AbstractType colCmp = ((CollectionType)c1.column.type).nameComparator();
                     return colCmp.compare(c1.collectionElement, c2.collectionElement);
                 }
                 return 0;
@@ -2201,7 +2201,7 @@ public abstract class LegacyLayout
             if (size == 0)
                 return;
 
-            List<AbstractType<?>> types = new ArrayList<>(comparator.clusteringComparator.subtypes());
+            List<AbstractType> types = new ArrayList<>(comparator.clusteringComparator.subtypes());
             if (!metadata.isDense())
                 types.add(UTF8Type.instance);
             CompositeType type = CompositeType.getInstance(types);
@@ -2240,7 +2240,7 @@ public abstract class LegacyLayout
             if (this.size == 0)
                 return size;
 
-            List<AbstractType<?>> types = new ArrayList<>(comparator.clusteringComparator.subtypes());
+            List<AbstractType> types = new ArrayList<>(comparator.clusteringComparator.subtypes());
             if (!metadata.isDense())
                 types.add(UTF8Type.instance);
             CompositeType type = CompositeType.getInstance(types);

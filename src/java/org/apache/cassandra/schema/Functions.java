@@ -109,7 +109,7 @@ public final class Functions implements Iterable<Function>
      * @param argTypes function argument types
      * @return an empty {@link Optional} if the function name is not found; a non-empty optional of {@link Function} otherwise
      */
-    public Optional<Function> find(FunctionName name, List<AbstractType<?>> argTypes)
+    public Optional<Function> find(FunctionName name, List<AbstractType> argTypes)
     {
         return get(name).stream()
                         .filter(fun -> typesMatch(fun.argTypes(), argTypes))
@@ -129,12 +129,12 @@ public final class Functions implements Iterable<Function>
      * or
      *    ALTER TYPE foo RENAME ...
      */
-    public static boolean typesMatch(AbstractType<?> t1, AbstractType<?> t2)
+    public static boolean typesMatch(AbstractType t1, AbstractType t2)
     {
         return t1.freeze().asCQL3Type().toString().equals(t2.freeze().asCQL3Type().toString());
     }
 
-    public static boolean typesMatch(List<AbstractType<?>> t1, List<AbstractType<?>> t2)
+    public static boolean typesMatch(List<AbstractType> t1, List<AbstractType> t2)
     {
         if (t1.size() != t2.size())
             return false;
@@ -146,15 +146,15 @@ public final class Functions implements Iterable<Function>
         return true;
     }
 
-    public static int typeHashCode(AbstractType<?> t)
+    public static int typeHashCode(AbstractType t)
     {
         return t.asCQL3Type().toString().hashCode();
     }
 
-    public static int typeHashCode(List<AbstractType<?>> types)
+    public static int typeHashCode(List<AbstractType> types)
     {
         int h = 0;
-        for (AbstractType<?> type : types)
+        for (AbstractType type : types)
             h = h * 31 + typeHashCode(type);
         return h;
     }
@@ -173,7 +173,7 @@ public final class Functions implements Iterable<Function>
     /**
      * Creates a Functions instance with the function with the provided name and argument types removed
      */
-    public Functions without(FunctionName name, List<AbstractType<?>> argTypes)
+    public Functions without(FunctionName name, List<AbstractType> argTypes)
     {
         Function fun =
             find(name, argTypes).orElseThrow(() -> new IllegalStateException(String.format("Function %s doesn't exists", name)));

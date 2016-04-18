@@ -192,11 +192,11 @@ final class SelectorFactories implements Iterable<Selector.Factory>
      *
      * @return a list of types
      */
-    public List<AbstractType<?>> getReturnTypes()
+    public List<AbstractType> getReturnTypes()
     {
-        return Lists.transform(factories, new com.google.common.base.Function<Selector.Factory, AbstractType<?>>()
+        return Lists.transform(factories, new com.google.common.base.Function<Selector.Factory, AbstractType>()
         {
-            public AbstractType<?> apply(Selector.Factory factory)
+            public AbstractType apply(Selector.Factory factory)
             {
                 return factory.getReturnType();
             }

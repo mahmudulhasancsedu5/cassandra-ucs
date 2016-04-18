@@ -27,13 +27,13 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TimeUUIDSerializer;
 
-public class TimeUUIDType extends AbstractType<UUID>
+public class TimeUUIDType extends ConcreteType<UUID>
 {
     public static final TimeUUIDType instance = new TimeUUIDType();
 
     TimeUUIDType()
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, UUID.class);
     } // singleton
 
     public boolean isEmptyValueMeaningless()

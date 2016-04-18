@@ -37,7 +37,7 @@ public class TypeParser
     private int idx;
 
     // A cache of parsed string, specially useful for DynamicCompositeType
-    private static final Map<String, AbstractType<?>> cache = new HashMap<>();
+    private static final Map<String, AbstractType> cache = new HashMap<>();
 
     public static final TypeParser EMPTY_PARSER = new TypeParser("", 0);
 
@@ -55,12 +55,12 @@ public class TypeParser
     /**
      * Parse a string containing an type definition.
      */
-    public static AbstractType<?> parse(String str) throws SyntaxException, ConfigurationException
+    public static AbstractType parse(String str) throws SyntaxException, ConfigurationException
     {
         if (str == null)
             return BytesType.instance;
 
-        AbstractType<?> type = cache.get(str);
+        AbstractType type = cache.get(str);
 
         if (type != null)
             return type;
@@ -88,7 +88,7 @@ public class TypeParser
         return type;
     }
 
-    public static AbstractType<?> parse(CharSequence compareWith) throws SyntaxException, ConfigurationException
+    public static AbstractType parse(CharSequence compareWith) throws SyntaxException, ConfigurationException
     {
         return parse(compareWith == null ? null : compareWith.toString());
     }
@@ -96,7 +96,7 @@ public class TypeParser
     /**
      * Parse an AbstractType from current position of this parser.
      */
-    public AbstractType<?> parse() throws SyntaxException, ConfigurationException
+    public AbstractType parse() throws SyntaxException, ConfigurationException
     {
         skipBlank();
         String name = readNextIdentifier();
@@ -145,9 +145,9 @@ public class TypeParser
         throw new SyntaxException(String.format("Syntax error parsing '%s' at char %d: unexpected end of string", str, idx));
     }
 
-    public List<AbstractType<?>> getTypeParameters() throws SyntaxException, ConfigurationException
+    public List<AbstractType> getTypeParameters() throws SyntaxException, ConfigurationException
     {
-        List<AbstractType<?>> list = new ArrayList<>();
+        List<AbstractType> list = new ArrayList<>();
 
         if (isEOS())
             return list;
@@ -179,9 +179,9 @@ public class TypeParser
         throw new SyntaxException(String.format("Syntax error parsing '%s' at char %d: unexpected end of string", str, idx));
     }
 
-    public Map<Byte, AbstractType<?>> getAliasParameters() throws SyntaxException, ConfigurationException
+    public Map<Byte, AbstractType> getAliasParameters() throws SyntaxException, ConfigurationException
     {
-        Map<Byte, AbstractType<?>> map = new HashMap<>();
+        Map<Byte, AbstractType> map = new HashMap<>();
 
         if (isEOS())
             return map;
@@ -257,7 +257,7 @@ public class TypeParser
             skipBlank();
             try
             {
-                AbstractType<?> type = parse();
+                AbstractType type = parse();
                 if (!(type instanceof CollectionType))
                     throw new SyntaxException(type + " is not a collection type");
                 map.put(bb, (CollectionType)type);
@@ -328,14 +328,14 @@ public class TypeParser
         throw new SyntaxException(String.format("Syntax error parsing '%s' at char %d: unexpected end of string", str, idx));
     }
 
-    private static AbstractType<?> getAbstractType(String compareWith) throws ConfigurationException
+    private static AbstractType getAbstractType(String compareWith) throws ConfigurationException
     {
         String className = compareWith.contains(".") ? compareWith : "org.apache.cassandra.db.marshal." + compareWith;
-        Class<? extends AbstractType<?>> typeClass = FBUtilities.<AbstractType<?>>classForName(className, "abstract-type");
+        Class<? extends AbstractType> typeClass = FBUtilities.<AbstractType>classForName(className, "abstract-type");
         try
         {
             Field field = typeClass.getDeclaredField("instance");
-            return (AbstractType<?>) field.get(null);
+            return (AbstractType) field.get(null);
         }
         catch (NoSuchFieldException | IllegalAccessException e)
         {
@@ -344,19 +344,19 @@ public class TypeParser
         }
     }
 
-    private static AbstractType<?> getAbstractType(String compareWith, TypeParser parser) throws SyntaxException, ConfigurationException
+    private static AbstractType getAbstractType(String compareWith, TypeParser parser) throws SyntaxException, ConfigurationException
     {
         String className = compareWith.contains(".") ? compareWith : "org.apache.cassandra.db.marshal." + compareWith;
-        Class<? extends AbstractType<?>> typeClass = FBUtilities.<AbstractType<?>>classForName(className, "abstract-type");
+        Class<? extends AbstractType> typeClass = FBUtilities.<AbstractType>classForName(className, "abstract-type");
         try
         {
             Method method = typeClass.getDeclaredMethod("getInstance", TypeParser.class);
-            return (AbstractType<?>) method.invoke(null, parser);
+            return (AbstractType) method.invoke(null, parser);
         }
         catch (NoSuchMethodException | IllegalAccessException e)
         {
             // Trying to see if we have an instance field and apply the default parameter to it
-            AbstractType<?> type = getRawAbstractType(typeClass);
+            AbstractType type = getRawAbstractType(typeClass);
             return AbstractType.parseDefaultParameters(type, parser);
         }
         catch (InvocationTargetException e)
@@ -367,12 +367,12 @@ public class TypeParser
         }
     }
 
-    private static AbstractType<?> getRawAbstractType(Class<? extends AbstractType<?>> typeClass) throws ConfigurationException
+    private static AbstractType getRawAbstractType(Class<? extends AbstractType> typeClass) throws ConfigurationException
     {
         try
         {
             Field field = typeClass.getDeclaredField("instance");
-            return (AbstractType<?>) field.get(null);
+            return (AbstractType) field.get(null);
         }
         catch (NoSuchFieldException | IllegalAccessException e)
         {
@@ -380,12 +380,12 @@ public class TypeParser
         }
     }
 
-    private static AbstractType<?> getRawAbstractType(Class<? extends AbstractType<?>> typeClass, TypeParser parser) throws ConfigurationException
+    private static AbstractType getRawAbstractType(Class<? extends AbstractType> typeClass, TypeParser parser) throws ConfigurationException
     {
         try
         {
             Method method = typeClass.getDeclaredMethod("getInstance", TypeParser.class);
-            return (AbstractType<?>) method.invoke(null, parser);
+            return (AbstractType) method.invoke(null, parser);
         }
         catch (NoSuchMethodException | IllegalAccessException e)
         {
@@ -478,19 +478,19 @@ public class TypeParser
     /**
      * Helper function to ease the writing of AbstractType.toString() methods.
      */
-    public static String stringifyAliasesParameters(Map<Byte, AbstractType<?>> aliases)
+    public static String stringifyAliasesParameters(Map<Byte, AbstractType> aliases)
     {
         StringBuilder sb = new StringBuilder();
         sb.append('(');
-        Iterator<Map.Entry<Byte, AbstractType<?>>> iter = aliases.entrySet().iterator();
+        Iterator<Map.Entry<Byte, AbstractType>> iter = aliases.entrySet().iterator();
         if (iter.hasNext())
         {
-            Map.Entry<Byte, AbstractType<?>> entry = iter.next();
+            Map.Entry<Byte, AbstractType> entry = iter.next();
             sb.append((char)(byte)entry.getKey()).append("=>").append(entry.getValue());
         }
         while (iter.hasNext())
         {
-            Map.Entry<Byte, AbstractType<?>> entry = iter.next();
+            Map.Entry<Byte, AbstractType> entry = iter.next();
             sb.append(',').append((char)(byte)entry.getKey()).append("=>").append(entry.getValue());
         }
         sb.append(')');
@@ -500,7 +500,7 @@ public class TypeParser
     /**
      * Helper function to ease the writing of AbstractType.toString() methods.
      */
-    public static String stringifyTypeParameters(List<AbstractType<?>> types)
+    public static String stringifyTypeParameters(List<AbstractType> types)
     {
         return stringifyTypeParameters(types, false);
     }
@@ -508,7 +508,7 @@ public class TypeParser
     /**
      * Helper function to ease the writing of AbstractType.toString() methods.
      */
-    public static String stringifyTypeParameters(List<AbstractType<?>> types, boolean ignoreFreezing)
+    public static String stringifyTypeParameters(List<AbstractType> types, boolean ignoreFreezing)
     {
         StringBuilder sb = new StringBuilder("(");
         for (int i = 0; i < types.size(); i++)
@@ -539,7 +539,7 @@ public class TypeParser
     }
 
     public static String stringifyUserTypeParameters(String keysace, ByteBuffer typeName, List<ByteBuffer> columnNames,
-                                                     List<AbstractType<?>> columnTypes, boolean ignoreFreezing)
+                                                     List<AbstractType> columnTypes, boolean ignoreFreezing)
     {
         StringBuilder sb = new StringBuilder();
         sb.append('(').append(keysace).append(",").append(ByteBufferUtil.bytesToHex(typeName));

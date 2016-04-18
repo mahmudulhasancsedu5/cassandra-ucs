@@ -243,7 +243,7 @@ public abstract class CassandraIndex implements Index
         return supportsExpression(expression.column(), expression.operator());
     }
 
-    public AbstractType<?> customExpressionValueType()
+    public AbstractType customExpressionValueType()
     {
         return null;
     }
@@ -718,7 +718,7 @@ public abstract class CassandraIndex implements Index
         Pair<ColumnDefinition, IndexTarget.Type> target = TargetParser.parse(baseCfsMetadata, indexMetadata);
         CassandraIndexFunctions utils = getFunctions(indexMetadata, target);
         ColumnDefinition indexedColumn = target.left;
-        AbstractType<?> indexedValueType = utils.getIndexedValueType(indexedColumn);
+        AbstractType indexedValueType = utils.getIndexedValueType(indexedColumn);
 
         // Tables for legacy KEYS indexes are non-compound and dense
         CFMetaData.Builder builder = indexMetadata.isKeys()
@@ -771,7 +771,7 @@ public abstract class CassandraIndex implements Index
         ColumnDefinition indexedColumn = target.left;
         if (indexedColumn.type.isCollection() && indexedColumn.type.isMultiCell())
         {
-            switch (((CollectionType)indexedColumn.type).kind)
+            switch (((CollectionType)indexedColumn.type).kind())
             {
                 case LIST:
                     return CassandraIndexFunctions.COLLECTION_VALUE_INDEX_FUNCTIONS;

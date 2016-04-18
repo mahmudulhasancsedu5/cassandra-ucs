@@ -85,7 +85,7 @@ public class MappedBuffer implements Closeable
         }
     }
 
-    public int comparePageTo(long offset, int length, AbstractType<?> comparator, ByteBuffer other)
+    public int comparePageTo(long offset, int length, AbstractType comparator, ByteBuffer other)
     {
         return comparator.compare(getPageRegion(offset, length), other);
     }

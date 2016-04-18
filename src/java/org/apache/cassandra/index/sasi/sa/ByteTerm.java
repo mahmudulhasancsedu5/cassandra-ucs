@@ -39,7 +39,7 @@ public class ByteTerm extends Term<ByteBuffer>
         return (ByteBuffer) value.duplicate().position(value.position() + start);
     }
 
-    public int compareTo(AbstractType<?> comparator, Term other)
+    public int compareTo(AbstractType comparator, Term other)
     {
         return comparator.compare(value, (ByteBuffer) other.value);
     }

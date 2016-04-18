@@ -123,7 +123,7 @@ public abstract class ColumnSubselection implements Comparable<ColumnSubselectio
         public String toString()
         {
             // This assert we're dealing with a collection since that's the only thing it's used for so far.
-            AbstractType<?> type = ((CollectionType<?>)column().type).nameComparator();
+            AbstractType type = ((CollectionType)column().type).nameComparator();
             return String.format("[%s:%s]", from == CellPath.BOTTOM ? "" : type.getString(from.get(0)), to == CellPath.TOP ? "" : type.getString(to.get(0)));
         }
     }
@@ -157,7 +157,7 @@ public abstract class ColumnSubselection implements Comparable<ColumnSubselectio
         public String toString()
         {
             // This assert we're dealing with a collection since that's the only thing it's used for so far.
-            AbstractType<?> type = ((CollectionType<?>)column().type).nameComparator();
+            AbstractType type = ((CollectionType)column().type).nameComparator();
             return String.format("[%s]", type.getString(element.get(0)));
         }
     }

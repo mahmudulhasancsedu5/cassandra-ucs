@@ -26,11 +26,11 @@ import org.apache.cassandra.db.marshal.AbstractType;
 
 public class CombinedTerm implements CombinedValue<DataTerm>
 {
-    private final AbstractType<?> comparator;
+    private final AbstractType comparator;
     private final DataTerm term;
     private final List<DataTerm> mergedTerms = new ArrayList<>();
 
-    public CombinedTerm(AbstractType<?> comparator, DataTerm term)
+    public CombinedTerm(AbstractType comparator, DataTerm term)
     {
         this.comparator = comparator;
         this.term = term;

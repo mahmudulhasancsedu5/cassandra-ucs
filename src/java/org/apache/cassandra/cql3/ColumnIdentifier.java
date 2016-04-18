@@ -90,7 +90,7 @@ public class ColumnIdentifier extends Selectable implements IMeasurableMemory, C
         this.interned = false;
     }
 
-    public ColumnIdentifier(ByteBuffer bytes, AbstractType<?> type)
+    public ColumnIdentifier(ByteBuffer bytes, AbstractType type)
     {
         this(bytes, type.getString(bytes), false);
     }
@@ -103,7 +103,7 @@ public class ColumnIdentifier extends Selectable implements IMeasurableMemory, C
         this.prefixComparison = prefixComparison(bytes);
     }
 
-    public static ColumnIdentifier getInterned(ByteBuffer bytes, AbstractType<?> type)
+    public static ColumnIdentifier getInterned(ByteBuffer bytes, AbstractType type)
     {
         return getInterned(bytes, type.getString(bytes));
     }
@@ -236,7 +236,7 @@ public class ColumnIdentifier extends Selectable implements IMeasurableMemory, C
             if (!cfm.isStaticCompactTable())
                 return getInterned(text, true);
 
-            AbstractType<?> thriftColumnNameType = cfm.thriftColumnNameType();
+            AbstractType thriftColumnNameType = cfm.thriftColumnNameType();
             if (thriftColumnNameType instanceof UTF8Type)
                 return getInterned(text, true);
 

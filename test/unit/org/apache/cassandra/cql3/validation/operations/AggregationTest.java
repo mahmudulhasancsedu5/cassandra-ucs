@@ -1907,7 +1907,7 @@ public class AggregationTest extends CQLTester
                        "STYPE '" + type + "'\n" +
                        "INITCOND 's@foo:i@32'");
 
-            AbstractType<?> compositeType = TypeParser.parse(type);
+            AbstractType compositeType = TypeParser.parse(type);
             ByteBuffer compositeTypeValue = compositeType.fromString("s@foo:i@32");
             String compositeTypeString = compositeType.asCQL3Type().toCQLLiteral(compositeTypeValue, Server.CURRENT_VERSION);
             // ensure that the composite type is serialized using the 'blob syntax'

@@ -124,14 +124,14 @@ public interface Clustering extends ClusteringPrefix
      */
     public static class Serializer
     {
-        public void serialize(Clustering clustering, DataOutputPlus out, int version, List<AbstractType<?>> types) throws IOException
+        public void serialize(Clustering clustering, DataOutputPlus out, int version, List<AbstractType> types) throws IOException
         {
             assert clustering != STATIC_CLUSTERING : "We should never serialize a static clustering";
             assert clustering.size() == types.size() : "Invalid clustering for the table: " + clustering;
             ClusteringPrefix.serializer.serializeValuesWithoutSize(clustering, out, version, types);
         }
 
-        public ByteBuffer serialize(Clustering clustering, int version, List<AbstractType<?>> types)
+        public ByteBuffer serialize(Clustering clustering, int version, List<AbstractType> types)
         {
             try (DataOutputBuffer buffer = new DataOutputBuffer((int)serializedSize(clustering, version, types)))
             {
@@ -144,12 +144,12 @@ public interface Clustering extends ClusteringPrefix
             }
         }
 
-        public long serializedSize(Clustering clustering, int version, List<AbstractType<?>> types)
+        public long serializedSize(Clustering clustering, int version, List<AbstractType> types)
         {
             return ClusteringPrefix.serializer.valuesWithoutSizeSerializedSize(clustering, version, types);
         }
 
-        public Clustering deserialize(DataInputPlus in, int version, List<AbstractType<?>> types) throws IOException
+        public Clustering deserialize(DataInputPlus in, int version, List<AbstractType> types) throws IOException
         {
             if (types.isEmpty())
                 return EMPTY;
@@ -158,7 +158,7 @@ public interface Clustering extends ClusteringPrefix
             return new BufferClustering(values);
         }
 
-        public Clustering deserialize(ByteBuffer in, int version, List<AbstractType<?>> types)
+        public Clustering deserialize(ByteBuffer in, int version, List<AbstractType> types)
         {
             try (DataInputBuffer buffer = new DataInputBuffer(in, true))
             {

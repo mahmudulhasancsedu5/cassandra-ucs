@@ -37,13 +37,13 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * pre-unix-epoch dates, sorting them *after* post-unix-epoch ones (due to it's
  * use of unsigned bytes comparison).
  */
-public class TimestampType extends AbstractType<Date>
+public class TimestampType extends ConcreteType<Date>
 {
     private static final Logger logger = LoggerFactory.getLogger(TimestampType.class);
 
     public static final TimestampType instance = new TimestampType();
 
-    private TimestampType() {super(ComparisonType.CUSTOM);} // singleton
+    private TimestampType() {super(ComparisonType.CUSTOM, Date.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {
@@ -94,7 +94,7 @@ public class TimestampType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (super.isCompatibleWith(previous))
             return true;
@@ -111,7 +111,7 @@ public class TimestampType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == DateType.instance || otherType == LongType.instance;
     }

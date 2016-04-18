@@ -30,9 +30,9 @@ public class ColumnSpecification
     public final String ksName;
     public final String cfName;
     public final ColumnIdentifier name;
-    public final AbstractType<?> type;
+    public final AbstractType type;
 
-    public ColumnSpecification(String ksName, String cfName, ColumnIdentifier name, AbstractType<?> type)
+    public ColumnSpecification(String ksName, String cfName, ColumnIdentifier name, AbstractType type)
     {
         this.ksName = ksName;
         this.cfName = cfName;

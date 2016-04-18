@@ -482,7 +482,7 @@ public class BTreeRow extends AbstractRow
 
         private CellInLegacyOrderIterator(CFMetaData metadata, boolean reversed)
         {
-            AbstractType<?> nameComparator = metadata.getColumnDefinitionNameComparator(isStatic() ? ColumnDefinition.Kind.STATIC : ColumnDefinition.Kind.REGULAR);
+            AbstractType nameComparator = metadata.getColumnDefinitionNameComparator(isStatic() ? ColumnDefinition.Kind.STATIC : ColumnDefinition.Kind.REGULAR);
             this.comparator = reversed ? Collections.reverseOrder(nameComparator) : nameComparator;
             this.reversed = reversed;
 

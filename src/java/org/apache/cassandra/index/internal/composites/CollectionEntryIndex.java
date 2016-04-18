@@ -62,7 +62,7 @@ public class CollectionEntryIndex extends CollectionKeyIndexBase
         if (cell == null || !cell.isLive(nowInSec))
             return true;
 
-        AbstractType<?> valueComparator = ((CollectionType)columnDef.type).valueComparator();
+        AbstractType valueComparator = ((CollectionType)columnDef.type).valueComparator();
         return valueComparator.compare(mapValue, cell.value()) != 0;
     }
 }

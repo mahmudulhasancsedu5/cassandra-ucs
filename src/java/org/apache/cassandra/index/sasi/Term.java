@@ -60,12 +60,12 @@ public class Term
         return position + (termSize.isConstant() ? termSize.size : 2 + readLength(position));
     }
 
-    public int compareTo(AbstractType<?> comparator, ByteBuffer query)
+    public int compareTo(AbstractType comparator, ByteBuffer query)
     {
         return compareTo(comparator, query, true);
     }
 
-    public int compareTo(AbstractType<?> comparator, ByteBuffer query, boolean checkFully)
+    public int compareTo(AbstractType comparator, ByteBuffer query, boolean checkFully)
     {
         long position = content.position();
         int padding = termSize.isConstant() ? 0 : 2;

@@ -110,7 +110,7 @@ public class OnDiskIndexBuilder
             }
         }
 
-        public static TermSize sizeOf(AbstractType<?> comparator)
+        public static TermSize sizeOf(AbstractType comparator)
         {
             if (comparator instanceof Int32Type || comparator instanceof FloatType)
                 return INT;
@@ -136,7 +136,7 @@ public class OnDiskIndexBuilder
 
     private final TermSize termSize;
 
-    private final AbstractType<?> keyComparator, termComparator;
+    private final AbstractType keyComparator, termComparator;
 
     private final Map<ByteBuffer, TokenTreeBuilder> terms;
     private final Mode mode;
@@ -145,12 +145,12 @@ public class OnDiskIndexBuilder
     private ByteBuffer minKey, maxKey;
     private long estimatedBytes;
 
-    public OnDiskIndexBuilder(AbstractType<?> keyComparator, AbstractType<?> comparator, Mode mode)
+    public OnDiskIndexBuilder(AbstractType keyComparator, AbstractType comparator, Mode mode)
     {
         this(keyComparator, comparator, mode, true);
     }
 
-    public OnDiskIndexBuilder(AbstractType<?> keyComparator, AbstractType<?> comparator, Mode mode, boolean marksPartials)
+    public OnDiskIndexBuilder(AbstractType keyComparator, AbstractType comparator, Mode mode, boolean marksPartials)
     {
         this.keyComparator = keyComparator;
         this.termComparator = comparator;
@@ -570,7 +570,7 @@ public class OnDiskIndexBuilder
     {
         private static final int MAX_KEYS_SPARSE = 5;
 
-        private final AbstractType<?> comparator;
+        private final AbstractType comparator;
         private final Mode mode;
 
         private int offset = 0;
@@ -578,7 +578,7 @@ public class OnDiskIndexBuilder
         private final List<TokenTreeBuilder> containers = new ArrayList<>();
         private TokenTreeBuilder combinedIndex;
 
-        public MutableDataBlock(AbstractType<?> comparator, Mode mode)
+        public MutableDataBlock(AbstractType comparator, Mode mode)
         {
             this.comparator = comparator;
             this.mode = mode;

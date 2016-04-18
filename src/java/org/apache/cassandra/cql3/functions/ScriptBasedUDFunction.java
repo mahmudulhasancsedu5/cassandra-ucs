@@ -132,8 +132,8 @@ final class ScriptBasedUDFunction extends UDFunction
 
     ScriptBasedUDFunction(FunctionName name,
                           List<ColumnIdentifier> argNames,
-                          List<AbstractType<?>> argTypes,
-                          AbstractType<?> returnType,
+                          List<AbstractType> argTypes,
+                          AbstractType returnType,
                           boolean calledOnNullInput,
                           String language,
                           String body)

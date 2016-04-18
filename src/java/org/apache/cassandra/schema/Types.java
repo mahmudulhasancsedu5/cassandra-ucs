@@ -308,7 +308,7 @@ public final class Types implements Iterable<UserType>
                               .map(ByteBufferUtil::bytes)
                               .collect(toList());
 
-                List<AbstractType<?>> preparedFieldTypes =
+                List<AbstractType> preparedFieldTypes =
                     fieldTypes.stream()
                               .map(t -> t.prepareInternal(keyspace, types).getType())
                               .collect(toList());

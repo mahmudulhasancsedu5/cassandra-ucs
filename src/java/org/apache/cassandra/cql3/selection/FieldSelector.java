@@ -43,7 +43,7 @@ final class FieldSelector extends Selector
                                      UTF8Type.instance.getString(type.fieldName(field)));
             }
 
-            protected AbstractType<?> getReturnType()
+            protected AbstractType getReturnType()
             {
                 return type.fieldType(field);
             }
@@ -79,7 +79,7 @@ final class FieldSelector extends Selector
         return field < buffers.length ? buffers[field] : null;
     }
 
-    public AbstractType<?> getType()
+    public AbstractType getType()
     {
         return type.fieldType(field);
     }

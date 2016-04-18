@@ -276,7 +276,7 @@ public abstract class Selectable
         public Selector.Factory newSelectorFactory(CFMetaData cfm, List<ColumnDefinition> defs)
         {
             Selector.Factory factory = selected.newSelectorFactory(cfm, defs);
-            AbstractType<?> type = factory.newInstance().getType();
+            AbstractType type = factory.newInstance().getType();
             if (!type.isUDT())
             {
                 throw new InvalidRequestException(

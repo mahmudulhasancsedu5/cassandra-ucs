@@ -181,8 +181,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
 
     protected UDFunction(FunctionName name,
                          List<ColumnIdentifier> argNames,
-                         List<AbstractType<?>> argTypes,
-                         AbstractType<?> returnType,
+                         List<AbstractType> argTypes,
+                         AbstractType returnType,
                          boolean calledOnNullInput,
                          String language,
                          String body)
@@ -193,9 +193,9 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
 
     protected UDFunction(FunctionName name,
                          List<ColumnIdentifier> argNames,
-                         List<AbstractType<?>> argTypes,
+                         List<AbstractType> argTypes,
                          DataType[] argDataTypes,
-                         AbstractType<?> returnType,
+                         AbstractType returnType,
                          DataType returnDataType,
                          boolean calledOnNullInput,
                          String language,
@@ -216,8 +216,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
 
     public static UDFunction create(FunctionName name,
                                     List<ColumnIdentifier> argNames,
-                                    List<AbstractType<?>> argTypes,
-                                    AbstractType<?> returnType,
+                                    List<AbstractType> argTypes,
+                                    AbstractType returnType,
                                     boolean calledOnNullInput,
                                     String language,
                                     String body)
@@ -244,8 +244,8 @@ public abstract class UDFunction extends AbstractFunction implements ScalarFunct
      */
     public static UDFunction createBrokenFunction(FunctionName name,
                                                   List<ColumnIdentifier> argNames,
-                                                  List<AbstractType<?>> argTypes,
-                                                  AbstractType<?> returnType,
+                                                  List<AbstractType> argTypes,
+                                                  AbstractType returnType,
                                                   boolean calledOnNullInput,
                                                   String language,
                                                   String body,

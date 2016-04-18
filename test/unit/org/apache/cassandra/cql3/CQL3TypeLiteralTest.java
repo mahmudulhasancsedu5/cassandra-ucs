@@ -430,21 +430,21 @@ public class CQL3TypeLiteralTest
             CQL3Type values = null;
             char bracketOpen;
             char bracketClose;
-            switch (collectionType.kind)
+            switch (collectionType.kind())
             {
                 case LIST:
-                    elements = ((ListType) collectionType).getElementsType().asCQL3Type();
+                    elements = ((ListType<?>) collectionType).getElementsType().asCQL3Type();
                     bracketOpen = '[';
                     bracketClose = ']';
                     break;
                 case SET:
-                    elements = ((SetType) collectionType).getElementsType().asCQL3Type();
+                    elements = ((SetType<?>) collectionType).getElementsType().asCQL3Type();
                     bracketOpen = '{';
                     bracketClose = '}';
                     break;
                 case MAP:
-                    elements = ((MapType) collectionType).getKeysType().asCQL3Type();
-                    values = ((MapType) collectionType).getValuesType().asCQL3Type();
+                    elements = ((MapType<?, ?>) collectionType).getKeysType().asCQL3Type();
+                    values = ((MapType<?, ?>) collectionType).getValuesType().asCQL3Type();
                     bracketOpen = '{';
                     bracketClose = '}';
                     break;
@@ -466,7 +466,7 @@ public class CQL3TypeLiteralTest
                     expected.append(", ");
                 expected.append(el.cql3Type.toCQLLiteral(el.value, version));
 
-                if (collectionType.kind == CollectionType.Kind.MAP)
+                if (collectionType.kind() == CollectionType.Kind.MAP)
                 {
                     // add map value
                     el = generateAnyValue(version, values);
@@ -521,7 +521,7 @@ public class CQL3TypeLiteralTest
             ByteBuffer[] buffers = new ByteBuffer[fields];
             for (int i = 0; i < fields; i++)
             {
-                AbstractType<?> fieldType = tupleType.type(i);
+                AbstractType fieldType = tupleType.type(i);
 
                 if (i > 0)
                     expected.append(", ");
@@ -566,7 +566,7 @@ public class CQL3TypeLiteralTest
             ByteBuffer[] buffers = new ByteBuffer[fields];
             for (int i = 0; i < fields; i++)
             {
-                AbstractType<?> fieldType = userType.type(i);
+                AbstractType fieldType = userType.type(i);
 
                 if (i > 0)
                     expected.append(", ");
@@ -620,7 +620,7 @@ public class CQL3TypeLiteralTest
     static TupleType randomTupleType(int level)
     {
         int typeCount = 2 + randInt(5);
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         for (int i = 0; i < typeCount; i++)
             types.add(randomNestedType(level));
         return new TupleType(types);
@@ -630,7 +630,7 @@ public class CQL3TypeLiteralTest
     {
         int typeCount = 2 + randInt(5);
         List<ByteBuffer> names = new ArrayList<>();
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         for (int i = 0; i < typeCount; i++)
         {
             names.add(UTF8Type.instance.fromString('f' + randLetters(i)));

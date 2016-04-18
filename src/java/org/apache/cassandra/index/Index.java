@@ -295,7 +295,7 @@ public interface Index
      * @return an the type of custom index expressions supported by this index, or an
      *         null if custom expressions are not supported.
      */
-    public AbstractType<?> customExpressionValueType();
+    public AbstractType customExpressionValueType();
 
     /**
      * Transform an initial RowFilter into the filter that will still need to applied

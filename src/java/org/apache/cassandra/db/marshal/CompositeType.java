@@ -65,10 +65,10 @@ public class CompositeType extends AbstractCompositeType
 {
     public static final int STATIC_MARKER = 0xFFFF;
 
-    public final List<AbstractType<?>> types;
+    public final List<AbstractType> types;
 
     // interning instances
-    private static final ConcurrentMap<List<AbstractType<?>>, CompositeType> instances = new ConcurrentHashMap<List<AbstractType<?>>, CompositeType>();
+    private static final ConcurrentMap<List<AbstractType>, CompositeType> instances = new ConcurrentHashMap<List<AbstractType>, CompositeType>();
 
     public static CompositeType getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
@@ -77,7 +77,7 @@ public class CompositeType extends AbstractCompositeType
 
     public static CompositeType getInstance(AbstractType... types)
     {
-        return getInstance(Arrays.<AbstractType<?>>asList(types));
+        return getInstance(Arrays.<AbstractType>asList(types));
     }
 
     protected boolean readIsStatic(ByteBuffer bb)
@@ -98,7 +98,7 @@ public class CompositeType extends AbstractCompositeType
         return true;
     }
 
-    public static CompositeType getInstance(List<AbstractType<?>> types)
+    public static CompositeType getInstance(List<AbstractType> types)
     {
         assert types != null && !types.isEmpty();
 
@@ -115,12 +115,12 @@ public class CompositeType extends AbstractCompositeType
         return ct;
     }
 
-    protected CompositeType(List<AbstractType<?>> types)
+    protected CompositeType(List<AbstractType> types)
     {
         this.types = ImmutableList.copyOf(types);
     }
 
-    protected AbstractType<?> getComparator(int i, ByteBuffer bb)
+    protected AbstractType getComparator(int i, ByteBuffer bb)
     {
         try
         {
@@ -138,12 +138,12 @@ public class CompositeType extends AbstractCompositeType
         }
     }
 
-    protected AbstractType<?> getComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
+    protected AbstractType getComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
     {
         return getComparator(i, bb1);
     }
 
-    protected AbstractType<?> getAndAppendComparator(int i, ByteBuffer bb, StringBuilder sb)
+    protected AbstractType getAndAppendComparator(int i, ByteBuffer bb, StringBuilder sb)
     {
         return types.get(i);
     }
@@ -153,7 +153,7 @@ public class CompositeType extends AbstractCompositeType
         return new StaticParsedComparator(types.get(i), part);
     }
 
-    protected AbstractType<?> validateComparator(int i, ByteBuffer bb) throws MarshalException
+    protected AbstractType validateComparator(int i, ByteBuffer bb) throws MarshalException
     {
         if (i >= types.size())
             throw new MarshalException("Too many bytes for comparator");
@@ -272,13 +272,13 @@ public class CompositeType extends AbstractCompositeType
     }
 
     @Override
-    public List<AbstractType<?>> getComponents()
+    public List<AbstractType> getComponents()
     {
         return types;
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (this == previous)
             return true;
@@ -302,7 +302,7 @@ public class CompositeType extends AbstractCompositeType
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         if (this == otherType)
             return true;
@@ -327,16 +327,16 @@ public class CompositeType extends AbstractCompositeType
 
     private static class StaticParsedComparator implements ParsedComparator
     {
-        final AbstractType<?> type;
+        final AbstractType type;
         final String part;
 
-        StaticParsedComparator(AbstractType<?> type, String part)
+        StaticParsedComparator(AbstractType type, String part)
         {
             this.type = type;
             this.part = part;
         }
 
-        public AbstractType<?> getAbstractType()
+        public AbstractType getAbstractType()
         {
             return type;
         }

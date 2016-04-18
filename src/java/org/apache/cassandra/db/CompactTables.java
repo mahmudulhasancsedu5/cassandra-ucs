@@ -93,7 +93,7 @@ public abstract class CompactTables
         return columns.regulars.getSimple(0);
     }
 
-    public static AbstractType<?> columnDefinitionComparator(ColumnDefinition.Kind kind, boolean isSuper, AbstractType<?> rawComparator, AbstractType<?> rawSubComparator)
+    public static AbstractType columnDefinitionComparator(ColumnDefinition.Kind kind, boolean isSuper, AbstractType rawComparator, AbstractType rawSubComparator)
     {
         if (isSuper)
             return kind == ColumnDefinition.Kind.REGULAR ? rawSubComparator : UTF8Type.instance;

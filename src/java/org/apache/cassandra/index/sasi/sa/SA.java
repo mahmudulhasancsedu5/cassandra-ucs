@@ -28,13 +28,13 @@ import org.apache.cassandra.db.marshal.AbstractType;
 
 public abstract class SA<T extends Buffer>
 {
-    protected final AbstractType<?> comparator;
+    protected final AbstractType comparator;
     protected final Mode mode;
 
     protected final List<Term<T>> terms = new ArrayList<>();
     protected int charCount = 0;
 
-    public SA(AbstractType<?> comparator, Mode mode)
+    public SA(AbstractType comparator, Mode mode)
     {
         this.comparator = comparator;
         this.mode = mode;

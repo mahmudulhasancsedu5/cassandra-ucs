@@ -100,7 +100,7 @@ public class SSTableMetadataViewer
 
                     if (header != null && header.getClusteringTypes().size() == stats.minClusteringValues.size())
                     {
-                        List<AbstractType<?>> clusteringTypes = header.getClusteringTypes();
+                        List<AbstractType> clusteringTypes = header.getClusteringTypes();
                         List<ByteBuffer> minClusteringValues = stats.minClusteringValues;
                         List<ByteBuffer> maxClusteringValues = stats.maxClusteringValues;
                         String[] minValues = new String[clusteringTypes.size()];
@@ -134,14 +134,14 @@ public class SSTableMetadataViewer
                 if (header != null)
                 {
                     EncodingStats encodingStats = header.getEncodingStats();
-                    AbstractType<?> keyType = header.getKeyType();
-                    List<AbstractType<?>> clusteringTypes = header.getClusteringTypes();
-                    Map<ByteBuffer, AbstractType<?>> staticColumns = header.getStaticColumns();
+                    AbstractType keyType = header.getKeyType();
+                    List<AbstractType> clusteringTypes = header.getClusteringTypes();
+                    Map<ByteBuffer, AbstractType> staticColumns = header.getStaticColumns();
                     Map<String, String> statics = staticColumns.entrySet().stream()
                                                                .collect(Collectors.toMap(
                                                                 e -> UTF8Type.instance.getString(e.getKey()),
                                                                 e -> e.getValue().toString()));
-                    Map<ByteBuffer, AbstractType<?>> regularColumns = header.getRegularColumns();
+                    Map<ByteBuffer, AbstractType> regularColumns = header.getRegularColumns();
                     Map<String, String> regulars = regularColumns.entrySet().stream()
                                                                  .collect(Collectors.toMap(
                                                                  e -> UTF8Type.instance.getString(e.getKey()),
@@ -181,7 +181,7 @@ public class SSTableMetadataViewer
         }
     }
 
-    private static void printMinMaxToken(Descriptor descriptor, IPartitioner partitioner, AbstractType<?> keyType, PrintStream out) throws IOException
+    private static void printMinMaxToken(Descriptor descriptor, IPartitioner partitioner, AbstractType keyType, PrintStream out) throws IOException
     {
         File summariesFile = new File(descriptor.filenameFor(Component.SUMMARY));
         if (!summariesFile.exists())

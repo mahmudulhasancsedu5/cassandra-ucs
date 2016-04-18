@@ -193,7 +193,7 @@ public enum Operator
      *
      * @throws AssertionError for CONTAINS and CONTAINS_KEY as this doesn't support those operators yet
      */
-    public boolean isSatisfiedBy(AbstractType<?> type, ByteBuffer leftOperand, ByteBuffer rightOperand)
+    public boolean isSatisfiedBy(AbstractType type, ByteBuffer leftOperand, ByteBuffer rightOperand)
     {
         switch (this)
         {

@@ -40,11 +40,11 @@ public class DataTracker
 {
     private static final Logger logger = LoggerFactory.getLogger(DataTracker.class);
 
-    private final AbstractType<?> keyValidator;
+    private final AbstractType keyValidator;
     private final ColumnIndex columnIndex;
     private final AtomicReference<View> view = new AtomicReference<>();
 
-    public DataTracker(AbstractType<?> keyValidator, ColumnIndex index)
+    public DataTracker(AbstractType keyValidator, ColumnIndex index)
     {
         this.keyValidator = keyValidator;
         this.columnIndex = index;

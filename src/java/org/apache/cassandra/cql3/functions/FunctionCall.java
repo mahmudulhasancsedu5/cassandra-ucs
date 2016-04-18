@@ -101,7 +101,7 @@ public class FunctionCall extends Term.NonTerminal
     {
         if (fun.returnType().isCollection())
         {
-            switch (((CollectionType) fun.returnType()).kind)
+            switch (((CollectionType) fun.returnType()).kind())
             {
                 case LIST:
                     return Lists.Value.fromSerialized(result, (ListType) fun.returnType(), version);

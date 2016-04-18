@@ -112,7 +112,7 @@ public enum DataType implements OptionCodec.Codecable<DataType>
                 ByteBuffer name = UTF8Type.instance.decompose(CBUtil.readString(cb));
                 int n = cb.readUnsignedShort();
                 List<ByteBuffer> fieldNames = new ArrayList<>(n);
-                List<AbstractType<?>> fieldTypes = new ArrayList<>(n);
+                List<AbstractType> fieldTypes = new ArrayList<>(n);
                 for (int i = 0; i < n; i++)
                 {
                     fieldNames.add(UTF8Type.instance.decompose(CBUtil.readString(cb)));
@@ -121,7 +121,7 @@ public enum DataType implements OptionCodec.Codecable<DataType>
                 return new UserType(ks, name, fieldNames, fieldTypes, true);
             case TUPLE:
                 n = cb.readUnsignedShort();
-                List<AbstractType<?>> types = new ArrayList<>(n);
+                List<AbstractType> types = new ArrayList<>(n);
                 for (int i = 0; i < n; i++)
                     types.add(DataType.toType(codec.decodeOne(cb, version)));
                 return new TupleType(types);

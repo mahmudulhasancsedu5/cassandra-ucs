@@ -46,7 +46,7 @@ public class Murmur3Partitioner implements IPartitioner
     private static final int HEAP_SIZE = (int) ObjectSizes.measureDeep(MINIMUM);
 
     public static final Murmur3Partitioner instance = new Murmur3Partitioner();
-    public static final AbstractType<?> partitionOrdering = new PartitionerDefinedOrder(instance);
+    public static final AbstractType partitionOrdering = new PartitionerDefinedOrder(instance);
 
     private final Splitter splitter = new Splitter(this)
     {
@@ -299,7 +299,7 @@ public class Murmur3Partitioner implements IPartitioner
         }
     };
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return LongType.instance;
     }
@@ -309,7 +309,7 @@ public class Murmur3Partitioner implements IPartitioner
         return new LongToken(Long.MAX_VALUE);
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return partitionOrdering;
     }

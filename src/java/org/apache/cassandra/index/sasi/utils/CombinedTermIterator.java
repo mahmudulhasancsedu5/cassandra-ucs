@@ -45,7 +45,7 @@ public class CombinedTermIterator extends TermIterator
         descriptor = d;
         union = OnDiskIndexIterator.union(parts);
 
-        AbstractType<?> comparator = parts[0].getComparator(); // assumes all SAs have same comparator
+        AbstractType comparator = parts[0].getComparator(); // assumes all SAs have same comparator
         ByteBuffer minimum = parts[0].minTerm();
         ByteBuffer maximum = parts[0].maxTerm();
 

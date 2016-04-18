@@ -34,7 +34,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 /*
  * This class is deprecated and only kept for backward compatibility.
  */
-public class ColumnToCollectionType extends AbstractType<ByteBuffer>
+public class ColumnToCollectionType extends ConcreteType<ByteBuffer>
 {
     // interning instances
     private static final Map<Map<ByteBuffer, CollectionType>, ColumnToCollectionType> instances = new HashMap<>();
@@ -61,7 +61,7 @@ public class ColumnToCollectionType extends AbstractType<ByteBuffer>
 
     private ColumnToCollectionType(Map<ByteBuffer, CollectionType> defined)
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, ByteBuffer.class);
         this.defined = ImmutableMap.copyOf(defined);
     }
 
@@ -129,7 +129,7 @@ public class ColumnToCollectionType extends AbstractType<ByteBuffer>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (!(previous instanceof ColumnToCollectionType))
             return false;

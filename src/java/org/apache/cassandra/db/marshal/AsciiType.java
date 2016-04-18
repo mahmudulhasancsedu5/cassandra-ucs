@@ -33,11 +33,11 @@ import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.AsciiSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class AsciiType extends AbstractType<String>
+public class AsciiType extends ConcreteType<String>
 {
     public static final AsciiType instance = new AsciiType();
 
-    AsciiType() {super(ComparisonType.BYTE_ORDER);} // singleton
+    AsciiType() {super(ComparisonType.BYTE_ORDER, String.class);} // singleton
 
     private final ThreadLocal<CharsetEncoder> encoder = new ThreadLocal<CharsetEncoder>()
     {

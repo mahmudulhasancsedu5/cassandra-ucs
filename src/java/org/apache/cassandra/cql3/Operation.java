@@ -166,7 +166,7 @@ public abstract class Operation
 
             if (receiver.type.isCollection())
             {
-                switch (((CollectionType) receiver.type).kind)
+                switch (((CollectionType) receiver.type).kind())
                 {
                     case LIST:
                         return new Lists.Setter(receiver, v);
@@ -216,7 +216,7 @@ public abstract class Operation
             else if (!(receiver.type.isMultiCell()))
                 throw new InvalidRequestException(String.format("Invalid operation (%s) for frozen collection column %s", toString(receiver), receiver.name));
 
-            switch (((CollectionType)receiver.type).kind)
+            switch (((CollectionType)receiver.type).kind())
             {
                 case LIST:
                     Term idx = selector.prepare(cfm.ksName, Lists.indexSpecOf(receiver));
@@ -308,7 +308,7 @@ public abstract class Operation
             else if (!(receiver.type.isMultiCell()))
                 throw new InvalidRequestException(String.format("Invalid operation (%s) for frozen collection column %s", toString(receiver), receiver.name));
 
-            switch (((CollectionType)receiver.type).kind)
+            switch (((CollectionType)receiver.type).kind())
             {
                 case LIST:
                     return new Lists.Appender(receiver, v);
@@ -351,7 +351,7 @@ public abstract class Operation
             else if (!(receiver.type.isMultiCell()))
                 throw new InvalidRequestException(String.format("Invalid operation (%s) for frozen collection column %s", toString(receiver), receiver.name));
 
-            switch (((CollectionType)receiver.type).kind)
+            switch (((CollectionType)receiver.type).kind())
             {
                 case LIST:
                     return new Lists.Discarder(receiver, value.prepare(cfm.ksName, receiver));
@@ -455,7 +455,7 @@ public abstract class Operation
             else if (!(receiver.type.isMultiCell()))
                 throw new InvalidRequestException(String.format("Invalid deletion operation for frozen collection column %s", receiver.name));
 
-            switch (((CollectionType)receiver.type).kind)
+            switch (((CollectionType)receiver.type).kind())
             {
                 case LIST:
                     Term idx = element.prepare(keyspace, Lists.indexSpecOf(receiver));

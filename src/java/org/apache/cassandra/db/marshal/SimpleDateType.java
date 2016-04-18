@@ -27,11 +27,11 @@ import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class SimpleDateType extends AbstractType<Integer>
+public class SimpleDateType extends ConcreteType<Integer>
 {
     public static final SimpleDateType instance = new SimpleDateType();
 
-    SimpleDateType() {super(ComparisonType.BYTE_ORDER);} // singleton
+    SimpleDateType() {super(ComparisonType.BYTE_ORDER, Integer.class);} // singleton
 
     public ByteBuffer fromString(String source) throws MarshalException
     {
@@ -49,7 +49,7 @@ public class SimpleDateType extends AbstractType<Integer>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == Int32Type.instance;
     }

@@ -83,7 +83,7 @@ public class QueryController
         return command.dataRange();
     }
 
-    public AbstractType<?> getKeyValidator()
+    public AbstractType getKeyValidator()
     {
         return cfs.metadata.getKeyValidator();
     }

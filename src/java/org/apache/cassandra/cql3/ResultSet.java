@@ -110,7 +110,7 @@ public class ResultSet
             ColumnSpecification spec = metadata.names.get(i);
             ByteBuffer colName = ByteBufferUtil.bytes(spec.name.toString());
             schema.name_types.put(colName, UTF8);
-            AbstractType<?> normalizedType = spec.type instanceof ReversedType ? ((ReversedType)spec.type).baseType : spec.type;
+            AbstractType normalizedType = spec.type instanceof ReversedType ? ((ReversedType)spec.type).baseType : spec.type;
             schema.value_types.put(colName, normalizedType.toString());
 
         }

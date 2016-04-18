@@ -24,39 +24,18 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.cassandra.cql3.functions.UDHelper;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.AsciiType;
-import org.apache.cassandra.db.marshal.BooleanType;
-import org.apache.cassandra.db.marshal.ByteType;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.CounterColumnType;
-import org.apache.cassandra.db.marshal.DateType;
-import org.apache.cassandra.db.marshal.DecimalType;
-import org.apache.cassandra.db.marshal.DoubleType;
-import org.apache.cassandra.db.marshal.FloatType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.Int32Type;
-import org.apache.cassandra.db.marshal.IntegerType;
-import org.apache.cassandra.db.marshal.LongType;
-import org.apache.cassandra.db.marshal.ReversedType;
-import org.apache.cassandra.db.marshal.ShortType;
-import org.apache.cassandra.db.marshal.SimpleDateType;
-import org.apache.cassandra.db.marshal.TimeType;
-import org.apache.cassandra.db.marshal.TimeUUIDType;
-import org.apache.cassandra.db.marshal.TimestampType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class UDHelperTest
 {
-    static class UFTestCustomType extends AbstractType<String>
+    static class UFTestCustomType extends ConcreteType<String>
     {
         protected UFTestCustomType()
         {
-            super(ComparisonType.CUSTOM);
+            super(ComparisonType.CUSTOM, String.class);
         }
 
         public ByteBuffer fromString(String source) throws MarshalException
@@ -83,14 +62,14 @@ public class UDHelperTest
     @Test
     public void testEmptyVariableLengthTypes()
     {
-        AbstractType<?>[] types = new AbstractType<?>[]{
+        AbstractType[] types = new AbstractType[]{
                                                        AsciiType.instance,
                                                        BytesType.instance,
                                                        UTF8Type.instance,
                                                        new UFTestCustomType()
         };
 
-        for (AbstractType<?> type : types)
+        for (AbstractType type : types)
         {
             Assert.assertFalse("type " + type.getClass().getName(),
                                UDHelper.isNullOrEmpty(type, ByteBufferUtil.EMPTY_BYTE_BUFFER));
@@ -100,14 +79,14 @@ public class UDHelperTest
     @Test
     public void testNonEmptyPrimitiveTypes()
     {
-        AbstractType<?>[] types = new AbstractType<?>[]{
+        AbstractType[] types = new AbstractType[]{
                                                        TimeType.instance,
                                                        SimpleDateType.instance,
                                                        ByteType.instance,
                                                        ShortType.instance
         };
 
-        for (AbstractType<?> type : types)
+        for (AbstractType type : types)
         {
             try
             {
@@ -124,7 +103,7 @@ public class UDHelperTest
     @Test
     public void testEmptiableTypes()
     {
-        AbstractType<?>[] types = new AbstractType<?>[]{
+        AbstractType[] types = new AbstractType[]{
                                                        BooleanType.instance,
                                                        CounterColumnType.instance,
                                                        DateType.instance,
@@ -140,7 +119,7 @@ public class UDHelperTest
                                                        UUIDType.instance
         };
 
-        for (AbstractType<?> type : types)
+        for (AbstractType type : types)
         {
             Assert.assertTrue(type.getClass().getSimpleName(), UDHelper.isNullOrEmpty(type, ByteBufferUtil.EMPTY_BYTE_BUFFER));
             Assert.assertTrue("reversed " + type.getClass().getSimpleName(),

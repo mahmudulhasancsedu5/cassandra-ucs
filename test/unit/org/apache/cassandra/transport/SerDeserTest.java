@@ -163,7 +163,7 @@ public class SerDeserTest
         return Constants.Literal.string(v);
     }
 
-    private static ColumnSpecification columnSpec(String name, AbstractType<?> type)
+    private static ColumnSpecification columnSpec(String name, AbstractType type)
     {
         return new ColumnSpecification("ks", "cf", ci(name), type);
     }

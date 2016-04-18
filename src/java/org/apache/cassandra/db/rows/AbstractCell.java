@@ -179,7 +179,7 @@ public abstract class AbstractCell extends Cell
         if (isCounterCell())
             return String.format("[%s=%d ts=%d]", column().name, CounterContext.instance().total(value()), timestamp());
 
-        AbstractType<?> type = column().type;
+        AbstractType type = column().type;
         if (type instanceof CollectionType && type.isMultiCell())
         {
             CollectionType ct = (CollectionType)type;

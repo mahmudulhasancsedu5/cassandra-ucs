@@ -128,16 +128,16 @@ public abstract class AbstractReadCommandBuilder
         return this;
     }
 
-    private ByteBuffer bb(Object value, AbstractType<?> type)
+    private ByteBuffer bb(Object value, AbstractType type)
     {
         return value instanceof ByteBuffer ? (ByteBuffer)value : ((AbstractType)type).decompose(value);
     }
 
-    private AbstractType<?> forValues(AbstractType<?> collectionType)
+    private AbstractType forValues(AbstractType collectionType)
     {
         assert collectionType instanceof CollectionType;
         CollectionType ct = (CollectionType)collectionType;
-        switch (ct.kind)
+        switch (ct.kind())
         {
             case LIST:
             case MAP:
@@ -148,17 +148,18 @@ public abstract class AbstractReadCommandBuilder
         throw new AssertionError();
     }
 
-    private AbstractType<?> forKeys(AbstractType<?> collectionType)
+    private AbstractType forKeys(AbstractType collectionType)
     {
         assert collectionType instanceof CollectionType;
         CollectionType ct = (CollectionType)collectionType;
-        switch (ct.kind)
+        switch (ct.kind())
         {
             case LIST:
             case MAP:
                 return ct.nameComparator();
+            default:
+                throw new AssertionError();
         }
-        throw new AssertionError();
     }
 
     public AbstractReadCommandBuilder filterOn(String column, Operator op, Object value)
@@ -166,7 +167,7 @@ public abstract class AbstractReadCommandBuilder
         ColumnDefinition def = cfs.metadata.getColumnDefinition(ColumnIdentifier.getInterned(column, true));
         assert def != null;
 
-        AbstractType<?> type = def.type;
+        AbstractType type = def.type;
         if (op == Operator.CONTAINS)
             type = forValues(type);
         else if (op == Operator.CONTAINS_KEY)

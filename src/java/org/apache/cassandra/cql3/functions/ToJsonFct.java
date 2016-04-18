@@ -33,14 +33,14 @@ public class ToJsonFct extends NativeScalarFunction
 {
     public static final FunctionName NAME = FunctionName.nativeFunction("tojson");
 
-    private static final Map<AbstractType<?>, ToJsonFct> instances = new ConcurrentHashMap<>();
+    private static final Map<AbstractType, ToJsonFct> instances = new ConcurrentHashMap<>();
 
-    public static ToJsonFct getInstance(List<AbstractType<?>> argTypes) throws InvalidRequestException
+    public static ToJsonFct getInstance(List<AbstractType> argTypes) throws InvalidRequestException
     {
         if (argTypes.size() != 1)
             throw new InvalidRequestException(String.format("toJson() only accepts one argument (got %d)", argTypes.size()));
 
-        AbstractType<?> fromType = argTypes.get(0);
+        AbstractType fromType = argTypes.get(0);
         ToJsonFct func = instances.get(fromType);
         if (func == null)
         {
@@ -50,7 +50,7 @@ public class ToJsonFct extends NativeScalarFunction
         return func;
     }
 
-    private ToJsonFct(AbstractType<?> argType)
+    private ToJsonFct(AbstractType argType)
     {
         super("tojson", UTF8Type.instance, argType);
     }

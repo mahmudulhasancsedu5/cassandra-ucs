@@ -311,19 +311,19 @@ public class LegacySchemaMigratorTest
         UserType udt1 = new UserType(keyspace,
                                      bytes("udt1"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col1")); add(bytes("col2")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
                                      true);
 
         UserType udt2 = new UserType(keyspace,
                                      bytes("udt2"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col3")); add(bytes("col4")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(BytesType.instance); add(BooleanType.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(BytesType.instance); add(BooleanType.instance); }},
                                      true);
 
         UserType udt3 = new UserType(keyspace,
                                      bytes("udt3"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col5")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(AsciiType.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(AsciiType.instance); }},
                                      true);
 
         return KeyspaceMetadata.create(keyspace,
@@ -434,13 +434,13 @@ public class LegacySchemaMigratorTest
         UserType udt1 = new UserType(keyspace,
                                      bytes("udt1"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col1")); add(bytes("col2")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
                                      true);
 
         UserType udt2 = new UserType(keyspace,
                                      bytes("udt2"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col1")); add(bytes("col2")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(ListType.getInstance(udt1, false)); add(Int32Type.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(ListType.getInstance(udt1, false)); add(Int32Type.instance); }},
                                      true);
 
         UDFunction udf1 = UDFunction.create(new FunctionName(keyspace, "udf"),
@@ -483,13 +483,13 @@ public class LegacySchemaMigratorTest
         UserType udt1 = new UserType(keyspace,
                                      bytes("udt1"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col1")); add(bytes("col2")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(UTF8Type.instance); add(Int32Type.instance); }},
                                      true);
 
         UserType udt2 = new UserType(keyspace,
                                      bytes("udt2"),
                                      new ArrayList<ByteBuffer>() {{ add(bytes("col1")); add(bytes("col2")); }},
-                                     new ArrayList<AbstractType<?>>() {{ add(ListType.getInstance(udt1, false)); add(Int32Type.instance); }},
+                                     new ArrayList<AbstractType>() {{ add(ListType.getInstance(udt1, false)); add(Int32Type.instance); }},
                                      true);
 
         UDFunction udf1 = UDFunction.create(new FunctionName(keyspace, "udf1"),
@@ -782,7 +782,7 @@ public class LegacySchemaMigratorTest
         if (aggregate.initialCondition() != null)
             adder.add("initcond", aggregate.initialCondition());
 
-        for (AbstractType<?> argType : aggregate.argTypes())
+        for (AbstractType argType : aggregate.argTypes())
             adder.addListEntry("argument_types", argType.toString());
 
         adder.build();

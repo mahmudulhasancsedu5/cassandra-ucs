@@ -214,7 +214,7 @@ public class SASIIndex implements Index, INotificationConsumer
         return dependsOn(column) && index.supports(operator);
     }
 
-    public AbstractType<?> customExpressionValueType()
+    public AbstractType customExpressionValueType()
     {
         return null;
     }
@@ -333,7 +333,7 @@ public class SASIIndex implements Index, INotificationConsumer
         return index;
     }
 
-    protected static PerSSTableIndexWriter newWriter(AbstractType<?> keyValidator,
+    protected static PerSSTableIndexWriter newWriter(AbstractType keyValidator,
                                                      Descriptor descriptor,
                                                      Map<ColumnDefinition, ColumnIndex> indexes,
                                                      OperationType opType)

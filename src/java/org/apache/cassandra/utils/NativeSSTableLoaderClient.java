@@ -201,7 +201,7 @@ public class NativeSSTableLoaderClient extends SSTableLoader.Client
         ColumnIdentifier name = ColumnIdentifier.getInterned(row.getBytes("column_name_bytes"), row.getString("column_name"));
 
         ClusteringOrder order = ClusteringOrder.valueOf(row.getString("clustering_order").toUpperCase());
-        AbstractType<?> type = CQLTypeParser.parse(keyspace, row.getString("type"), types);
+        AbstractType type = CQLTypeParser.parse(keyspace, row.getString("type"), types);
         if (order == ClusteringOrder.DESC)
             type = ReversedType.getInstance(type);
 

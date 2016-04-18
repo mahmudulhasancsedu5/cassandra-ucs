@@ -210,7 +210,7 @@ public class ThriftResultsMerger extends Transformation<UnfilteredRowIterator>
         private final int nowInSec;
         private final Row.Builder builder;
         private final ColumnDefinition superColumnMapColumn;
-        private final AbstractType<?> columnComparator;
+        private final AbstractType columnComparator;
 
         private SuperColumnsPartitionMerger(UnfilteredRowIterator applyTo, int nowInSec)
         {

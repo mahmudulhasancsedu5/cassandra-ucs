@@ -226,13 +226,13 @@ public class ThriftConversion
         try
         {
             boolean isSuper = isSuper(cf_def.column_type);
-            AbstractType<?> rawComparator = TypeParser.parse(cf_def.comparator_type);
-            AbstractType<?> subComparator = isSuper
+            AbstractType rawComparator = TypeParser.parse(cf_def.comparator_type);
+            AbstractType subComparator = isSuper
                                           ? cf_def.subcomparator_type == null ? BytesType.instance : TypeParser.parse(cf_def.subcomparator_type)
                                           : null;
 
-            AbstractType<?> keyValidator = cf_def.isSetKey_validation_class() ? TypeParser.parse(cf_def.key_validation_class) : BytesType.instance;
-            AbstractType<?> defaultValidator = TypeParser.parse(cf_def.default_validation_class);
+            AbstractType keyValidator = cf_def.isSetKey_validation_class() ? TypeParser.parse(cf_def.key_validation_class) : BytesType.instance;
+            AbstractType defaultValidator = TypeParser.parse(cf_def.default_validation_class);
 
             // Convert the definitions from the input CfDef
             List<ColumnDefinition> defs = fromThrift(cf_def.keyspace, cf_def.name, rawComparator, subComparator, cf_def.column_metadata);
@@ -364,17 +364,17 @@ public class ThriftConversion
     private static void addDefaultCQLMetadata(Collection<ColumnDefinition> defs,
                                               String ks,
                                               String cf,
-                                              AbstractType<?> keyValidator,
-                                              AbstractType<?> comparator,
-                                              AbstractType<?> subComparator,
-                                              AbstractType<?> defaultValidator)
+                                              AbstractType keyValidator,
+                                              AbstractType comparator,
+                                              AbstractType subComparator,
+                                              AbstractType defaultValidator)
     {
         CompactTables.DefaultNames names = CompactTables.defaultNameGenerator(defs);
         if (keyValidator != null)
         {
             if (keyValidator instanceof CompositeType)
             {
-                List<AbstractType<?>> subTypes = ((CompositeType)keyValidator).types;
+                List<AbstractType> subTypes = ((CompositeType)keyValidator).types;
                 for (int i = 0; i < subTypes.size(); i++)
                     defs.add(ColumnDefinition.partitionKeyDef(ks, cf, names.defaultPartitionKeyName(), subTypes.get(i), i));
             }
@@ -392,9 +392,9 @@ public class ThriftConversion
         }
         else
         {
-            List<AbstractType<?>> subTypes = comparator instanceof CompositeType
+            List<AbstractType> subTypes = comparator instanceof CompositeType
                                            ? ((CompositeType)comparator).types
-                                           : Collections.<AbstractType<?>>singletonList(comparator);
+                                           : Collections.<AbstractType>singletonList(comparator);
 
             for (int i = 0; i < subTypes.size(); i++)
                 defs.add(ColumnDefinition.clusteringDef(ks, cf, names.defaultClusteringName(), subTypes.get(i), i));
@@ -485,14 +485,14 @@ public class ThriftConversion
 
     public static ColumnDefinition fromThrift(String ksName,
                                               String cfName,
-                                              AbstractType<?> thriftComparator,
-                                              AbstractType<?> thriftSubcomparator,
+                                              AbstractType thriftComparator,
+                                              AbstractType thriftSubcomparator,
                                               ColumnDef thriftColumnDef)
     throws SyntaxException, ConfigurationException
     {
         boolean isSuper = thriftSubcomparator != null;
         // For super columns, the componentIndex is 1 because the ColumnDefinition applies to the column component.
-        AbstractType<?> comparator = thriftSubcomparator == null ? thriftComparator : thriftSubcomparator;
+        AbstractType comparator = thriftSubcomparator == null ? thriftComparator : thriftSubcomparator;
         try
         {
             comparator.validate(thriftColumnDef.name);
@@ -515,8 +515,8 @@ public class ThriftConversion
 
     private static List<ColumnDefinition> fromThrift(String ksName,
                                                      String cfName,
-                                                     AbstractType<?> thriftComparator,
-                                                     AbstractType<?> thriftSubcomparator,
+                                                     AbstractType thriftComparator,
+                                                     AbstractType thriftSubcomparator,
                                                      List<ColumnDef> thriftDefs)
     throws SyntaxException, ConfigurationException
     {
@@ -533,8 +533,8 @@ public class ThriftConversion
     private static Indexes indexDefsFromThrift(CFMetaData cfm,
                                                String ksName,
                                                String cfName,
-                                               AbstractType<?> thriftComparator,
-                                               AbstractType<?> thriftSubComparator,
+                                               AbstractType thriftComparator,
+                                               AbstractType thriftSubComparator,
                                                List<ColumnDef> thriftDefs)
     {
         if (thriftDefs == null)

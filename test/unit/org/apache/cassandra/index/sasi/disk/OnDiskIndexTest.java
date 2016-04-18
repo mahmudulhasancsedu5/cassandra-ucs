@@ -802,19 +802,19 @@ public class OnDiskIndexTest
         return expression;
     }
 
-    private static Expression expressionFor(AbstractType<?> validator, ByteBuffer term)
+    private static Expression expressionFor(AbstractType validator, ByteBuffer term)
     {
         return expressionFor(Operator.LIKE_CONTAINS, validator, term);
     }
 
-    private static Expression expressionFor(Operator op, AbstractType<?> validator, ByteBuffer term)
+    private static Expression expressionFor(Operator op, AbstractType validator, ByteBuffer term)
     {
         Expression expression = new Expression("", validator);
         expression.add(op, term);
         return expression;
     }
 
-    private static Expression expressionForNot(AbstractType<?> validator, ByteBuffer lower, ByteBuffer upper, Iterable<ByteBuffer> terms)
+    private static Expression expressionForNot(AbstractType validator, ByteBuffer lower, ByteBuffer upper, Iterable<ByteBuffer> terms)
     {
         Expression expression = new Expression("", validator);
         expression.setOp(Expression.Op.RANGE);

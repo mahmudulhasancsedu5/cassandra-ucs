@@ -82,7 +82,7 @@ public class DropTypeStatement extends SchemaAlteringStatement
             if (function.returnType().referencesUserType(name.getStringTypeName()))
                 throw new InvalidRequestException(String.format("Cannot drop user type %s as it is still used by function %s", name, function));
 
-            for (AbstractType<?> argType : function.argTypes())
+            for (AbstractType argType : function.argTypes())
                 if (argType.referencesUserType(name.getStringTypeName()))
                     throw new InvalidRequestException(String.format("Cannot drop user type %s as it is still used by function %s", name, function));
         }

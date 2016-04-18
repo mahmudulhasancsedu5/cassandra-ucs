@@ -40,7 +40,7 @@ import static org.apache.cassandra.io.sstable.IndexHelper.IndexInfo;
  */
 public class ClusteringComparator implements Comparator<Clusterable>
 {
-    private final List<AbstractType<?>> clusteringTypes;
+    private final List<AbstractType> clusteringTypes;
 
     private final Comparator<IndexInfo> indexComparator;
     private final Comparator<IndexInfo> indexReverseComparator;
@@ -48,12 +48,12 @@ public class ClusteringComparator implements Comparator<Clusterable>
 
     private final Comparator<Row> rowComparator = (r1, r2) -> compare(r1.clustering(), r2.clustering());
 
-    public ClusteringComparator(AbstractType<?>... clusteringTypes)
+    public ClusteringComparator(AbstractType... clusteringTypes)
     {
         this(ImmutableList.copyOf(clusteringTypes));
     }
 
-    public ClusteringComparator(List<AbstractType<?>> clusteringTypes)
+    public ClusteringComparator(List<AbstractType> clusteringTypes)
     {
         // copy the list to ensure despatch is monomorphic
         this.clusteringTypes = ImmutableList.copyOf(clusteringTypes);
@@ -61,7 +61,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
         this.indexComparator = (o1, o2) -> ClusteringComparator.this.compare(o1.lastName, o2.lastName);
         this.indexReverseComparator = (o1, o2) -> ClusteringComparator.this.compare(o1.firstName, o2.firstName);
         this.reverseComparator = (c1, c2) -> ClusteringComparator.this.compare(c2, c1);
-        for (AbstractType<?> type : clusteringTypes)
+        for (AbstractType type : clusteringTypes)
             type.checkComparable(); // this should already be enforced by CFMetaData.rebuild, but we check again for other constructors
     }
 
@@ -77,7 +77,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
      * The "subtypes" of this clustering comparator, that is the types of the clustering
      * columns for the table this is a comparator of.
      */
-    public List<AbstractType<?>> subtypes()
+    public List<AbstractType> subtypes()
     {
         return clusteringTypes;
     }
@@ -85,7 +85,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
     /**
      * Returns the type of the ith clustering column of the table.
      */
-    public AbstractType<?> subtype(int i)
+    public AbstractType subtype(int i)
     {
         return clusteringTypes.get(i);
     }
@@ -183,8 +183,8 @@ public class ClusteringComparator implements Comparator<Clusterable>
 
         for (int i = 0; i < previous.size(); i++)
         {
-            AbstractType<?> tprev = previous.subtype(i);
-            AbstractType<?> tnew = subtype(i);
+            AbstractType tprev = previous.subtype(i);
+            AbstractType tnew = subtype(i);
             if (!tnew.isCompatibleWith(tprev))
                 return false;
         }

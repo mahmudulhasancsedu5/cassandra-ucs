@@ -34,9 +34,9 @@ public class RangeTermTree implements TermTree
 {
     protected final ByteBuffer min, max;
     protected final IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree;
-    protected final AbstractType<?> comparator;
+    protected final AbstractType comparator;
 
-    public RangeTermTree(ByteBuffer min, ByteBuffer max, IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree, AbstractType<?> comparator)
+    public RangeTermTree(ByteBuffer min, ByteBuffer max, IntervalTree<Term, SSTableIndex, Interval<Term, SSTableIndex>> rangeTree, AbstractType comparator)
     {
         this.min = min;
         this.max = max;
@@ -63,7 +63,7 @@ public class RangeTermTree implements TermTree
     {
         protected final List<Interval<Term, SSTableIndex>> intervals = new ArrayList<>();
 
-        protected Builder(OnDiskIndexBuilder.Mode mode, AbstractType<?> comparator)
+        protected Builder(OnDiskIndexBuilder.Mode mode, AbstractType comparator)
         {
             super(mode, comparator);
         }
@@ -89,9 +89,9 @@ public class RangeTermTree implements TermTree
     protected static class Term implements Comparable<Term>
     {
         private final ByteBuffer term;
-        private final AbstractType<?> comparator;
+        private final AbstractType comparator;
 
-        public Term(ByteBuffer term, AbstractType<?> comparator)
+        public Term(ByteBuffer term, AbstractType comparator)
         {
             this.term = term;
             this.comparator = comparator;

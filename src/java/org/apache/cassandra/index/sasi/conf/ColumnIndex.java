@@ -55,7 +55,7 @@ public class ColumnIndex
 {
     private static final String FILE_NAME_FORMAT = "SI_%s.db";
 
-    private final AbstractType<?> keyValidator;
+    private final AbstractType keyValidator;
 
     private final ColumnDefinition column;
     private final Optional<IndexMetadata> config;
@@ -70,7 +70,7 @@ public class ColumnIndex
 
     private final boolean isTokenized;
 
-    public ColumnIndex(AbstractType<?> keyValidator, ColumnDefinition column, IndexMetadata metadata)
+    public ColumnIndex(AbstractType keyValidator, ColumnDefinition column, IndexMetadata metadata)
     {
         this.keyValidator = keyValidator;
         this.column = column;
@@ -94,7 +94,7 @@ public class ColumnIndex
         return tracker.update(Collections.emptySet(), sstables);
     }
 
-    public AbstractType<?> keyValidator()
+    public AbstractType keyValidator()
     {
         return keyValidator;
     }
@@ -152,7 +152,7 @@ public class ColumnIndex
         return column;
     }
 
-    public AbstractType<?> getValidator()
+    public AbstractType getValidator()
     {
         return column.cellValueType();
     }
@@ -207,7 +207,7 @@ public class ColumnIndex
 
     public boolean isLiteral()
     {
-        AbstractType<?> validator = getValidator();
+        AbstractType validator = getValidator();
         return isIndexed() ? mode.isLiteral : (validator instanceof UTF8Type || validator instanceof AsciiType);
     }
 

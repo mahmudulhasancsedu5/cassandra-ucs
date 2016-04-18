@@ -47,7 +47,7 @@ class SASIIndexBuilder extends SecondaryIndexBuilder
 
     public void build()
     {
-        AbstractType<?> keyValidator = cfs.metadata.getKeyValidator();
+        AbstractType keyValidator = cfs.metadata.getKeyValidator();
         for (Map.Entry<SSTableReader, Map<ColumnDefinition, ColumnIndex>> e : sstables.entrySet())
         {
             SSTableReader sstable = e.getKey();

@@ -1741,7 +1741,7 @@ public class ClusteringColumnRestrictionsTest
      */
     private static CFMetaData newCFMetaData(Sort... sorts)
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
 
         for (Sort sort : sorts)
             types.add(sort == Sort.ASC ? Int32Type.instance : ReversedType.getInstance(Int32Type.instance));

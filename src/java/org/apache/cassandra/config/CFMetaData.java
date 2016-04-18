@@ -100,7 +100,7 @@ public final class CFMetaData
     // non-final, for now
     public volatile TableParams params = TableParams.DEFAULT;
 
-    private volatile AbstractType<?> keyValidator = BytesType.instance;
+    private volatile AbstractType keyValidator = BytesType.instance;
     private volatile Map<ByteBuffer, DroppedColumn> droppedColumns = new HashMap<>();
     private volatile Triggers triggers = Triggers.none();
     private volatile Indexes indexes = Indexes.none();
@@ -315,7 +315,7 @@ public final class CFMetaData
         for (ColumnDefinition def : partitionColumns)
             this.columnMetadata.put(def.name.bytes, def);
 
-        List<AbstractType<?>> keyTypes = extractTypes(partitionKeyColumns);
+        List<AbstractType> keyTypes = extractTypes(partitionKeyColumns);
         this.keyValidator = keyTypes.size() == 1 ? keyTypes.get(0) : CompositeType.getInstance(keyTypes);
 
         if (isCompactTable())
@@ -375,9 +375,9 @@ public final class CFMetaData
                               partitioner);
     }
 
-    private static List<AbstractType<?>> extractTypes(List<ColumnDefinition> clusteringColumns)
+    private static List<AbstractType> extractTypes(List<ColumnDefinition> clusteringColumns)
     {
-        List<AbstractType<?>> types = new ArrayList<>(clusteringColumns.size());
+        List<AbstractType> types = new ArrayList<>(clusteringColumns.size());
         for (ColumnDefinition def : clusteringColumns)
             types.add(def.type);
         return types;
@@ -572,14 +572,14 @@ public final class CFMetaData
         return ReadRepairDecision.NONE;
     }
 
-    public AbstractType<?> getColumnDefinitionNameComparator(ColumnDefinition.Kind kind)
+    public AbstractType getColumnDefinitionNameComparator(ColumnDefinition.Kind kind)
     {
         return (isSuper() && kind == ColumnDefinition.Kind.REGULAR) || (isStaticCompactTable() && kind == ColumnDefinition.Kind.STATIC)
              ? thriftColumnNameType()
              : UTF8Type.instance;
     }
 
-    public AbstractType<?> getKeyValidator()
+    public AbstractType getKeyValidator()
     {
         return keyValidator;
     }
@@ -642,9 +642,9 @@ public final class CFMetaData
     public ClusteringComparator getKeyValidatorAsClusteringComparator()
     {
         boolean isCompound = keyValidator instanceof CompositeType;
-        List<AbstractType<?>> types = isCompound
+        List<AbstractType> types = isCompound
                                     ? ((CompositeType) keyValidator).types
-                                    : Collections.<AbstractType<?>>singletonList(keyValidator);
+                                    : Collections.<AbstractType>singletonList(keyValidator);
         return new ClusteringComparator(types);
     }
 
@@ -681,7 +681,7 @@ public final class CFMetaData
         // We need the type for deserialization purpose. If we don't have the type however,
         // it means that it's a dropped column from before 3.0, and in that case using
         // BytesType is fine for what we'll be using it for, even if that's a hack.
-        AbstractType<?> type = dropped.type == null ? BytesType.instance : dropped.type;
+        AbstractType type = dropped.type == null ? BytesType.instance : dropped.type;
         return ColumnDefinition.regularDef(this, name, type);
     }
 
@@ -893,7 +893,7 @@ public final class CFMetaData
 
 
     // The comparator to validate the definition name with thrift.
-    public AbstractType<?> thriftColumnNameType()
+    public AbstractType thriftColumnNameType()
     {
         if (isSuper())
         {
@@ -924,7 +924,7 @@ public final class CFMetaData
         {
             case PARTITION_KEY:
                 partitionKeyColumns.set(def.position(), def);
-                List<AbstractType<?>> keyTypes = extractTypes(partitionKeyColumns);
+                List<AbstractType> keyTypes = extractTypes(partitionKeyColumns);
                 keyValidator = keyTypes.size() == 1 ? keyTypes.get(0) : CompositeType.getInstance(keyTypes);
                 break;
             case CLUSTERING:
@@ -1085,7 +1085,7 @@ public final class CFMetaData
         return serializers;
     }
 
-    public AbstractType<?> makeLegacyDefaultValidator()
+    public AbstractType makeLegacyDefaultValidator()
     {
         return isCounter()
              ? CounterColumnType.instance
@@ -1339,12 +1339,12 @@ public final class CFMetaData
     {
         // we only allow dropping REGULAR columns, from CQL-native tables, so the names are always of UTF8Type
         public final String name;
-        public final AbstractType<?> type;
+        public final AbstractType type;
 
         // drop timestamp, in microseconds, yet with millisecond granularity
         public final long droppedTime;
 
-        public DroppedColumn(String name, AbstractType<?> type, long droppedTime)
+        public DroppedColumn(String name, AbstractType type, long droppedTime)
         {
             this.name = name;
             this.type = type;

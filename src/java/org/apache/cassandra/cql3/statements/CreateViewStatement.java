@@ -87,14 +87,14 @@ public class CreateViewStatement extends SchemaAlteringStatement
     }
 
     private interface AddColumn {
-        void add(ColumnIdentifier identifier, AbstractType<?> type);
+        void add(ColumnIdentifier identifier, AbstractType type);
     }
 
     private void add(CFMetaData baseCfm, Iterable<ColumnIdentifier> columns, AddColumn adder)
     {
         for (ColumnIdentifier column : columns)
         {
-            AbstractType<?> type = baseCfm.getColumnDefinition(column).type;
+            AbstractType type = baseCfm.getColumnDefinition(column).type;
             if (properties.definedOrdering.containsKey(column))
             {
                 boolean desc = properties.definedOrdering.get(column);

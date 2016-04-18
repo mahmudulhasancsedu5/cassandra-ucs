@@ -88,7 +88,7 @@ public class Expression
     public final AbstractAnalyzer analyzer;
 
     public final ColumnIndex index;
-    public final AbstractType<?> validator;
+    public final AbstractType validator;
     public final boolean isLiteral;
 
     @VisibleForTesting
@@ -113,7 +113,7 @@ public class Expression
     }
 
     @VisibleForTesting
-    public Expression(String name, AbstractType<?> validator)
+    public Expression(String name, AbstractType validator)
     {
         this(null, new ColumnIndex(UTF8Type.instance, ColumnDefinition.regularDef("sasi", "internal", name, validator), null));
     }

@@ -58,7 +58,7 @@ public class SSTableIndex
         if (sstable == null)
             throw new IllegalStateException("Couldn't acquire reference to the sstable: " + referent);
 
-        AbstractType<?> validator = columnIndex.getValidator();
+        AbstractType validator = columnIndex.getValidator();
 
         assert validator != null;
         assert indexFile.exists() : String.format("SSTable %s should have index %s.",

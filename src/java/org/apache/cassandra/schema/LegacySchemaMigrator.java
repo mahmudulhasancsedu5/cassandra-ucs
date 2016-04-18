@@ -280,8 +280,8 @@ public final class LegacySchemaMigrator
         String ksName = tableRow.getString("keyspace_name");
         String cfName = tableRow.getString("columnfamily_name");
 
-        AbstractType<?> rawComparator = TypeParser.parse(tableRow.getString("comparator"));
-        AbstractType<?> subComparator = tableRow.has("subcomparator") ? TypeParser.parse(tableRow.getString("subcomparator")) : null;
+        AbstractType rawComparator = TypeParser.parse(tableRow.getString("comparator"));
+        AbstractType subComparator = tableRow.has("subcomparator") ? TypeParser.parse(tableRow.getString("subcomparator")) : null;
 
         boolean isSuper = "super".equals(tableRow.getString("type").toLowerCase());
         boolean isDense = tableRow.has("is_dense")
@@ -290,7 +290,7 @@ public final class LegacySchemaMigrator
         boolean isCompound = rawComparator instanceof CompositeType;
 
         // We don't really use the default validator but as we have it for backward compatibility, we use it to know if it's a counter table
-        AbstractType<?> defaultValidator = TypeParser.parse(tableRow.getString("default_validator"));
+        AbstractType defaultValidator = TypeParser.parse(tableRow.getString("default_validator"));
         boolean isCounter = defaultValidator instanceof CounterColumnType;
 
         /*
@@ -374,7 +374,7 @@ public final class LegacySchemaMigrator
      * information for table just created through thrift, nor for table prior to CASSANDRA-7744, so this
      * method does its best to infer whether the table is dense or not based on other elements.
      */
-    public static boolean calculateIsDense(AbstractType<?> comparator, UntypedResultSet columnRows)
+    public static boolean calculateIsDense(AbstractType comparator, UntypedResultSet columnRows)
     {
         /*
          * As said above, this method is only here because we need to deal with thrift upgrades.
@@ -416,7 +416,7 @@ public final class LegacySchemaMigrator
                : !hasRegular && !isCQL3OnlyPKComparator(comparator);
     }
 
-    private static boolean isCQL3OnlyPKComparator(AbstractType<?> comparator)
+    private static boolean isCQL3OnlyPKComparator(AbstractType comparator)
     {
         if (!(comparator instanceof CompositeType))
             return false;
@@ -558,9 +558,9 @@ public final class LegacySchemaMigrator
                                                 String cfName,
                                                 boolean isStaticCompactTable,
                                                 boolean isSuper,
-                                                AbstractType<?> rawComparator,
-                                                AbstractType<?> subComparator,
-                                                AbstractType<?> defaultValidator)
+                                                AbstractType rawComparator,
+                                                AbstractType subComparator,
+                                                AbstractType defaultValidator)
     {
         CompactTables.DefaultNames names = CompactTables.defaultNameGenerator(defs);
 
@@ -599,9 +599,9 @@ public final class LegacySchemaMigrator
      * that we should preserve the type of the dropped columns now, and, during migration, fetch the types from
      * the original comparator if necessary.
      */
-    private static void addDroppedColumns(CFMetaData cfm, AbstractType<?> comparator, Map<String, Long> droppedTimes)
+    private static void addDroppedColumns(CFMetaData cfm, AbstractType comparator, Map<String, Long> droppedTimes)
     {
-        AbstractType<?> last = comparator.getComponents().get(comparator.componentsCount() - 1);
+        AbstractType last = comparator.getComponents().get(comparator.componentsCount() - 1);
         Map<ByteBuffer, CollectionType> collections = last instanceof ColumnToCollectionType
                                                     ? ((ColumnToCollectionType) last).defined
                                                     : Collections.emptyMap();
@@ -612,7 +612,7 @@ public final class LegacySchemaMigrator
             ByteBuffer nameBytes = UTF8Type.instance.decompose(name);
             long time = entry.getValue();
 
-            AbstractType<?> type = collections.containsKey(nameBytes)
+            AbstractType type = collections.containsKey(nameBytes)
                                  ? collections.get(nameBytes)
                                  : BytesType.instance;
 
@@ -623,8 +623,8 @@ public final class LegacySchemaMigrator
     private static List<ColumnDefinition> createColumnsFromColumnRows(UntypedResultSet rows,
                                                                       String keyspace,
                                                                       String table,
-                                                                      AbstractType<?> rawComparator,
-                                                                      AbstractType<?> rawSubComparator,
+                                                                      AbstractType rawComparator,
+                                                                      AbstractType rawSubComparator,
                                                                       boolean isSuper,
                                                                       boolean isCQLTable,
                                                                       boolean isStaticCompactTable,
@@ -655,8 +655,8 @@ public final class LegacySchemaMigrator
     private static ColumnDefinition createColumnFromColumnRow(UntypedResultSet.Row row,
                                                               String keyspace,
                                                               String table,
-                                                              AbstractType<?> rawComparator,
-                                                              AbstractType<?> rawSubComparator,
+                                                              AbstractType rawComparator,
+                                                              AbstractType rawSubComparator,
                                                               boolean isSuper,
                                                               boolean isCQLTable,
                                                               boolean isStaticCompactTable,
@@ -676,12 +676,12 @@ public final class LegacySchemaMigrator
 
         // Note: we save the column name as string, but we should not assume that it is an UTF8 name, we
         // we need to use the comparator fromString method
-        AbstractType<?> comparator = isCQLTable
+        AbstractType comparator = isCQLTable
                                      ? UTF8Type.instance
                                      : CompactTables.columnDefinitionComparator(kind, isSuper, rawComparator, rawSubComparator);
         ColumnIdentifier name = ColumnIdentifier.getInterned(comparator.fromString(row.getString("column_name")), comparator);
 
-        AbstractType<?> validator = parseType(row.getString("validator"));
+        AbstractType validator = parseType(row.getString("validator"));
 
         return new ColumnDefinition(keyspace, table, name, validator, componentIndex, kind);
     }
@@ -690,8 +690,8 @@ public final class LegacySchemaMigrator
                                                        UntypedResultSet rows,
                                                        String keyspace,
                                                        String table,
-                                                       AbstractType<?> rawComparator,
-                                                       AbstractType<?> rawSubComparator,
+                                                       AbstractType rawComparator,
+                                                       AbstractType rawSubComparator,
                                                        boolean isSuper,
                                                        boolean isCQLTable,
                                                        boolean isStaticCompactTable,
@@ -821,7 +821,7 @@ public final class LegacySchemaMigrator
                .map(ByteBufferUtil::bytes)
                .collect(Collectors.toList());
 
-        List<AbstractType<?>> types =
+        List<AbstractType> types =
             row.getList("field_types", UTF8Type.instance)
                .stream()
                .map(LegacySchemaMigrator::parseType)
@@ -878,12 +878,12 @@ public final class LegacySchemaMigrator
             for (String arg : row.getList("argument_names", UTF8Type.instance))
                 argNames.add(new ColumnIdentifier(arg, true));
 
-        List<AbstractType<?>> argTypes = new ArrayList<>();
+        List<AbstractType> argTypes = new ArrayList<>();
         if (row.has("argument_types"))
             for (String type : row.getList("argument_types", UTF8Type.instance))
                 argTypes.add(parseType(type));
 
-        AbstractType<?> returnType = parseType(row.getString("return_type"));
+        AbstractType returnType = parseType(row.getString("return_type"));
 
         String language = row.getString("language");
         String body = row.getString("body");
@@ -944,7 +944,7 @@ public final class LegacySchemaMigrator
 
         List<String> types = row.getList("argument_types", UTF8Type.instance);
 
-        List<AbstractType<?>> argTypes = new ArrayList<>();
+        List<AbstractType> argTypes = new ArrayList<>();
         if (types != null)
         {
             argTypes = new ArrayList<>(types.size());
@@ -952,10 +952,10 @@ public final class LegacySchemaMigrator
                 argTypes.add(parseType(type));
         }
 
-        AbstractType<?> returnType = parseType(row.getString("return_type"));
+        AbstractType returnType = parseType(row.getString("return_type"));
 
         FunctionName stateFunc = new FunctionName(keyspaceName, row.getString("state_func"));
-        AbstractType<?> stateType = parseType(row.getString("state_type"));
+        AbstractType stateType = parseType(row.getString("state_type"));
         FunctionName finalFunc = row.has("final_func") ? new FunctionName(keyspaceName, row.getString("final_func")) : null;
         ByteBuffer initcond = row.has("initcond") ? row.getBytes("initcond") : null;
 
@@ -974,7 +974,7 @@ public final class LegacySchemaMigrator
         return QueryProcessor.executeOnceInternal(query, values);
     }
 
-    private static AbstractType<?> parseType(String str)
+    private static AbstractType parseType(String str)
     {
         return TypeParser.parse(str);
     }

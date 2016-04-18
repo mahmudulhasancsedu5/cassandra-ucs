@@ -25,15 +25,14 @@ import org.apache.cassandra.serializers.TimeSerializer;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
  * Nanosecond resolution time values
  */
-public class TimeType extends AbstractType<Long>
+public class TimeType extends ConcreteType<Long>
 {
     public static final TimeType instance = new TimeType();
-    private TimeType() {super(ComparisonType.BYTE_ORDER);} // singleton
+    private TimeType() {super(ComparisonType.BYTE_ORDER, Long.class);} // singleton
 
     public ByteBuffer fromString(String source) throws MarshalException
     {
@@ -41,7 +40,7 @@ public class TimeType extends AbstractType<Long>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == LongType.instance;
     }

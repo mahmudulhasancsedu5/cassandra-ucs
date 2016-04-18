@@ -669,7 +669,7 @@ public class CustomIndexTest extends CQLTester
             super(baseCfs, metadata);
         }
 
-        public AbstractType<?> customExpressionValueType()
+        public AbstractType customExpressionValueType()
         {
             return UTF8Type.instance;
         }
@@ -682,7 +682,7 @@ public class CustomIndexTest extends CQLTester
             super(baseCfs, metadata);
         }
 
-        public AbstractType<?> customExpressionValueType()
+        public AbstractType customExpressionValueType()
         {
             return Int32Type.instance;
         }
@@ -735,7 +735,7 @@ public class CustomIndexTest extends CQLTester
             super(baseCfs, metadata);
         }
 
-        public AbstractType<?> customExpressionValueType()
+        public AbstractType customExpressionValueType()
         {
             return null;
         }

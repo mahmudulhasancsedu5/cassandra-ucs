@@ -27,13 +27,13 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class ByteType extends AbstractType<Byte>
+public class ByteType extends ConcreteType<Byte>
 {
     public static final ByteType instance = new ByteType();
 
     ByteType()
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, Byte.class);
     } // singleton
 
     public int compareCustom(ByteBuffer o1, ByteBuffer o2)

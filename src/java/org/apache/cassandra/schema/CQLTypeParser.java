@@ -37,7 +37,7 @@ public final class CQLTypeParser
         PRIMITIVE_TYPES = builder.build();
     }
 
-    public static AbstractType<?> parse(String keyspace, String unparsed, Types userTypes)
+    public static AbstractType parse(String keyspace, String unparsed, Types userTypes)
     {
         String lowercased = unparsed.toLowerCase();
 

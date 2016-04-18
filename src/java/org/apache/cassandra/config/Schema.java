@@ -519,7 +519,7 @@ public class Schema
      * @return an empty {@link Optional} if the keyspace or the function name are not found;
      *         a non-empty optional of {@link Function} otherwise
      */
-    public Optional<Function> findFunction(FunctionName name, List<AbstractType<?>> argTypes)
+    public Optional<Function> findFunction(FunctionName name, List<AbstractType> argTypes)
     {
         if (!name.hasKeyspace())
             throw new IllegalArgumentException(String.format("Function name must be fully quallified: got %s", name));

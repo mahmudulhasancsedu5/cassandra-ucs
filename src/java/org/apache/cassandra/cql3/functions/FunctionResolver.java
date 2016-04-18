@@ -62,7 +62,7 @@ public final class FunctionResolver
                                List<? extends AssignmentTestable> providedArgs,
                                String receiverKs,
                                String receiverCf,
-                               AbstractType<?> receiverType)
+                               AbstractType receiverType)
     throws InvalidRequestException
     {
         if (name.equalsNativeFunction(TOKEN_FUNCTION_NAME))

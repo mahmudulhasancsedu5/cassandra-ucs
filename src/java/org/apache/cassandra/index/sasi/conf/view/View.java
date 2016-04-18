@@ -40,7 +40,7 @@ public class View implements Iterable<SSTableIndex>
     private final Map<Descriptor, SSTableIndex> view;
 
     private final TermTree termTree;
-    private final AbstractType<?> keyValidator;
+    private final AbstractType keyValidator;
     private final IntervalTree<Key, SSTableIndex, Interval<Key, SSTableIndex>> keyIntervalTree;
 
     public View(ColumnIndex index, Set<SSTableIndex> indexes)
@@ -55,7 +55,7 @@ public class View implements Iterable<SSTableIndex>
     {
         Map<Descriptor, SSTableIndex> newView = new HashMap<>();
 
-        AbstractType<?> validator = index.getValidator();
+        AbstractType validator = index.getValidator();
         TermTree.Builder termTreeBuilder = (validator instanceof AsciiType || validator instanceof UTF8Type)
                                             ? new PrefixTermTree.Builder(index.getMode().mode, validator)
                                             : new RangeTermTree.Builder(index.getMode().mode, validator);
@@ -114,9 +114,9 @@ public class View implements Iterable<SSTableIndex>
     private static class Key implements Comparable<Key>
     {
         private final ByteBuffer key;
-        private final AbstractType<?> comparator;
+        private final AbstractType comparator;
 
-        public Key(ByteBuffer key, AbstractType<?> comparator)
+        public Key(ByteBuffer key, AbstractType comparator)
         {
             this.key = key;
             this.comparator = comparator;

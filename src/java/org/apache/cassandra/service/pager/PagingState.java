@@ -188,7 +188,7 @@ public class PagingState
             this.protocolVersion = protocolVersion;
         }
 
-        private static List<AbstractType<?>> makeClusteringTypes(CFMetaData metadata)
+        private static List<AbstractType> makeClusteringTypes(CFMetaData metadata)
         {
             // This is the types that will be used when serializing the clustering in the paging state. We can't really use the actual clustering
             // types however because we can't guarantee that there won't be a schema change between when we send the paging state and get it back,
@@ -196,7 +196,7 @@ public class PagingState
             // (say timestamp -> blob). So we simply use a list of BytesTypes (for both reading and writting), which may be slightly inefficient
             // for fixed-width types, but avoid any risk during schema changes.
             int size = metadata.clusteringColumns().size();
-            List<AbstractType<?>> l = new ArrayList<>(size);
+            List<AbstractType> l = new ArrayList<>(size);
             for (int i = 0; i < size; i++)
                 l.add(BytesType.instance);
             return l;

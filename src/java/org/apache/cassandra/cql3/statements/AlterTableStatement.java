@@ -140,7 +140,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                     if (meta.isCounter() && meta.getDroppedColumns().containsKey(columnName.bytes))
                         throw new InvalidRequestException(String.format("Cannot re-add previously dropped counter column %s", columnName));
 
-                    AbstractType<?> type = validator.getType();
+                    AbstractType type = validator.getType();
                     if (type.isCollection() && type.isMultiCell())
                     {
                         if (!cfm.isCompound())
@@ -201,7 +201,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 if (def == null)
                     throw new InvalidRequestException(String.format("Column %s was not found in table %s", columnName, columnFamily()));
 
-                AbstractType<?> validatorType = def.isReversedType() && !validator.getType().isReversed()
+                AbstractType validatorType = def.isReversedType() && !validator.getType().isReversed()
                                                 ? ReversedType.getInstance(validator.getType())
                                                 : validator.getType();
                 validateAlter(cfm, def, validatorType);
@@ -356,7 +356,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
         return new Event.SchemaChange(Event.SchemaChange.Change.UPDATED, Event.SchemaChange.Target.TABLE, keyspace(), columnFamily());
     }
 
-    private static void validateAlter(CFMetaData cfm, ColumnDefinition def, AbstractType<?> validatorType)
+    private static void validateAlter(CFMetaData cfm, ColumnDefinition def, AbstractType validatorType)
     {
         switch (def.kind)
         {
@@ -364,7 +364,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 if (validatorType instanceof CounterColumnType)
                     throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", def.name));
 
-                AbstractType<?> currentType = cfm.getKeyValidatorAsClusteringComparator().subtype(def.position());
+                AbstractType currentType = cfm.getKeyValidatorAsClusteringComparator().subtype(def.position());
                 if (!validatorType.isValueCompatibleWith(currentType))
                     throw new ConfigurationException(String.format("Cannot change %s from type %s to type %s: types are incompatible.",
                                                                    def.name,
@@ -375,7 +375,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 if (!cfm.isCQLTable())
                     throw new InvalidRequestException(String.format("Cannot alter clustering column %s in a non-CQL3 table", def.name));
 
-                AbstractType<?> oldType = cfm.comparator.subtype(def.position());
+                AbstractType oldType = cfm.comparator.subtype(def.position());
                 // Note that CFMetaData.validateCompatibility already validate the change we're about to do. However, the error message it
                 // sends is a bit cryptic for a CQL3 user, so validating here for a sake of returning a better error message
                 // Do note that we need isCompatibleWith here, not just isValueCompatibleWith.

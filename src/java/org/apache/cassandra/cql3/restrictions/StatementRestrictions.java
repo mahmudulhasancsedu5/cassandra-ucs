@@ -550,7 +550,7 @@ public final class StatementRestrictions
         if (!index.getIndexMetadata().isCustom())
             throw IndexRestrictions.nonCustomIndexInExpression(expression.targetIndex);
 
-        AbstractType<?> expressionType = index.customExpressionValueType();
+        AbstractType expressionType = index.customExpressionValueType();
         if (expressionType == null)
             throw IndexRestrictions.customExpressionNotSupported(expression.targetIndex);
 

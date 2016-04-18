@@ -173,7 +173,7 @@ public class CustomCassandraIndex implements Index
                && supportsOperator(indexedColumn, operator);
     }
 
-    public AbstractType<?> customExpressionValueType()
+    public AbstractType customExpressionValueType()
     {
         return null;
     }

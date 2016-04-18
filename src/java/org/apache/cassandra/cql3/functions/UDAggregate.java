@@ -37,14 +37,14 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
 {
     protected static final Logger logger = LoggerFactory.getLogger(UDAggregate.class);
 
-    protected final AbstractType<?> stateType;
+    protected final AbstractType stateType;
     protected final ByteBuffer initcond;
     private final ScalarFunction stateFunction;
     private final ScalarFunction finalFunction;
 
     public UDAggregate(FunctionName name,
-                       List<AbstractType<?>> argTypes,
-                       AbstractType<?> returnType,
+                       List<AbstractType> argTypes,
+                       AbstractType returnType,
                        ScalarFunction stateFunc,
                        ScalarFunction finalFunc,
                        ByteBuffer initcond)
@@ -58,18 +58,18 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
 
     public static UDAggregate create(Functions functions,
                                      FunctionName name,
-                                     List<AbstractType<?>> argTypes,
-                                     AbstractType<?> returnType,
+                                     List<AbstractType> argTypes,
+                                     AbstractType returnType,
                                      FunctionName stateFunc,
                                      FunctionName finalFunc,
-                                     AbstractType<?> stateType,
+                                     AbstractType stateType,
                                      ByteBuffer initcond)
     throws InvalidRequestException
     {
-        List<AbstractType<?>> stateTypes = new ArrayList<>(argTypes.size() + 1);
+        List<AbstractType> stateTypes = new ArrayList<>(argTypes.size() + 1);
         stateTypes.add(stateType);
         stateTypes.addAll(argTypes);
-        List<AbstractType<?>> finalTypes = Collections.<AbstractType<?>>singletonList(stateType);
+        List<AbstractType> finalTypes = Collections.<AbstractType>singletonList(stateType);
         return new UDAggregate(name,
                                argTypes,
                                returnType,
@@ -79,8 +79,8 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
     }
 
     public static UDAggregate createBroken(FunctionName name,
-                                           List<AbstractType<?>> argTypes,
-                                           AbstractType<?> returnType,
+                                           List<AbstractType> argTypes,
+                                           AbstractType returnType,
                                            ByteBuffer initcond,
                                            final InvalidRequestException reason)
     {
@@ -136,7 +136,7 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         return initcond;
     }
 
-    public AbstractType<?> stateType()
+    public AbstractType stateType()
     {
         return stateType;
     }
@@ -194,7 +194,7 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
         };
     }
 
-    private static ScalarFunction resolveScalar(Functions functions, FunctionName aName, FunctionName fName, List<AbstractType<?>> argTypes) throws InvalidRequestException
+    private static ScalarFunction resolveScalar(Functions functions, FunctionName aName, FunctionName fName, List<AbstractType> argTypes) throws InvalidRequestException
     {
         Optional<Function> fun = functions.find(fName, argTypes);
         if (!fun.isPresent())

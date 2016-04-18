@@ -31,11 +31,11 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * A type that only accept empty data.
  * It is only useful as a value validation type, not as a comparator since column names can't be empty.
  */
-public class EmptyType extends AbstractType<Void>
+public class EmptyType extends ConcreteType<Void>
 {
     public static final EmptyType instance = new EmptyType();
 
-    private EmptyType() {super(ComparisonType.CUSTOM);} // singleton
+    private EmptyType() {super(ComparisonType.CUSTOM, Void.class);} // singleton
 
     public int compareCustom(ByteBuffer o1, ByteBuffer o2)
     {

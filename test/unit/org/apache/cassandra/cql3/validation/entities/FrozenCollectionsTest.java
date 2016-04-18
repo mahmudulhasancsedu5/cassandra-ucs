@@ -1111,7 +1111,7 @@ public class FrozenCollectionsTest extends CQLTester
         assertEquals("MapType(ListType(Int32Type),Int32Type)", clean(m.toString(true)));
 
         // tuple<set<int>>
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(SetType.getInstance(Int32Type.instance, true));
         TupleType tuple = new TupleType(types);
         assertEquals("TupleType(SetType(Int32Type))", clean(tuple.toString()));

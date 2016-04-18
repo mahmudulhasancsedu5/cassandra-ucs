@@ -48,7 +48,7 @@ public final class DropFunctionStatement extends SchemaAlteringStatement
     private final List<CQL3Type.Raw> argRawTypes;
     private final boolean argsPresent;
 
-    private List<AbstractType<?>> argTypes;
+    private List<AbstractType> argTypes;
 
     public DropFunctionStatement(FunctionName functionName,
                                  List<CQL3Type.Raw> argRawTypes,

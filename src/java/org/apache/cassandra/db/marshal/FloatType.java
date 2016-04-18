@@ -28,11 +28,11 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 
-public class FloatType extends AbstractType<Float>
+public class FloatType extends ConcreteType<Float>
 {
     public static final FloatType instance = new FloatType();
 
-    FloatType() {super(ComparisonType.CUSTOM);} // singleton
+    FloatType() {super(ComparisonType.CUSTOM, Float.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {

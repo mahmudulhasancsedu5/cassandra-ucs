@@ -295,7 +295,7 @@ public class DataRange
 
     // TODO: this is reused in SinglePartitionReadCommand but this should not really be here. Ideally
     // we need a more "native" handling of composite partition keys.
-    public static void appendKeyString(StringBuilder sb, AbstractType<?> type, ByteBuffer key)
+    public static void appendKeyString(StringBuilder sb, AbstractType type, ByteBuffer key)
     {
         if (type instanceof CompositeType)
         {

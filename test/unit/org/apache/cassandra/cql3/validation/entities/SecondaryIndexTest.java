@@ -1063,7 +1063,7 @@ public class SecondaryIndexTest extends CQLTester
     private static void assertColumnValue(int expected, String name, Row row, CFMetaData cfm)
     {
         ColumnDefinition col = cfm.getColumnDefinition(new ColumnIdentifier(name, true));
-        AbstractType<?> type = col.type;
+        AbstractType type = col.type;
         assertEquals(expected, type.compose(row.getCell(col).value()));
     }
 

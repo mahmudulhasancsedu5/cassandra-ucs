@@ -78,7 +78,7 @@ public class PerSSTableIndexWriter implements SSTableFlushObserver
     private final Descriptor descriptor;
     private final OperationType source;
 
-    private final AbstractType<?> keyValidator;
+    private final AbstractType keyValidator;
     private final Map<ColumnDefinition, ColumnIndex> supportedIndexes;
 
     @VisibleForTesting
@@ -88,7 +88,7 @@ public class PerSSTableIndexWriter implements SSTableFlushObserver
     private long currentKeyPosition;
     private boolean isComplete;
 
-    public PerSSTableIndexWriter(AbstractType<?> keyValidator,
+    public PerSSTableIndexWriter(AbstractType keyValidator,
                                  Descriptor descriptor,
                                  OperationType source,
                                  Map<ColumnDefinition, ColumnIndex> supportedIndexes)

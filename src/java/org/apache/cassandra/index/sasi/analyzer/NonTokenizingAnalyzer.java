@@ -43,7 +43,7 @@ public class NonTokenizingAnalyzer extends AbstractAnalyzer
 {
     private static final Logger logger = LoggerFactory.getLogger(NonTokenizingAnalyzer.class);
 
-    private static final Set<AbstractType<?>> VALID_ANALYZABLE_TYPES = new HashSet<AbstractType<?>>()
+    private static final Set<AbstractType> VALID_ANALYZABLE_TYPES = new HashSet<AbstractType>()
     {{
             add(UTF8Type.instance);
             add(AsciiType.instance);

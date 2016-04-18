@@ -118,12 +118,12 @@ public abstract class AbstractBounds<T extends RingPosition<T>> implements Seria
 
     public abstract List<? extends AbstractBounds<T>> unwrap();
 
-    public String getString(AbstractType<?> keyValidator)
+    public String getString(AbstractType keyValidator)
     {
         return getOpeningString() + format(left, keyValidator) + ", " + format(right, keyValidator) + getClosingString();
     }
 
-    private String format(T value, AbstractType<?> keyValidator)
+    private String format(T value, AbstractType keyValidator)
     {
         if (value instanceof DecoratedKey)
         {

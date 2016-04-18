@@ -1535,7 +1535,7 @@ public class SASIIndexTest
     {
 
         // special type which is UTF-8 but is only on the inside
-        AbstractType<?> stringType = new AbstractType<String>(AbstractType.ComparisonType.CUSTOM)
+        AbstractType stringType = new ConcreteType<String>(ConcreteType.ComparisonType.CUSTOM, String.class)
         {
             public ByteBuffer fromString(String source) throws MarshalException
             {

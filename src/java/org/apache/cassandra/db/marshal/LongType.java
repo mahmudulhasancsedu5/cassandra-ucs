@@ -27,11 +27,11 @@ import org.apache.cassandra.serializers.LongSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class LongType extends AbstractType<Long>
+public class LongType extends ConcreteType<Long>
 {
     public static final LongType instance = new LongType();
 
-    LongType() {super(ComparisonType.CUSTOM);} // singleton
+    LongType() {super(ComparisonType.CUSTOM, Long.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {
@@ -103,7 +103,7 @@ public class LongType extends AbstractType<Long>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == DateType.instance || otherType == TimestampType.instance;
     }

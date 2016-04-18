@@ -28,7 +28,7 @@ import org.apache.cassandra.serializers.IntegerSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public final class IntegerType extends AbstractType<BigInteger>
+public final class IntegerType extends ConcreteType<BigInteger>
 {
     public static final IntegerType instance = new IntegerType();
 
@@ -58,7 +58,7 @@ public final class IntegerType extends AbstractType<BigInteger>
         return i;
     }
 
-    IntegerType() {super(ComparisonType.CUSTOM);}/* singleton */
+    IntegerType() {super(ComparisonType.CUSTOM, BigInteger.class);}/* singleton */
 
     public boolean isEmptyValueMeaningless()
     {
@@ -169,7 +169,7 @@ public final class IntegerType extends AbstractType<BigInteger>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || Int32Type.instance.isValueCompatibleWith(otherType) || LongType.instance.isValueCompatibleWith(otherType);
     }

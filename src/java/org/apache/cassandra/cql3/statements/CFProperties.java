@@ -45,7 +45,7 @@ public class CFProperties
         useCompactStorage = true;
     }
 
-    public AbstractType getReversableType(ColumnIdentifier targetIdentifier, AbstractType<?> type)
+    public AbstractType getReversableType(ColumnIdentifier targetIdentifier, AbstractType type)
     {
         if (!definedOrdering.containsKey(targetIdentifier))
         {

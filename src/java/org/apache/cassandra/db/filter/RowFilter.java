@@ -139,7 +139,7 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
      * Returns true if all of the expressions within this filter that apply to the partition key are satisfied by
      * the given key, false otherwise.
      */
-    public boolean partitionKeyRestrictionsAreSatisfiedBy(DecoratedKey key, AbstractType<?> keyValidator)
+    public boolean partitionKeyRestrictionsAreSatisfiedBy(DecoratedKey key, AbstractType keyValidator)
     {
         for (Expression e : expressions)
         {
@@ -667,13 +667,13 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
                     }
                 case CONTAINS:
                     assert column.type.isCollection();
-                    CollectionType<?> type = (CollectionType<?>)column.type;
+                    CollectionType type = (CollectionType)column.type;
                     if (column.isComplex())
                     {
                         ComplexColumnData complexData = row.getComplexColumnData(column);
                         for (Cell cell : complexData)
                         {
-                            if (type.kind == CollectionType.Kind.SET)
+                            if (type.kind() == CollectionType.Kind.SET)
                             {
                                 if (type.nameComparator().compare(cell.path().get(0), value) == 0)
                                     return true;
@@ -692,7 +692,7 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
                         if (foundValue == null)
                             return false;
 
-                        switch (type.kind)
+                        switch (type.kind())
                         {
                             case LIST:
                                 ListType<?> listType = (ListType<?>)type;
@@ -730,13 +730,13 @@ public abstract class RowFilter implements Iterable<RowFilter.Expression>
         @Override
         public String toString()
         {
-            AbstractType<?> type = column.type;
+            AbstractType type = column.type;
             switch (operator)
             {
                 case CONTAINS:
                     assert type instanceof CollectionType;
-                    CollectionType<?> ct = (CollectionType<?>)type;
-                    type = ct.kind == CollectionType.Kind.SET ? ct.nameComparator() : ct.valueComparator();
+                    CollectionType ct = (CollectionType)type;
+                    type = ct.kind() == CollectionType.Kind.SET ? ct.nameComparator() : ct.valueComparator();
                     break;
                 case CONTAINS_KEY:
                     assert type instanceof MapType;

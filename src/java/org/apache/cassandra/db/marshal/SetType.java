@@ -29,29 +29,37 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.SetSerializer;
 
-public class SetType<T> extends CollectionType<Set<T>>
+public class SetType<T> extends ConcreteCollectionType<Set<T>>
 {
     // interning instances
-    private static final Map<AbstractType<?>, SetType> instances = new HashMap<>();
-    private static final Map<AbstractType<?>, SetType> frozenInstances = new HashMap<>();
+    private static final Map<ConcreteType<?>, SetType<?>> instances = new HashMap<>();
+    private static final Map<ConcreteType<?>, SetType<?>> frozenInstances = new HashMap<>();
 
-    private final AbstractType<T> elements;
+    private final ConcreteType<T> elements;
     private final SetSerializer<T> serializer;
     private final boolean isMultiCell;
 
     public static SetType<?> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> l = parser.getTypeParameters();
+        List<AbstractType> l = parser.getTypeParameters();
         if (l.size() != 1)
             throw new ConfigurationException("SetType takes exactly 1 type parameter");
 
         return getInstance(l.get(0), true);
     }
 
-    public static synchronized <T> SetType<T> getInstance(AbstractType<T> elements, boolean isMultiCell)
+    @SuppressWarnings("unchecked")
+    public static synchronized <T> SetType<T> getInstance(AbstractType elements, boolean isMultiCell)
     {
-        Map<AbstractType<?>, SetType> internMap = isMultiCell ? instances : frozenInstances;
-        SetType<T> t = internMap.get(elements);
+        return getInstance((ConcreteType<T>) elements, isMultiCell);
+    }
+
+    public static synchronized <T> SetType<T> getInstance(ConcreteType<T> elements, boolean isMultiCell)
+    {
+        Map<ConcreteType<?>, SetType<?>> internMap = isMultiCell ? instances : frozenInstances;
+        @SuppressWarnings("unchecked")
+        SetType<T> t = (SetType<T>) internMap.get(elements);
+
         if (t == null)
         {
             t = new SetType<T>(elements, isMultiCell);
@@ -60,7 +68,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         return t;
     }
 
-    public SetType(AbstractType<T> elements, boolean isMultiCell)
+    public SetType(ConcreteType<T> elements, boolean isMultiCell)
     {
         super(ComparisonType.CUSTOM, Kind.SET);
         this.elements = elements;
@@ -74,17 +82,17 @@ public class SetType<T> extends CollectionType<Set<T>>
         return getElementsType().referencesUserType(userTypeName);
     }
 
-    public AbstractType<T> getElementsType()
+    public AbstractType getElementsType()
     {
         return elements;
     }
 
-    public AbstractType<T> nameComparator()
+    public AbstractType nameComparator()
     {
         return elements;
     }
 
-    public AbstractType<?> valueComparator()
+    public AbstractType valueComparator()
     {
         return EmptyType.instance;
     }
@@ -96,7 +104,7 @@ public class SetType<T> extends CollectionType<Set<T>>
     }
 
     @Override
-    public AbstractType<?> freeze()
+    public SetType<T> freeze()
     {
         if (isMultiCell)
             return getInstance(this.elements, false);
@@ -105,14 +113,14 @@ public class SetType<T> extends CollectionType<Set<T>>
     }
 
     @Override
-    public boolean isCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isCompatibleWithFrozen(ConcreteCollectionType<?> previous)
     {
         assert !isMultiCell;
-        return this.elements.isCompatibleWith(((SetType) previous).elements);
+        return this.elements.isCompatibleWith(((SetType<?>) previous).elements);
     }
 
     @Override
-    public boolean isValueCompatibleWithFrozen(CollectionType<?> previous)
+    public boolean isValueCompatibleWithFrozen(ConcreteCollectionType<?> previous)
     {
         // because sets are ordered, any changes to the type must maintain the ordering
         return isCompatibleWithFrozen(previous);
@@ -138,7 +146,7 @@ public class SetType<T> extends CollectionType<Set<T>>
         if (includeFrozenType)
             sb.append(FrozenType.class.getName()).append("(");
         sb.append(getClass().getName());
-        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType<?>>singletonList(elements), ignoreFreezing || !isMultiCell));
+        sb.append(TypeParser.stringifyTypeParameters(Collections.<AbstractType>singletonList(elements), ignoreFreezing || !isMultiCell));
         if (includeFrozenType)
             sb.append(")");
         return sb.toString();
@@ -162,7 +170,7 @@ public class SetType<T> extends CollectionType<Set<T>>
             throw new MarshalException(String.format(
                     "Expected a list (representing a set), but got a %s: %s", parsed.getClass().getSimpleName(), parsed));
 
-        List list = (List) parsed;
+        List<?> list = (List<?>) parsed;
         Set<Term> terms = new HashSet<>(list.size());
         for (Object element : list)
         {

@@ -187,13 +187,13 @@ public class ColumnCondition
             return null;
         }
 
-        protected boolean isSatisfiedByValue(ByteBuffer value, Cell c, AbstractType<?> type, Operator operator) throws InvalidRequestException
+        protected boolean isSatisfiedByValue(ByteBuffer value, Cell c, AbstractType type, Operator operator) throws InvalidRequestException
         {
             return compareWithOperator(operator, type, value, c == null ? null : c.value());
         }
 
         /** Returns true if the operator is satisfied (i.e. "otherValue operator value == true"), false otherwise. */
-        protected boolean compareWithOperator(Operator operator, AbstractType<?> type, ByteBuffer value, ByteBuffer otherValue) throws InvalidRequestException
+        protected boolean compareWithOperator(Operator operator, AbstractType type, ByteBuffer value, ByteBuffer otherValue) throws InvalidRequestException
         {
             if (value == ByteBufferUtil.UNSET_BYTE_BUFFER)
                 throw new InvalidRequestException("Invalid 'unset' value in condition");
@@ -419,7 +419,7 @@ public class ColumnCondition
                 throw new InvalidRequestException("Invalid null value for " + (column.type instanceof MapType ? "map" : "list") + " element access");
 
             ByteBuffer cellValue;
-            AbstractType<?> valueType;
+            AbstractType valueType;
             if (column.type instanceof MapType)
             {
                 MapType mapType = (MapType) column.type;
@@ -510,9 +510,9 @@ public class ColumnCondition
 
             // make sure we use v3 serialization format for comparison
             ByteBuffer conditionValue;
-            if (type.kind == CollectionType.Kind.LIST)
+            if (type.kind() == CollectionType.Kind.LIST)
                 conditionValue = ((Lists.Value) value).get(Server.VERSION_3);
-            else if (type.kind == CollectionType.Kind.SET)
+            else if (type.kind() == CollectionType.Kind.SET)
                 conditionValue = ((Sets.Value) value).get(Server.VERSION_3);
             else
                 conditionValue = ((Maps.Value) value).get(Server.VERSION_3);
@@ -525,22 +525,22 @@ public class ColumnCondition
             if (value == null)
                 return !iter.hasNext();
 
-            switch (type.kind)
+            switch (type.kind())
             {
                 case LIST:
                     List<ByteBuffer> valueList = ((Lists.Value) value).elements;
-                    return listAppliesTo((ListType)type, iter, valueList, operator);
+                    return listAppliesTo((ListType<?>)type, iter, valueList, operator);
                 case SET:
                     Set<ByteBuffer> valueSet = ((Sets.Value) value).elements;
-                    return setAppliesTo((SetType)type, iter, valueSet, operator);
+                    return setAppliesTo((SetType<?>)type, iter, valueSet, operator);
                 case MAP:
                     Map<ByteBuffer, ByteBuffer> valueMap = ((Maps.Value) value).map;
-                    return mapAppliesTo((MapType)type, iter, valueMap, operator);
+                    return mapAppliesTo((MapType<?, ?>)type, iter, valueMap, operator);
             }
             throw new AssertionError();
         }
 
-        private static boolean setOrListAppliesTo(AbstractType<?> type, Iterator<Cell> iter, Iterator<ByteBuffer> conditionIter, Operator operator, boolean isSet)
+        private static boolean setOrListAppliesTo(AbstractType type, Iterator<Cell> iter, Iterator<ByteBuffer> conditionIter, Operator operator, boolean isSet)
         {
             while(iter.hasNext())
             {
@@ -561,12 +561,12 @@ public class ColumnCondition
             return operator == Operator.EQ || operator == Operator.LTE || operator == Operator.GTE;
         }
 
-        static boolean listAppliesTo(ListType type, Iterator<Cell> iter, List<ByteBuffer> elements, Operator operator)
+        static boolean listAppliesTo(ListType<?> type, Iterator<Cell> iter, List<ByteBuffer> elements, Operator operator)
         {
             return setOrListAppliesTo(type.getElementsType(), iter, elements.iterator(), operator, false);
         }
 
-        static boolean setAppliesTo(SetType type, Iterator<Cell> iter, Set<ByteBuffer> elements, Operator operator)
+        static boolean setAppliesTo(SetType<?> type, Iterator<Cell> iter, Set<ByteBuffer> elements, Operator operator)
         {
             ArrayList<ByteBuffer> sortedElements = new ArrayList<>(elements.size());
             sortedElements.addAll(elements);
@@ -574,7 +574,7 @@ public class ColumnCondition
             return setOrListAppliesTo(type.getElementsType(), iter, sortedElements.iterator(), operator, true);
         }
 
-        static boolean mapAppliesTo(MapType type, Iterator<Cell> iter, Map<ByteBuffer, ByteBuffer> elements, Operator operator)
+        static boolean mapAppliesTo(MapType<?, ?> type, Iterator<Cell> iter, Map<ByteBuffer, ByteBuffer> elements, Operator operator)
         {
             Iterator<Map.Entry<ByteBuffer, ByteBuffer>> conditionIter = elements.entrySet().iterator();
             while(iter.hasNext())
@@ -771,7 +771,7 @@ public class ColumnCondition
                 cellValue = cell == null ? null : userType.split(getCell(row, column).value())[fieldPosition];
             }
 
-            AbstractType<?> valueType = userType.fieldType(fieldPosition);
+            AbstractType valueType = userType.fieldType(fieldPosition);
             for (ByteBuffer value : inValues)
             {
                 if (compareWithOperator(Operator.EQ, valueType, value, cellValue))
@@ -972,7 +972,7 @@ public class ColumnCondition
                     throw new InvalidRequestException(String.format("Invalid element access syntax for non-collection column %s", receiver.name));
 
                 ColumnSpecification elementSpec, valueSpec;
-                switch ((((CollectionType) receiver.type).kind))
+                switch ((((CollectionType) receiver.type).kind()))
                 {
                     case LIST:
                         elementSpec = Lists.indexSpecOf(receiver);

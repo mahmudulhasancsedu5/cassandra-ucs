@@ -29,20 +29,20 @@ import org.apache.cassandra.serializers.MarshalException;
 /**
  * A fake type that is only used for parsing type strings that include frozen types.
  */
-public class FrozenType extends AbstractType<Void>
+public class FrozenType extends ConcreteType<Void>
 {
     protected FrozenType()
     {
-        super(ComparisonType.NOT_COMPARABLE);
+        super(ComparisonType.NOT_COMPARABLE, Void.class);
     }
 
-    public static AbstractType<?> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
+    public static AbstractType getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> innerTypes = parser.getTypeParameters();
+        List<AbstractType> innerTypes = parser.getTypeParameters();
         if (innerTypes.size() != 1)
             throw new SyntaxException("FrozenType() only accepts one parameter");
 
-        AbstractType<?> innerType = innerTypes.get(0);
+        AbstractType innerType = innerTypes.get(0);
         return innerType.freeze();
     }
 

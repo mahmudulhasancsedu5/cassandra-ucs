@@ -46,7 +46,7 @@ import static junit.framework.Assert.assertTrue;
 
 public class RowIndexEntryTest extends CQLTester
 {
-    private static final List<AbstractType<?>> clusterTypes = Collections.<AbstractType<?>>singletonList(LongType.instance);
+    private static final List<AbstractType> clusterTypes = Collections.<AbstractType>singletonList(LongType.instance);
     private static final ClusteringComparator comp = new ClusteringComparator(clusterTypes);
     private static ClusteringPrefix cn(long l)
     {

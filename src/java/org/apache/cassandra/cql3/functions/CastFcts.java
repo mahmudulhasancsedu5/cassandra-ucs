@@ -25,25 +25,8 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.cassandra.cql3.CQL3Type;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.AsciiType;
-import org.apache.cassandra.db.marshal.BooleanType;
-import org.apache.cassandra.db.marshal.ByteType;
-import org.apache.cassandra.db.marshal.CounterColumnType;
-import org.apache.cassandra.db.marshal.DecimalType;
-import org.apache.cassandra.db.marshal.DoubleType;
-import org.apache.cassandra.db.marshal.FloatType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.Int32Type;
-import org.apache.cassandra.db.marshal.IntegerType;
-import org.apache.cassandra.db.marshal.LongType;
-import org.apache.cassandra.db.marshal.ShortType;
-import org.apache.cassandra.db.marshal.SimpleDateType;
-import org.apache.cassandra.db.marshal.TimeType;
-import org.apache.cassandra.db.marshal.TimeUUIDType;
-import org.apache.cassandra.db.marshal.TimestampType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.db.marshal.*;
+
 import org.apache.commons.lang3.text.WordUtils;
 
 /**
@@ -59,7 +42,7 @@ public final class CastFcts
         List<Function> functions = new ArrayList<>();
 
         @SuppressWarnings("unchecked")
-        final AbstractType<? extends Number>[] numericTypes = new AbstractType[] {ByteType.instance,
+        final ConcreteType<? extends Number>[] numericTypes = new ConcreteType[] {ByteType.instance,
                                                                                   ShortType.instance,
                                                                                   Int32Type.instance,
                                                                                   LongType.instance,
@@ -69,7 +52,7 @@ public final class CastFcts
                                                                                   CounterColumnType.instance,
                                                                                   IntegerType.instance};
 
-        for (AbstractType<? extends Number> inputType : numericTypes)
+        for (ConcreteType<? extends Number> inputType : numericTypes)
         {
             addFunctionIfNeeded(functions, inputType, ByteType.instance, Number::byteValue);
             addFunctionIfNeeded(functions, inputType, ShortType.instance, Number::shortValue);
@@ -116,7 +99,7 @@ public final class CastFcts
      * @param outputType the output type
      * @return the name of the cast function use to cast to the specified type
      */
-    public static String getFunctionName(AbstractType<?> outputType)
+    public static String getFunctionName(ConcreteType<?> outputType)
     {
         return getFunctionName(outputType.asCQL3Type());
     }
@@ -141,8 +124,8 @@ public final class CastFcts
      * @param converter the function use to convert the input type into the output type
      */
     private static <I, O> void addFunctionIfNeeded(List<Function> functions,
-                                                   AbstractType<I> inputType,
-                                                   AbstractType<O> outputType,
+                                                   ConcreteType<I> inputType,
+                                                   ConcreteType<O> outputType,
                                                    java.util.function.Function<I, O> converter)
     {
         if (!inputType.equals(outputType))
@@ -150,8 +133,8 @@ public final class CastFcts
     }
 
     @SuppressWarnings("unchecked")
-    private static <O, I> Function wrapJavaFunction(AbstractType<I> inputType,
-                                                    AbstractType<O> outputType,
+    private static <O, I> Function wrapJavaFunction(ConcreteType<I> inputType,
+                                                    ConcreteType<O> outputType,
                                                     java.util.function.Function<I, O> converter)
     {
         return inputType.equals(CounterColumnType.instance)
@@ -172,7 +155,7 @@ public final class CastFcts
      */
     private static abstract class CastFunction<I, O> extends NativeScalarFunction
     {
-        public CastFunction(AbstractType<I> inputType, AbstractType<O> outputType)
+        public CastFunction(ConcreteType<I> inputType, ConcreteType<O> outputType)
         {
             super(getFunctionName(outputType), outputType, inputType);
         }
@@ -184,15 +167,15 @@ public final class CastFcts
         }
 
         @SuppressWarnings("unchecked")
-        protected AbstractType<O> outputType()
+        protected ConcreteType<O> outputType()
         {
-            return (AbstractType<O>) returnType;
+            return (ConcreteType<O>) returnType;
         }
 
         @SuppressWarnings("unchecked")
-        protected AbstractType<I> inputType()
+        protected ConcreteType<I> inputType()
         {
-            return (AbstractType<I>) argTypes.get(0);
+            return (ConcreteType<I>) argTypes.get(0);
         }
     }
 
@@ -209,15 +192,15 @@ public final class CastFcts
          */
         private final java.util.function.Function<I, O> converter;
 
-        public static <I, O> JavaFunctionWrapper<I, O> create(AbstractType<I> inputType,
-                                                              AbstractType<O> outputType,
+        public static <I, O> JavaFunctionWrapper<I, O> create(ConcreteType<I> inputType,
+                                                              ConcreteType<O> outputType,
                                                               java.util.function.Function<I, O> converter)
         {
             return new JavaFunctionWrapper<I, O>(inputType, outputType, converter);
         }
 
-        protected JavaFunctionWrapper(AbstractType<I> inputType,
-                                      AbstractType<O> outputType,
+        protected JavaFunctionWrapper(ConcreteType<I> inputType,
+                                      ConcreteType<O> outputType,
                                       java.util.function.Function<I, O> converter)
         {
             super(inputType, outputType);
@@ -249,13 +232,13 @@ public final class CastFcts
      */
     private static class JavaCounterFunctionWrapper<O> extends JavaFunctionWrapper<Long, O>
     {
-        public static <O> JavaFunctionWrapper<Long, O> create(AbstractType<O> outputType,
+        public static <O> JavaFunctionWrapper<Long, O> create(ConcreteType<O> outputType,
                                                               java.util.function.Function<Long, O> converter)
         {
             return new JavaCounterFunctionWrapper<O>(outputType, converter);
         }
 
-        protected JavaCounterFunctionWrapper(AbstractType<O> outputType,
+        protected JavaCounterFunctionWrapper(ConcreteType<O> outputType,
                                             java.util.function.Function<Long, O> converter)
         {
             super(CounterColumnType.instance, outputType, converter);
@@ -280,15 +263,15 @@ public final class CastFcts
          */
         private final NativeScalarFunction delegate;
 
-        public static <I, O> CassandraFunctionWrapper<I, O> create(AbstractType<I> inputType,
-                                                                   AbstractType<O> outputType,
+        public static <I, O> CassandraFunctionWrapper<I, O> create(ConcreteType<I> inputType,
+                                                                   ConcreteType<O> outputType,
                                                                    NativeScalarFunction delegate)
         {
             return new CassandraFunctionWrapper<I, O>(inputType, outputType, delegate);
         }
 
-        private CassandraFunctionWrapper(AbstractType<I> inputType,
-                                         AbstractType<O> outputType,
+        private CassandraFunctionWrapper(ConcreteType<I> inputType,
+                                         ConcreteType<O> outputType,
                                          NativeScalarFunction delegate)
         {
             super(inputType, outputType);
@@ -311,14 +294,14 @@ public final class CastFcts
     private static final class CastAsTextFunction<I> extends CastFunction<I, String>
     {
 
-        public static <I> CastAsTextFunction<I> create(AbstractType<I> inputType,
-                                                       AbstractType<String> outputType)
+        public static <I> CastAsTextFunction<I> create(ConcreteType<I> inputType,
+                                                       ConcreteType<String> outputType)
         {
             return new CastAsTextFunction<I>(inputType, outputType);
         }
 
-        private CastAsTextFunction(AbstractType<I> inputType,
-                                    AbstractType<String> outputType)
+        private CastAsTextFunction(ConcreteType<I> inputType,
+                                   ConcreteType<String> outputType)
         {
             super(inputType, outputType);
         }

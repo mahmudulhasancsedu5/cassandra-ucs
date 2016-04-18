@@ -32,6 +32,7 @@ import org.apache.cassandra.cql3.Attributes;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.ReversedType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
@@ -191,7 +192,7 @@ public class ThriftValidation
         }
     }
 
-    private static AbstractType<?> getThriftColumnNameComparator(CFMetaData metadata, ByteBuffer superColumnName)
+    private static AbstractType getThriftColumnNameComparator(CFMetaData metadata, ByteBuffer superColumnName)
     {
         if (!metadata.isSuper())
             return LegacyLayout.makeLegacyComparator(metadata);
@@ -225,7 +226,7 @@ public class ThriftValidation
             if (!metadata.isSuper())
                 throw new org.apache.cassandra.exceptions.InvalidRequestException("supercolumn specified to table " + metadata.cfName + " containing normal columns");
         }
-        AbstractType<?> comparator = getThriftColumnNameComparator(metadata, superColumnName);
+        AbstractType comparator = getThriftColumnNameComparator(metadata, superColumnName);
         boolean isCQL3Table = !metadata.isThriftCompatible();
         for (ByteBuffer name : column_names)
         {
@@ -285,7 +286,7 @@ public class ThriftValidation
         if (range.finish.remaining() > maxNameLength)
             throw new org.apache.cassandra.exceptions.InvalidRequestException("range finish length cannot be larger than " + maxNameLength);
 
-        AbstractType<?> comparator = getThriftColumnNameComparator(metadata, column_parent.super_column);
+        AbstractType comparator = getThriftColumnNameComparator(metadata, column_parent.super_column);
         try
         {
             comparator.validate(range.start);
@@ -296,7 +297,7 @@ public class ThriftValidation
             throw new org.apache.cassandra.exceptions.InvalidRequestException(e.getMessage());
         }
 
-        Comparator<ByteBuffer> orderedComparator = range.isReversed() ? comparator.reverseComparator : comparator;
+        Comparator<ByteBuffer> orderedComparator = range.isReversed() ? ReversedType.getInstance(comparator) : comparator;
         if (range.start.remaining() > 0
             && range.finish.remaining() > 0
             && orderedComparator.compare(range.start, range.finish) > 0)
@@ -572,7 +573,7 @@ public class ThriftValidation
             return false;
 
         SecondaryIndexManager idxManager = Keyspace.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager;
-        AbstractType<?> nameValidator = getThriftColumnNameComparator(metadata, null);
+        AbstractType nameValidator = getThriftColumnNameComparator(metadata, null);
 
         boolean isIndexed = false;
         for (IndexExpression expression : index_clause)

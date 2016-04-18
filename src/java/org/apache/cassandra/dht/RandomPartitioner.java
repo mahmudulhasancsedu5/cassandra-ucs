@@ -48,7 +48,7 @@ public class RandomPartitioner implements IPartitioner
     private static final int HEAP_SIZE = (int) ObjectSizes.measureDeep(new BigIntegerToken(FBUtilities.hashToBigInteger(ByteBuffer.allocate(1))));
 
     public static final RandomPartitioner instance = new RandomPartitioner();
-    public static final AbstractType<?> partitionOrdering = new PartitionerDefinedOrder(instance);
+    public static final AbstractType partitionOrdering = new PartitionerDefinedOrder(instance);
 
     private final Splitter splitter = new Splitter(this)
     {
@@ -212,12 +212,12 @@ public class RandomPartitioner implements IPartitioner
         return new BigIntegerToken(MAXIMUM);
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return IntegerType.instance;
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return partitionOrdering;
     }

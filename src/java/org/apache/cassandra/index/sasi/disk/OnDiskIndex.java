@@ -101,7 +101,7 @@ public class OnDiskIndex implements Iterable<OnDiskIndex.DataTerm>, Closeable
     protected final OnDiskIndexBuilder.Mode mode;
     protected final OnDiskIndexBuilder.TermSize termSize;
 
-    protected final AbstractType<?> comparator;
+    protected final AbstractType comparator;
     protected final MappedBuffer indexFile;
     protected final long indexSize;
     protected final boolean hasMarkedPartials;
@@ -116,7 +116,7 @@ public class OnDiskIndex implements Iterable<OnDiskIndex.DataTerm>, Closeable
     protected final ByteBuffer minTerm, maxTerm, minKey, maxKey;
 
     @SuppressWarnings("resource")
-    public OnDiskIndex(File index, AbstractType<?> cmp, Function<Long, DecoratedKey> keyReader)
+    public OnDiskIndex(File index, AbstractType cmp, Function<Long, DecoratedKey> keyReader)
     {
         keyFetcher = keyReader;
 
@@ -716,7 +716,7 @@ public class OnDiskIndex implements Iterable<OnDiskIndex.DataTerm>, Closeable
         }
     }
 
-    public AbstractType<?> getComparator()
+    public AbstractType getComparator()
     {
         return comparator;
     }

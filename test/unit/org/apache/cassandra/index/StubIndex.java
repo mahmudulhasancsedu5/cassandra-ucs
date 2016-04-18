@@ -85,7 +85,7 @@ public class StubIndex implements Index
         return operator == Operator.EQ;
     }
 
-    public AbstractType<?> customExpressionValueType()
+    public AbstractType customExpressionValueType()
     {
         return UTF8Type.instance;
     }

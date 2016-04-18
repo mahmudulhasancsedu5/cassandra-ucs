@@ -30,7 +30,7 @@ import org.apache.cassandra.utils.Pair;
 
 public class IntegralSA extends SA<ByteBuffer>
 {
-    public IntegralSA(AbstractType<?> comparator, OnDiskIndexBuilder.Mode mode)
+    public IntegralSA(AbstractType comparator, OnDiskIndexBuilder.Mode mode)
     {
         super(comparator, mode);
     }

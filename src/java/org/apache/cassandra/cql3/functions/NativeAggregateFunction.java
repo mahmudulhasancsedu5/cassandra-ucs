@@ -24,7 +24,7 @@ import org.apache.cassandra.db.marshal.AbstractType;
  */
 public abstract class NativeAggregateFunction extends NativeFunction implements AggregateFunction
 {
-    protected NativeAggregateFunction(String name, AbstractType<?> returnType, AbstractType<?>... argTypes)
+    protected NativeAggregateFunction(String name, AbstractType returnType, AbstractType... argTypes)
     {
         super(name, returnType, argTypes);
     }

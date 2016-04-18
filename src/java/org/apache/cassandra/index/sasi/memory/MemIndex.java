@@ -30,10 +30,10 @@ import org.github.jamm.MemoryMeter;
 
 public abstract class MemIndex
 {
-    protected final AbstractType<?> keyValidator;
+    protected final AbstractType keyValidator;
     protected final ColumnIndex columnIndex;
 
-    protected MemIndex(AbstractType<?> keyValidator, ColumnIndex columnIndex)
+    protected MemIndex(AbstractType keyValidator, ColumnIndex columnIndex)
     {
         this.keyValidator = keyValidator;
         this.columnIndex = columnIndex;
@@ -42,7 +42,7 @@ public abstract class MemIndex
     public abstract long add(DecoratedKey key, ByteBuffer value);
     public abstract RangeIterator<Long, Token> search(Expression expression);
 
-    public static MemIndex forColumn(AbstractType<?> keyValidator, ColumnIndex columnIndex)
+    public static MemIndex forColumn(AbstractType keyValidator, ColumnIndex columnIndex)
     {
         return columnIndex.isLiteral()
                 ? new TrieMemIndex(keyValidator, columnIndex)

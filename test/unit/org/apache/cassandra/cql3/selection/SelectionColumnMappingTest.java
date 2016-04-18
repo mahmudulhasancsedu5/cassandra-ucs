@@ -499,7 +499,7 @@ public class SelectionColumnMappingTest extends CQLTester
 
     }
 
-    private ColumnSpecification columnSpecification(String name, AbstractType<?> type)
+    private ColumnSpecification columnSpecification(String name, AbstractType type)
     {
         return new ColumnSpecification(KEYSPACE,
                                        tableName,

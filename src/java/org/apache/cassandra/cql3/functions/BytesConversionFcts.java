@@ -55,7 +55,7 @@ public abstract class BytesConversionFcts
 
     // Most of the XAsBlob and blobAsX functions are basically no-op since everything is
     // bytes internally. They only "trick" the type system.
-    public static Function makeToBlobFunction(AbstractType<?> fromType)
+    public static Function makeToBlobFunction(AbstractType fromType)
     {
         String name = fromType.asCQL3Type() + "asblob";
         return new NativeScalarFunction(name, BytesType.instance, fromType)
@@ -67,7 +67,7 @@ public abstract class BytesConversionFcts
         };
     }
 
-    public static Function makeFromBlobFunction(final AbstractType<?> toType)
+    public static Function makeFromBlobFunction(final AbstractType toType)
     {
         final String name = "blobas" + toType.asCQL3Type();
         return new NativeScalarFunction(name, toType, BytesType.instance)

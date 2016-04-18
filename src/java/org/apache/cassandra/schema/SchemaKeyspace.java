@@ -630,7 +630,7 @@ public final class SchemaKeyspace
     {
         RowUpdateBuilder adder = new RowUpdateBuilder(Columns, timestamp, mutation).clustering(table.cfName, column.name.toString());
 
-        AbstractType<?> type = column.type;
+        AbstractType type = column.type;
         if (type instanceof ReversedType)
             type = ((ReversedType) type).baseType;
 
@@ -1019,7 +1019,7 @@ public final class SchemaKeyspace
         int position = row.getInt("position");
         ClusteringOrder order = ClusteringOrder.valueOf(row.getString("clustering_order").toUpperCase());
 
-        AbstractType<?> type = parse(keyspace, row.getString("type"), types);
+        AbstractType type = parse(keyspace, row.getString("type"), types);
         if (order == ClusteringOrder.DESC)
             type = ReversedType.getInstance(type);
 
@@ -1047,7 +1047,7 @@ public final class SchemaKeyspace
          * them anymore), so before storing dropped columns in schema we expand UDTs to tuples. See expandUserTypes method.
          * Because of that, we can safely pass Types.none() to parse()
          */
-        AbstractType<?> type = parse(keyspace, row.getString("type"), org.apache.cassandra.schema.Types.none());
+        AbstractType type = parse(keyspace, row.getString("type"), org.apache.cassandra.schema.Types.none());
         long droppedTime = TimeUnit.MILLISECONDS.toMicros(row.getLong("dropped_time"));
         return new CFMetaData.DroppedColumn(name, type, droppedTime);
     }
@@ -1161,11 +1161,11 @@ public final class SchemaKeyspace
         for (String arg : row.getFrozenList("argument_names", UTF8Type.instance))
             argNames.add(new ColumnIdentifier(arg, true));
 
-        List<AbstractType<?>> argTypes = new ArrayList<>();
+        List<AbstractType> argTypes = new ArrayList<>();
         for (String type : row.getFrozenList("argument_types", UTF8Type.instance))
             argTypes.add(parse(ksName, type, types));
 
-        AbstractType<?> returnType = parse(ksName, row.getString("return_type"), types);
+        AbstractType returnType = parse(ksName, row.getString("return_type"), types);
 
         String language = row.getString("language");
         String body = row.getString("body");
@@ -1218,17 +1218,17 @@ public final class SchemaKeyspace
         String functionName = row.getString("aggregate_name");
         FunctionName name = new FunctionName(ksName, functionName);
 
-        List<AbstractType<?>> argTypes =
+        List<AbstractType> argTypes =
             row.getFrozenList("argument_types", UTF8Type.instance)
                .stream()
                .map(t -> parse(ksName, t, types))
                .collect(toList());
 
-        AbstractType<?> returnType = parse(ksName, row.getString("return_type"), types);
+        AbstractType returnType = parse(ksName, row.getString("return_type"), types);
 
         FunctionName stateFunc = new FunctionName(ksName, (row.getString("state_func")));
         FunctionName finalFunc = row.has("final_func") ? new FunctionName(ksName, row.getString("final_func")) : null;
-        AbstractType<?> stateType = row.has("state_type") ? parse(ksName, row.getString("state_type"), types) : null;
+        AbstractType stateType = row.has("state_type") ? parse(ksName, row.getString("state_type"), types) : null;
         ByteBuffer initcond = row.has("initcond") ? Terms.asBytes(ksName, row.getString("initcond"), stateType) : null;
 
         try
@@ -1372,7 +1372,7 @@ public final class SchemaKeyspace
      * We do it for dropped_columns, to allow safely dropping unused user types without retaining any references
      * in dropped_columns.
      */
-    private static AbstractType<?> expandUserTypes(AbstractType<?> original)
+    private static AbstractType expandUserTypes(AbstractType original)
     {
         if (original instanceof UserType)
             return new TupleType(expandUserTypes(((UserType) original).fieldTypes()));
@@ -1402,7 +1402,7 @@ public final class SchemaKeyspace
         return original;
     }
 
-    private static List<AbstractType<?>> expandUserTypes(List<AbstractType<?>> types)
+    private static List<AbstractType> expandUserTypes(List<? extends AbstractType> types)
     {
         return types.stream()
                     .map(SchemaKeyspace::expandUserTypes)

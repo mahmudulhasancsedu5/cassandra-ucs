@@ -27,13 +27,13 @@ import org.apache.cassandra.serializers.ShortSerializer;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class ShortType extends AbstractType<Short>
+public class ShortType extends ConcreteType<Short>
 {
     public static final ShortType instance = new ShortType();
 
     ShortType()
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, Short.class);
     } // singleton
 
     public int compareCustom(ByteBuffer o1, ByteBuffer o2)

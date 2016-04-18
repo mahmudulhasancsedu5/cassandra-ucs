@@ -36,7 +36,7 @@ public class SkipListMemIndex extends MemIndex
 
     private final ConcurrentSkipListMap<ByteBuffer, ConcurrentSkipListSet<DecoratedKey>> index;
 
-    public SkipListMemIndex(AbstractType<?> keyValidator, ColumnIndex columnIndex)
+    public SkipListMemIndex(AbstractType keyValidator, ColumnIndex columnIndex)
     {
         super(keyValidator, columnIndex);
         index = new ConcurrentSkipListMap<>(columnIndex.getValidator());

@@ -32,8 +32,6 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A user defined type.
@@ -42,15 +40,13 @@ import org.slf4j.LoggerFactory;
  */
 public class UserType extends TupleType
 {
-    private static final Logger logger = LoggerFactory.getLogger(UserType.class);
-
     public final String keyspace;
     public final ByteBuffer name;
     private final List<ByteBuffer> fieldNames;
     private final List<String> stringFieldNames;
     private final boolean isMultiCell;
 
-    public UserType(String keyspace, ByteBuffer name, List<ByteBuffer> fieldNames, List<AbstractType<?>> fieldTypes, boolean isMultiCell)
+    public UserType(String keyspace, ByteBuffer name, List<ByteBuffer> fieldNames, List<AbstractType> fieldTypes, boolean isMultiCell)
     {
         super(fieldTypes, false);
         assert fieldNames.size() == fieldTypes.size();
@@ -79,7 +75,7 @@ public class UserType extends TupleType
         String keyspace = params.left.left;
         ByteBuffer name = params.left.right;
         List<ByteBuffer> columnNames = new ArrayList<>(params.right.size());
-        List<AbstractType<?>> columnTypes = new ArrayList<>(params.right.size());
+        List<AbstractType> columnTypes = new ArrayList<>(params.right.size());
         for (Pair<ByteBuffer, AbstractType> p : params.right)
         {
             columnNames.add(p.left);
@@ -107,12 +103,12 @@ public class UserType extends TupleType
         return true;
     }
 
-    public AbstractType<?> fieldType(int i)
+    public AbstractType fieldType(int i)
     {
         return type(i);
     }
 
-    public List<AbstractType<?>> fieldTypes()
+    public List<AbstractType> fieldTypes()
     {
         return types;
     }
@@ -228,13 +224,14 @@ public class UserType extends TupleType
             throw new MarshalException(String.format(
                     "Expected a map, but got a %s: %s", parsed.getClass().getSimpleName(), parsed));
 
+        @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) parsed;
 
         Json.handleCaseSensitivity(map);
 
         List<Term> terms = new ArrayList<>(types.size());
 
-        Set keys = map.keySet();
+        Set<String> keys = map.keySet();
         assert keys.isEmpty() || keys.iterator().next() instanceof String;
 
         int foundValues = 0;
@@ -309,7 +306,7 @@ public class UserType extends TupleType
     }
 
     @Override
-    public boolean isValueCompatibleWith(AbstractType<?> previous)
+    public boolean isValueCompatibleWith(AbstractType previous)
     {
         if (this == previous)
             return true;
@@ -324,8 +321,8 @@ public class UserType extends TupleType
         if (!keyspace.equals(other.keyspace))
             return false;
 
-        Iterator<AbstractType<?>> thisTypeIter = types.iterator();
-        Iterator<AbstractType<?>> previousTypeIter = other.types.iterator();
+        Iterator<AbstractType> thisTypeIter = types.iterator();
+        Iterator<AbstractType> previousTypeIter = other.types.iterator();
         while (thisTypeIter.hasNext() && previousTypeIter.hasNext())
         {
             if (!thisTypeIter.next().isCompatibleWith(previousTypeIter.next()))
@@ -359,8 +356,8 @@ public class UserType extends TupleType
         if (this.types.size() != that.types.size())
             return false;
 
-        Iterator<AbstractType<?>> otherTypeIter = that.types.iterator();
-        for (AbstractType<?> type : types)
+        Iterator<AbstractType> otherTypeIter = that.types.iterator();
+        for (AbstractType type : types)
         {
             if (!type.equals(otherTypeIter.next(), ignoreFreezing))
                 return false;

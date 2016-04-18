@@ -29,24 +29,32 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.serializers.TypeSerializer;
 
-public class ReversedType<T> extends AbstractType<T>
+public class ReversedType<T> extends ConcreteType<T>
 {
     // interning instances
-    private static final Map<AbstractType<?>, ReversedType> instances = new HashMap<AbstractType<?>, ReversedType>();
+    private static final Map<ConcreteType<?>, ReversedType<?>> instances = new HashMap<>();
 
-    public final AbstractType<T> baseType;
+    public final ConcreteType<T> baseType;
 
-    public static <T> ReversedType<T> getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
+    public static AbstractType getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
-        List<AbstractType<?>> types = parser.getTypeParameters();
+        List<AbstractType> types = parser.getTypeParameters();
         if (types.size() != 1)
             throw new ConfigurationException("ReversedType takes exactly one argument, " + types.size() + " given");
-        return getInstance((AbstractType<T>) types.get(0));
+        return getInstance((AbstractType) types.get(0));
     }
 
-    public static synchronized <T> ReversedType<T> getInstance(AbstractType<T> baseType)
+    @SuppressWarnings("unchecked")
+    public static <T> ReversedType<T> getInstance(AbstractType baseType)
     {
-        ReversedType<T> type = instances.get(baseType);
+        return getInstance((ConcreteType<T>) baseType);
+    }
+
+    public static synchronized <T> ReversedType<T> getInstance(ConcreteType<T> baseType)
+    {
+        @SuppressWarnings("unchecked")
+        ReversedType<T> type = (ReversedType<T>) instances.get(baseType);
+
         if (type == null)
         {
             type = new ReversedType<T>(baseType);
@@ -55,9 +63,9 @@ public class ReversedType<T> extends AbstractType<T>
         return type;
     }
 
-    private ReversedType(AbstractType<T> baseType)
+    private ReversedType(ConcreteType<T> baseType)
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, baseType.type);
         this.baseType = baseType;
     }
 
@@ -110,16 +118,16 @@ public class ReversedType<T> extends AbstractType<T>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> otherType)
+    public boolean isCompatibleWith(AbstractType otherType)
     {
         if (!(otherType instanceof ReversedType))
             return false;
 
-        return this.baseType.isCompatibleWith(((ReversedType) otherType).baseType);
+        return this.baseType.isCompatibleWith(((ReversedType<?>) otherType).baseType);
     }
 
     @Override
-    public boolean isValueCompatibleWith(AbstractType<?> otherType)
+    public boolean isValueCompatibleWith(AbstractType otherType)
     {
         return this.baseType.isValueCompatibleWith(otherType);
     }

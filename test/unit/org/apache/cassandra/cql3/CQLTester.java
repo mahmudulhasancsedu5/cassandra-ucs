@@ -1353,7 +1353,7 @@ public abstract class CQLTester
         return type.decompose(serializeTuples(value));
     }
 
-    private static String formatValue(ByteBuffer bb, AbstractType<?> type)
+    private static String formatValue(ByteBuffer bb, AbstractType type)
     {
         if (bb == null)
             return "null";

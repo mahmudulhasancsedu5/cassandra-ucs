@@ -602,17 +602,17 @@ public class QueryProcessor implements QueryHandler
             return ksName.equals(statementKsName) && (cfName == null || cfName.equals(statementCfName));
         }
 
-        public void onCreateFunction(String ksName, String functionName, List<AbstractType<?>> argTypes)
+        public void onCreateFunction(String ksName, String functionName, List<AbstractType> argTypes)
         {
             onCreateFunctionInternal(ksName, functionName, argTypes);
         }
 
-        public void onCreateAggregate(String ksName, String aggregateName, List<AbstractType<?>> argTypes)
+        public void onCreateAggregate(String ksName, String aggregateName, List<AbstractType> argTypes)
         {
             onCreateFunctionInternal(ksName, aggregateName, argTypes);
         }
 
-        private static void onCreateFunctionInternal(String ksName, String functionName, List<AbstractType<?>> argTypes)
+        private static void onCreateFunctionInternal(String ksName, String functionName, List<AbstractType> argTypes)
         {
             // in case there are other overloads, we have to remove all overloads since argument type
             // matching may change (due to type casting)
@@ -627,7 +627,7 @@ public class QueryProcessor implements QueryHandler
                 removeInvalidPreparedStatements(ksName, cfName);
         }
 
-        public void onUpdateFunction(String ksName, String functionName, List<AbstractType<?>> argTypes)
+        public void onUpdateFunction(String ksName, String functionName, List<AbstractType> argTypes)
         {
             // Updating a function may imply we've changed the body of the function, so we need to invalid statements so that
             // the new definition is picked (the function is resolved at preparation time).
@@ -636,7 +636,7 @@ public class QueryProcessor implements QueryHandler
             removeAllInvalidPreparedStatementsForFunction(ksName, functionName);
         }
 
-        public void onUpdateAggregate(String ksName, String aggregateName, List<AbstractType<?>> argTypes)
+        public void onUpdateAggregate(String ksName, String aggregateName, List<AbstractType> argTypes)
         {
             // Updating a function may imply we've changed the body of the function, so we need to invalid statements so that
             // the new definition is picked (the function is resolved at preparation time).
@@ -657,12 +657,12 @@ public class QueryProcessor implements QueryHandler
             removeInvalidPreparedStatements(ksName, cfName);
         }
 
-        public void onDropFunction(String ksName, String functionName, List<AbstractType<?>> argTypes)
+        public void onDropFunction(String ksName, String functionName, List<AbstractType> argTypes)
         {
             removeAllInvalidPreparedStatementsForFunction(ksName, functionName);
         }
 
-        public void onDropAggregate(String ksName, String aggregateName, List<AbstractType<?>> argTypes)
+        public void onDropAggregate(String ksName, String aggregateName, List<AbstractType> argTypes)
         {
             removeAllInvalidPreparedStatementsForFunction(ksName, aggregateName);
         }

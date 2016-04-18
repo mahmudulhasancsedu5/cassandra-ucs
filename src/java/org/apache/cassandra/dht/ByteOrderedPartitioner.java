@@ -296,12 +296,12 @@ public class ByteOrderedPartitioner implements IPartitioner
         return allTokens;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return BytesType.instance;
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return BytesType.instance;
     }

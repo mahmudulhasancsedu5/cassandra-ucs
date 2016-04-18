@@ -53,8 +53,8 @@ public final class CreateAggregateStatement extends SchemaAlteringStatement
     private final List<CQL3Type.Raw> argRawTypes;
     private final Term.Raw ival;
 
-    private List<AbstractType<?>> argTypes;
-    private AbstractType<?> returnType;
+    private List<AbstractType> argTypes;
+    private AbstractType returnType;
     private ScalarFunction stateFunction;
     private ScalarFunction finalFunction;
     private ByteBuffer initcond;
@@ -84,22 +84,22 @@ public final class CreateAggregateStatement extends SchemaAlteringStatement
         for (CQL3Type.Raw rawType : argRawTypes)
             argTypes.add(prepareType("arguments", rawType));
 
-        AbstractType<?> stateType = prepareType("state type", stateTypeRaw);
+        AbstractType stateType = prepareType("state type", stateTypeRaw);
 
-        List<AbstractType<?>> stateArgs = stateArguments(stateType, argTypes);
+        List<AbstractType> stateArgs = stateArguments(stateType, argTypes);
 
         Function f = Schema.instance.findFunction(stateFunc, stateArgs).orElse(null);
         if (!(f instanceof ScalarFunction))
             throw new InvalidRequestException("State function " + stateFuncSig(stateFunc, stateTypeRaw, argRawTypes) + " does not exist or is not a scalar function");
         stateFunction = (ScalarFunction)f;
 
-        AbstractType<?> stateReturnType = stateFunction.returnType();
+        AbstractType stateReturnType = stateFunction.returnType();
         if (!stateReturnType.equals(stateType))
             throw new InvalidRequestException("State function " + stateFuncSig(stateFunction.name(), stateTypeRaw, argRawTypes) + " return type must be the same as the first argument type - check STYPE, argument and return types");
 
         if (finalFunc != null)
         {
-            List<AbstractType<?>> finalArgs = Collections.<AbstractType<?>>singletonList(stateType);
+            List<AbstractType> finalArgs = Collections.<AbstractType>singletonList(stateType);
             f = Schema.instance.findFunction(finalFunc, finalArgs).orElse(null);
             if (!(f instanceof ScalarFunction))
                 throw new InvalidRequestException("Final function " + finalFunc + '(' + stateTypeRaw + ") does not exist or is not a scalar function");
@@ -139,7 +139,7 @@ public final class CreateAggregateStatement extends SchemaAlteringStatement
         return super.prepare();
     }
 
-    private AbstractType<?> prepareType(String typeName, CQL3Type.Raw rawType)
+    private AbstractType prepareType(String typeName, CQL3Type.Raw rawType)
     {
         if (rawType.isFrozen())
             throw new InvalidRequestException(String.format("The function %s should not be frozen; remove the frozen<> modifier", typeName));
@@ -149,7 +149,7 @@ public final class CreateAggregateStatement extends SchemaAlteringStatement
         if (!rawType.canBeNonFrozen())
             rawType.freeze();
 
-        AbstractType<?> type = rawType.prepare(functionName.keyspace).getType();
+        AbstractType type = rawType.prepare(functionName.keyspace).getType();
         return type;
     }
 
@@ -254,9 +254,9 @@ public final class CreateAggregateStatement extends SchemaAlteringStatement
         return sb.toString();
     }
 
-    private static List<AbstractType<?>> stateArguments(AbstractType<?> stateType, List<AbstractType<?>> argTypes)
+    private static List<AbstractType> stateArguments(AbstractType stateType, List<AbstractType> argTypes)
     {
-        List<AbstractType<?>> r = new ArrayList<>(argTypes.size() + 1);
+        List<AbstractType> r = new ArrayList<>(argTypes.size() + 1);
         r.add(stateType);
         r.addAll(argTypes);
         return r;

@@ -128,7 +128,7 @@ public abstract class Selector implements AssignmentTestable
          *
          * @return the selector output type
          */
-        protected abstract AbstractType<?> getReturnType();
+        protected abstract AbstractType getReturnType();
 
         /**
          * Record a mapping between the ColumnDefinitions that are used by the selector
@@ -167,7 +167,7 @@ public abstract class Selector implements AssignmentTestable
      *
      * @return the <code>Selector</code> output type.
      */
-    public abstract AbstractType<?> getType();
+    public abstract AbstractType getType();
 
     /**
      * Checks if this <code>Selector</code> is creating aggregates.
@@ -189,7 +189,7 @@ public abstract class Selector implements AssignmentTestable
     {
         // We should ignore the fact that the output type is frozen in our comparison as functions do not support
         // frozen types for arguments
-        AbstractType<?> receiverType = receiver.type;
+        AbstractType receiverType = receiver.type;
         if (getType().isFreezable() && !getType().isMultiCell())
             receiverType = receiverType.freeze();
 

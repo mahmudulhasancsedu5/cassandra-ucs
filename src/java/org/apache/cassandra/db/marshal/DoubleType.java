@@ -27,11 +27,11 @@ import org.apache.cassandra.serializers.DoubleSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class DoubleType extends AbstractType<Double>
+public class DoubleType extends ConcreteType<Double>
 {
     public static final DoubleType instance = new DoubleType();
 
-    DoubleType() {super(ComparisonType.CUSTOM);} // singleton
+    DoubleType() {super(ComparisonType.CUSTOM, Double.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {

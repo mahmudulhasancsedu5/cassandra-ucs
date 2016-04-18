@@ -56,7 +56,7 @@ abstract class AbstractFunctionSelector<T extends Function> extends Selector
                 return fun.columnName(factories.getColumnNames());
             }
 
-            protected AbstractType<?> getReturnType()
+            protected AbstractType getReturnType()
             {
                 return fun.returnType();
             }
@@ -111,7 +111,7 @@ abstract class AbstractFunctionSelector<T extends Function> extends Selector
         this.args = Arrays.asList(new ByteBuffer[argSelectors.size()]);
     }
 
-    public AbstractType<?> getType()
+    public AbstractType getType()
     {
         return fun.returnType();
     }

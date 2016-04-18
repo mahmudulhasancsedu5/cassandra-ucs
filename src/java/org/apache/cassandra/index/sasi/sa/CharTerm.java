@@ -42,7 +42,7 @@ public class CharTerm extends Term<CharBuffer>
         return Charsets.UTF_8.encode(value.subSequence(value.position() + start, value.remaining()));
     }
 
-    public int compareTo(AbstractType<?> comparator, Term other)
+    public int compareTo(AbstractType comparator, Term other)
     {
         return value.compareTo((CharBuffer) other.value);
     }

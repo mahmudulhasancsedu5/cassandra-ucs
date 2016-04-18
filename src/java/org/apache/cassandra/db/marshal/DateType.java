@@ -36,13 +36,13 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * correctly. This is kept for backward compatibility but shouldn't be used in new code.
  */
 @Deprecated
-public class DateType extends AbstractType<Date>
+public class DateType extends ConcreteType<Date>
 {
     private static final Logger logger = LoggerFactory.getLogger(DateType.class);
 
     public static final DateType instance = new DateType();
 
-    DateType() {super(ComparisonType.BYTE_ORDER);} // singleton
+    DateType() {super(ComparisonType.BYTE_ORDER, Date.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {
@@ -83,7 +83,7 @@ public class DateType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (super.isCompatibleWith(previous))
             return true;
@@ -101,7 +101,7 @@ public class DateType extends AbstractType<Date>
     }
 
     @Override
-    public boolean isValueCompatibleWithInternal(AbstractType<?> otherType)
+    public boolean isValueCompatibleWithInternal(AbstractType otherType)
     {
         return this == otherType || otherType == TimestampType.instance || otherType == LongType.instance;
     }

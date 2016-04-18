@@ -33,7 +33,7 @@ public class TypeParserTest
     @Test
     public void testParse() throws ConfigurationException, SyntaxException
     {
-        AbstractType<?> type;
+        AbstractType type;
 
         type = TypeParser.parse(null);
         assert type == BytesType.instance;
@@ -93,7 +93,7 @@ public class TypeParserTest
                                                             RandomPartitioner.instance,
                                                             OrderPreservingPartitioner.instance })
         {
-            AbstractType<?> type = partitioner.partitionOrdering();
+            AbstractType type = partitioner.partitionOrdering();
             assertSame(type, TypeParser.parse(type.toString()));
         }
         assertSame(DatabaseDescriptor.getPartitioner().partitionOrdering(), TypeParser.parse("PartitionerDefinedOrder"));

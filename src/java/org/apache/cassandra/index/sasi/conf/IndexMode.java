@@ -44,7 +44,7 @@ public class IndexMode
 
     public static final IndexMode NOT_INDEXED = new IndexMode(Mode.PREFIX, true, false, NonTokenizingAnalyzer.class, 0);
 
-    private static final Set<AbstractType<?>> TOKENIZABLE_TYPES = new HashSet<AbstractType<?>>()
+    private static final Set<AbstractType> TOKENIZABLE_TYPES = new HashSet<AbstractType>()
     {{
         add(UTF8Type.instance);
         add(AsciiType.instance);
@@ -71,7 +71,7 @@ public class IndexMode
         this.maxCompactionFlushMemoryInMb = maxFlushMemMb;
     }
 
-    public AbstractAnalyzer getAnalyzer(AbstractType<?> validator)
+    public AbstractAnalyzer getAnalyzer(AbstractType validator)
     {
         AbstractAnalyzer analyzer = new NoOpAnalyzer();
 
@@ -159,7 +159,7 @@ public class IndexMode
         try
         {
             String literalOption = indexOptions.get(INDEX_IS_LITERAL_OPTION);
-            AbstractType<?> validator = column.cellValueType();
+            AbstractType validator = column.cellValueType();
 
             isLiteral = literalOption == null
                             ? (validator instanceof UTF8Type || validator instanceof AsciiType)

@@ -39,7 +39,7 @@ public class AuthMigrationListener extends MigrationListener
         DatabaseDescriptor.getAuthorizer().revokeAllOn(DataResource.table(ksName, cfName));
     }
 
-    public void onDropFunction(String ksName, String functionName, List<AbstractType<?>> argTypes)
+    public void onDropFunction(String ksName, String functionName, List<AbstractType> argTypes)
     {
         DatabaseDescriptor.getAuthorizer()
                           .revokeAllOn(FunctionResource.function(ksName, functionName, argTypes));

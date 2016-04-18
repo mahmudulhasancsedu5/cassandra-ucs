@@ -95,14 +95,14 @@ public class SchemaLoader
 
         AbstractType bytes = BytesType.instance;
 
-        AbstractType<?> composite = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
-        AbstractType<?> compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{BytesType.instance, IntegerType.instance}));
-        Map<Byte, AbstractType<?>> aliases = new HashMap<Byte, AbstractType<?>>();
+        AbstractType composite = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, TimeUUIDType.instance, IntegerType.instance}));
+        AbstractType compositeMaxMin = CompositeType.getInstance(Arrays.asList(new AbstractType[]{BytesType.instance, IntegerType.instance}));
+        Map<Byte, AbstractType> aliases = new HashMap<Byte, AbstractType>();
         aliases.put((byte)'b', BytesType.instance);
         aliases.put((byte)'t', TimeUUIDType.instance);
         aliases.put((byte)'B', ReversedType.getInstance(BytesType.instance));
         aliases.put((byte)'T', ReversedType.getInstance(TimeUUIDType.instance));
-        AbstractType<?> dynamicComposite = DynamicCompositeType.getInstance(aliases);
+        AbstractType dynamicComposite = DynamicCompositeType.getInstance(aliases);
 
         // Make it easy to test compaction
         Map<String, String> compactionOptions = new HashMap<String, String>();
@@ -336,17 +336,17 @@ public class SchemaLoader
         return standardCFMD(ksName, cfName, 1, AsciiType.instance);
     }
 
-    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType)
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType keyType)
     {
         return standardCFMD(ksName, cfName, columnCount, keyType, AsciiType.instance);
     }
 
-    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType, AbstractType<?> valType)
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType keyType, AbstractType valType)
     {
         return standardCFMD(ksName, cfName, columnCount, keyType, valType, AsciiType.instance);
     }
 
-    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType<?> keyType, AbstractType<?> valType, AbstractType<?> clusteringType)
+    public static CFMetaData standardCFMD(String ksName, String cfName, int columnCount, AbstractType keyType, AbstractType valType, AbstractType clusteringType)
     {
         CFMetaData.Builder builder = CFMetaData.Builder.create(ksName, cfName)
                 .addPartitionKey("key", keyType)
@@ -372,7 +372,7 @@ public class SchemaLoader
     {
         AbstractType comp = cc;
         if (subcc != null)
-            comp = CompositeType.getInstance(Arrays.asList(new AbstractType<?>[]{cc, subcc}));
+            comp = CompositeType.getInstance(Arrays.asList(new AbstractType[]{cc, subcc}));
 
         return CFMetaData.Builder.createDense(ksName, cfName, subcc != null, false)
             .addPartitionKey("key", AsciiType.instance)

@@ -224,7 +224,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
         int size = clustering.size();
         for (int i = 0; i < size; i++)
         {
-            AbstractType<?> type = comparator.subtype(i);
+            AbstractType type = comparator.subtype(i);
             ByteBuffer newValue = clustering.get(i);
             minClusteringValues[i] = maybeMinimize(min(minClusteringValues[i], newValue, type));
             maxClusteringValues[i] = maybeMinimize(max(maxClusteringValues[i], newValue, type));
@@ -239,7 +239,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
         return buffer == null ? null : ByteBufferUtil.minimalBufferFor(buffer);
     }
 
-    private static ByteBuffer min(ByteBuffer b1, ByteBuffer b2, AbstractType<?> comparator)
+    private static ByteBuffer min(ByteBuffer b1, ByteBuffer b2, AbstractType comparator)
     {
         if (b1 == null)
             return b2;
@@ -251,7 +251,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
         return b1;
     }
 
-    private static ByteBuffer max(ByteBuffer b1, ByteBuffer b2, AbstractType<?> comparator)
+    private static ByteBuffer max(ByteBuffer b1, ByteBuffer b2, AbstractType comparator)
     {
         if (b1 == null)
             return b2;

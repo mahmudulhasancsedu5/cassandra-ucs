@@ -118,7 +118,7 @@ public class CreateTypeStatement extends SchemaAlteringStatement
         for (ColumnIdentifier name : columnNames)
             names.add(name.bytes);
 
-        List<AbstractType<?>> types = new ArrayList<>(columnTypes.size());
+        List<AbstractType> types = new ArrayList<>(columnTypes.size());
         for (CQL3Type.Raw type : columnTypes)
             types.add(type.prepare(keyspace()).getType());
 

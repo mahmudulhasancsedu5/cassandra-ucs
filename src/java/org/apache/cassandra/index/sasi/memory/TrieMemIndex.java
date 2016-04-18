@@ -52,7 +52,7 @@ public class TrieMemIndex extends MemIndex
 
     private final ConcurrentTrie index;
 
-    public TrieMemIndex(AbstractType<?> keyValidator, ColumnIndex columnIndex)
+    public TrieMemIndex(AbstractType keyValidator, ColumnIndex columnIndex)
     {
         super(keyValidator, columnIndex);
 

@@ -27,13 +27,13 @@ import org.apache.cassandra.serializers.Int32Serializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class Int32Type extends AbstractType<Integer>
+public class Int32Type extends ConcreteType<Integer>
 {
     public static final Int32Type instance = new Int32Type();
 
     Int32Type()
     {
-        super(ComparisonType.CUSTOM);
+        super(ComparisonType.CUSTOM, Integer.class);
     } // singleton
 
     public boolean isEmptyValueMeaningless()

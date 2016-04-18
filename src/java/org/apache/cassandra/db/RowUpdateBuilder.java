@@ -298,7 +298,7 @@ public class RowUpdateBuilder
         return add(columnDefinition, null);
     }
 
-    private static ByteBuffer bb(Object value, AbstractType<?> type)
+    private static ByteBuffer bb(Object value, AbstractType type)
     {
         if (value == null)
             return null;

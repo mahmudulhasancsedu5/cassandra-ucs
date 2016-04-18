@@ -59,7 +59,7 @@ public abstract class OnDiskBlock<T extends Term>
         blockIndexSize = block.getInt() * 2;
     }
 
-    public SearchResult<T> search(AbstractType<?> comparator, ByteBuffer query)
+    public SearchResult<T> search(AbstractType comparator, ByteBuffer query)
     {
         int cmp = -1, start = 0, end = termCount() - 1, middle = 0;
 

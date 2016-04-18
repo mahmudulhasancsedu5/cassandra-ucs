@@ -96,7 +96,7 @@ public final class UDFContextImpl implements UDFContext
 
     public TupleValue newTupleValue(String cqlDefinition)
     {
-        AbstractType<?> abstractType = CQLTypeParser.parse(keyspaceMetadata.name, cqlDefinition, keyspaceMetadata.types);
+        AbstractType abstractType = CQLTypeParser.parse(keyspaceMetadata.name, cqlDefinition, keyspaceMetadata.types);
         DataType dataType = UDHelper.driverType(abstractType);
         return newTupleValue(dataType);
     }

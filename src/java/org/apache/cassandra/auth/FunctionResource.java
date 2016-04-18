@@ -74,7 +74,7 @@ public class FunctionResource implements IResource
     private final Level level;
     private final String keyspace;
     private final String name;
-    private final List<AbstractType<?>> argTypes;
+    private final List<AbstractType> argTypes;
 
     private FunctionResource()
     {
@@ -92,7 +92,7 @@ public class FunctionResource implements IResource
         argTypes = null;
     }
 
-    private FunctionResource(String keyspace, String name, List<AbstractType<?>> argTypes)
+    private FunctionResource(String keyspace, String name, List<AbstractType> argTypes)
     {
         level = Level.FUNCTION;
         this.keyspace = keyspace;
@@ -128,7 +128,7 @@ public class FunctionResource implements IResource
      * @param argTypes the types of the arguments to the function
      * @return FunctionResource instance reresenting the function.
      */
-    public static FunctionResource function(String keyspace, String name, List<AbstractType<?>> argTypes)
+    public static FunctionResource function(String keyspace, String name, List<AbstractType> argTypes)
     {
         return new FunctionResource(keyspace, name, argTypes);
     }
@@ -146,7 +146,7 @@ public class FunctionResource implements IResource
      */
     public static FunctionResource functionFromCql(String keyspace, String name, List<CQL3Type.Raw> argTypes)
     {
-        List<AbstractType<?>> abstractTypes = new ArrayList<>();
+        List<AbstractType> abstractTypes = new ArrayList<>();
         for (CQL3Type.Raw cqlType : argTypes)
             abstractTypes.add(cqlType.prepare(keyspace).getType());
 
@@ -317,9 +317,9 @@ public class FunctionResource implements IResource
         return Joiner.on("^").join(argTypes);
     }
 
-    private static List<AbstractType<?>> argsListFromString(String s)
+    private static List<AbstractType> argsListFromString(String s)
     {
-        List<AbstractType<?>> argTypes = new ArrayList<>();
+        List<AbstractType> argTypes = new ArrayList<>();
         for(String type : Splitter.on("^").omitEmptyStrings().trimResults().split(s))
             argTypes.add(TypeParser.parse(type));
         return argTypes;

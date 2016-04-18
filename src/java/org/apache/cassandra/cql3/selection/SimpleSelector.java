@@ -29,7 +29,7 @@ public final class SimpleSelector extends Selector
 {
     private final String columnName;
     private final int idx;
-    private final AbstractType<?> type;
+    private final AbstractType type;
     private ByteBuffer current;
     private boolean isSet;
 
@@ -44,7 +44,7 @@ public final class SimpleSelector extends Selector
             }
 
             @Override
-            protected AbstractType<?> getReturnType()
+            protected AbstractType getReturnType()
             {
                 return def.type;
             }
@@ -92,7 +92,7 @@ public final class SimpleSelector extends Selector
     }
 
     @Override
-    public AbstractType<?> getType()
+    public AbstractType getType()
     {
         return type;
     }
@@ -103,7 +103,7 @@ public final class SimpleSelector extends Selector
         return columnName;
     }
 
-    private SimpleSelector(String columnName, int idx, AbstractType<?> type)
+    private SimpleSelector(String columnName, int idx, AbstractType type)
     {
         this.columnName = columnName;
         this.idx = idx;

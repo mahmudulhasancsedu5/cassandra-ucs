@@ -27,8 +27,8 @@ import org.github.jamm.Unmetered;
 public interface Function extends AssignmentTestable
 {
     public FunctionName name();
-    public List<AbstractType<?>> argTypes();
-    public AbstractType<?> returnType();
+    public List<AbstractType> argTypes();
+    public AbstractType returnType();
 
     /**
      * Checks whether the function is a native/hard coded one or not.

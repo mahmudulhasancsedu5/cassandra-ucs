@@ -33,10 +33,10 @@ import org.apache.commons.lang3.text.StrBuilder;
 public abstract class AbstractFunction implements Function
 {
     protected final FunctionName name;
-    protected final List<AbstractType<?>> argTypes;
-    protected final AbstractType<?> returnType;
+    protected final List<AbstractType> argTypes;
+    protected final AbstractType returnType;
 
-    protected AbstractFunction(FunctionName name, List<AbstractType<?>> argTypes, AbstractType<?> returnType)
+    protected AbstractFunction(FunctionName name, List<AbstractType> argTypes, AbstractType returnType)
     {
         this.name = name;
         this.argTypes = argTypes;
@@ -48,12 +48,12 @@ public abstract class AbstractFunction implements Function
         return name;
     }
 
-    public List<AbstractType<?>> argTypes()
+    public List<AbstractType> argTypes()
     {
         return argTypes;
     }
 
-    public AbstractType<?> returnType()
+    public AbstractType returnType()
     {
         return returnType;
     }
@@ -90,7 +90,7 @@ public abstract class AbstractFunction implements Function
     {
         // We should ignore the fact that the receiver type is frozen in our comparison as functions do not support
         // frozen types for return type
-        AbstractType<?> returnType = returnType();
+        AbstractType returnType = returnType();
         if (receiver.type.isFreezable() && !receiver.type.isMultiCell())
             returnType = returnType.freeze();
 

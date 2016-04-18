@@ -299,7 +299,7 @@ public final class SingleColumnRelation extends Relation
 
     private static ColumnSpecification makeCollectionReceiver(ColumnSpecification receiver, boolean forKey)
     {
-        return ((CollectionType<?>) receiver.type).makeCollectionReceiver(receiver, forKey);
+        return ((CollectionType) receiver.type).makeCollectionReceiver(receiver, forKey);
     }
 
     private boolean isLegalRelationForNonFrozenCollection()

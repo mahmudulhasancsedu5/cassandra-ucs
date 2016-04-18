@@ -258,7 +258,7 @@ public class MergeIteratorComparisonTest
     public void testTimeUuidType()
     {
         System.out.println("testTimeUuidType");
-        final AbstractType<UUID> type = TimeUUIDType.instance;
+        final AbstractType type = TimeUUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
         List<List<ByteBuffer>> lists = new SimpleListGenerator<ByteBuffer>(type, ITERATOR_COUNT, LIST_LENGTH) {
@@ -275,7 +275,7 @@ public class MergeIteratorComparisonTest
     public void testUuidType()
     {
         System.out.println("testUuidType");
-        final AbstractType<UUID> type = UUIDType.instance;
+        final AbstractType type = UUIDType.instance;
         Reducer<ByteBuffer, Counted<ByteBuffer>> reducer = new Counter<ByteBuffer>();
 
         List<List<ByteBuffer>> lists = new SimpleListGenerator<ByteBuffer>(type, ITERATOR_COUNT, LIST_LENGTH) {

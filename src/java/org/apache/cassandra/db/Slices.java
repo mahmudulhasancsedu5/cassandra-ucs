@@ -292,8 +292,8 @@ public abstract class Slices implements Iterable<Slice>
             if (size == 0)
                 return;
 
-            List<AbstractType<?>> types = slices == ALL
-                                        ? Collections.<AbstractType<?>>emptyList()
+            List<AbstractType> types = slices == ALL
+                                        ? Collections.<AbstractType>emptyList()
                                         : ((ArrayBackedSlices)slices).comparator.subtypes();
 
             for (Slice slice : slices)
@@ -307,8 +307,8 @@ public abstract class Slices implements Iterable<Slice>
             if (slices.size() == 0)
                 return size;
 
-            List<AbstractType<?>> types = slices instanceof SelectAllSlices
-                                        ? Collections.<AbstractType<?>>emptyList()
+            List<AbstractType> types = slices instanceof SelectAllSlices
+                                        ? Collections.<AbstractType>emptyList()
                                         : ((ArrayBackedSlices)slices).comparator.subtypes();
 
             for (Slice slice : slices)

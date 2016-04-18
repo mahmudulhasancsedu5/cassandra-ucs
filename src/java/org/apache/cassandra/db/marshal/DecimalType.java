@@ -28,11 +28,11 @@ import org.apache.cassandra.serializers.DecimalSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class DecimalType extends AbstractType<BigDecimal>
+public class DecimalType extends ConcreteType<BigDecimal>
 {
     public static final DecimalType instance = new DecimalType();
 
-    DecimalType() {super(ComparisonType.CUSTOM);} // singleton
+    DecimalType() {super(ComparisonType.CUSTOM, BigDecimal.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {

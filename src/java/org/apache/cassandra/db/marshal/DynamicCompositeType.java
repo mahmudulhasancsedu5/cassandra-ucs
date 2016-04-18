@@ -55,17 +55,17 @@ public class DynamicCompositeType extends AbstractCompositeType
 {
     private static final Logger logger = LoggerFactory.getLogger(DynamicCompositeType.class);
 
-    private final Map<Byte, AbstractType<?>> aliases;
+    private final Map<Byte, AbstractType> aliases;
 
     // interning instances
-    private static final Map<Map<Byte, AbstractType<?>>, DynamicCompositeType> instances = new HashMap<Map<Byte, AbstractType<?>>, DynamicCompositeType>();
+    private static final Map<Map<Byte, AbstractType>, DynamicCompositeType> instances = new HashMap<Map<Byte, AbstractType>, DynamicCompositeType>();
 
     public static synchronized DynamicCompositeType getInstance(TypeParser parser) throws ConfigurationException, SyntaxException
     {
         return getInstance(parser.getAliasParameters());
     }
 
-    public static synchronized DynamicCompositeType getInstance(Map<Byte, AbstractType<?>> aliases)
+    public static synchronized DynamicCompositeType getInstance(Map<Byte, AbstractType> aliases)
     {
         DynamicCompositeType dct = instances.get(aliases);
         if (dct == null)
@@ -76,7 +76,7 @@ public class DynamicCompositeType extends AbstractCompositeType
         return dct;
     }
 
-    private DynamicCompositeType(Map<Byte, AbstractType<?>> aliases)
+    private DynamicCompositeType(Map<Byte, AbstractType> aliases)
     {
         this.aliases = aliases;
     }
@@ -87,7 +87,7 @@ public class DynamicCompositeType extends AbstractCompositeType
         return false;
     }
 
-    private AbstractType<?> getComparator(ByteBuffer bb)
+    private AbstractType getComparator(ByteBuffer bb)
     {
         try
         {
@@ -108,16 +108,16 @@ public class DynamicCompositeType extends AbstractCompositeType
         }
     }
 
-    protected AbstractType<?> getComparator(int i, ByteBuffer bb)
+    protected AbstractType getComparator(int i, ByteBuffer bb)
     {
         return getComparator(bb);
     }
 
-    protected AbstractType<?> getComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
+    protected AbstractType getComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
     {
-        AbstractType<?> comp1 = getComparator(bb1);
-        AbstractType<?> comp2 = getComparator(bb2);
-        AbstractType<?> rawComp = comp1;
+        AbstractType comp1 = getComparator(bb1);
+        AbstractType comp2 = getComparator(bb2);
+        AbstractType rawComp = comp1;
 
         /*
          * If both types are ReversedType(Type), we need to compare on the wrapped type (which may differ between the two types) to avoid
@@ -152,7 +152,7 @@ public class DynamicCompositeType extends AbstractCompositeType
         return rawComp;
     }
 
-    protected AbstractType<?> getAndAppendComparator(int i, ByteBuffer bb, StringBuilder sb)
+    protected AbstractType getAndAppendComparator(int i, ByteBuffer bb, StringBuilder sb)
     {
         try
         {
@@ -180,9 +180,9 @@ public class DynamicCompositeType extends AbstractCompositeType
         return new DynamicParsedComparator(part);
     }
 
-    protected AbstractType<?> validateComparator(int i, ByteBuffer bb) throws MarshalException
+    protected AbstractType validateComparator(int i, ByteBuffer bb) throws MarshalException
     {
-        AbstractType<?> comparator = null;
+        AbstractType comparator = null;
         if (bb.remaining() < 2)
             throw new MarshalException("Not enough bytes to header of the comparator part of component " + i);
         int header = ByteBufferUtil.readShortLength(bb);
@@ -230,7 +230,7 @@ public class DynamicCompositeType extends AbstractCompositeType
     }
 
     @Override
-    public boolean isCompatibleWith(AbstractType<?> previous)
+    public boolean isCompatibleWith(AbstractType previous)
     {
         if (this == previous)
             return true;
@@ -246,10 +246,10 @@ public class DynamicCompositeType extends AbstractCompositeType
         if (aliases.size() < cp.aliases.size())
             return false;
 
-        for (Map.Entry<Byte, AbstractType<?>> entry : cp.aliases.entrySet())
+        for (Map.Entry<Byte, AbstractType> entry : cp.aliases.entrySet())
         {
-            AbstractType<?> tprev = entry.getValue();
-            AbstractType<?> tnew = aliases.get(entry.getKey());
+            AbstractType tprev = entry.getValue();
+            AbstractType tnew = aliases.get(entry.getKey());
             if (tnew == null || tnew != tprev)
                 return false;
         }
@@ -258,7 +258,7 @@ public class DynamicCompositeType extends AbstractCompositeType
 
     private class DynamicParsedComparator implements ParsedComparator
     {
-        final AbstractType<?> type;
+        final AbstractType type;
         final boolean isAlias;
         final String comparatorName;
         final String remainingPart;
@@ -274,7 +274,7 @@ public class DynamicCompositeType extends AbstractCompositeType
 
             try
             {
-                AbstractType<?> t = null;
+                AbstractType t = null;
                 if (comparatorName.length() == 1)
                 {
                     // try for an alias
@@ -295,7 +295,7 @@ public class DynamicCompositeType extends AbstractCompositeType
             }
         }
 
-        public AbstractType<?> getAbstractType()
+        public AbstractType getAbstractType()
         {
             return type;
         }
@@ -334,7 +334,7 @@ public class DynamicCompositeType extends AbstractCompositeType
      * A comparator that always sorts it's first argument before the second
      * one.
      */
-    private static class FixedValueComparator extends AbstractType<Void>
+    private static class FixedValueComparator extends ConcreteType<Void>
     {
         public static final FixedValueComparator alwaysLesserThan = new FixedValueComparator(-1);
         public static final FixedValueComparator alwaysGreaterThan = new FixedValueComparator(1);
@@ -343,7 +343,7 @@ public class DynamicCompositeType extends AbstractCompositeType
 
         public FixedValueComparator(int cmp)
         {
-            super(ComparisonType.CUSTOM);
+            super(ComparisonType.CUSTOM, Void.class);
             this.cmp = cmp;
         }
 
@@ -359,7 +359,7 @@ public class DynamicCompositeType extends AbstractCompositeType
         }
 
         @Override
-        public ByteBuffer decompose(Void value)
+        public ByteBuffer decompose(Object value)
         {
             throw new UnsupportedOperationException();
         }

@@ -98,42 +98,42 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
                | (name.prefixComparison >>> 16);
     }
 
-    public static ColumnDefinition partitionKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> type, int position)
+    public static ColumnDefinition partitionKeyDef(CFMetaData cfm, ByteBuffer name, AbstractType type, int position)
     {
         return new ColumnDefinition(cfm, name, type, position, Kind.PARTITION_KEY);
     }
 
-    public static ColumnDefinition partitionKeyDef(String ksName, String cfName, String name, AbstractType<?> type, int position)
+    public static ColumnDefinition partitionKeyDef(String ksName, String cfName, String name, AbstractType type, int position)
     {
         return new ColumnDefinition(ksName, cfName, ColumnIdentifier.getInterned(name, true), type, position, Kind.PARTITION_KEY);
     }
 
-    public static ColumnDefinition clusteringDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> type, int position)
+    public static ColumnDefinition clusteringDef(CFMetaData cfm, ByteBuffer name, AbstractType type, int position)
     {
         return new ColumnDefinition(cfm, name, type, position, Kind.CLUSTERING);
     }
 
-    public static ColumnDefinition clusteringDef(String ksName, String cfName, String name, AbstractType<?> type, int position)
+    public static ColumnDefinition clusteringDef(String ksName, String cfName, String name, AbstractType type, int position)
     {
         return new ColumnDefinition(ksName, cfName, ColumnIdentifier.getInterned(name, true),  type, position, Kind.CLUSTERING);
     }
 
-    public static ColumnDefinition regularDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> type)
+    public static ColumnDefinition regularDef(CFMetaData cfm, ByteBuffer name, AbstractType type)
     {
         return new ColumnDefinition(cfm, name, type, NO_POSITION, Kind.REGULAR);
     }
 
-    public static ColumnDefinition regularDef(String ksName, String cfName, String name, AbstractType<?> type)
+    public static ColumnDefinition regularDef(String ksName, String cfName, String name, AbstractType type)
     {
         return new ColumnDefinition(ksName, cfName, ColumnIdentifier.getInterned(name, true), type, NO_POSITION, Kind.REGULAR);
     }
 
-    public static ColumnDefinition staticDef(CFMetaData cfm, ByteBuffer name, AbstractType<?> type)
+    public static ColumnDefinition staticDef(CFMetaData cfm, ByteBuffer name, AbstractType type)
     {
         return new ColumnDefinition(cfm, name, type, NO_POSITION, Kind.STATIC);
     }
 
-    public ColumnDefinition(CFMetaData cfm, ByteBuffer name, AbstractType<?> type, int position, Kind kind)
+    public ColumnDefinition(CFMetaData cfm, ByteBuffer name, AbstractType type, int position, Kind kind)
     {
         this(cfm.ksName,
              cfm.cfName,
@@ -147,7 +147,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
     public ColumnDefinition(String ksName,
                             String cfName,
                             ColumnIdentifier name,
-                            AbstractType<?> type,
+                            AbstractType type,
                             int position,
                             Kind kind)
     {
@@ -164,12 +164,12 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
         this.comparisonOrder = comparisonOrder(kind, isComplex(), Math.max(0, position), name);
     }
 
-    private static Comparator<CellPath> makeCellPathComparator(Kind kind, AbstractType<?> type)
+    private static Comparator<CellPath> makeCellPathComparator(Kind kind, AbstractType type)
     {
         if (kind.isPrimaryKeyKind() || !type.isMultiCell())
             return null;
 
-        AbstractType<?> nameComparator = type.isCollection()
+        AbstractType nameComparator = type.isCollection()
                                        ? ((CollectionType) type).nameComparator()
                                        : ((UserType) type).nameComparator();
 
@@ -204,7 +204,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
         return new ColumnDefinition(ksName, cfName, newName, type, position, kind);
     }
 
-    public ColumnDefinition withNewType(AbstractType<?> newType)
+    public ColumnDefinition withNewType(AbstractType newType)
     {
         return new ColumnDefinition(ksName, cfName, name, newType, position, kind);
     }
@@ -412,7 +412,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
      * This is the same than the column type, except for collections where it's the 'valueComparator'
      * of the collection.
      */
-    public AbstractType<?> cellValueType()
+    public AbstractType cellValueType()
     {
         return type instanceof CollectionType
              ? ((CollectionType)type).valueComparator()

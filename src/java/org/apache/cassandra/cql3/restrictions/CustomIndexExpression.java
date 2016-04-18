@@ -38,7 +38,7 @@ public class CustomIndexExpression
         this.valueRaw = value;
     }
 
-    public void prepareValue(CFMetaData cfm, AbstractType<?> expressionType, VariableSpecifications boundNames)
+    public void prepareValue(CFMetaData cfm, AbstractType expressionType, VariableSpecifications boundNames)
     {
         ColumnSpecification spec = new ColumnSpecification(cfm.ksName, cfm.ksName, valueColId, expressionType);
         value = valueRaw.prepare(cfm.ksName, spec);

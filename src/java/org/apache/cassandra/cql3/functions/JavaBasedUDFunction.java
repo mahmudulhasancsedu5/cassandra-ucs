@@ -183,8 +183,8 @@ public final class JavaBasedUDFunction extends UDFunction
 
     private final JavaUDF javaUDF;
 
-    JavaBasedUDFunction(FunctionName name, List<ColumnIdentifier> argNames, List<AbstractType<?>> argTypes,
-                        AbstractType<?> returnType, boolean calledOnNullInput, String body)
+    JavaBasedUDFunction(FunctionName name, List<ColumnIdentifier> argNames, List<AbstractType> argTypes,
+                        AbstractType returnType, boolean calledOnNullInput, String body)
     {
         super(name, argNames, argTypes, UDHelper.driverTypes(argTypes),
               returnType, UDHelper.driverType(returnType), calledOnNullInput, "java", body);

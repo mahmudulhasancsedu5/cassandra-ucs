@@ -45,7 +45,7 @@ public class DynamicCompositeTypeTest
 {
     private static final String KEYSPACE1 = "DynamicCompositeType";
     private static final String CF_STANDARDDYNCOMPOSITE = "StandardDynamicComposite";
-    private static Map<Byte, AbstractType<?>> aliases = new HashMap<>();
+    private static Map<Byte, AbstractType> aliases = new HashMap<>();
 
     private static final DynamicCompositeType comparator;
     static
@@ -68,7 +68,7 @@ public class DynamicCompositeTypeTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
-        AbstractType<?> dynamicComposite = DynamicCompositeType.getInstance(aliases);
+        AbstractType dynamicComposite = DynamicCompositeType.getInstance(aliases);
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),

@@ -28,11 +28,11 @@ import org.apache.cassandra.serializers.InetAddressSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public class InetAddressType extends AbstractType<InetAddress>
+public class InetAddressType extends ConcreteType<InetAddress>
 {
     public static final InetAddressType instance = new InetAddressType();
 
-    InetAddressType() {super(ComparisonType.BYTE_ORDER);} // singleton
+    InetAddressType() {super(ComparisonType.BYTE_ORDER, InetAddress.class);} // singleton
 
     public boolean isEmptyValueMeaningless()
     {

@@ -39,7 +39,7 @@ public class SliceTest
     @Test
     public void testIntersectsSingleSlice()
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
@@ -312,7 +312,7 @@ public class SliceTest
     @Test
     public void testDifferentMinMaxLengths()
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
@@ -354,7 +354,7 @@ public class SliceTest
     @Test
     public void testSliceNormalization()
     {
-        List<AbstractType<?>> types = new ArrayList<>();
+        List<AbstractType> types = new ArrayList<>();
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);
         types.add(Int32Type.instance);

@@ -236,12 +236,12 @@ public class OrderPreservingPartitioner implements IPartitioner
         return allTokens;
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return UTF8Type.instance;
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return UTF8Type.instance;
     }

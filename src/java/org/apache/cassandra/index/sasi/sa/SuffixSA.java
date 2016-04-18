@@ -31,7 +31,7 @@ import net.mintern.primitive.Primitive;
 
 public class SuffixSA extends SA<CharBuffer>
 {
-    public SuffixSA(AbstractType<?> comparator, OnDiskIndexBuilder.Mode mode)
+    public SuffixSA(AbstractType comparator, OnDiskIndexBuilder.Mode mode)
     {
         super(comparator, mode);
     }

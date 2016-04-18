@@ -32,9 +32,9 @@ public class LocalPartitioner implements IPartitioner
 {
     private static final long EMPTY_SIZE = ObjectSizes.measure(new LocalPartitioner(null).new LocalToken(null));
 
-    final AbstractType<?> comparator;   // package-private to avoid access workarounds in embedded LocalToken.
+    final AbstractType comparator;   // package-private to avoid access workarounds in embedded LocalToken.
 
-    public LocalPartitioner(AbstractType<?> comparator)
+    public LocalPartitioner(AbstractType comparator)
     {
         this.comparator = comparator;
     }
@@ -107,12 +107,12 @@ public class LocalPartitioner implements IPartitioner
         return Collections.singletonMap((Token)getMinimumToken(), new Float(1.0));
     }
 
-    public AbstractType<?> getTokenValidator()
+    public AbstractType getTokenValidator()
     {
         return comparator;
     }
 
-    public AbstractType<?> partitionOrdering()
+    public AbstractType partitionOrdering()
     {
         return comparator;
     }

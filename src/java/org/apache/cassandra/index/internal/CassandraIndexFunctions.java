@@ -46,7 +46,7 @@ public interface CassandraIndexFunctions
      * @param indexedColumn
      * @return
      */
-    default AbstractType<?> getIndexedValueType(ColumnDefinition indexedColumn)
+    default AbstractType getIndexedValueType(ColumnDefinition indexedColumn)
     {
         return indexedColumn.type;
     }
@@ -138,7 +138,7 @@ public interface CassandraIndexFunctions
             return new CollectionKeyIndex(baseCfs, indexMetadata);
         }
 
-        public AbstractType<?> getIndexedValueType(ColumnDefinition indexedColumn)
+        public AbstractType getIndexedValueType(ColumnDefinition indexedColumn)
         {
             return ((CollectionType) indexedColumn.type).nameComparator();
         }
@@ -152,7 +152,7 @@ public interface CassandraIndexFunctions
             return new CollectionValueIndex(baseCfs, indexMetadata);
         }
 
-        public AbstractType<?> getIndexedValueType(ColumnDefinition indexedColumn)
+        public AbstractType getIndexedValueType(ColumnDefinition indexedColumn)
         {
             return ((CollectionType)indexedColumn.type).valueComparator();
         }
@@ -177,7 +177,7 @@ public interface CassandraIndexFunctions
             return new CollectionEntryIndex(baseCfs, indexMetadata);
         }
 
-        public AbstractType<?> getIndexedValueType(ColumnDefinition indexedColumn)
+        public AbstractType getIndexedValueType(ColumnDefinition indexedColumn)
         {
             CollectionType colType = (CollectionType)indexedColumn.type;
             return CompositeType.getInstance(colType.nameComparator(), colType.valueComparator());

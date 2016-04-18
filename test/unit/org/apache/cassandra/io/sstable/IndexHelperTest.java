@@ -38,7 +38,7 @@ import static org.junit.Assert.assertEquals;
 public class IndexHelperTest
 {
 
-    private static ClusteringComparator comp = new ClusteringComparator(Collections.<AbstractType<?>>singletonList(LongType.instance));
+    private static ClusteringComparator comp = new ClusteringComparator(Collections.<AbstractType>singletonList(LongType.instance));
     private static ClusteringPrefix cn(long l)
     {
         return Util.clustering(comp, l);

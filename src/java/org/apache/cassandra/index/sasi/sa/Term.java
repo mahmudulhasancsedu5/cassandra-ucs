@@ -50,7 +50,7 @@ public abstract class Term<T extends Buffer>
         return tokens;
     }
 
-    public abstract int compareTo(AbstractType<?> comparator, Term other);
+    public abstract int compareTo(AbstractType comparator, Term other);
 
     public abstract int length();
 

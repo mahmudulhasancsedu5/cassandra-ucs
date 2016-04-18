@@ -87,7 +87,7 @@ public class Tuples
                 throw new InvalidRequestException(String.format("Expected %d elements in value tuple, but got %d: %s", receivers.size(), elements.size(), this));
 
             List<Term> values = new ArrayList<>(elements.size());
-            List<AbstractType<?>> types = new ArrayList<>(elements.size());
+            List<AbstractType> types = new ArrayList<>(elements.size());
             boolean allTerminal = true;
             for (int i = 0; i < elements.size(); i++)
             {
@@ -309,7 +309,7 @@ public class Tuples
 
         private static ColumnSpecification makeReceiver(List<? extends ColumnSpecification> receivers)
         {
-            List<AbstractType<?>> types = new ArrayList<>(receivers.size());
+            List<AbstractType> types = new ArrayList<>(receivers.size());
             StringBuilder inName = new StringBuilder("(");
             for (int i = 0; i < receivers.size(); i++)
             {
@@ -344,7 +344,7 @@ public class Tuples
 
         private static ColumnSpecification makeInReceiver(List<? extends ColumnSpecification> receivers) throws InvalidRequestException
         {
-            List<AbstractType<?>> types = new ArrayList<>(receivers.size());
+            List<AbstractType> types = new ArrayList<>(receivers.size());
             StringBuilder inName = new StringBuilder("in(");
             for (int i = 0; i < receivers.size(); i++)
             {

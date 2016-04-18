@@ -43,8 +43,8 @@ public class CreateTableStatement extends SchemaAlteringStatement
 {
     private static final Pattern PATTERN_WORD_CHARS = Pattern.compile("\\w+");
 
-    private List<AbstractType<?>> keyTypes;
-    private List<AbstractType<?>> clusteringTypes;
+    private List<AbstractType> keyTypes;
+    private List<AbstractType> clusteringTypes;
 
     private final Map<ByteBuffer, AbstractType> multicellColumns = new HashMap<>();
 
@@ -231,7 +231,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
                 // check for non-frozen UDTs or collections in a non-frozen UDT
                 if (pt.getType().isUDT() && pt.getType().isMultiCell())
                 {
-                    for (AbstractType<?> innerType : ((UserType) pt.getType()).fieldTypes())
+                    for (AbstractType innerType : ((UserType) pt.getType()).fieldTypes())
                     {
                         if (innerType.isMultiCell())
                         {
@@ -256,7 +256,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
             for (ColumnIdentifier alias : kAliases)
             {
                 stmt.keyAliases.add(alias);
-                AbstractType<?> t = getTypeAndRemove(stmt.columns, alias);
+                AbstractType t = getTypeAndRemove(stmt.columns, alias);
                 if (t instanceof CounterColumnType)
                     throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", alias));
                 if (staticColumns.contains(alias))
@@ -270,7 +270,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
             {
                 stmt.columnAliases.add(t);
 
-                AbstractType<?> type = getTypeAndRemove(stmt.columns, t);
+                AbstractType type = getTypeAndRemove(stmt.columns, t);
                 if (type instanceof CounterColumnType)
                     throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", t));
                 if (staticColumns.contains(t))
@@ -282,7 +282,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
             // if it's a counter table, make sure we don't have non-counter types
             if (stmt.hasCounters)
             {
-                for (AbstractType<?> type : stmt.columns.values())
+                for (AbstractType type : stmt.columns.values())
                     if (!type.isCounter())
                         throw new InvalidRequestException("Cannot mix counter and non counter columns in the same table");
             }
@@ -359,7 +359,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
             return new ParsedStatement.Prepared(stmt);
         }
 
-        private AbstractType<?> getTypeAndRemove(Map<ColumnIdentifier, AbstractType> columns, ColumnIdentifier t) throws InvalidRequestException
+        private AbstractType getTypeAndRemove(Map<ColumnIdentifier, AbstractType> columns, ColumnIdentifier t) throws InvalidRequestException
         {
             AbstractType type = columns.get(t);
             if (type == null)
