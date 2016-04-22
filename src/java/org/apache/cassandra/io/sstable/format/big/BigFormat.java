@@ -124,9 +124,7 @@ public class BigFormat implements SSTableFormat
         // lb (2.2.7): commit log lower bound included
         // ma (3.0.0): swap bf hash order
         //             store rows natively
-        // mb (3.0.3): swap bf hash order
-        //             store rows natively
-        // mc (3.0.6): commit log lower bound included
+        // mb (3.0.6): commit log lower bound included
         //
         // NOTE: when adding a new version, please add that to LegacySSTableTest, too.
 
@@ -187,7 +185,7 @@ public class BigFormat implements SSTableFormat
 
             hasBoundaries = version.compareTo("ma") < 0;
             hasCommitLogLowerBound = (version.compareTo("lb") >= 0 && version.compareTo("ma") < 0)
-                                     || version.compareTo("mc") >= 0;
+                                     || version.compareTo("mb") >= 0;
         }
 
         @Override
