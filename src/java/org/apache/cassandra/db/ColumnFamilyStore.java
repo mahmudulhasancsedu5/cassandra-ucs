@@ -1048,6 +1048,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 }
             }
 
+            if (memtables.isEmpty())
+            {
+                postFlush.latch.countDown();
+                return;
+            }
+
             metric.memtableSwitchCount.inc();
 
             try

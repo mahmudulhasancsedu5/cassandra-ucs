@@ -111,7 +111,7 @@ public class BigFormat implements SSTableFormat
     // we always incremented the major version.
     static class BigVersion extends Version
     {
-        public static final String current_version = "mb";
+        public static final String current_version = "mc";
         public static final String earliest_supported_version = "jb";
 
         // jb (2.0.1): switch from crc32 to adler32 for compression checksums
@@ -121,10 +121,12 @@ public class BigFormat implements SSTableFormat
         //             switch uncompressed checksums to adler32
         //             tracks presense of legacy (local and remote) counter shards
         // la (2.2.0): new file name format
+        // lb (2.2.7): commit log lower bound included
         // ma (3.0.0): swap bf hash order
         //             store rows natively
         // mb (3.0.3): swap bf hash order
         //             store rows natively
+        // mc (3.0.6): commit log lower bound included
         //
         // NOTE: when adding a new version, please add that to LegacySSTableTest, too.
 
@@ -185,7 +187,7 @@ public class BigFormat implements SSTableFormat
 
             hasBoundaries = version.compareTo("ma") < 0;
             hasCommitLogLowerBound = (version.compareTo("lb") >= 0 && version.compareTo("ma") < 0)
-                                     || version.compareTo("mb") >= 0;
+                                     || version.compareTo("mc") >= 0;
         }
 
         @Override
