@@ -35,7 +35,6 @@ import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.utils.AbstractIterator;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CLibrary;
-import org.apache.rat.document.UnsuitableDocumentException;
 
 /**
  * A paged non-compressed hints reader that provides two iterators:
@@ -113,7 +112,6 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
     void seek(long newPosition)
     {
         throw new UnsupportedOperationException("Hints are not seekable.");
-//        input.seek(newPosition);
     }
 
     public Iterator<Page> iterator()

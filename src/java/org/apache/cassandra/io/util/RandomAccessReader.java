@@ -26,6 +26,7 @@ import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.util.Rebufferer.BufferHolder;
 import org.apache.cassandra.utils.memory.BufferPool;
 
@@ -282,14 +283,30 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         return rebufferer.getCrcCheckChance();
     }
 
+    protected static Rebufferer instantiateRebufferer(RebuffererFactory fileRebufferer, RateLimiter limiter)
+    {
+        Rebufferer rebufferer = fileRebufferer.instantiateRebufferer();
+
+        if (limiter != null)
+            rebufferer = new LimitingRebufferer(rebufferer, limiter, MAX_BUFFER_SIZE);
+
+        return rebufferer;
+    }
+
+    public static RandomAccessReader build(SegmentedFile file, RateLimiter limiter)
+    {
+        return new RandomAccessReader(instantiateRebufferer(file.rebuffererFactory(), limiter));
+    }
+
+    public static Builder builder(ChannelProxy channel)
+    {
+        return new Builder(channel);
+    }
+
     public static class Builder
     {
         // The NIO file channel or an empty channel
         public final ChannelProxy channel;
-
-        // We override the file length when we open sstables early, so that we do not
-        // read past the early mark
-        public long overrideLength;
 
         // The size of the buffer for buffered readers
         protected int bufferSize;
@@ -300,29 +317,20 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
         // The buffer
         public ByteBuffer buffer;
 
-        public BaseRebufferer fileRebufferer;
-
         // An optional limiter that will throttle the amount of data we read
         public RateLimiter limiter;
+
+        // The mmap segments for mmap readers
+        public MmappedRegions regions;
+
+        // Compression for compressed readers
+        public CompressionMetadata compression;
 
         public Builder(ChannelProxy channel)
         {
             this.channel = channel;
-            this.overrideLength = -1L;
             this.bufferSize = DEFAULT_BUFFER_SIZE;
             this.bufferType = BufferType.OFF_HEAP;
-            this.limiter = null;
-            this.fileRebufferer = null;
-        }
-
-        public Builder(SegmentedFile file)
-        {
-            this.channel = file.channel;
-            this.overrideLength = file.dataLength();
-            this.bufferSize = DEFAULT_BUFFER_SIZE;
-            this.bufferType = BufferType.OFF_HEAP;
-            this.limiter = null;
-            this.fileRebufferer = file.rebufferer();
         }
 
         /** The buffer size is typically already page aligned but if that is not the case
@@ -342,36 +350,18 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         protected Rebufferer createRebufferer()
         {
-            Rebufferer rebufferer;
-            if (fileRebufferer instanceof Rebufferer)
-                rebufferer = (Rebufferer) fileRebufferer;
-            else
-            {
-                BufferlessRebufferer bufferless;
-                if (fileRebufferer instanceof BufferlessRebufferer)
-                    bufferless = (BufferlessRebufferer) fileRebufferer;
-                else
-                    bufferless = bufferlessRebufferer();
-
-                rebufferer = BufferManagingRebufferer.on(bufferless);
-            }
-
-            if (limiter != null)
-                rebufferer = new LimitingRebufferer(rebufferer, limiter, MAX_BUFFER_SIZE);
-
-            return rebufferer;
+            return instantiateRebufferer(bufferlessRebufferer(), limiter);
         }
 
-        public BufferlessRebufferer bufferlessRebufferer()
+        public RebuffererFactory bufferlessRebufferer()
         {
+            if (compression != null)
+                return CompressedSegmentedFile.bufferlessRebufferer(channel, compression, regions);
+            if (regions != null)
+                return new MmapRebufferer(channel, -1, regions);
+
             int adjustedSize = adjustedBufferSize();
-            return new SimpleReadRebufferer(channel, overrideLength, bufferType, adjustedSize);
-        }
-
-        public Builder overrideLength(long overrideLength)
-        {
-            this.overrideLength = overrideLength;
-            return this;
+            return new SimpleReadRebufferer(channel, -1, bufferType, adjustedSize);
         }
 
         public Builder bufferSize(int bufferSize)
@@ -391,8 +381,13 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         public Builder regions(MmappedRegions regions)
         {
-            assert fileRebufferer == null;
-            fileRebufferer = new MmapRebufferer(channel, overrideLength, regions);
+            this.regions = regions;
+            return this;
+        }
+
+        public Builder compression(CompressionMetadata metadata)
+        {
+            this.compression = metadata;
             return this;
         }
 

@@ -59,9 +59,9 @@ public abstract class SegmentedFile extends SharedCloseableImpl
     /**
      * Rebufferer to use to construct RandomAccessReaders.
      */
-    private final SharedRebufferer rebufferer;
+    private final RebuffererFactory rebufferer;
 
-    protected SegmentedFile(Cleanup cleanup, ChannelProxy channel, SharedRebufferer rebufferer, long onDiskLength)
+    protected SegmentedFile(Cleanup cleanup, ChannelProxy channel, RebuffererFactory rebufferer, long onDiskLength)
     {
         super(cleanup);
         this.rebufferer = rebufferer;
@@ -87,7 +87,7 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         return rebufferer.fileLength();
     }
 
-    public BaseRebufferer rebufferer()
+    public RebuffererFactory rebuffererFactory()
     {
         return rebufferer;
     }
@@ -95,8 +95,8 @@ public abstract class SegmentedFile extends SharedCloseableImpl
     protected static class Cleanup implements RefCounted.Tidy
     {
         final ChannelProxy channel;
-        final BaseRebufferer rebufferer;
-        protected Cleanup(ChannelProxy channel, BaseRebufferer rebufferer)
+        final ReaderFileProxy rebufferer;
+        protected Cleanup(ChannelProxy channel, ReaderFileProxy rebufferer)
         {
             this.channel = channel;
             this.rebufferer = rebufferer;
@@ -124,15 +124,12 @@ public abstract class SegmentedFile extends SharedCloseableImpl
 
     public RandomAccessReader createReader()
     {
-        return new RandomAccessReader.Builder(this)
-               .build();
+        return RandomAccessReader.build(this, null);
     }
 
     public RandomAccessReader createReader(RateLimiter limiter)
     {
-        return new RandomAccessReader.Builder(this)
-               .limiter(limiter)
-               .build();
+        return RandomAccessReader.build(this, limiter);
     }
 
     public FileDataInput createReader(long position)

@@ -23,7 +23,7 @@ import java.nio.ByteBuffer;
 /**
  * Rebufferer for reading data by a RandomAccessReader.
  */
-public interface Rebufferer extends BaseRebufferer
+public interface Rebufferer extends ReaderFileProxy
 {
     /**
      * Rebuffer (move on or seek to) a given position, and return a buffer that can be used there.

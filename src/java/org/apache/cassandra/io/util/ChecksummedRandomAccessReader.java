@@ -43,9 +43,9 @@ public class ChecksummedRandomAccessReader
     {
         private final DataIntegrityMetadata.ChecksumValidator validator;
 
-        public ChecksummedRebufferer(ChannelProxy channel, long fileLength, ChecksumValidator validator)
+        public ChecksummedRebufferer(ChannelProxy channel, ChecksumValidator validator)
         {
-            super(new SimpleReadRebufferer(channel, fileLength, BufferType.ON_HEAP, validator.chunkSize));
+            super(new SimpleReadRebufferer(channel, channel.size(), BufferType.ON_HEAP, validator.chunkSize));
             this.validator = validator;
         }
 
@@ -107,7 +107,7 @@ public class ChecksummedRandomAccessReader
         @Override
         protected Rebufferer createRebufferer()
         {
-            return new ChecksummedRebufferer(channel, overrideLength, validator);
+            return new ChecksummedRebufferer(channel, validator);
         }
 
         @Override

@@ -27,7 +27,7 @@ import org.apache.cassandra.io.compress.BufferType;
  * A caching or buffer-managing rebufferer will reference one of these to do the actual reading.
  * Note: Implementations of this interface must be thread-safe!
  */
-public interface BufferlessRebufferer extends SharedRebufferer
+public interface BufferlessRebufferer extends RebuffererFactory
 {
     /**
      * Rebuffer (i.e. read) at the given position, attempting to fill the capacity of the given buffer.
@@ -37,7 +37,7 @@ public interface BufferlessRebufferer extends SharedRebufferer
      *
      * @return buffer
      */
-    ByteBuffer rebuffer(long position, ByteBuffer buffer);
+    void rebuffer(long position, ByteBuffer buffer);
 
     /**
      * Buffer size required for this rebufferer. Must be power of 2 if alignment is required.
