@@ -31,7 +31,7 @@ public interface BufferlessRebufferer extends RebuffererFactory
 {
     /**
      * Rebuffer (i.e. read) at the given position, attempting to fill the capacity of the given buffer.
-     * The returned buffer must be positioned at 0, with limit set at the size of the available data.
+     * The filled buffer must be positioned at 0, with limit set at the size of the available data.
      * Rebufferer may have requirements for the positioning and/or size of the buffer (e.g. chunk-aligned and
      * chunk-sized). These must be satisfied by the caller. 
      *
