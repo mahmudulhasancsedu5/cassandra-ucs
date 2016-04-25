@@ -19,9 +19,14 @@
 package org.apache.cassandra.io.util;
 
 /**
- * Interface marking rebufferers that are thread-safe and can be shared among RandomAccessReaders of a given
- * SegmentedFile.
+ * Interface for the classes that can be used to instantiate rebufferers over a given file.
+ *
+ * These are one of two types:
+ *  - bufferless rebufferers (e.g. SimpleReadRebufferer) which instantiate a buffer managing rebufferer referencing
+ *    themselves.
+ *  - thread-safe shared rebufferers (e.g. MmapRebufferer) which directly return themselves.
  */
-public interface SharedRebufferer extends BaseRebufferer
+public interface RebuffererFactory extends ReaderFileProxy
 {
+    Rebufferer instantiateRebufferer();
 }

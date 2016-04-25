@@ -6,7 +6,7 @@ import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.io.compress.BufferType;
 
-class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebufferer
+class SimpleReadRebufferer extends AbstractReaderFileProxy implements BufferlessRebufferer
 {
     private final int bufferSize;
     private final BufferType bufferType;
@@ -19,15 +19,11 @@ class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebuf
     }
 
     @Override
-    public ByteBuffer rebuffer(long position, ByteBuffer buffer)
+    public void rebuffer(long position, ByteBuffer buffer)
     {
-        assert position <= fileLength;
-
         buffer.clear();
-        buffer.limit(Ints.checkedCast(Math.min(fileLength - position, buffer.capacity())));
         channel.read(buffer, position);
         buffer.flip();
-        return buffer;
     }
 
     @Override
@@ -46,6 +42,12 @@ class SimpleReadRebufferer extends AbstractRebufferer implements BufferlessRebuf
     public boolean alignmentRequired()
     {
         return false;
+    }
+
+    @Override
+    public Rebufferer instantiateRebufferer()
+    {
+        return BufferManagingRebufferer.on(this);
     }
 
     @Override

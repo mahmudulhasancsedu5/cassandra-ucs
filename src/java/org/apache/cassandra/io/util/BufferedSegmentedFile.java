@@ -27,7 +27,7 @@ public class BufferedSegmentedFile extends SegmentedFile
         this(channel, createRebufferer(channel, length, bufferSize), length);
     }
 
-    private BufferedSegmentedFile(ChannelProxy channel, SharedRebufferer rebufferer, long length)
+    private BufferedSegmentedFile(ChannelProxy channel, RebuffererFactory rebufferer, long length)
     {
         super(new Cleanup(channel, rebufferer), channel, rebufferer, length);
     }
@@ -37,7 +37,7 @@ public class BufferedSegmentedFile extends SegmentedFile
         super(copy);
     }
 
-    private static SharedRebufferer createRebufferer(ChannelProxy channel, long length, int bufferSize)
+    private static RebuffererFactory createRebufferer(ChannelProxy channel, long length, int bufferSize)
     {
         return ReaderCache.maybeWrap(new SimpleReadRebufferer(channel, length, BufferType.OFF_HEAP, bufferSize));
     }

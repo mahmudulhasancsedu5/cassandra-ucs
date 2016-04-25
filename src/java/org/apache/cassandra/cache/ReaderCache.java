@@ -130,8 +130,9 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         metrics.misses.mark();
         try (Timer.Context ctx = metrics.missLatency.time())
         {
-            ByteBuffer buffer = rebufferer.rebuffer(key.position, BufferPool.get(key.file.chunkSize()));
+            ByteBuffer buffer = BufferPool.get(key.file.chunkSize());
             assert buffer != null;
+            rebufferer.rebuffer(key.position, buffer);
             return new Buffer(buffer, key.position);
         }
     }
@@ -147,12 +148,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         cache.invalidateAll();
     }
 
-    public SharedRebufferer wrap(BufferlessRebufferer file)
+    public RebuffererFactory wrap(BufferlessRebufferer file)
     {
         return new CachingRebufferer(file);
     }
 
-    public static SharedRebufferer maybeWrap(BufferlessRebufferer file)
+    public static RebuffererFactory maybeWrap(BufferlessRebufferer file)
     {
         if (!enabled)
             return file;
@@ -162,10 +163,10 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
 
     public void invalidatePosition(SegmentedFile dfile, long position)
     {
-        if (!(dfile.rebufferer() instanceof CachingRebufferer))
+        if (!(dfile.rebuffererFactory() instanceof CachingRebufferer))
             return;
 
-        ((CachingRebufferer) dfile.rebufferer()).invalidate(position);
+        ((CachingRebufferer) dfile.rebuffererFactory()).invalidate(position);
     }
 
     public void invalidateFile(String fileName)
@@ -187,7 +188,7 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
      * Rebufferer providing cached chunks where data is obtained from the specified BufferlessRebufferer.
      * Thread-safe. One instance per SegmentedFile, created by ReaderCache.maybeWrap if the cache is enabled.
      */
-    class CachingRebufferer implements Rebufferer, SharedRebufferer
+    class CachingRebufferer implements Rebufferer, RebuffererFactory
     {
         private final BufferlessRebufferer source;
         final long alignmentMask;
@@ -225,6 +226,12 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
         {
             long pageAlignedPos = position & alignmentMask;
             cache.invalidate(new Key(source, pageAlignedPos));
+        }
+
+        @Override
+        public Rebufferer instantiateRebufferer()
+        {
+            return this;
         }
 
         @Override

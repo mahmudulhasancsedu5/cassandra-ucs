@@ -18,12 +18,12 @@
 
 package org.apache.cassandra.io.util;
 
-public abstract class AbstractRebufferer implements BaseRebufferer
+public abstract class AbstractReaderFileProxy implements ReaderFileProxy
 {
     protected final ChannelProxy channel;
     protected final long fileLength;
 
-    public AbstractRebufferer(ChannelProxy channel, long fileLength)
+    public AbstractReaderFileProxy(ChannelProxy channel, long fileLength)
     {
         this.channel = channel;
         this.fileLength = fileLength >= 0 ? fileLength : channel.size();

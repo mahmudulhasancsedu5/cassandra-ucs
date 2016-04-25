@@ -331,7 +331,7 @@ public class BufferedRandomAccessFileTest
             {
                 File file1 = writeTemporaryFile(new byte[16]);
                 try (final ChannelProxy channel = new ChannelProxy(file1);
-                     final RandomAccessReader file = new RandomAccessReader.Builder(channel)
+                     final RandomAccessReader file = RandomAccessReader.builder(channel)
                                                      .bufferSize(bufferSize)
                                                      .build())
                 {
@@ -344,7 +344,7 @@ public class BufferedRandomAccessFileTest
             {
                 File file1 = writeTemporaryFile(new byte[16]);
                 try (final ChannelProxy channel = new ChannelProxy(file1);
-                     final RandomAccessReader file = new RandomAccessReader.Builder(channel).bufferSize(bufferSize).build())
+                     final RandomAccessReader file = RandomAccessReader.builder(channel).bufferSize(bufferSize).build())
                 {
                     expectEOF(() -> {
                         while (true)

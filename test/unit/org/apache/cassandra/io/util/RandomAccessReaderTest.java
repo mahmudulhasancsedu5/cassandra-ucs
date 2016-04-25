@@ -114,7 +114,7 @@ public class RandomAccessReaderTest
 
         try(ChannelProxy channel = new ChannelProxy("abc", new FakeFileChannel(SIZE)))
         {
-            RandomAccessReader.Builder builder = new RandomAccessReader.Builder(channel)
+            RandomAccessReader.Builder builder = RandomAccessReader.builder(channel)
                                                  .bufferType(params.bufferType)
                                                  .bufferSize(params.bufferSize);
 
@@ -265,7 +265,7 @@ public class RandomAccessReaderTest
         final File f = writeFile(params);
         try(ChannelProxy channel = new ChannelProxy(f))
         {
-            RandomAccessReader.Builder builder = new RandomAccessReader.Builder(channel)
+            RandomAccessReader.Builder builder = RandomAccessReader.builder(channel)
                                                  .bufferType(params.bufferType)
                                                  .bufferSize(params.bufferSize);
             MmappedRegions regions = null;
@@ -315,7 +315,7 @@ public class RandomAccessReaderTest
         assert f.exists();
 
         try(ChannelProxy channel = new ChannelProxy(f);
-            RandomAccessReader reader = new RandomAccessReader.Builder(channel).build())
+            RandomAccessReader reader = RandomAccessReader.builder(channel).build())
         {
             assertEquals(f.getAbsolutePath(), reader.getPath());
             assertEquals(expected.length(), reader.length());
@@ -345,7 +345,7 @@ public class RandomAccessReaderTest
         assert f.exists();
 
         try(ChannelProxy channel = new ChannelProxy(f);
-        RandomAccessReader reader = new RandomAccessReader.Builder(channel).build())
+        RandomAccessReader reader = RandomAccessReader.builder(channel).build())
         {
             assertEquals(expected.length() * numIterations, reader.length());
 
@@ -427,7 +427,7 @@ public class RandomAccessReaderTest
         {
             final Runnable worker = () ->
             {
-                try(RandomAccessReader reader = new RandomAccessReader.Builder(channel).build())
+                try(RandomAccessReader reader = RandomAccessReader.builder(channel).build())
                 {
                     assertEquals(expected.length, reader.length());
 
