@@ -5,9 +5,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
-import com.google.common.cache.*;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.MoreExecutors;
 
+import com.github.benmanes.caffeine.cache.*;
 import com.codahale.metrics.Timer;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -15,8 +16,8 @@ import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer>
-        implements RemovalListener<ReaderCache.Key, ReaderCache.Buffer>, CacheSize
+public class ReaderCache 
+        implements CacheLoader<ReaderCache.Key, ReaderCache.Buffer>, RemovalListener<ReaderCache.Key, ReaderCache.Buffer>, CacheSize
 {
     public static final int RESERVED_POOL_SPACE_IN_MB = 32;
     public static final long cacheSize = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
@@ -115,8 +116,9 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
 
     public ReaderCache()
     {
-        cache = CacheBuilder.newBuilder()
+        cache = Caffeine.newBuilder()
                 .maximumWeight(cacheSize)
+                .executor(MoreExecutors.directExecutor())
                 .weigher((key, buffer) -> ((Buffer) buffer).buffer.capacity())
                 .removalListener(this)
                 .build(this);
@@ -138,9 +140,9 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
     }
 
     @Override
-    public void onRemoval(RemovalNotification<Key, Buffer> removal)
+    public void onRemoval(Key key, Buffer buffer, RemovalCause cause)
     {
-        removal.getValue().release();
+        buffer.release();
     }
 
     public void close()
@@ -292,6 +294,8 @@ public class ReaderCache extends CacheLoader<ReaderCache.Key, ReaderCache.Buffer
     @Override
     public long weightedSize()
     {
-        return cache.asMap().values().stream().mapToLong(buf -> buf.buffer.capacity()).sum();
+        return cache.policy().eviction()
+                .map(policy -> policy.weightedSize().orElseGet(cache::estimatedSize))
+                .orElseGet(cache::estimatedSize);
     }
 }
