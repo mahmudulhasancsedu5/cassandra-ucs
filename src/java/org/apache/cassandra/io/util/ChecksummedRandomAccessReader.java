@@ -45,7 +45,7 @@ public class ChecksummedRandomAccessReader
 
         public ChecksummedRebufferer(ChannelProxy channel, ChecksumValidator validator)
         {
-            super(new SimpleReadRebufferer(channel, channel.size(), BufferType.ON_HEAP, validator.chunkSize));
+            super(new SimpleChunkReader(channel, channel.size(), BufferType.ON_HEAP, validator.chunkSize));
             this.validator = validator;
         }
 
@@ -57,7 +57,7 @@ public class ChecksummedRandomAccessReader
 
             // align with buffer size, as checksums were computed in chunks of buffer size each.
             offset = alignedPosition(desiredPosition);
-            rebufferer.rebuffer(offset, buffer);
+            source.readChunk(offset, buffer);
 
             try
             {
@@ -76,7 +76,7 @@ public class ChecksummedRandomAccessReader
         {
             try
             {
-                rebufferer.close();
+                source.close();
             }
             finally
             {

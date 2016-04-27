@@ -16,25 +16,25 @@ import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.CacheMissMetrics;
 import org.apache.cassandra.utils.memory.BufferPool;
 
-public class ReaderCache 
-        implements CacheLoader<ReaderCache.Key, ReaderCache.Buffer>, RemovalListener<ReaderCache.Key, ReaderCache.Buffer>, CacheSize
+public class ChunkCache 
+        implements CacheLoader<ChunkCache.Key, ChunkCache.Buffer>, RemovalListener<ChunkCache.Key, ChunkCache.Buffer>, CacheSize
 {
     public static final int RESERVED_POOL_SPACE_IN_MB = 32;
     public static final long cacheSize = 1024L * 1024L * Math.max(0, DatabaseDescriptor.getFileCacheSizeInMB() - RESERVED_POOL_SPACE_IN_MB);
 
     private static boolean enabled = cacheSize > 0;
-    public static final ReaderCache instance = enabled ? new ReaderCache() : null;
+    public static final ChunkCache instance = enabled ? new ChunkCache() : null;
 
     private final LoadingCache<Key, Buffer> cache;
     public final CacheMissMetrics metrics;
 
     static class Key
     {
-        final BufferlessRebufferer file;
+        final ChunkReader file;
         final String path;
         final long position;
 
-        public Key(BufferlessRebufferer file, long position)
+        public Key(ChunkReader file, long position)
         {
             super();
             this.file = file;
@@ -114,7 +114,7 @@ public class ReaderCache
         }
     }
 
-    public ReaderCache()
+    public ChunkCache()
     {
         cache = Caffeine.newBuilder()
                 .maximumWeight(cacheSize)
@@ -128,13 +128,13 @@ public class ReaderCache
     @Override
     public Buffer load(Key key) throws Exception
     {
-        BufferlessRebufferer rebufferer = key.file;
+        ChunkReader rebufferer = key.file;
         metrics.misses.mark();
         try (Timer.Context ctx = metrics.missLatency.time())
         {
             ByteBuffer buffer = BufferPool.get(key.file.chunkSize());
             assert buffer != null;
-            rebufferer.rebuffer(key.position, buffer);
+            rebufferer.readChunk(key.position, buffer);
             return new Buffer(buffer, key.position);
         }
     }
@@ -150,12 +150,12 @@ public class ReaderCache
         cache.invalidateAll();
     }
 
-    public RebuffererFactory wrap(BufferlessRebufferer file)
+    public RebuffererFactory wrap(ChunkReader file)
     {
         return new CachingRebufferer(file);
     }
 
-    public static RebuffererFactory maybeWrap(BufferlessRebufferer file)
+    public static RebuffererFactory maybeWrap(ChunkReader file)
     {
         if (!enabled)
             return file;
@@ -179,7 +179,7 @@ public class ReaderCache
     @VisibleForTesting
     public void enable(boolean enabled)
     {
-        ReaderCache.enabled = enabled;
+        ChunkCache.enabled = enabled;
         cache.invalidateAll();
         metrics.reset();
     }
@@ -187,15 +187,15 @@ public class ReaderCache
     // TODO: Invalidate caches for obsoleted/MOVED_START tables?
 
     /**
-     * Rebufferer providing cached chunks where data is obtained from the specified BufferlessRebufferer.
-     * Thread-safe. One instance per SegmentedFile, created by ReaderCache.maybeWrap if the cache is enabled.
+     * Rebufferer providing cached chunks where data is obtained from the specified ChunkReader.
+     * Thread-safe. One instance per SegmentedFile, created by ChunkCache.maybeWrap if the cache is enabled.
      */
     class CachingRebufferer implements Rebufferer, RebuffererFactory
     {
-        private final BufferlessRebufferer source;
+        private final ChunkReader source;
         final long alignmentMask;
 
-        public CachingRebufferer(BufferlessRebufferer file)
+        public CachingRebufferer(ChunkReader file)
         {
             source = file;
             int chunkSize = file.chunkSize();
