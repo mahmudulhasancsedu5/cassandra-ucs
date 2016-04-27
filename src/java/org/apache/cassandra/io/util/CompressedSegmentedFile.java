@@ -24,7 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.io.compress.*;
@@ -52,14 +52,14 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     private static RebuffererFactory createRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
-        return ReaderCache.maybeWrap(bufferlessRebufferer(channel, metadata, regions));
+        return ChunkCache.maybeWrap(chunkReader(channel, metadata, regions));
     }
 
-    public static BufferlessRebufferer bufferlessRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+    public static ChunkReader chunkReader(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
     {
         return regions != null
-               ? new MmapRebufferer(channel, metadata, regions)
-               : new StandardRebufferer(channel, metadata);
+               ? new Mmap(channel, metadata, regions)
+               : new Standard(channel, metadata);
     }
 
     public CompressedSegmentedFile(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions, RebuffererFactory rebufferer)
@@ -90,9 +90,9 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         }
         public void tidy()
         {
-            if (ReaderCache.instance != null)
+            if (ChunkCache.instance != null)
             {
-                ReaderCache.instance.invalidateFile(name());
+                ChunkCache.instance.invalidateFile(name());
             }
             metadata.close();
 
@@ -154,11 +154,11 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
     }
 
     @VisibleForTesting
-    public abstract static class CompressedRebufferer extends AbstractReaderFileProxy implements BufferlessRebufferer
+    public abstract static class CompressedChunkReader extends AbstractReaderFileProxy implements ChunkReader
     {
         final CompressionMetadata metadata;
 
-        public CompressedRebufferer(ChannelProxy channel, CompressionMetadata metadata)
+        public CompressedChunkReader(ChannelProxy channel, CompressionMetadata metadata)
         {
             super(channel, metadata.dataLength);
             this.metadata = metadata;
@@ -174,7 +174,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         @Override
         public String toString()
         {
-            return String.format("%s(%s - %s, chunk length %d, data length %d)",
+            return String.format("CompressedChunkReader.%s(%s - %s, chunk length %d, data length %d)",
                                  getClass().getSimpleName(),
                                  channel.filePath(),
                                  metadata.compressor().getClass().getSimpleName(),
@@ -207,12 +207,12 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         }
     }
 
-    static class StandardRebufferer extends CompressedRebufferer
+    static class Standard extends CompressedChunkReader
     {
-        // we read the raw compressed bytes into this buffer, then move the uncompressed ones into super.buffer.
+        // we read the raw compressed bytes into this buffer, then uncompressed them into the provided one.
         private final ThreadLocal<ByteBuffer> compressedHolder;
 
-        public StandardRebufferer(ChannelProxy channel, CompressionMetadata metadata)
+        public Standard(ChannelProxy channel, CompressionMetadata metadata)
         {
             super(channel, metadata);
             compressedHolder = ThreadLocal.withInitial(this::allocateBuffer);
@@ -229,7 +229,7 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         }
 
         @Override
-        public void rebuffer(long position, ByteBuffer uncompressed)
+        public void readChunk(long position, ByteBuffer uncompressed)
         {
             try
             {
@@ -288,18 +288,18 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
         }
     }
 
-    static class MmapRebufferer extends CompressedRebufferer
+    static class Mmap extends CompressedChunkReader
     {
         protected final MmappedRegions regions;
 
-        public MmapRebufferer(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
+        public Mmap(ChannelProxy channel, CompressionMetadata metadata, MmappedRegions regions)
         {
             super(channel, metadata);
             this.regions = regions;
         }
 
         @Override
-        public void rebuffer(long position, ByteBuffer uncompressed)
+        public void readChunk(long position, ByteBuffer uncompressed)
         {
             try
             {

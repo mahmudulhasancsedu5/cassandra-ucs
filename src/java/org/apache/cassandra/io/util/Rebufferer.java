@@ -53,7 +53,7 @@ public interface Rebufferer extends ReaderFileProxy
         long offset();
 
         /**
-         * To be called when this buffer is no longer in use. Must be called for all BufferHolders, or ReaderCache
+         * To be called when this buffer is no longer in use. Must be called for all BufferHolders, or ChunkCache
          * will not be able to free blocks.
          */
         void release();

@@ -350,18 +350,18 @@ public class RandomAccessReader extends RebufferingInputStream implements FileDa
 
         protected Rebufferer createRebufferer()
         {
-            return instantiateRebufferer(bufferlessRebufferer(), limiter);
+            return instantiateRebufferer(chunkReader(), limiter);
         }
 
-        public RebuffererFactory bufferlessRebufferer()
+        public RebuffererFactory chunkReader()
         {
             if (compression != null)
-                return CompressedSegmentedFile.bufferlessRebufferer(channel, compression, regions);
+                return CompressedSegmentedFile.chunkReader(channel, compression, regions);
             if (regions != null)
                 return new MmapRebufferer(channel, -1, regions);
 
             int adjustedSize = adjustedBufferSize();
-            return new SimpleReadRebufferer(channel, -1, bufferType, adjustedSize);
+            return new SimpleChunkReader(channel, -1, bufferType, adjustedSize);
         }
 
         public Builder bufferSize(int bufferSize)

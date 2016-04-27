@@ -22,7 +22,7 @@ package org.apache.cassandra.io.util;
  * Interface for the classes that can be used to instantiate rebufferers over a given file.
  *
  * These are one of two types:
- *  - bufferless rebufferers (e.g. SimpleReadRebufferer) which instantiate a buffer managing rebufferer referencing
+ *  - chunk sources (e.g. SimpleReadRebufferer) which instantiate a buffer managing rebufferer referencing
  *    themselves.
  *  - thread-safe shared rebufferers (e.g. MmapRebufferer) which directly return themselves.
  */

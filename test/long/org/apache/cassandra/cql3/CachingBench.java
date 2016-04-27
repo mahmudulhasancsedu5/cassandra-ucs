@@ -36,7 +36,7 @@ import org.junit.Test;
 import junit.framework.Assert;
 import org.apache.cassandra.config.Config.CommitLogSync;
 import org.apache.cassandra.config.Config.DiskAccessMode;
-import org.apache.cassandra.cache.ReaderCache;
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -55,7 +55,7 @@ public class CachingBench extends CQLTester
     private static final int DEL_SECTIONS = 1000;
     private static final int FLUSH_FREQ = 10000;
     private static final int SCAN_FREQUENCY_INV = 12000;
-    static final int COUNT = 90000;
+    static final int COUNT = 29000;
     static final int ITERS = 9;
 
     static final int KEY_RANGE = 30;
@@ -194,7 +194,7 @@ public class CachingBench extends CQLTester
     {
         id.set(0);
         compactionTimeNanos = 0;
-        ReaderCache.instance.enable(cacheEnabled);
+        ChunkCache.instance.enable(cacheEnabled);
         DatabaseDescriptor.setDiskAccessMode(mode);
         alterTable("ALTER TABLE %s WITH compaction = { 'class' :  '" + compactionClass + "'  };");
         alterTable("ALTER TABLE %s WITH compression = { 'sstable_compression' : '" + compressorClass + "'  };");
@@ -235,12 +235,12 @@ public class CachingBench extends CQLTester
         System.out.println("Reader " + cfs.getLiveSSTables().iterator().next().getFileDataInput(0).toString());
         if (cacheEnabled)
             System.out.format("Cache size %s requests %,d hit ratio %f\n",
-                FileUtils.stringifyFileSize(ReaderCache.instance.metrics.size.getValue()),
-                ReaderCache.instance.metrics.requests.getCount(),
-                ReaderCache.instance.metrics.hitRate.getValue());
+                FileUtils.stringifyFileSize(ChunkCache.instance.metrics.size.getValue()),
+                ChunkCache.instance.metrics.requests.getCount(),
+                ChunkCache.instance.metrics.hitRate.getValue());
         else
         {
-            Assert.assertTrue("Chunk cache had requests: " + ReaderCache.instance.metrics.requests.getCount(), ReaderCache.instance.metrics.requests.getCount() < COUNT);
+            Assert.assertTrue("Chunk cache had requests: " + ChunkCache.instance.metrics.requests.getCount(), ChunkCache.instance.metrics.requests.getCount() < COUNT);
             System.out.println("Cache disabled");
         }
         System.out.println(String.format("Operations completed in %.3fs", (onEndTime - onStartTime) * 1e-3));

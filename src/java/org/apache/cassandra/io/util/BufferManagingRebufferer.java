@@ -5,18 +5,18 @@ import java.nio.ByteBuffer;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 /**
- * Buffer provider for bufferless rebufferers. Instances of this class are reader-specific and thus do not need to be
- * thread-safe since the reader itself isn't.
+ * Buffer manager used for reading from a ChunkReader when cache is not in use. Instances of this class are
+ * reader-specific and thus do not need to be thread-safe since the reader itself isn't.
  *
  * The instances reuse themselves as the BufferHolder to avoid having to return a new object for each rebuffer call.
  */
 public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer.BufferHolder
 {
-    protected final BufferlessRebufferer rebufferer;
+    protected final ChunkReader source;
     protected final ByteBuffer buffer;
     protected long offset = 0;
 
-    public static BufferManagingRebufferer on(BufferlessRebufferer wrapped)
+    public static BufferManagingRebufferer on(ChunkReader wrapped)
     {
         return wrapped.alignmentRequired()
              ? new Aligned(wrapped)
@@ -25,9 +25,9 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
 
     abstract long alignedPosition(long position);
 
-    public BufferManagingRebufferer(BufferlessRebufferer wrapped)
+    public BufferManagingRebufferer(ChunkReader wrapped)
     {
-        this.rebufferer = wrapped;
+        this.source = wrapped;
         buffer = RandomAccessReader.allocateBuffer(wrapped.chunkSize(), wrapped.preferredBufferType());
         buffer.limit(0);
     }
@@ -43,39 +43,39 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
     public void close()
     {
         assert offset == -1;    // reader must be closed at this point.
-        rebufferer.close();
+        source.close();
     }
 
     @Override
     public ChannelProxy channel()
     {
-        return rebufferer.channel();
+        return source.channel();
     }
 
     @Override
     public long fileLength()
     {
-        return rebufferer.fileLength();
+        return source.fileLength();
     }
 
     @Override
     public BufferHolder rebuffer(long position)
     {
         offset = alignedPosition(position);
-        rebufferer.rebuffer(offset, buffer);
+        source.readChunk(offset, buffer);
         return this;
     }
 
     @Override
     public double getCrcCheckChance()
     {
-        return rebufferer.getCrcCheckChance();
+        return source.getCrcCheckChance();
     }
 
     @Override
     public String toString()
     {
-        return "BufferManagingRebufferer." + getClass().getSimpleName() + ":" + rebufferer.toString();
+        return "BufferManagingRebufferer." + getClass().getSimpleName() + ":" + source.toString();
     }
 
     // BufferHolder methods
@@ -96,9 +96,9 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
         // nothing to do, we don't delete buffers before we're closed.
     }
 
-    public static class Unaligned extends BufferManagingRebufferer implements Rebufferer
+    public static class Unaligned extends BufferManagingRebufferer
     {
-        public Unaligned(BufferlessRebufferer wrapped)
+        public Unaligned(ChunkReader wrapped)
         {
             super(wrapped);
         }
@@ -110,9 +110,9 @@ public abstract class BufferManagingRebufferer implements Rebufferer, Rebufferer
         }
     }
 
-    public static class Aligned extends BufferManagingRebufferer implements Rebufferer
+    public static class Aligned extends BufferManagingRebufferer
     {
-        public Aligned(BufferlessRebufferer wrapped)
+        public Aligned(ChunkReader wrapped)
         {
             super(wrapped);
             assert Integer.bitCount(wrapped.chunkSize()) == 1;
