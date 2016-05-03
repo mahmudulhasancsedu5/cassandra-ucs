@@ -233,7 +233,7 @@ public class CommitLogTest
 
         // "Flush": this won't delete anything
         UUID cfid1 = rm.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.sync(true);
+        CommitLog.instance.sync();
         CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getContext());
 
         assertEquals(1, CommitLog.instance.activeSegments());
@@ -650,7 +650,7 @@ public class CommitLogTest
         cellCount += 1;
         commitLog.add(rm2);
 
-        commitLog.sync(true);
+        commitLog.sync();
 
         Replayer replayer = new Replayer(commitLog, ReplayPosition.NONE);
         List<String> activeSegments = commitLog.getActiveSegmentNames();
@@ -686,7 +686,7 @@ public class CommitLogTest
             }
         }
 
-        commitLog.sync(true);
+        commitLog.sync();
 
         Replayer replayer = new Replayer(commitLog, replayPosition);
         List<String> activeSegments = commitLog.getActiveSegmentNames();

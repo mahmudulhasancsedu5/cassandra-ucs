@@ -39,9 +39,6 @@ import com.codahale.metrics.Timer;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
@@ -62,9 +59,8 @@ import static org.apache.cassandra.utils.FBUtilities.updateChecksumInt;
  */
 public abstract class CommitLogSegment
 {
-    private static final Logger logger = LoggerFactory.getLogger(CommitLogSegment.class);
-
     private final static long idBase;
+    private static long replayLimitId;
     private final static AtomicInteger nextId = new AtomicInteger(1);
     static
     {
@@ -74,7 +70,7 @@ public abstract class CommitLogSegment
             if (CommitLogDescriptor.isValid(file.getName()))
                 maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
         }
-        idBase = Math.max(System.currentTimeMillis(), maxId + 1);
+        replayLimitId = idBase = Math.max(System.currentTimeMillis(), maxId + 1);
     }
 
     // The commit log entry overhead in bytes (int: length + int: head checksum + int: tail checksum)
@@ -156,8 +152,8 @@ public abstract class CommitLogSegment
 
         try
         {
-            channel = FileChannel.open(logFile.toPath(), StandardOpenOption.WRITE, StandardOpenOption.READ, StandardOpenOption.CREATE);
-            fd = CLibrary.getfd(channel);
+            channel = channel(logFile);
+            fd = fd(channel);
         }
         catch (IOException e)
         {
@@ -185,6 +181,16 @@ public abstract class CommitLogSegment
     protected Map<String, String> additionalHeaderParameters()
     {
         return Collections.<String, String>emptyMap();
+    }
+
+    FileChannel channel(File logFile) throws IOException
+    {
+        return FileChannel.open(logFile.toPath(), StandardOpenOption.WRITE, StandardOpenOption.READ, StandardOpenOption.CREATE);
+    }
+
+    int fd(FileChannel channel)
+    {
+        return CLibrary.getfd(channel);
     }
 
     abstract ByteBuffer createBuffer(CommitLog commitLog);
@@ -350,7 +356,8 @@ public abstract class CommitLogSegment
     }
 
     /**
-     * Completely discards a segment file by deleting it. (Potentially blocking operation)
+     * Discards a segment file when the log no longer requires it. The file may be left on disk if the archive script
+     * requires it. (Potentially blocking operation)
      */
     void discard(boolean deleteFile)
     {
@@ -579,6 +586,16 @@ public abstract class CommitLogSegment
     public String toString()
     {
         return "CommitLogSegment(" + getPath() + ')';
+    }
+
+    static boolean shouldReplay(String name)
+    {
+        return CommitLogDescriptor.fromFileName(name).id < replayLimitId;
+    }
+
+    static void resetReplayLimit()
+    {
+        replayLimitId = getNextId();
     }
 
     public static class CommitLogSegmentFileComparator implements Comparator<File>

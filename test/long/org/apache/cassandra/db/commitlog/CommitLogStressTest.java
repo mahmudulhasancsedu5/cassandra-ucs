@@ -43,6 +43,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.UpdateBuilder;
@@ -115,6 +116,7 @@ public class CommitLogStressTest
             initialize();
 
             CommitLogStressTest tester = new CommitLogStressTest();
+            tester.cleanDir();
             tester.testFixedSize();
         }
         catch (Throwable e)
@@ -234,8 +236,7 @@ public class CommitLogStressTest
                            commitLog.executor.getClass().getSimpleName(),
                            randomSize ? " random size" : "",
                            discardedRun ? " with discarded run" : "");
-        commitLog.allocator.enableReserveSegmentCreation();
-        
+
         final List<CommitlogThread> threads = new ArrayList<>();
         ScheduledExecutorService scheduled = startThreads(commitLog, threads);
 
@@ -312,13 +313,7 @@ public class CommitLogStressTest
     private void verifySizes(CommitLog commitLog)
     {
         // Complete anything that's still left to write.
-        commitLog.executor.requestExtraSync().awaitUninterruptibly();
-        // One await() does not suffice as we may be signalled when an ongoing sync finished. Request another
-        // (which shouldn't write anything) to make sure the first we triggered completes.
-        // FIXME: The executor should give us a chance to await completion of the sync we requested.
-        commitLog.executor.requestExtraSync().awaitUninterruptibly();
-        // Wait for any pending deletes or segment allocations to complete.
-        commitLog.allocator.awaitManagementTasksCompletion();
+        commitLog.executor.syncBlocking();
 
         long combinedSize = 0;
         for (File f : new File(commitLog.location).listFiles())

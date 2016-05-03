@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableMap;
 public class CommitLogSegmentManagerTest
 {
     //Block commit log service from syncing
+    @SuppressWarnings("unused")
     private static final Semaphore allowSync = new Semaphore(0);
 
     private static final String KEYSPACE1 = "CommitLogTest";
@@ -93,7 +94,7 @@ public class CommitLogSegmentManagerTest
         //Should only be able to create 3 segments not 7 because it blocks waiting for truncation that never comes
         Assert.assertEquals(3, clsm.getActiveSegments().size());
 
-        clsm.getActiveSegments().forEach( segment -> clsm.recycleSegment(segment));
+        clsm.getActiveSegments().forEach( clsm::discardSegment );
 
         Util.spinAssertEquals(3, () -> clsm.getActiveSegments().size(), 5);
     }
