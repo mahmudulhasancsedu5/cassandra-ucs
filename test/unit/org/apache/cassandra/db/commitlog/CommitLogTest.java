@@ -276,7 +276,7 @@ public class CommitLogTest
 
         // "Flush": this won't delete anything
         UUID cfid1 = rm.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.sync(true);
+        CommitLog.instance.sync();
         CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getCurrentPosition());
 
         assertEquals(1, CommitLog.instance.segmentManager.getActiveSegments().size());
@@ -593,7 +593,7 @@ public class CommitLogTest
         cellCount += 1;
         CommitLog.instance.add(rm2);
 
-        CommitLog.instance.sync(true);
+        CommitLog.instance.sync();
 
         SimpleCountingReplayer replayer = new SimpleCountingReplayer(CommitLog.instance, CommitLogPosition.NONE);
         List<String> activeSegments = CommitLog.instance.getActiveSegmentNames();
@@ -630,7 +630,7 @@ public class CommitLogTest
             }
         }
 
-        CommitLog.instance.sync(true);
+        CommitLog.instance.sync();
 
         SimpleCountingReplayer replayer = new SimpleCountingReplayer(CommitLog.instance, commitLogPosition);
         List<String> activeSegments = CommitLog.instance.getActiveSegmentNames();
@@ -645,7 +645,6 @@ public class CommitLogTest
     class SimpleCountingReplayer extends CommitLogReplayer
     {
         private final CommitLogPosition filterPosition;
-        private CommitLogReader reader;
         int cells;
         int skipped;
 
@@ -653,13 +652,16 @@ public class CommitLogTest
         {
             super(commitLog, filterPosition, Collections.emptyMap(), ReplayFilter.create());
             this.filterPosition = filterPosition;
-            this.reader = new CommitLogReader();
         }
 
         @SuppressWarnings("resource")
         @Override
         public void handleMutation(Mutation m, int size, int entryLocation, CommitLogDescriptor desc)
         {
+            // Filter out system writes that could flake the test.
+            if (!KEYSPACE1.equals(m.getKeyspaceName()))
+                return;
+
             if (entryLocation <= filterPosition.position)
             {
                 // Skip over this mutation.
