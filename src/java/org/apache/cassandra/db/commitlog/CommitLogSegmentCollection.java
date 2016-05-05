@@ -70,7 +70,7 @@ abstract class CommitLogSegmentCollection
 
     void init()
     {
-        head = new Node(new DummySegment(commitLog));
+        head = new Node(null);
         tail = allocatingFrom = head;
     }
 
