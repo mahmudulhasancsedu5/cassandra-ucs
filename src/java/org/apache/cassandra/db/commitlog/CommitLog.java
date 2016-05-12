@@ -126,7 +126,7 @@ public class CommitLog implements CommitLogMBean
     CommitLog restart()
     {
         allocator.restart();
-        executor.restart();
+        executor.restartUnsafe();
         return this;
     }
 
