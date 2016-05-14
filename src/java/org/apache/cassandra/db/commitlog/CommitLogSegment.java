@@ -30,8 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.CRC32;
 
 import com.codahale.metrics.Timer;
@@ -49,6 +49,7 @@ import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.CLibrary;
+import org.apache.cassandra.utils.IntegerIntervals;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
 
@@ -102,10 +103,10 @@ public abstract class CommitLogSegment
     private final WaitQueue syncComplete = new WaitQueue();
 
     // a map of Cf->dirty position; this is used to permit marking Cfs clean whilst the log is still in use
-    private final NonBlockingHashMap<UUID, AtomicInteger> cfDirty = new NonBlockingHashMap<>(1024);
+    private final NonBlockingHashMap<UUID, AtomicLong> cfDirty = new NonBlockingHashMap<>(1024);
 
     // a map of Cf->clean position; this is used to permit marking Cfs clean whilst the log is still in use
-    private final ConcurrentHashMap<UUID, AtomicInteger> cfClean = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, IntegerIntervals.Set> cfClean = new ConcurrentHashMap<>();
 
     public final long id;
 
@@ -426,7 +427,7 @@ public abstract class CommitLogSegment
     void markDirty(Mutation mutation, int allocatedPosition)
     {
         for (PartitionUpdate update : mutation.getPartitionUpdates())
-            ensureAtleast(cfDirty, update.metadata().cfId, allocatedPosition);
+            IntegerIntervals.coverInMap(cfDirty, update.metadata().cfId, allocatedPosition);
     }
 
     /**
@@ -437,39 +438,16 @@ public abstract class CommitLogSegment
      * @param cfId    the column family ID that is now clean
      * @param context the optional clean offset
      */
-    public synchronized void markClean(UUID cfId, ReplayPosition context)
+    public synchronized void markClean(UUID cfId, ReplayPosition startPosition, ReplayPosition endPosition)
     {
+        if (startPosition.segment > id || endPosition.segment < id)
+            return;
         if (!cfDirty.containsKey(cfId))
             return;
-        if (context.segment == id)
-            markClean(cfId, context.position);
-        else if (context.segment > id)
-            markClean(cfId, Integer.MAX_VALUE);
-    }
-
-    private void markClean(UUID cfId, int position)
-    {
-        ensureAtleast(cfClean, cfId, position);
+        int start = startPosition.segment == id ? startPosition.position : 0;
+        int end = endPosition.segment == id ? endPosition.position : Integer.MAX_VALUE;
+        cfClean.computeIfAbsent(cfId, k -> new IntegerIntervals.Set()).add(start, end);
         removeCleanFromDirty();
-    }
-
-    private static void ensureAtleast(ConcurrentMap<UUID, AtomicInteger> map, UUID cfId, int value)
-    {
-        AtomicInteger i = map.get(cfId);
-        if (i == null)
-        {
-            AtomicInteger i2 = map.putIfAbsent(cfId, i = new AtomicInteger());
-            if (i2 != null)
-                i = i2;
-        }
-        while (true)
-        {
-            int cur = i.get();
-            if (cur > value)
-                break;
-            if (i.compareAndSet(cur, value))
-                break;
-        }
     }
 
     private void removeCleanFromDirty()
@@ -478,14 +456,14 @@ public abstract class CommitLogSegment
         if (isStillAllocating())
             return;
 
-        Iterator<Map.Entry<UUID, AtomicInteger>> iter = cfClean.entrySet().iterator();
+        Iterator<Map.Entry<UUID, IntegerIntervals.Set>> iter = cfClean.entrySet().iterator();
         while (iter.hasNext())
         {
-            Map.Entry<UUID, AtomicInteger> clean = iter.next();
+            Map.Entry<UUID, IntegerIntervals.Set> clean = iter.next();
             UUID cfId = clean.getKey();
-            AtomicInteger cleanPos = clean.getValue();
-            AtomicInteger dirtyPos = cfDirty.get(cfId);
-            if (dirtyPos != null && dirtyPos.intValue() <= cleanPos.intValue())
+            IntegerIntervals.Set cleanPos = clean.getValue();
+            AtomicLong dirtyPos = cfDirty.get(cfId);
+            if (dirtyPos != null && cleanPos.covers(dirtyPos.get()))
             {
                 cfDirty.remove(cfId);
                 iter.remove();
@@ -502,12 +480,12 @@ public abstract class CommitLogSegment
             return cfDirty.keySet();
 
         List<UUID> r = new ArrayList<>(cfDirty.size());
-        for (Map.Entry<UUID, AtomicInteger> dirty : cfDirty.entrySet())
+        for (Map.Entry<UUID, AtomicLong> dirty : cfDirty.entrySet())
         {
             UUID cfId = dirty.getKey();
-            AtomicInteger dirtyPos = dirty.getValue();
-            AtomicInteger cleanPos = cfClean.get(cfId);
-            if (cleanPos == null || cleanPos.intValue() < dirtyPos.intValue())
+            AtomicLong dirtyPos = dirty.getValue();
+            IntegerIntervals.Set cleanPos = cfClean.get(cfId);
+            if (cleanPos == null || !cleanPos.covers(dirtyPos.get()))
                 r.add(dirty.getKey());
         }
         return r;

@@ -18,12 +18,20 @@
 */
 package org.apache.cassandra.db.commitlog;
 
+<<<<<<< HEAD
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+=======
+import static junit.framework.Assert.assertTrue;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
+import static org.junit.Assert.assertEquals;
+
+import java.io.*;
+>>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
@@ -46,18 +54,28 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParameterizedClass;
+<<<<<<< HEAD
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.RowUpdateBuilder;
+=======
+import org.apache.cassandra.config.Config.DiskFailurePolicy;
+import org.apache.cassandra.db.*;
+>>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
 import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.exceptions.ConfigurationException;
+<<<<<<< HEAD
 import org.apache.cassandra.io.compress.DeflateCompressor;
 import org.apache.cassandra.io.compress.LZ4Compressor;
 import org.apache.cassandra.io.compress.SnappyCompressor;
+=======
+import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.util.DataInputBuffer;
+>>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -235,7 +253,7 @@ public class CommitLogTest
         assert CommitLog.instance.activeSegments() == 2 : "Expecting 2 segments, got " + CommitLog.instance.activeSegments();
 
         UUID cfid2 = m2.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext());
+        CommitLog.instance.discardCompletedSegments(cfid2, ReplayPosition.NONE, CommitLog.instance.getContext());
 
         // Assert we still have both our segment
         assert CommitLog.instance.activeSegments() == 2 : "Expecting 2 segments, got " + CommitLog.instance.activeSegments();
@@ -262,7 +280,7 @@ public class CommitLogTest
         // "Flush": this won't delete anything
         UUID cfid1 = rm.getColumnFamilyIds().iterator().next();
         CommitLog.instance.sync(true);
-        CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getContext());
+        CommitLog.instance.discardCompletedSegments(cfid1, ReplayPosition.NONE, CommitLog.instance.getContext());
 
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();
 
@@ -283,7 +301,7 @@ public class CommitLogTest
         // didn't write anything on cf1 since last flush (and we flush cf2)
 
         UUID cfid2 = rm2.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext());
+        CommitLog.instance.discardCompletedSegments(cfid2, ReplayPosition.NONE, CommitLog.instance.getContext());
 
         // Assert we still have both our segment
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();
@@ -494,8 +512,8 @@ public class CommitLogTest
             ReplayPosition position = CommitLog.instance.getContext();
             for (Keyspace ks : Keyspace.system())
                 for (ColumnFamilyStore syscfs : ks.getColumnFamilyStores())
-                    CommitLog.instance.discardCompletedSegments(syscfs.metadata.cfId, position);
-            CommitLog.instance.discardCompletedSegments(cfs2.metadata.cfId, position);
+                    CommitLog.instance.discardCompletedSegments(syscfs.metadata.cfId, ReplayPosition.NONE, position);
+            CommitLog.instance.discardCompletedSegments(cfs2.metadata.cfId, ReplayPosition.NONE, position);
             assertEquals(1, CommitLog.instance.activeSegments());
         }
         finally
@@ -531,6 +549,121 @@ public class CommitLogTest
         {
             DatabaseDescriptor.setAutoSnapshot(originalState);
         }
+    }
+
+    @Test
+    public void testUnwriteableFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    {
+        CommitLog.instance.resetUnsafe(true);
+
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(STANDARD1);
+
+        DiskFailurePolicy oldPolicy = DatabaseDescriptor.getDiskFailurePolicy();
+        try
+        {
+            DatabaseDescriptor.setDiskFailurePolicy(DiskFailurePolicy.ignore);
+
+            for (int i = 0 ; i < 5 ; i++)
+            {
+                new RowUpdateBuilder(cfs.metadata, 0, "k")
+                    .clustering("c" + i).add("val", ByteBuffer.allocate(100))
+                    .build()
+                    .apply();
+
+                if (i == 2)
+                    try (Closeable c = Util.markDirectoriesUnwriteable(cfs))
+                    {
+                        cfs.forceBlockingFlush();
+                    }
+                    catch (Throwable t)
+                    {
+                        // expected. Cause (after some wrappings) should be a write error
+                        while (!(t instanceof FSWriteError))
+                            t = t.getCause();
+                    }
+                else
+                    cfs.forceBlockingFlush();
+            }
+        }
+        finally
+        {
+            DatabaseDescriptor.setDiskFailurePolicy(oldPolicy);
+        }
+
+        CommitLog.instance.sync(true);
+        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
+        // Currently we don't attempt to re-flush a memtable that failed, thus make sure data is replayed by commitlog.
+        // If retries work subsequent flushes should clear up error and this should change to expect 0.
+        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+    }
+
+    @Test
+    public void testOutOfOrderFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    {
+        CommitLog.instance.resetUnsafe(true);
+
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(STANDARD1);
+
+        for (int i = 0 ; i < 5 ; i++)
+        {
+            new RowUpdateBuilder(cfs.metadata, 0, "k")
+                .clustering("c" + i).add("val", ByteBuffer.allocate(100))
+                .build()
+                .apply();
+
+            Memtable current = cfs.getTracker().getView().getCurrentMemtable();
+            if (i == 2)
+                current.makeUnflushable();
+
+            try
+            {
+                cfs.forceBlockingFlush();
+            }
+            catch (Throwable t)
+            {
+                // expected after makeUnflushable. Cause (after some wrappings) should be a write error
+                while (!(t instanceof FSWriteError))
+                    t = t.getCause();
+                // Wait for started flushes to complete.
+                cfs.switchMemtableIfCurrent(current);
+            }
+        }
+
+        CommitLog.instance.sync(true);
+        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
+        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+    }
+
+    @Test
+    public void testOutOfOrderLogDiscard() throws ExecutionException, InterruptedException, IOException
+    {
+        CommitLog.instance.resetUnsafe(true);
+
+        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(STANDARD1);
+
+        for (int i = 0 ; i < 5 ; i++)
+        {
+            new RowUpdateBuilder(cfs.metadata, 0, "k")
+                .clustering("c" + i).add("val", ByteBuffer.allocate(100))
+                .build()
+                .apply();
+
+            Memtable current = cfs.getTracker().getView().getCurrentMemtable();
+            if (i == 2)
+                current.makeUnflushable();
+
+            // Move to new commit log segment and try to flush all data. Also delete segments that no longer contain
+            // flushed data.
+            // This does not stop on errors and should retain segments for which flushing failed.
+            CommitLog.instance.forceRecycleAllSegments();
+
+            // Wait for started flushes to complete.
+            cfs.switchMemtableIfCurrent(current);
+        }
+
+        CommitLog.instance.sync(true);
+        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
+        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
     }
 }
 
