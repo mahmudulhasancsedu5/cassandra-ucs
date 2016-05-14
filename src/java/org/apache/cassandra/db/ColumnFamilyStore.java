@@ -146,9 +146,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         }
     }
 
-    @VisibleForTesting
-    public static volatile ColumnFamilyStore discardFlushResults;
-
     public final Keyspace keyspace;
     public final String name;
     public final CFMetaData metadata;
@@ -1013,9 +1010,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         public ReplayPosition call()
         {
-            if (discardFlushResults == ColumnFamilyStore.this)
-                return commitLogUpperBound;
-
             writeBarrier.await();
 
             /**
@@ -1046,14 +1040,24 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 throw new IllegalStateException();
             }
 
+            if (memtables.isEmpty())
+            {
+                metric.pendingFlushes.dec();
+                return ReplayPosition.NONE;
+            }
+
             // If a flush errored out but the error was ignored, make sure we don't discard the commit log.
             if (flushFailure == null)
             {
-                CommitLog.instance.discardCompletedSegments(metadata.cfId, commitLogUpperBound);
+                Memtable memtable = memtables.get(0);
+                CommitLog.instance.discardCompletedSegments(metadata.cfId, memtable.getCommitLogLowerBound(), commitLogUpperBound);
                 for (int i = 0 ; i < memtables.size() ; i++)
                 {
-                    Memtable memtable = memtables.get(i);
+                    memtable = memtables.get(i);
                     SSTableReader reader = readers.get(i);
+                    // FIXME: If an earlier flush failed and the failure policy ignored it (or stopped transports),
+                    // this could cause compaction to combine tables over an unflushed region, making replay skip
+                    // unflushed data.
                     memtable.cfs.data.permitCompactionOfFlushed(reader);
                     memtable.cfs.compactionStrategyWrapper.replaceFlushed(memtable, reader);
                 }
@@ -1215,13 +1219,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     // the commit log as done, however they *will* terminate (unlike under typical failures) to ensure progress is made
     public void simulateFailedFlush()
     {
-        discardFlushResults = this;
         data.markFlushing(data.switchMemtable(false, new Memtable(new AtomicReference<>(CommitLog.instance.getContext()), this)));
-    }
-
-    public void resumeFlushing()
-    {
-        discardFlushResults = null;
     }
 
     /**

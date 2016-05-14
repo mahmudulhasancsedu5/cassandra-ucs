@@ -24,8 +24,6 @@ import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.Keyspace;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -211,11 +209,6 @@ public class CompactionsCQLTest extends CQLTester
             found = true;
         }
         return found;
-    }
-
-    private ColumnFamilyStore getCurrentColumnFamilyStore()
-    {
-        return Keyspace.open(KEYSPACE).getColumnFamilyStore(currentTable());
     }
 
     private void waitForMinor(String keyspace, String cf, long maxWaitTime, boolean shouldFind) throws Throwable

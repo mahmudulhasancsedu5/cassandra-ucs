@@ -50,6 +50,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.functions.FunctionName;
 import org.apache.cassandra.cql3.statements.ParsedStatement;
+import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
@@ -355,6 +356,11 @@ public abstract class CQLTester
         if (tables.isEmpty())
             return null;
         return tables.get(tables.size() - 1);
+    }
+
+    protected ColumnFamilyStore getCurrentColumnFamilyStore()
+    {
+        return Keyspace.open(keyspace()).getColumnFamilyStore(currentTable());
     }
 
     protected ByteBuffer unset()
