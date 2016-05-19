@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
@@ -53,7 +54,13 @@ import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayExcept
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.compress.DeflateCompressor;
+import org.apache.cassandra.io.compress.LZ4Compressor;
+import org.apache.cassandra.io.compress.SnappyCompressor;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataInputBuffer;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.FastByteArrayInputStream;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -569,8 +576,8 @@ public class CommitLogTest
         Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
     }
 
-    @Test
-    public void testOutOfOrderFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    public void testOutOfOrderFlushRecovery(BiConsumer<ColumnFamilyStore, Memtable> flushAction, boolean performCompaction)
+            throws ExecutionException, InterruptedException, IOException
     {
         CommitLog.instance.resetUnsafe(true);
 
@@ -587,58 +594,70 @@ public class CommitLogTest
             if (i == 2)
                 current.makeUnflushable();
 
-            try
-            {
-                cfs.forceBlockingFlush();
-            }
-            catch (Throwable t)
-            {
-                // expected after makeUnflushable. Cause (after some wrappings) should be a write error
-                while (!(t instanceof FSWriteError))
-                    t = t.getCause();
-                // Wait for started flushes to complete.
-                cfs.switchMemtableIfCurrent(current);
-            }
+            flushAction.accept(cfs, current);
         }
+        if (performCompaction)
+            cfs.forceMajorCompaction();
+        // Make sure metadata saves and reads fine
+        for (SSTableReader reader : cfs.getLiveSSTables())
+            reader.reloadSSTableMetadata();
 
         CommitLog.instance.sync(true);
         System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
         Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+    }
+
+    BiConsumer<ColumnFamilyStore, Memtable> flush = (cfs, current) ->
+    {
+        try
+        {
+            cfs.forceBlockingFlush();
+        }
+        catch (Throwable t)
+        {
+            // expected after makeUnflushable. Cause (after some wrappings) should be a write error
+            while (!(t instanceof FSWriteError))
+                t = t.getCause();
+            // Wait for started flushes to complete.
+            cfs.switchMemtableIfCurrent(current);
+        }
+    };
+
+    BiConsumer<ColumnFamilyStore, Memtable> recycleSegments = (cfs, current) ->
+    {
+        // Move to new commit log segment and try to flush all data. Also delete segments that no longer contain
+        // flushed data.
+        // This does not stop on errors and should retain segments for which flushing failed.
+        CommitLog.instance.forceRecycleAllSegments();
+
+        // Wait for started flushes to complete.
+        cfs.switchMemtableIfCurrent(current);
+    };
+
+    @Test
+    public void testOutOfOrderFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(flush, false);
     }
 
     @Test
     public void testOutOfOrderLogDiscard() throws ExecutionException, InterruptedException, IOException
     {
-        CommitLog.instance.resetUnsafe(true);
-
-        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(STANDARD1);
-
-        for (int i = 0 ; i < 5 ; i++)
-        {
-            new RowUpdateBuilder(cfs.metadata, 0, "k")
-                .clustering("c" + i).add("val", ByteBuffer.allocate(100))
-                .build()
-                .apply();
-
-            Memtable current = cfs.getTracker().getView().getCurrentMemtable();
-            if (i == 2)
-                current.makeUnflushable();
-
-            // Move to new commit log segment and try to flush all data. Also delete segments that no longer contain
-            // flushed data.
-            // This does not stop on errors and should retain segments for which flushing failed.
-            CommitLog.instance.forceRecycleAllSegments();
-
-            // Wait for started flushes to complete.
-            cfs.switchMemtableIfCurrent(current);
-        }
-
-        CommitLog.instance.sync(true);
-        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
-        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+        testOutOfOrderFlushRecovery(recycleSegments, false);
     }
 
     @Test
+    public void testOutOfOrderFlushRecoveryWithCompaction() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(flush, true);
+    }
+
+    @Test
+    public void testOutOfOrderLogDiscardWithCompaction() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(recycleSegments, true);
+    }
+
     private void testDescriptorPersistence(CommitLogDescriptor desc) throws IOException
     {
         ByteBuffer buf = ByteBuffer.allocate(1024);
