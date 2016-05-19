@@ -19,7 +19,6 @@ package org.apache.cassandra.io.sstable.metadata;
 
 import java.io.File;
 import java.nio.ByteBuffer;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -28,11 +27,10 @@ import java.util.Set;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Ordering;
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus;
 import com.clearspring.analytics.stream.cardinality.ICardinality;
-import org.apache.cassandra.db.commitlog.ReplayPosition;
+import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.io.sstable.ColumnNameHelper;
 import org.apache.cassandra.io.sstable.ColumnStats;
@@ -69,8 +67,7 @@ public class MetadataCollector
     {
         return new StatsMetadata(defaultRowSizeHistogram(),
                                  defaultColumnCountHistogram(),
-                                 ReplayPosition.NONE,
-                                 ReplayPosition.NONE,
+                                 ReplayIntervalSet.EMPTY,
                                  Long.MIN_VALUE,
                                  Long.MAX_VALUE,
                                  Integer.MAX_VALUE,
@@ -85,8 +82,7 @@ public class MetadataCollector
 
     protected EstimatedHistogram estimatedRowSize = defaultRowSizeHistogram();
     protected EstimatedHistogram estimatedColumnCount = defaultColumnCountHistogram();
-    protected ReplayPosition commitLogLowerBound = ReplayPosition.NONE;
-    protected ReplayPosition commitLogUpperBound = ReplayPosition.NONE;
+    protected ReplayIntervalSet commitLogIntervals = ReplayIntervalSet.EMPTY;
     protected long minTimestamp = Long.MAX_VALUE;
     protected long maxTimestamp = Long.MIN_VALUE;
     protected int maxLocalDeletionTime = Integer.MIN_VALUE;
@@ -116,23 +112,13 @@ public class MetadataCollector
     {
         this(columnNameComparator);
 
-        ReplayPosition min = null, max = null;
+        ReplayIntervalSet.Builder intervals = new ReplayIntervalSet.Builder();
         for (SSTableReader sstable : sstables)
         {
-            if (min == null)
-            {
-                min = sstable.getSSTableMetadata().commitLogLowerBound;
-                max = sstable.getSSTableMetadata().commitLogUpperBound;
-            }
-            else
-            {
-                min = Ordering.natural().min(min, sstable.getSSTableMetadata().commitLogLowerBound);
-                max = Ordering.natural().max(max, sstable.getSSTableMetadata().commitLogUpperBound);
-            }
+            intervals.addAll(sstable.getSSTableMetadata().commitLogIntervals);
         }
 
-        commitLogLowerBound(min);
-        commitLogUpperBound(max);
+        commitLogIntervals(intervals.build());
         sstableLevel(level);
         // Get the max timestamp of the precompacted sstables
         // and adds generation of live ancestors
@@ -218,15 +204,9 @@ public class MetadataCollector
         return this;
     }
 
-    public MetadataCollector commitLogLowerBound(ReplayPosition commitLogLowerBound)
+    public MetadataCollector commitLogIntervals(ReplayIntervalSet commitLogIntervals)
     {
-        this.commitLogLowerBound = commitLogLowerBound;
-        return this;
-    }
-
-    public MetadataCollector commitLogUpperBound(ReplayPosition commitLogUpperBound)
-    {
-        this.commitLogUpperBound = commitLogUpperBound;
+        this.commitLogIntervals = commitLogIntervals;
         return this;
     }
 
@@ -282,8 +262,7 @@ public class MetadataCollector
         components.put(MetadataType.VALIDATION, new ValidationMetadata(partitioner, bloomFilterFPChance));
         components.put(MetadataType.STATS, new StatsMetadata(estimatedRowSize,
                                                              estimatedColumnCount,
-                                                             commitLogLowerBound,
-                                                             commitLogUpperBound,
+                                                             commitLogIntervals,
                                                              minTimestamp,
                                                              maxTimestamp,
                                                              maxLocalDeletionTime,

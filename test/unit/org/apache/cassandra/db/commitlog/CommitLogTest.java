@@ -48,6 +48,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.ByteBufferDataInput;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.locator.SimpleStrategy;
@@ -498,7 +499,7 @@ public class CommitLogTest
         Assert.assertEquals("Descriptor length", length, input.getFilePointer());
         Assert.assertEquals("Descriptors", desc, read);
     }
-    
+
     @Test
     public void testDescriptorPersistence() throws IOException
     {
@@ -555,8 +556,13 @@ public class CommitLogTest
         Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
     }
 
-    @Test
-    public void testOutOfOrderFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    interface FlushAction
+    {
+        void perform(ColumnFamilyStore cfs, Memtable currentMemtable);
+    }
+
+    public void testOutOfOrderFlushRecovery(FlushAction flushAction, boolean performCompaction)
+            throws ExecutionException, InterruptedException, IOException
     {
         CommitLog.instance.resetUnsafe(true);
 
@@ -567,11 +573,29 @@ public class CommitLogTest
             final Mutation rm1 = new Mutation(KEYSPACE1, bytes("k"));
             rm1.add("Standard1", Util.cellname("c" + i), ByteBuffer.allocate(100), 0);
             rm1.apply();
- 
+
             Memtable current = cfs.getTracker().getView().getCurrentMemtable();
             if (i == 2)
                 current.makeUnflushable();
 
+            flushAction.perform(cfs, current);
+        }
+        if (performCompaction)
+            cfs.forceMajorCompaction();
+        // Make sure metadata saves and reads fine
+        for (SSTableReader reader : cfs.getSSTables())
+            reader.reloadSSTableMetadata();
+
+        CommitLog.instance.sync(true);
+        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + "Standard1");
+        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+    }
+
+    FlushAction flush = new FlushAction()
+    {
+        @Override
+        public void perform(ColumnFamilyStore cfs, Memtable current)
+        {
             try
             {
                 cfs.forceBlockingFlush();
@@ -586,28 +610,13 @@ public class CommitLogTest
             }
         }
 
-        CommitLog.instance.sync(true);
-        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + "Standard1");
-        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
-    }
+    };
 
-    @Test
-    public void testOutOfOrderLogDiscard() throws ExecutionException, InterruptedException, IOException
+    FlushAction recycleSegments = new FlushAction()
     {
-        CommitLog.instance.resetUnsafe(true);
-
-        ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore("Standard1");
-
-        for (int i = 0 ; i < 5 ; i++)
+        @Override
+        public void perform(ColumnFamilyStore cfs, Memtable current)
         {
-            final Mutation rm1 = new Mutation(KEYSPACE1, bytes("k"));
-            rm1.add("Standard1", Util.cellname("c" + i), ByteBuffer.allocate(100), 0);
-            rm1.apply();
-
-            Memtable current = cfs.getTracker().getView().getCurrentMemtable();
-            if (i == 2)
-                current.makeUnflushable();
-
             // Move to new commit log segment and try to flush all data. Also delete segments that no longer contain
             // flushed data.
             // This does not stop on errors and should retain segments for which flushing failed.
@@ -615,11 +624,31 @@ public class CommitLogTest
 
             // Wait for started flushes to complete.
             cfs.switchMemtableIfCurrent(current);
-        }
+        };
+    };
 
-        CommitLog.instance.sync(true);
-        System.setProperty("cassandra.replayList", KEYSPACE1 + "." + "Standard1");
-        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+    @Test
+    public void testOutOfOrderFlushRecovery() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(flush, false);
+    }
+
+    @Test
+    public void testOutOfOrderLogDiscard() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(recycleSegments, false);
+    }
+
+    @Test
+    public void testOutOfOrderFlushRecoveryWithCompaction() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(flush, true);
+    }
+
+    @Test
+    public void testOutOfOrderLogDiscardWithCompaction() throws ExecutionException, InterruptedException, IOException
+    {
+        testOutOfOrderFlushRecovery(recycleSegments, true);
     }
 
     @Test

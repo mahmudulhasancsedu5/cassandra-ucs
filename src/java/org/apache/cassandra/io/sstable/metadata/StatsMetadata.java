@@ -28,6 +28,7 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -43,8 +44,7 @@ public class StatsMetadata extends MetadataComponent
 
     public final EstimatedHistogram estimatedRowSize;
     public final EstimatedHistogram estimatedColumnCount;
-    public final ReplayPosition commitLogLowerBound;
-    public final ReplayPosition commitLogUpperBound;
+    public final ReplayIntervalSet commitLogIntervals;
     public final long minTimestamp;
     public final long maxTimestamp;
     public final int maxLocalDeletionTime;
@@ -58,8 +58,7 @@ public class StatsMetadata extends MetadataComponent
 
     public StatsMetadata(EstimatedHistogram estimatedRowSize,
                          EstimatedHistogram estimatedColumnCount,
-                         ReplayPosition commitLogLowerBound,
-                         ReplayPosition commitLogUpperBound,
+                         ReplayIntervalSet commitLogIntervals,
                          long minTimestamp,
                          long maxTimestamp,
                          int maxLocalDeletionTime,
@@ -73,8 +72,7 @@ public class StatsMetadata extends MetadataComponent
     {
         this.estimatedRowSize = estimatedRowSize;
         this.estimatedColumnCount = estimatedColumnCount;
-        this.commitLogLowerBound = commitLogLowerBound;
-        this.commitLogUpperBound = commitLogUpperBound;
+        this.commitLogIntervals = commitLogIntervals;
         this.minTimestamp = minTimestamp;
         this.maxTimestamp = maxTimestamp;
         this.maxLocalDeletionTime = maxLocalDeletionTime;
@@ -120,8 +118,7 @@ public class StatsMetadata extends MetadataComponent
     {
         return new StatsMetadata(estimatedRowSize,
                                  estimatedColumnCount,
-                                 commitLogLowerBound,
-                                 commitLogUpperBound,
+                                 commitLogIntervals,
                                  minTimestamp,
                                  maxTimestamp,
                                  maxLocalDeletionTime,
@@ -138,8 +135,7 @@ public class StatsMetadata extends MetadataComponent
     {
         return new StatsMetadata(estimatedRowSize,
                                  estimatedColumnCount,
-                                 commitLogLowerBound,
-                                 commitLogUpperBound,
+                                 commitLogIntervals,
                                  minTimestamp,
                                  maxTimestamp,
                                  maxLocalDeletionTime,
@@ -162,8 +158,7 @@ public class StatsMetadata extends MetadataComponent
         return new EqualsBuilder()
                        .append(estimatedRowSize, that.estimatedRowSize)
                        .append(estimatedColumnCount, that.estimatedColumnCount)
-                       .append(commitLogLowerBound, that.commitLogLowerBound)
-                       .append(commitLogUpperBound, that.commitLogUpperBound)
+                       .append(commitLogIntervals, that.commitLogIntervals)
                        .append(minTimestamp, that.minTimestamp)
                        .append(maxTimestamp, that.maxTimestamp)
                        .append(maxLocalDeletionTime, that.maxLocalDeletionTime)
@@ -183,8 +178,7 @@ public class StatsMetadata extends MetadataComponent
         return new HashCodeBuilder()
                        .append(estimatedRowSize)
                        .append(estimatedColumnCount)
-                       .append(commitLogLowerBound)
-                       .append(commitLogUpperBound)
+                       .append(commitLogIntervals)
                        .append(minTimestamp)
                        .append(maxTimestamp)
                        .append(maxLocalDeletionTime)
@@ -205,7 +199,7 @@ public class StatsMetadata extends MetadataComponent
             int size = 0;
             size += EstimatedHistogram.serializer.serializedSize(component.estimatedRowSize, TypeSizes.NATIVE);
             size += EstimatedHistogram.serializer.serializedSize(component.estimatedColumnCount, TypeSizes.NATIVE);
-            size += ReplayPosition.serializer.serializedSize(component.commitLogUpperBound, TypeSizes.NATIVE);
+            size += ReplayPosition.serializer.serializedSize(component.commitLogIntervals.upperBound(), TypeSizes.NATIVE);
             size += 8 + 8 + 4 + 8 + 8; // mix/max timestamp(long), maxLocalDeletionTime(int), compressionRatio(double), repairedAt (long)
             size += StreamingHistogram.serializer.serializedSize(component.estimatedTombstoneDropTime, TypeSizes.NATIVE);
             size += TypeSizes.NATIVE.sizeof(component.sstableLevel);
@@ -219,7 +213,9 @@ public class StatsMetadata extends MetadataComponent
                 size += 2 + columnName.remaining(); // with short length
             size += TypeSizes.NATIVE.sizeof(component.hasLegacyCounterShards);
             if (version.hasCommitLogLowerBound())
-                size += ReplayPosition.serializer.serializedSize(component.commitLogLowerBound, TypeSizes.NATIVE);
+                size += ReplayPosition.serializer.serializedSize(component.commitLogIntervals.lowerBound(), TypeSizes.NATIVE);
+            if (version.hasCommitLogIntervals())
+                size += ReplayIntervalSet.serializer.serializedSize(component.commitLogIntervals, TypeSizes.NATIVE);
             return size;
         }
 
@@ -227,7 +223,7 @@ public class StatsMetadata extends MetadataComponent
         {
             EstimatedHistogram.serializer.serialize(component.estimatedRowSize, out);
             EstimatedHistogram.serializer.serialize(component.estimatedColumnCount, out);
-            ReplayPosition.serializer.serialize(component.commitLogUpperBound, out);
+            ReplayPosition.serializer.serialize(component.commitLogIntervals.upperBound(), out);
             out.writeLong(component.minTimestamp);
             out.writeLong(component.maxTimestamp);
             out.writeInt(component.maxLocalDeletionTime);
@@ -243,7 +239,9 @@ public class StatsMetadata extends MetadataComponent
                 ByteBufferUtil.writeWithShortLength(columnName, out);
             out.writeBoolean(component.hasLegacyCounterShards);
             if (version.hasCommitLogLowerBound())
-                ReplayPosition.serializer.serialize(component.commitLogLowerBound, out);
+                ReplayPosition.serializer.serialize(component.commitLogIntervals.lowerBound(), out);
+            if (version.hasCommitLogIntervals())
+                ReplayIntervalSet.serializer.serialize(component.commitLogIntervals, out);
         }
 
         public StatsMetadata deserialize(Version version, DataInput in) throws IOException
@@ -278,10 +276,15 @@ public class StatsMetadata extends MetadataComponent
 
             if (version.hasCommitLogLowerBound())
                 commitLogLowerBound = ReplayPosition.serializer.deserialize(in);
+            ReplayIntervalSet commitLogIntervals;
+            if (version.hasCommitLogIntervals())
+                commitLogIntervals = ReplayIntervalSet.serializer.deserialize(in);
+            else
+                commitLogIntervals = new ReplayIntervalSet(commitLogLowerBound, commitLogUpperBound);
+
             return new StatsMetadata(rowSizes,
                                      columnCounts,
-                                     commitLogLowerBound,
-                                     commitLogUpperBound,
+                                     commitLogIntervals,
                                      minTimestamp,
                                      maxTimestamp,
                                      maxLocalDeletionTime,

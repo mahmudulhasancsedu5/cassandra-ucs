@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.commitlog.CommitLog;
+import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.index.SecondaryIndexManager;
@@ -418,8 +419,7 @@ public class Memtable implements Comparable<Memtable>
     private SSTableWriter createFlushWriter(String filename)
     {
         MetadataCollector sstableMetadataCollector = new MetadataCollector(cfs.metadata.comparator)
-                                                     .commitLogLowerBound(commitLogLowerBound.get())
-                                                     .commitLogUpperBound(commitLogUpperBound.get());
+                                                     .commitLogIntervals(new ReplayIntervalSet(commitLogLowerBound.get(), commitLogUpperBound.get()));
         return SSTableWriter.create(Descriptor.fromFilename(filename), (long) rows.size(), ActiveRepairService.UNREPAIRED_SSTABLE, cfs.metadata, cfs.partitioner, sstableMetadataCollector);
     }
 

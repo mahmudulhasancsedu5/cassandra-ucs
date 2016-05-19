@@ -54,6 +54,8 @@ public abstract class Version
 
     public abstract boolean hasCommitLogLowerBound();
 
+    public abstract boolean hasCommitLogIntervals();
+
     public String getVersion()
     {
         return version;

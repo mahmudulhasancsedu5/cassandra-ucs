@@ -30,6 +30,7 @@ import com.google.common.collect.Sets;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.composites.SimpleDenseCellNameType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -93,8 +94,7 @@ public class MetadataSerializerTest
         MetadataCollector collector = new MetadataCollector(new SimpleDenseCellNameType(BytesType.instance))
                                                       .estimatedRowSize(rowSizes)
                                                       .estimatedColumnCount(columnCounts)
-                                                      .commitLogLowerBound(start)
-                                                      .commitLogUpperBound(end);
+                                                      .commitLogIntervals(new ReplayIntervalSet(start, end));
         collector.updateMinTimestamp(minTimestamp);
         collector.updateMaxTimestamp(maxTimestamp);
 
@@ -109,17 +109,34 @@ public class MetadataSerializerTest
     }
 
     @Test
-    public void testLaReadsLb() throws IOException
+    public void testLaReadLb() throws IOException
+    {
+        testOldReadsNew("la", "lb");
+    }
+
+    @Test
+    public void testLaReadLc() throws IOException
+    {
+        testOldReadsNew("la", "lc");
+    }
+
+    @Test
+    public void testLbReadLc() throws IOException
+    {
+        testOldReadsNew("lb", "lc");
+    }
+
+    public void testOldReadsNew(String oldV, String newV) throws IOException
     {
         Map<MetadataType, MetadataComponent> originalMetadata = constructMetadata();
 
         MetadataSerializer serializer = new MetadataSerializer();
         // Write metadata in two minor formats.
-        File statsFileLb = serialize(originalMetadata, serializer, BigFormat.instance.getVersion("lb"));
-        File statsFileLa = serialize(originalMetadata, serializer, BigFormat.instance.getVersion("la"));
+        File statsFileLb = serialize(originalMetadata, serializer, BigFormat.instance.getVersion(newV));
+        File statsFileLa = serialize(originalMetadata, serializer, BigFormat.instance.getVersion(oldV));
 
         // Reading both as earlier version should yield identical results.
-        Descriptor desc = new Descriptor("la", statsFileLb.getParentFile(), "", "", 0, Descriptor.Type.FINAL, DatabaseDescriptor.getSSTableFormat());
+        Descriptor desc = new Descriptor(oldV, statsFileLb.getParentFile(), "", "", 0, Descriptor.Type.FINAL, DatabaseDescriptor.getSSTableFormat());
         try (RandomAccessReader inLb = RandomAccessReader.open(statsFileLb);
              RandomAccessReader inLa = RandomAccessReader.open(statsFileLa))
         {
