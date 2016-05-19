@@ -44,6 +44,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Ordering;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.commons.lang3.StringUtils;
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
@@ -63,6 +64,7 @@ import org.apache.cassandra.db.UnknownColumnFamilyException;
 import org.apache.cassandra.db.commitlog.SegmentReader.SyncSegment;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.rows.SerializationHelper;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.ChannelProxy;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.FileDataInput;
@@ -89,7 +91,7 @@ public class CommitLogReplayer
     private final Queue<Future<Integer>> futures;
     private final Map<UUID, AtomicInteger> invalidMutations;
     private final AtomicInteger replayedCount;
-    private final Map<UUID, ReplayPosition.ReplayFilter> cfPersisted;
+    private final Map<UUID, ReplayIntervalSet> cfPersisted;
     private final ReplayPosition globalPosition;
     private final CRC32 checksum;
     private byte[] buffer;
@@ -164,7 +166,7 @@ public class CommitLogReplayer
         }
     }
 
-    CommitLogReplayer(CommitLog commitLog, ReplayPosition globalPosition, Map<UUID, ReplayPosition.ReplayFilter> cfPersisted, ReplayFilter replayFilter)
+    CommitLogReplayer(CommitLog commitLog, ReplayPosition globalPosition, Map<UUID, ReplayIntervalSet> cfPersisted, ReplayFilter replayFilter)
     {
         this.keyspacesRecovered = new NonBlockingHashSet<Keyspace>();
         this.futures = new ArrayDeque<Future<Integer>>();
@@ -182,7 +184,7 @@ public class CommitLogReplayer
     public static CommitLogReplayer construct(CommitLog commitLog)
     {
         // compute per-CF and global replay positions
-        Map<UUID, ReplayPosition.ReplayFilter> cfPersisted = new HashMap<>();
+        Map<UUID, ReplayIntervalSet> cfPersisted = new HashMap<>();
         ReplayFilter replayFilter = ReplayFilter.create();
         ReplayPosition globalPosition = null;
         for (ColumnFamilyStore cfs : ColumnFamilyStore.all())
@@ -209,14 +211,14 @@ public class CommitLogReplayer
                 }
             }
 
-            ReplayPosition.ReplayFilter filter = new ReplayPosition.ReplayFilter(cfs.getSSTables(), truncatedAt);
+            ReplayIntervalSet filter = persistedIntervals(cfs.getSSTables(), truncatedAt);
             if (!filter.isEmpty())
                 cfPersisted.put(cfs.metadata.cfId, filter);
             else
                 globalPosition = ReplayPosition.NONE; // if we have no ranges for this CF, we must replay everything and filter
         }
         if (globalPosition == null)
-            globalPosition = ReplayPosition.firstNotCovered(cfPersisted.values());
+            globalPosition = firstNotCovered(cfPersisted.values());
         logger.debug("Global replay position is {} from columnfamilies {}", globalPosition, FBUtilities.toString(cfPersisted));
         return new CommitLogReplayer(commitLog, globalPosition, cfPersisted, replayFilter);
     }
@@ -226,6 +228,37 @@ public class CommitLogReplayer
         int i;
         for (i = 0; i < clogs.length; ++i)
             recover(clogs[i], i + 1 == clogs.length);
+    }
+
+    /**
+     * A set of known safe-to-discard commit log replay positions, based on
+     * the range covered by on disk sstables and those prior to the most recent truncation record
+     */
+    public static ReplayIntervalSet persistedIntervals(Iterable<SSTableReader> onDisk, ReplayPosition truncatedAt)
+    {
+        ReplayIntervalSet.Builder builder = new ReplayIntervalSet.Builder();
+        for (SSTableReader reader : onDisk)
+            builder.addAll(reader.getSSTableMetadata().commitLogIntervals);
+
+        if (truncatedAt != null)
+            builder.add(ReplayPosition.NONE, truncatedAt);
+        return builder.build();
+    }
+
+    public static ReplayPosition firstNotCovered(Iterable<ReplayIntervalSet> ranges)
+    {
+        ReplayPosition min = null;
+        for (ReplayIntervalSet map : ranges)
+        {
+            ReplayPosition first = map.ranges.firstEntry().getValue();
+            if (min == null)
+                min = first;
+            else
+                min = Ordering.natural().min(min, first);
+        }
+        if (min == null)
+            return ReplayPosition.NONE;
+        return min;
     }
 
     public int blockForWrites()
@@ -342,8 +375,8 @@ public class CommitLogReplayer
      */
     private boolean shouldReplay(UUID cfId, ReplayPosition position)
     {
-        ReplayPosition.ReplayFilter filter = cfPersisted.get(cfId);
-        return filter == null || filter.shouldReplay(position);
+        ReplayIntervalSet filter = cfPersisted.get(cfId);
+        return filter == null || !filter.contains(position);
     }
 
     @SuppressWarnings("resource")
