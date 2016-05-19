@@ -24,6 +24,7 @@ import java.util.*;
 import com.google.common.collect.Maps;
 
 import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
@@ -55,7 +56,7 @@ public class LegacyMetadataSerializer extends MetadataSerializer
 
         EstimatedHistogram.serializer.serialize(stats.estimatedPartitionSize, out);
         EstimatedHistogram.serializer.serialize(stats.estimatedColumnCount, out);
-        ReplayPosition.serializer.serialize(stats.commitLogUpperBound, out);
+        ReplayPosition.serializer.serialize(stats.commitLogIntervals.upperBound(), out);
         out.writeLong(stats.minTimestamp);
         out.writeLong(stats.maxTimestamp);
         out.writeInt(stats.maxLocalDeletionTime);
@@ -72,7 +73,9 @@ public class LegacyMetadataSerializer extends MetadataSerializer
         for (ByteBuffer value : stats.maxClusteringValues)
             ByteBufferUtil.writeWithShortLength(value, out);
         if (version.hasCommitLogLowerBound())
-            ReplayPosition.serializer.serialize(stats.commitLogLowerBound, out);
+            ReplayPosition.serializer.serialize(stats.commitLogIntervals.lowerBound(), out);
+        if (version.hasCommitLogIntervals())
+            ReplayIntervalSet.serializer.serialize(stats.commitLogIntervals, out);
     }
 
     /**
@@ -121,6 +124,11 @@ public class LegacyMetadataSerializer extends MetadataSerializer
 
                 if (descriptor.version.hasCommitLogLowerBound())
                     commitLogLowerBound = ReplayPosition.serializer.deserialize(in);
+                ReplayIntervalSet commitLogIntervals;
+                if (descriptor.version.hasCommitLogIntervals())
+                    commitLogIntervals = ReplayIntervalSet.serializer.deserialize(in);
+                else
+                    commitLogIntervals = new ReplayIntervalSet(commitLogLowerBound, commitLogUpperBound);
 
                 if (types.contains(MetadataType.VALIDATION))
                     components.put(MetadataType.VALIDATION,
@@ -129,8 +137,7 @@ public class LegacyMetadataSerializer extends MetadataSerializer
                     components.put(MetadataType.STATS,
                                    new StatsMetadata(partitionSizes,
                                                      columnCounts,
-                                                     commitLogLowerBound,
-                                                     commitLogUpperBound,
+                                                     commitLogIntervals,
                                                      minTimestamp,
                                                      maxTimestamp,
                                                      Integer.MAX_VALUE,
