@@ -993,19 +993,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         final boolean flushSecondaryIndexes;
         final OpOrder.Barrier writeBarrier;
         final CountDownLatch latch = new CountDownLatch(1);
-        final ReplayPosition commitLogUpperBound;
         final List<Memtable> memtables;
-        final List<SSTableReader> readers;
         volatile FSWriteError flushFailure = null;
 
-        private PostFlush(boolean flushSecondaryIndexes, OpOrder.Barrier writeBarrier, ReplayPosition commitLogUpperBound,
-                          List<Memtable> memtables, List<SSTableReader> readers)
+        private PostFlush(boolean flushSecondaryIndexes, OpOrder.Barrier writeBarrier,
+                          List<Memtable> memtables)
         {
             this.writeBarrier = writeBarrier;
             this.flushSecondaryIndexes = flushSecondaryIndexes;
-            this.commitLogUpperBound = commitLogUpperBound;
             this.memtables = memtables;
-            this.readers = readers;
         }
 
         public ReplayPosition call()
@@ -1040,27 +1036,13 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 throw new IllegalStateException();
             }
 
-            if (memtables.isEmpty())
-            {
-                metric.pendingFlushes.dec();
-                return ReplayPosition.NONE;
-            }
-
+            ReplayPosition commitLogUpperBound = ReplayPosition.NONE;
             // If a flush errored out but the error was ignored, make sure we don't discard the commit log.
-            if (flushFailure == null)
+            if (flushFailure == null && !memtables.isEmpty())
             {
                 Memtable memtable = memtables.get(0);
+                commitLogUpperBound = memtable.getCommitLogUpperBound();
                 CommitLog.instance.discardCompletedSegments(metadata.cfId, memtable.getCommitLogLowerBound(), commitLogUpperBound);
-                for (int i = 0 ; i < memtables.size() ; i++)
-                {
-                    memtable = memtables.get(i);
-                    SSTableReader reader = readers.get(i);
-                    // FIXME: If an earlier flush failed and the failure policy ignored it (or stopped transports),
-                    // this could cause compaction to combine tables over an unflushed region, making replay skip
-                    // unflushed data.
-                    memtable.cfs.data.permitCompactionOfFlushed(reader);
-                    memtable.cfs.compactionStrategyWrapper.replaceFlushed(memtable, reader);
-                }
             }
             metric.pendingFlushes.dec();
 
@@ -1082,7 +1064,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         final OpOrder.Barrier writeBarrier;
         final List<Memtable> memtables = new ArrayList<>();
-        final List<SSTableReader> readers = new ArrayList<>();
         final PostFlush postFlush;
         final boolean truncate;
 
@@ -1124,7 +1105,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             // since this happens after wiring up the commitLogUpperBound, we also know all operations with earlier
             // replay positions have also completed, i.e. the memtables are done and ready to flush
             writeBarrier.issue();
-            postFlush = new PostFlush(!truncate, writeBarrier, commitLogUpperBound.get(), memtables, readers);
+            postFlush = new PostFlush(!truncate, writeBarrier, memtables);
         }
 
         public void run()
@@ -1143,8 +1124,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 memtable.cfs.data.markFlushing(memtable);
                 if (memtable.isClean() || truncate)
                 {
-                    memtable.cfs.data.replaceFlushed(memtable, null);
-                    memtable.cfs.compactionStrategyWrapper.replaceFlushed(memtable, null);
+                    memtable.cfs.replaceFlushed(memtable, null);
                     reclaim(memtable);
                     iter.remove();
                 }
@@ -1164,9 +1144,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 {
                     // flush the memtable
                     SSTableReader reader = memtable.flush();
-                    memtable.cfs.data.replaceFlushed(memtable, reader);
+                    memtable.cfs.replaceFlushed(memtable, reader);
                     reclaim(memtable);
-                    readers.add(reader);
                 }
             }
             catch (FSWriteError e)
@@ -1637,6 +1616,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         maybeFail(data.dropSSTables(Predicates.in(sstables), compactionType, null));
     }
 
+    void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    {
+        compactionStrategyWrapper.replaceFlushed(memtable, sstable);
+    }
+
     public boolean isValid()
     {
         return valid;
@@ -1656,11 +1640,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public Collection<SSTableReader> getSSTables()
     {
         return data.getSSTables();
-    }
-
-    public Iterable<SSTableReader> getPermittedToCompactSSTables()
-    {
-        return data.getPermittedToCompact();
     }
 
     public Set<SSTableReader> getUncompactingSSTables()
@@ -2860,7 +2839,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             public LifecycleTransaction call() throws Exception
             {
                 assert data.getCompacting().isEmpty() : data.getCompacting();
-                Iterable<SSTableReader> sstables = getPermittedToCompactSSTables();
+                Iterable<SSTableReader> sstables = getSSTables();
                 sstables = AbstractCompactionStrategy.filterSuspectSSTables(sstables);
                 sstables = ImmutableList.copyOf(sstables);
                 LifecycleTransaction modifier = data.tryModify(sstables, operationType);

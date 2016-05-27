@@ -232,6 +232,9 @@ public abstract class AbstractCompactionStrategy
      */
     public void replaceFlushed(Memtable memtable, SSTableReader sstable)
     {
+        cfs.getTracker().replaceFlushed(memtable, sstable);
+        if (sstable != null)
+            CompactionManager.instance.submitBackground(cfs);
     }
 
     /**

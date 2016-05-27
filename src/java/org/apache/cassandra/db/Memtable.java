@@ -179,6 +179,11 @@ public class Memtable implements Comparable<Memtable>
         return commitLogLowerBound.get();
     }
 
+    public ReplayPosition getCommitLogUpperBound()
+    {
+        return commitLogUpperBound.get();
+    }
+
     public boolean isLive()
     {
         return allocator.isLive();
