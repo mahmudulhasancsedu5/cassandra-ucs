@@ -131,7 +131,7 @@ public class CommitLogReplayer
                 }
             }
 
-            ReplayIntervalSet filter = persistedIntervals(cfs.getSSTables(), truncatedAt);
+            ReplayIntervalSet filter = persistedIntervals(cfs.getLiveSSTables(), truncatedAt);
             if (!filter.isEmpty())
                 cfPersisted.put(cfs.metadata.cfId, filter);
             else

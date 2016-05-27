@@ -14,7 +14,7 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 
 public class ReplayIntervalSet
 {
-    public static final ReplayIntervalSet EMPTY = new ReplayIntervalSet(ImmutableSortedMap.of()); 
+    public static final ReplayIntervalSet EMPTY = new ReplayIntervalSet(ImmutableSortedMap.of());
 
     final NavigableMap<ReplayPosition, ReplayPosition> ranges;
 
