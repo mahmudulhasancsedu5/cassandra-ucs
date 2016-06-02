@@ -492,7 +492,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             Set<String> repairedSSTables = sstableMap.get(cfId);
             Set<SSTableReader> activeSSTables = new HashSet<>();
             Set<String> activeSSTableNames = new HashSet<>();
-            for (SSTableReader sstable : columnFamilyStores.get(cfId).getSSTables())
+            for (SSTableReader sstable : columnFamilyStores.get(cfId).getLiveSSTables())
             {
                 if (repairedSSTables.contains(sstable.getFilename()))
                 {

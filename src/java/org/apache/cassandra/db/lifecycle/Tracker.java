@@ -199,6 +199,7 @@ public class Tracker
                          !isDummy() ? ImmutableList.of(new Memtable(new AtomicReference<>(CommitLog.instance.getContext()), cfstore))
                                     : ImmutableList.<Memtable>of(),
                          ImmutableList.<Memtable>of(),
+                         ImmutableList.<Memtable>of(),
                          Collections.<SSTableReader, SSTableReader>emptyMap(),
                          Collections.<SSTableReader, SSTableReader>emptyMap(),
                          SSTableIntervalTree.empty()));
@@ -360,6 +361,18 @@ public class Tracker
         maybeFail(fail);
     }
 
+    public void markFlushFailed(Memtable memtable)
+    {
+        apply(View.markFlushFailed(memtable));
+    }
+
+    public Collection<Memtable> grabFlushFailed()
+    {
+        if (view.get().flushFailedMemtables.isEmpty())
+            return ImmutableList.of();
+
+        return apply(View.grabFlushFailed()).left.flushFailedMemtables;
+    }
 
 
     // MISCELLANEOUS public utility calls

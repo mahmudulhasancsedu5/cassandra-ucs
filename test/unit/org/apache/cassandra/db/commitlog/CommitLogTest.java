@@ -597,7 +597,7 @@ public class CommitLogTest
         System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
         // Currently we don't attempt to re-flush a memtable that failed, thus make sure data is replayed by commitlog.
         // If retries work subsequent flushes should clear up error and this should change to expect 0.
-        Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
+        Assert.assertEquals(0, CommitLog.instance.resetUnsafe(false));
     }
 
     public void testOutOfOrderFlushRecovery(BiConsumer<ColumnFamilyStore, Memtable> flushAction, boolean performCompaction)
@@ -627,6 +627,9 @@ public class CommitLogTest
             reader.reloadSSTableMetadata();
 
         CommitLog.instance.sync(true);
+        // If we don't clear the flush failed list the CFS will attempt to flush the table again, and fail during the
+        // flush that follows recovery.
+        cfs.getTracker().grabFlushFailed();
         System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
         Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
     }

@@ -67,6 +67,11 @@ public class View
      * flushed. In chronologically ascending order.
      */
     public final List<Memtable> flushingMemtables;
+    /**
+     * contains older memtables that failed to flush. A blocking flush will only end successfully if this list is empty.
+     */
+    public final List<Memtable> flushFailedMemtables;
+
     final Set<SSTableReader> compacting;
     final Set<SSTableReader> sstables;
     // we use a Map here so that we can easily perform identity checks as well as equality checks.
@@ -78,7 +83,9 @@ public class View
 
     final SSTableIntervalTree intervalTree;
 
-    View(List<Memtable> liveMemtables, List<Memtable> flushingMemtables, Map<SSTableReader, SSTableReader> sstables, Map<SSTableReader, SSTableReader> compacting, SSTableIntervalTree intervalTree)
+    View(List<Memtable> liveMemtables, List<Memtable> flushingMemtables, List<Memtable> flushFailedMemtables,
+         Map<SSTableReader, SSTableReader> sstables, Map<SSTableReader, SSTableReader> compacting,
+         SSTableIntervalTree intervalTree)
     {
         assert liveMemtables != null;
         assert flushingMemtables != null;
@@ -88,6 +95,7 @@ public class View
 
         this.liveMemtables = liveMemtables;
         this.flushingMemtables = flushingMemtables;
+        this.flushFailedMemtables = flushFailedMemtables;
 
         this.sstablesMap = sstables;
         this.sstables = sstablesMap.keySet();
@@ -236,7 +244,8 @@ public class View
             public View apply(View view)
             {
                 assert all(mark, Helpers.idIn(view.sstablesMap));
-                return new View(view.liveMemtables, view.flushingMemtables, view.sstablesMap,
+                return new View(view.liveMemtables, view.flushingMemtables, view.flushFailedMemtables,
+                                view.sstablesMap,
                                 replace(view.compactingMap, unmark, mark),
                                 view.intervalTree);
             }
@@ -269,7 +278,7 @@ public class View
             public View apply(View view)
             {
                 Map<SSTableReader, SSTableReader> sstableMap = replace(view.sstablesMap, remove, add);
-                return new View(view.liveMemtables, view.flushingMemtables, sstableMap, view.compactingMap,
+                return new View(view.liveMemtables, view.flushingMemtables, view.flushFailedMemtables, sstableMap, view.compactingMap,
                                 SSTableIntervalTree.build(sstableMap.keySet()));
             }
         };
@@ -284,7 +293,7 @@ public class View
             {
                 List<Memtable> newLive = ImmutableList.<Memtable>builder().addAll(view.liveMemtables).add(newMemtable).build();
                 assert newLive.size() == view.liveMemtables.size() + 1;
-                return new View(newLive, view.flushingMemtables, view.sstablesMap, view.compactingMap, view.intervalTree);
+                return new View(newLive, view.flushingMemtables, view.flushFailedMemtables, view.sstablesMap, view.compactingMap, view.intervalTree);
             }
         };
     }
@@ -303,7 +312,7 @@ public class View
                                                            filter(flushing, not(lessThan(toFlush)))));
                 assert newLive.size() == live.size() - 1;
                 assert newFlushing.size() == flushing.size() + 1;
-                return new View(newLive, newFlushing, view.sstablesMap, view.compactingMap, view.intervalTree);
+                return new View(newLive, newFlushing, view.flushFailedMemtables, view.sstablesMap, view.compactingMap, view.intervalTree);
             }
         };
     }
@@ -319,13 +328,47 @@ public class View
                 assert flushingMemtables.size() == view.flushingMemtables.size() - 1;
 
                 if (flushed == null)
-                    return new View(view.liveMemtables, flushingMemtables, view.sstablesMap,
-                                    view.compactingMap, view.intervalTree);
+                    return new View(view.liveMemtables, flushingMemtables, view.flushFailedMemtables,
+                                    view.sstablesMap, view.compactingMap, view.intervalTree);
 
                 Map<SSTableReader, SSTableReader> sstableMap = replace(view.sstablesMap, emptySet(), flushed);
-                return new View(view.liveMemtables, flushingMemtables, sstableMap, view.compactingMap,
-                                SSTableIntervalTree.build(sstableMap.keySet()));
+                return new View(view.liveMemtables, flushingMemtables, view.flushFailedMemtables,
+                                sstableMap, view.compactingMap, SSTableIntervalTree.build(sstableMap.keySet()));
             }
+        };
+    }
+
+    // called after a flush that failed: move toFlush from flushingMemtables to flushFailedMemtables
+    static Function<View, View> markFlushFailed(final Memtable memtable)
+    {
+        return new Function<View, View>()
+        {
+            public View apply(View view)
+            {
+                List<Memtable> failed = view.flushFailedMemtables, flushing = view.flushingMemtables;
+                List<Memtable> newFlushing = copyOf(filter(flushing, not(equalTo(memtable))));
+                List<Memtable> newFailed = copyOf(concat(filter(failed, lessThan(memtable)),
+                                                         of(memtable),
+                                                         filter(failed, not(lessThan(memtable)))));
+                assert newFailed.size() == failed.size() + 1;
+                assert newFlushing.size() == flushing.size() - 1;
+                return new View(view.liveMemtables, newFlushing, newFailed, view.sstablesMap, view.compactingMap, view.intervalTree);
+            }
+        };
+    }
+
+    // called before retrying failed flushes: move all flushFailedMemtables to flushingMemtables
+    static Function<View, View> grabFlushFailed()
+    {
+        return view ->
+        {
+            List<Memtable> failed = view.flushFailedMemtables, flushing = view.flushingMemtables;
+            if (failed.isEmpty())
+                return view;
+
+            List<Memtable> newFlushing = copyOf(concat(flushing, failed));
+            List<Memtable> newFailed = ImmutableList.of();
+            return new View(view.liveMemtables, newFlushing, newFailed, view.sstablesMap, view.compactingMap, view.intervalTree);
         };
     }
 

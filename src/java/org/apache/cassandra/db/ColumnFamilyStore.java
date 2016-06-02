@@ -833,7 +833,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         synchronized (data)
         {
             logFlush();
-            Flush flush = new Flush(false);
+            Flush flush = createMemtableSwitch();
             flushExecutor.execute(flush);
             ListenableFutureTask<ReplayPosition> task = ListenableFutureTask.create(flush.postFlush);
             postFlushExecutor.submit(task);
@@ -910,6 +910,19 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     private ListenableFuture<ReplayPosition> waitForFlushes()
     {
+        synchronized (data)
+        {
+            for (ColumnFamilyStore cfs : concatWithIndexes())
+                if (!cfs.data.getView().flushFailedMemtables.isEmpty())
+                {
+                    Flush flush = createReflushFailed();
+                    flushExecutor.execute(flush);
+                    ListenableFutureTask<ReplayPosition> task = ListenableFutureTask.create(flush.postFlush);
+                    postFlushExecutor.submit(task);
+                    return task;
+                }
+        }
+
         // we grab the current memtable; once any preceding memtables have flushed, we know its
         // commitLogLowerBound has been set (as this it is set with the upper bound of the preceding memtable)
         final Memtable current = data.getView().getCurrentMemtable();
@@ -952,21 +965,21 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         public ReplayPosition call()
         {
-            writeBarrier.await();
-
-            /**
-             * we can flush 2is as soon as the barrier completes, as they will be consistent with (or ahead of) the
-             * flushed memtables and CL position, which is as good as we can guarantee.
-             * TODO: SecondaryIndex should support setBarrier(), so custom implementations can co-ordinate exactly
-             * with CL as we do with memtables/CFS-backed SecondaryIndexes.
-             */
-
             if (flushSecondaryIndexes)
-                indexManager.flushAllNonCFSBackedIndexesBlocking();
+            {
+                /**
+                 * we can flush 2is as soon as the barrier completes, as they will be consistent with (or ahead of) the
+                 * flushed memtables and CL position, which is as good as we can guarantee.
+                 * TODO: SecondaryIndex should support setBarrier(), so custom implementations can co-ordinate exactly
+                 * with CL as we do with memtables/CFS-backed SecondaryIndexes.
+                 */
+                 writeBarrier.await();
+                 indexManager.flushAllNonCFSBackedIndexesBlocking();
+            }
 
             try
             {
-                // we wait on the latch for the commitLogUpperBound to be set, and so that waiters
+                // we wait on the latch for so that waiters
                 // on this task can rely on all prior flushes being complete
                 latch.await();
             }
@@ -975,22 +988,38 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 throw new IllegalStateException();
             }
 
-            ReplayPosition commitLogUpperBound = ReplayPosition.NONE;
-            // If a flush errored out but the error was ignored, make sure we don't discard the commit log.
-            if (flushFailure == null && !memtables.isEmpty())
-            {
-                Memtable memtable = memtables.get(0);
-                commitLogUpperBound = memtable.getCommitLogUpperBound();
-                CommitLog.instance.discardCompletedSegments(metadata.cfId, memtable.getCommitLogLowerBound(), commitLogUpperBound);
-            }
-
             metric.pendingFlushes.dec();
 
             if (flushFailure != null)
                 throw Throwables.propagate(flushFailure);
 
-            return commitLogUpperBound;
+            if (memtables.isEmpty())
+                return null;
+
+            Memtable memtable = memtables.get(0);
+            return memtable.getCommitLogUpperBound();
         }
+    }
+
+    Flush createMemtableSwitch()
+    {
+        return new Flush(false);
+    }
+
+    Flush createTruncation()
+    {
+        return new Flush(true);
+    }
+
+    Flush createReflushFailed()
+    {
+        return new Flush();
+    }
+
+    void addFailedMemtables(List<Memtable> where)
+    {
+        for (ColumnFamilyStore cfs : concatWithIndexes())
+            where.addAll(cfs.data.grabFlushFailed());
     }
 
     /**
@@ -1046,15 +1075,33 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             // since this happens after wiring up the commitLogUpperBound, we also know all operations with earlier
             // replay positions have also completed, i.e. the memtables are done and ready to flush
             writeBarrier.issue();
+            metric.memtableSwitchCount.inc();
+
             postFlush = new PostFlush(!truncate, writeBarrier, memtables);
+        }
+
+        /**
+         * Re-flush of previously failed flushes.
+         */
+        private Flush()
+        {
+            this.truncate = false;
+
+            metric.pendingFlushes.inc();
+            writeBarrier = null;
+
+            postFlush = new PostFlush(false, null, memtables);
         }
 
         public void run()
         {
             // mark writes older than the barrier as blocking progress, permitting them to exceed our memory limit
             // if they are stuck waiting on it, then wait for them all to complete
-            writeBarrier.markBlocking();
-            writeBarrier.await();
+            if (writeBarrier != null)
+            {
+                writeBarrier.markBlocking();
+                writeBarrier.await();
+            }
 
             // mark all memtables as flushing, removing them from the live memtable list, and
             // remove any memtables that are already clean from the set we need to flush
@@ -1070,26 +1117,24 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     iter.remove();
                 }
             }
+            addFailedMemtables(memtables);
 
-            metric.memtableSwitchCount.inc();
-
-            try
+            Throwable accumulatedFailure = null;
+            for (Memtable memtable : memtables)
             {
-                for (Memtable memtable : memtables)
+                Throwable failure = flushMemtable(memtable);
+                if (failure != null)
                 {
-                    flushMemtable(memtable);
+                    memtable.cfs.data.markFlushFailed(memtable);
+                    accumulatedFailure = org.apache.cassandra.utils.Throwables.merge(accumulatedFailure, failure);
                 }
             }
-            catch (Throwable t)
-            {
-                JVMStabilityInspector.inspectThrowable(t);
-                postFlush.flushFailure = t;
-            }
+            postFlush.flushFailure = accumulatedFailure;
             // signal the post-flush we've done our work
             postFlush.latch.countDown();
         }
 
-        public Collection<SSTableReader> flushMemtable(Memtable memtable)
+        public Throwable flushMemtable(Memtable memtable)
         {
             List<Future<SSTableMultiWriter>> futures = new ArrayList<>();
             long totalBytesOnDisk = 0;
@@ -1115,7 +1160,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 {
                     t = memtable.abortRunnables(flushRunnables, t);
                     t = txn.abort(t);
-                    throw Throwables.propagate(t);
+                    return t;
                 }
 
                 try
@@ -1141,7 +1186,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     for (SSTableMultiWriter writer : flushResults)
                         t = writer.abort(t);
                     t = txn.abort(t);
-                    Throwables.propagate(t);
+                    return t;
                 }
 
                 txn.prepareToCommit();
@@ -1150,7 +1195,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 for (SSTableMultiWriter writer : flushResults)
                     accumulate = writer.commit(accumulate);
 
-                maybeFail(txn.commit(accumulate));
+                accumulate = txn.commit(accumulate);
+                if (accumulate != null)
+                    return accumulate;
 
                 for (SSTableMultiWriter writer : flushResults)
                 {
@@ -1170,6 +1217,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
             memtable.cfs.replaceFlushed(memtable, sstables);
             reclaim(memtable);
+            CommitLog.instance.discardCompletedSegments(memtable.cfs.metadata.cfId,
+                                                        memtable.getCommitLogLowerBound(),
+                                                        memtable.getCommitLogUpperBound());
             memtable.cfs.compactionStrategyManager.compactionLogger.flush(sstables);
             logger.debug("Flushed to {} ({} sstables, {}), biggest {}, smallest {}",
                          sstables,
@@ -1177,7 +1227,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                          FBUtilities.prettyPrintMemory(totalBytesOnDisk),
                          FBUtilities.prettyPrintMemory(maxBytesOnDisk),
                          FBUtilities.prettyPrintMemory(minBytesOnDisk));
-            return sstables;
+            return null;
         }
 
         private void reclaim(final Memtable memtable)
@@ -2113,7 +2163,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 indexManager.truncateAllIndexesBlocking(truncatedAt);
                 viewManager.truncateBlocking(replayAfter, truncatedAt);
 
-                SystemKeyspace.saveTruncationRecord(ColumnFamilyStore.this, truncatedAt, replayAfter);
+                if (replayAfter != null)
+                    SystemKeyspace.saveTruncationRecord(ColumnFamilyStore.this, truncatedAt, replayAfter);
+                else
+                    assert !keyspace.getMetadata().params.durableWrites;
                 logger.trace("cleaning out row cache");
                 invalidateCaches();
             }
@@ -2130,7 +2183,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         synchronized (data)
         {
-            final Flush flush = new Flush(true);
+            final Flush flush = createTruncation();
             flushExecutor.execute(flush);
             return postFlushExecutor.submit(flush.postFlush);
         }
