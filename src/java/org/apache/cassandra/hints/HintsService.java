@@ -378,4 +378,12 @@ public final class HintsService implements HintsServiceMBean
     {
         return catalog;
     }
+
+    /**
+     * Returns true in case service is shut down.
+     */
+    public boolean isShutDown()
+    {
+        return isShutDown;
+    }
 }
