@@ -30,6 +30,7 @@ import java.util.function.Supplier;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParameterizedClass;
+import org.apache.cassandra.gms.FailureDetector;
+import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.metrics.HintedHandoffMetrics;
 import org.apache.cassandra.metrics.StorageMetrics;
 import org.apache.cassandra.dht.Token;
@@ -60,7 +63,7 @@ public final class HintsService implements HintsServiceMBean
 {
     private static final Logger logger = LoggerFactory.getLogger(HintsService.class);
 
-    public static final HintsService instance = new HintsService();
+    public static HintsService instance = new HintsService();
 
     private static final String MBEAN_NAME = "org.apache.cassandra.hints:type=HintsService";
 
@@ -82,6 +85,12 @@ public final class HintsService implements HintsServiceMBean
 
     private HintsService()
     {
+        this(FailureDetector.instance);
+    }
+
+    @VisibleForTesting
+    HintsService(IFailureDetector failureDetector)
+    {
         File hintsDirectory = DatabaseDescriptor.getHintsDirectory();
         int maxDeliveryThreads = DatabaseDescriptor.getMaxHintsDeliveryThreads();
 
@@ -92,7 +101,7 @@ public final class HintsService implements HintsServiceMBean
         bufferPool = new HintsBufferPool(bufferSize, writeExecutor::flushBuffer);
 
         isDispatchPaused = new AtomicBoolean(true);
-        dispatchExecutor = new HintsDispatchExecutor(hintsDirectory, maxDeliveryThreads, isDispatchPaused);
+        dispatchExecutor = new HintsDispatchExecutor(hintsDirectory, maxDeliveryThreads, isDispatchPaused, failureDetector::isAlive);
 
         // periodically empty the current content of the buffers
         int flushPeriod = DatabaseDescriptor.getHintsFlushPeriodInMS();

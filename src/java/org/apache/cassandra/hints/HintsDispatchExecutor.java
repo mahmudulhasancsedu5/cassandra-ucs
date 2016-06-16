@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.google.common.util.concurrent.RateLimiter;
@@ -48,12 +50,14 @@ final class HintsDispatchExecutor
     private final File hintsDirectory;
     private final ExecutorService executor;
     private final AtomicBoolean isPaused;
+    private final Function<InetAddress, Boolean> isAlive;
     private final Map<UUID, Future> scheduledDispatches;
 
-    HintsDispatchExecutor(File hintsDirectory, int maxThreads, AtomicBoolean isPaused)
+    HintsDispatchExecutor(File hintsDirectory, int maxThreads, AtomicBoolean isPaused, Function<InetAddress, Boolean> isAlive)
     {
         this.hintsDirectory = hintsDirectory;
         this.isPaused = isPaused;
+        this.isAlive = isAlive;
 
         scheduledDispatches = new ConcurrentHashMap<>();
         executor = new JMXEnabledThreadPoolExecutor(1,
@@ -251,10 +255,11 @@ final class HintsDispatchExecutor
             File file = new File(hintsDirectory, descriptor.fileName());
             Long offset = store.getDispatchOffset(descriptor).orElse(null);
 
-            try (HintsDispatcher dispatcher = HintsDispatcher.create(file, rateLimiter, address, descriptor.hostId, isPaused))
+            BooleanSupplier shouldAbort = () -> !isAlive.apply(address) || isPaused.get();
+            try (HintsDispatcher dispatcher = HintsDispatcher.create(file, rateLimiter, address, descriptor.hostId, shouldAbort))
             {
                 if (offset != null)
-                    dispatcher.seek(offset);
+                    dispatcher.seekPage(offset);
 
                 if (dispatcher.dispatch())
                 {
