@@ -29,15 +29,15 @@ import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 /**
- * A {@link RandomAccessReader} wrapper that calctulates the CRC in place.
+ * A {@link RandomAccessReader} wrapper that calculates the CRC in place.
  *
  * Useful for {@link org.apache.cassandra.hints.HintsReader}, for example, where we must verify the CRC, yet don't want
  * to allocate an extra byte array just that purpose. The CRC can be embedded in the input stream and checked via checkCrc().
  *
- * In addition to calculating the CRC, it allows to enforce a maximim known size. This is needed
+ * In addition to calculating the CRC, it allows to enforce a maximum known size. This is needed
  * so that {@link org.apache.cassandra.db.Mutation.MutationSerializer} doesn't blow up the heap when deserializing a
  * corrupted sequence by reading a huge corrupted length of bytes via
- * via {@link org.apache.cassandra.utils.ByteBufferUtil#readWithLength(java.io.DataInput)}.
+ * {@link org.apache.cassandra.utils.ByteBufferUtil#readWithLength(java.io.DataInput)}.
  */
 public class ChecksummedDataInput extends RebufferingInputStream
 {
