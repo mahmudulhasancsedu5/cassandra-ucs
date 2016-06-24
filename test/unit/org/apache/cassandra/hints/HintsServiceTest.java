@@ -23,11 +23,17 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import javax.annotation.Nullable;
 
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.datastax.driver.core.utils.MoreFutures;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.Mutation;
@@ -65,6 +71,12 @@ public class HintsServiceTest
                 SchemaLoader.standardCFMD(KEYSPACE, TABLE));
     }
 
+    @After
+    public void cleanup()
+    {
+        MockMessagingService.cleanup();
+    }
+
     @Before
     public void reinstanciateService() throws ExecutionException, InterruptedException
     {
@@ -82,20 +94,23 @@ public class HintsServiceTest
     }
 
     @Test
-    public void testDispatchHints() throws InterruptedException
+    public void testDispatchHints() throws InterruptedException, ExecutionException
     {
+        long cnt = StorageMetrics.totalHints.getCount();
+
         // create spy for hint messages
         MockMessagingSpy spy = sendHintsAndResponses(100, -1);
 
         // metrics should have been updated with number of create hints
-        assertEquals(100, StorageMetrics.totalHints.getCount());
+        assertEquals(cnt + 100, StorageMetrics.totalHints.getCount());
 
         // wait until hints have been send
-        spy.receiveN(100).receiveNoMsg(500, TimeUnit.MILLISECONDS);
+        spy.interceptMessageOut(100).get();
+        spy.interceptNoMsg(500, TimeUnit.MILLISECONDS).get();
     }
 
     @Test
-    public void testPauseAndResume() throws InterruptedException
+    public void testPauseAndResume() throws InterruptedException, ExecutionException
     {
         HintsService.instance.pauseDispatch();
 
@@ -103,33 +118,45 @@ public class HintsServiceTest
         MockMessagingSpy spy = sendHintsAndResponses(100, -1);
 
         // we should not send any hints while paused
-        spy.receiveNoMsg(15, TimeUnit.SECONDS);
+        ListenableFuture<Boolean> noMessagesWhilePaused = spy.interceptNoMsg(15, TimeUnit.SECONDS);
+        Futures.addCallback(noMessagesWhilePaused, new MoreFutures.SuccessCallback<Boolean>()
+        {
+            public void onSuccess(@Nullable Boolean aBoolean)
+            {
+                HintsService.instance.resumeDispatch();
+            }
+        });
 
-        // resume and wait until hints have been send
-        HintsService.instance.resumeDispatch();
-        spy.receiveN(100).receiveNoMsg(500, TimeUnit.MILLISECONDS);
+        Futures.allAsList(
+                noMessagesWhilePaused,
+                spy.interceptMessageOut(100),
+                spy.interceptNoMsg(200, TimeUnit.MILLISECONDS)
+        ).get();
     }
 
     @Test
-    public void testPageRetry() throws InterruptedException
+    public void testPageRetry() throws InterruptedException, ExecutionException, TimeoutException
     {
         // create spy for hint messages, but only create responses for 5 hints
         MockMessagingSpy spy = sendHintsAndResponses(20, 5);
 
-        // the dispatcher will always send all hints within the current page
-        // and only wait for the acks before going to the next page
-        spy.receiveN(20).receiveNoMsg(1, TimeUnit.SECONDS);
+        Futures.allAsList(
+                // the dispatcher will always send all hints within the current page
+                // and only wait for the acks before going to the next page
+                spy.interceptMessageOut(20),
+                spy.interceptNoMsg(200, TimeUnit.MILLISECONDS),
 
-        // next tick will trigger a retry of the same page as we only replied with 5/20 acks
-        spy.receiveN(20, 20, TimeUnit.SECONDS).receiveNoMsg(1, TimeUnit.SECONDS);
+                // next tick will trigger a retry of the same page as we only replied with 5/20 acks
+                spy.interceptMessageOut(20)
+        ).get();
 
-        // retry would normally go on each tick until the failure detector marks the node as dead
+        // marking the destination node as dead should stop sending hints
         failureDetector.isAlive = false;
-        spy.receiveNoMsg(20, TimeUnit.SECONDS);
+        spy.interceptNoMsg(20, TimeUnit.SECONDS).get();
     }
 
     @Test
-    public void testPageSeek() throws InterruptedException
+    public void testPageSeek() throws InterruptedException, ExecutionException
     {
         // create spy for hint messages, stop replying after 12k (should be on 3rd page)
         MockMessagingSpy spy = sendHintsAndResponses(20000, 12000);
@@ -137,7 +164,7 @@ public class HintsServiceTest
         // At this point the dispatcher will constantly retry the page we stopped acking,
         // thus we receive the same hints from the page multiple times and in total more than
         // all written hints. Lets just consume them for a while and then pause the dispatcher.
-        spy.receiveN(22000);
+        spy.interceptMessageOut(22000).get();
         HintsService.instance.pauseDispatch();
         Thread.sleep(1000);
 
