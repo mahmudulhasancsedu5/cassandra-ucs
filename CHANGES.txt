@@ -1,4 +1,5 @@
 3.8
+ * Chunk cache should request off-heap buffers if pool space is exhausted (CASSANDRA-11993)
  * Move skip_stop_words filter before stemming (CASSANDRA-12078)
  * Support seek() in EncryptedFileSegmentInputStream (CASSANDRA-11957)
  * SSTable tools mishandling LocalPartitioner (CASSANDRA-12002)
