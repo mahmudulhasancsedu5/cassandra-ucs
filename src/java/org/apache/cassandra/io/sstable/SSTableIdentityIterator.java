@@ -38,7 +38,7 @@ public class SSTableIdentityIterator implements Comparable<SSTableIdentityIterat
     private final Row staticRow;
 
     public SSTableIdentityIterator(SSTableReader sstable, DecoratedKey key, DeletionTime partitionLevelDeletion,
-            String filename, SSTableSimpleIterator iterator) throws IOException 
+            String filename, SSTableSimpleIterator iterator) throws IOException
     {
         super();
         this.sstable = sstable;

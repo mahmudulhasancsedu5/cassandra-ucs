@@ -52,7 +52,7 @@ public class UnfilteredRowsGenerator
             RangeTombstoneMarker marker = (RangeTombstoneMarker) curr;
             if (marker.isClose(reversed))
                 val = "[" + marker.closeDeletionTime(reversed).markedForDeleteAt() + "]" + (marker.closeIsInclusive(reversed) ? "<=" : "<") + val;
-            if (marker.isOpen(reversed)) 
+            if (marker.isOpen(reversed))
                 val = val + (marker.openIsInclusive(reversed) ? "<=" : "<") + "[" + marker.openDeletionTime(reversed).markedForDeleteAt() + "]";
         }
         else if (curr instanceof Row)
@@ -169,6 +169,21 @@ public class UnfilteredRowsGenerator
         return content;
     }
 
+    /**
+     * Constructs a list of unfiltereds with integer clustering according to the specification string.
+     *
+     * The string is a space-delimited sorted list that can contain:
+     *  * open tombstone markers, e.g. xx<[yy] where xx is the clustering, yy is the deletion time, and "<" stands for
+     *    non-inclusive (<= for inclusive).
+     *  * close tombstone markers, e.g. [yy]<=xx. Adjacent close and open markers (e.g. [yy]<=xx xx<[zz]) are combined
+     *    into boundary markers.
+     *  * empty rows, e.g. xx or xx[yy] or xx[yyDzz] where xx is the clustering, yy is the live time and zz is deletion
+     *    time.
+     *
+     * @param input Specification.
+     * @param default_liveness Liveness to use for rows if not explicitly specified.
+     * @return Parsed list.
+     */
     public List<Unfiltered> parse(String input, int default_liveness)
     {
         String[] split = input.split(" ");

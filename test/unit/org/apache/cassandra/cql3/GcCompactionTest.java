@@ -25,26 +25,15 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import com.google.common.collect.Iterables;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.db.lifecycle.SSTableSet;
-import org.apache.cassandra.db.marshal.AsciiType;
-import org.apache.cassandra.db.rows.Row;
-import org.apache.cassandra.db.rows.Unfiltered;
-import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.schema.KeyspaceParams;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class GcCompactionTest extends CQLTester
@@ -175,6 +164,87 @@ public class GcCompactionTest extends CQLTester
     }
 
     @Test
+    public void testGcCompactionStatic() throws Throwable
+    {
+        createTable("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  column int," +
+                          "  data int static," +
+                          "  extra text," +
+                          "  PRIMARY KEY(key, column)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'cell'  };"
+                          );
+
+        for (int i = 0; i < KEY_COUNT; ++i)
+            for (int j = 0; j < CLUSTERING_COUNT; ++j)
+                execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", i, j, i+j, "" + i + ":" + j);
+
+        Set<SSTableReader> readers = new HashSet<>();
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+
+        flush();
+        assertEquals(1, cfs.getLiveSSTables().size());
+        SSTableReader table0 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table0));
+        int cellCount = countStaticCells(table0);
+        assertEquals(KEY_COUNT, cellCount);
+
+        execute("DELETE data FROM %s WHERE key = 0");   // delete static cell
+        execute("INSERT INTO %s (key, data) VALUES (1, 0)");  // overwrite static cell
+        flush();
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table1 = getNewTable(readers);
+        assertTrue(countStaticCells(table1) > 0);
+        assertEquals(0, countTombstoneMarkers(table0));
+
+        CompactionManager.instance.forceUserDefinedCompaction(table0.getFilename());
+
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table3 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table3));
+        assertEquals(cellCount - 2, countStaticCells(table3));
+    }
+
+    @Test
+    public void testGcCompactionComplexColumn() throws Throwable
+    {
+        createTable("CREATE TABLE %s(" +
+                          "  key int," +
+                          "  data map<int, int>," +
+                          "  extra text," +
+                          "  PRIMARY KEY(key)" +
+                          ") WITH compaction = { 'class' :  'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones' : 'cell'  };"
+                          );
+
+        for (int i = 0; i < KEY_COUNT; ++i)
+            for (int j = 0; j < CLUSTERING_COUNT; ++j)
+                execute("UPDATE %s SET data[?] = ? WHERE key = ?", j, i+j, i);
+
+        Set<SSTableReader> readers = new HashSet<>();
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+
+        flush();
+        assertEquals(1, cfs.getLiveSSTables().size());
+        SSTableReader table0 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table0));
+        int cellCount = countComplexCells(table0);
+
+        deleteWithSomeInsertsComplexColumn(3, 5, 8);
+        flush();
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table1 = getNewTable(readers);
+        assertTrue(countComplexCells(table1) > 0);
+        assertEquals(0, countTombstoneMarkers(table0));
+
+        CompactionManager.instance.forceUserDefinedCompaction(table0.getFilename());
+
+        assertEquals(2, cfs.getLiveSSTables().size());
+        SSTableReader table3 = getNewTable(readers);
+        assertEquals(0, countTombstoneMarkers(table3));
+        assertEquals(cellCount - 23, countComplexCells(table3));
+    }
+
+    @Test
     public void testLocalDeletionTime() throws Throwable
     {
         createTable("create table %s (k int, c1 int, primary key (k, c1)) with compaction = {'class': 'SizeTieredCompactionStrategy', 'provide_overlapping_tombstones':'row'}");
@@ -207,14 +277,31 @@ public class GcCompactionTest extends CQLTester
         for (int i = 0; i < KEY_COUNT; i += key_step)
         {
             if (delete_step > 0)
-                for (int j = 0; j < CLUSTERING_COUNT; j += delete_step)
+                for (int j = i % delete_step; j < CLUSTERING_COUNT; j += delete_step)
                 {
                     execute("DELETE FROM %s WHERE key = ? AND column = ?", i, j);
                 }
             if (readd_step > 0)
-                for (int j = 0; j < CLUSTERING_COUNT; j += readd_step)
+                for (int j = i % readd_step; j < CLUSTERING_COUNT; j += readd_step)
                 {
                     execute("INSERT INTO %s (key, column, data, extra) VALUES (?, ?, ?, ?)", i, j, i-j, "readded " + i + ":" + j);
+                }
+        }
+    }
+
+    void deleteWithSomeInsertsComplexColumn(int key_step, int delete_step, int readd_step) throws Throwable
+    {
+        for (int i = 0; i < KEY_COUNT; i += key_step)
+        {
+            if (delete_step > 0)
+                for (int j = i % delete_step; j < CLUSTERING_COUNT; j += delete_step)
+                {
+                    execute("DELETE data[?] FROM %s WHERE key = ?", j, i);
+                }
+            if (readd_step > 0)
+                for (int j = i % readd_step; j < CLUSTERING_COUNT; j += readd_step)
+                {
+                    execute("UPDATE %s SET data[?] = ? WHERE key = ?", j, -(i+j), i);
                 }
         }
     }
@@ -234,6 +321,24 @@ public class GcCompactionTest extends CQLTester
     int countCells(SSTableReader reader)
     {
         return count(reader, x -> x.isRow() ? Iterables.size((Row) x) : 0, x -> 0);
+    }
+
+    int countStaticCells(SSTableReader reader)
+    {
+        return count(reader, x -> 0, x -> Iterables.size(x.staticRow()));
+    }
+
+    int countComplexCells(SSTableReader reader)
+    {
+        return count(reader, x -> x.isRow() ? ((Row) x).stream().mapToInt(this::countComplex).sum() : 0, x -> 0);
+    }
+
+    int countComplex(ColumnData c)
+    {
+        if (!(c instanceof ComplexColumnData))
+            return 0;
+        ComplexColumnData ccd = (ComplexColumnData) c;
+        return ccd.cellsCount();
     }
 
     int count(SSTableReader reader, Function<Unfiltered, Integer> predicate, Function<UnfilteredRowIterator, Integer> partitionPredicate)
