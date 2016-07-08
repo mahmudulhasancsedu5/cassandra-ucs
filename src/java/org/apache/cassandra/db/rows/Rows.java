@@ -315,10 +315,10 @@ public abstract class Rows
      * Returns a row that is obtained from the given existing row by removing everything that is shadowed by data in
      * the update row. In other words, produces the smallest result row such that
      * {@code merge(result, update, nowInSec) == merge(existing, update, nowInSec)} after filtering by rangeDeletion.
-     * 
+     *
      * @param existing source row
      * @param update shadowing row
-     * @param rangeDeletion extra {@code DeletionTime} from covering tombstone  
+     * @param rangeDeletion extra {@code DeletionTime} from covering tombstone
      * @param nowInSec the current time in seconds (which plays a role during reconciliation
      * because deleted cells always have precedence on timestamp equality and deciding if a
      * cell is a live or not depends on the current time due to expiring cells).
@@ -359,7 +359,7 @@ public abstract class Rows
                 {
                     ComplexColumnData existingData = (ComplexColumnData) cura;
                     ComplexColumnData updateData = (ComplexColumnData) curb;
-    
+
                     DeletionTime existingDt = existingData.complexDeletion();
                     DeletionTime updateDt = updateData == null ? DeletionTime.LIVE : updateData.complexDeletion();
 
@@ -369,7 +369,7 @@ public abstract class Rows
                         builder.addComplexDeletion(column, existingDt);
                         maxDt = existingDt;
                     }
-    
+
                     Iterator<Cell> existingCells = existingData.iterator();
                     Iterator<Cell> updateCells = updateData == null ? null : updateData.iterator();
                     Cells.addNonShadowedComplex(column, existingCells, updateCells, maxDt, builder, nowInSec);

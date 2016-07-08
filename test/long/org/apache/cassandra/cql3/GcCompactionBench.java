@@ -138,7 +138,7 @@ public class GcCompactionBench extends CQLTester
             builder.append((char) ('a' + rand.nextInt('z' - 'a' + 1)));
         return builder.toString();
     }
-    
+
     void deleteData(Random rand, int count) throws Throwable
     {
         for (int i = 0; i < count; ++i)

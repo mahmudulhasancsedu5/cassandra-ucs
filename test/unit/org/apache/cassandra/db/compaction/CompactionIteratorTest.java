@@ -68,6 +68,8 @@ public class CompactionIteratorTest
                                                                          Int32Type.instance));
     }
 
+    // See org.apache.cassandra.db.rows.UnfilteredRowsGenerator.parse for the syntax used in these tests.
+
     @Test
     public void testGcCompactionSupersedeLeft()
     {
@@ -151,6 +153,7 @@ public class CompactionIteratorTest
         testCompaction(new String[] {
             "10[150] 20[160] 25[160] 30[170] 40[120] 50[120]"
         }, new String[] {
+            // Dxx| stands for partition deletion at time xx
             "D165|10<=[155] 20[200D180] 30[200D160] [155]<=30 40[150D130] 50[150D100]"
         },
         "30[170]");
@@ -198,7 +201,7 @@ public class CompactionIteratorTest
         verifyEquivalent(inputLists, result, tombstoneLists, generator);
         return size(result);
     }
-    
+
     private static int size(List<Unfiltered> data)
     {
         return data.stream().mapToInt(x -> x instanceof RangeTombstoneBoundaryMarker ? 2 : 1).sum();
@@ -228,7 +231,7 @@ public class CompactionIteratorTest
     {
         return ImmutableList.copyOf(Lists.transform(Arrays.asList(inputs), x -> parse(x, generator)));
     }
-    
+
     private List<Unfiltered> parse(String input, UnfilteredRowsGenerator generator)
     {
         Matcher m = Pattern.compile("D(\\d+)\\|").matcher(input);
@@ -281,7 +284,7 @@ public class CompactionIteratorTest
         }
         return map;
     }
-    
+
     @Test
     public void testRandom()
     {

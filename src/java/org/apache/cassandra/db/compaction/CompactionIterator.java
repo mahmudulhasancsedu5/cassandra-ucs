@@ -313,7 +313,12 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             return maxPurgeableTimestamp;
         }
     }
-    
+
+    /**
+     * Unfiltered row iterator that removes deleted data as provided by a "tombstone source" for the partition.
+     * The result produced by this iterator is such that when merged with tombSource it produces the same output
+     * as the merge of dataSource and tombSource.
+     */
     private static class GarbageSkippingUnfilteredRowIterator extends WrappingUnfilteredRowIterator
     {
         final UnfilteredRowIterator tombSource;
@@ -333,6 +338,15 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         Unfiltered dataNext = null;
         Unfiltered next = null;
 
+        /**
+         * Construct an iterator that filters out data shadowed by the provided "tombstone source".
+         *
+         * @param dataSource The input row. The result is a filtered version of this.
+         * @param tombSource Tombstone source, i.e. iterator used to identify deleted data in the input row.
+         * @param nowInSec Current time, used in choosing the winner when cell expiration is involved.
+         * @param cellLevelGC If false, the iterator will only look at row-level deletion times and tombstones.
+         *                    If true, deleted or overwritten cells within a surviving row will also be removed.
+         */
         protected GarbageSkippingUnfilteredRowIterator(UnfilteredRowIterator dataSource, UnfilteredRowIterator tombSource, int nowInSec, boolean cellLevelGC)
         {
             super(dataSource);
@@ -343,16 +357,13 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             cf = ColumnFilter.all(metadata);
 
             activeDeletionTime = partitionDeletionTime = tombSource.partitionLevelDeletion();
+
+            // Only preserve partition level deletion if not shadowed. (Note: Shadowing deletion must not be copied.)
             this.partitionLevelDeletion = dataSource.partitionLevelDeletion().supersedes(tombSource.partitionLevelDeletion()) ?
                     dataSource.partitionLevelDeletion() :
                     DeletionTime.LIVE;
 
-            Row tombStaticRow = tombSource.staticRow();
-            Row dataStaticRow = dataSource.staticRow().filter(cf,
-                                                              Ordering.natural().max(tombStaticRow.deletion().time(),
-                                                                                     partitionDeletionTime),
-                                                              isReverseOrder(),
-                                                              metadata);
+            Row dataStaticRow = garbageFilterRow(dataSource.staticRow(), tombSource.staticRow());
             this.staticRow = dataStaticRow != null ? dataStaticRow : Rows.EMPTY_STATIC_ROW;
 
             tombNext = advance(tombSource);
@@ -385,6 +396,11 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         @Override
         public boolean hasNext()
         {
+            // Produce the next element. This may consume multiple elements from both inputs until we find something
+            // from dataSource that is still live. We track the currently open deletion in both sources, as well as the
+            // one we have last issued to the output. The tombOpenDeletionTime is used to filter out content; the others
+            // to decide whether or not a tombstone is superseded, and to be able to surface (the rest of) a deletion
+            // range from the input when a suppressing deletion ends.
             while (next == null && dataNext != null)
             {
                 int cmp = tombNext == null ? -1 : metadata.comparator.compare(dataNext, tombNext);
@@ -399,17 +415,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                 {
                     if (dataNext.isRow())
                     {
-                        Row nextRow = (Row) dataNext;
-                        if (cellLevelGC)
-                        {
-                            next = Rows.removeShadowedCells(nextRow, (Row) tombNext, activeDeletionTime, nowInSec);
-                        }
-                        else
-                        {
-                            DeletionTime deletion = Ordering.natural().max(((Row) tombNext).deletion().time(),
-                                                                           activeDeletionTime);
-                            next = nextRow.filter(cf, deletion, false, metadata);
-                        }
+                        next = garbageFilterRow((Row) dataNext, (Row) tombNext);
                     }
                     else
                     {
@@ -446,6 +452,25 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             return next != null;
         }
 
+        protected Row garbageFilterRow(Row dataRow, Row tombRow)
+        {
+            if (cellLevelGC)
+            {
+                return Rows.removeShadowedCells(dataRow, tombRow, activeDeletionTime, nowInSec);
+            }
+            else
+            {
+                DeletionTime deletion = Ordering.natural().max(tombRow.deletion().time(),
+                                                               activeDeletionTime);
+                return dataRow.filter(cf, deletion, false, metadata);
+            }
+        }
+
+        /**
+         * Decide how to act on a tombstone marker from the input iterator. We can decide what to issue depending on
+         * whether or not the ranges before and after the marker are superseded/live -- if none are, we can reuse the
+         * marker; if both are, the marker can be ignored; otherwise we issue a corresponding start/end marker.
+         */
         private RangeTombstoneMarker processDataMarker()
         {
             dataOpenDeletionTime = updateOpenDeletionTime(dataOpenDeletionTime, dataNext);
@@ -484,6 +509,10 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
     }
 
+    /**
+     * Partition transformation applying GarbageSkippingUnfilteredRowIterator, obtaining tombstone sources for each
+     * partition using the controller's shadowSources method.
+     */
     private static class GarbageSkipper extends Transformation<UnfilteredRowIterator>
     {
         final int nowInSec;
