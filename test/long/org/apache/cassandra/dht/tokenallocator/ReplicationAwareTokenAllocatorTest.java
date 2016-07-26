@@ -29,6 +29,7 @@ import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 
 import org.junit.Test;
 
+import org.apache.cassandra.Util;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
 
@@ -544,6 +545,13 @@ public class ReplicationAwareTokenAllocatorTest
 
     @Test
     public void testNewCluster()
+    {
+        Util.flakyTest(this::flakyTestNewCluster,
+                       5,
+                       "It tends to fail sometimes due to the random selection of the tokens in the first few nodes.");
+    }
+
+    public void flakyTestNewCluster()
     {
         for (int rf = 2; rf <= 5; ++rf)
         {

@@ -544,6 +544,44 @@ public class Util
         thread.join(10000);
     }
 
+    public static AssertionError runCatchingAssertionError(Runnable test)
+    {
+        try
+        {
+            test.run();
+            return null;
+        }
+        catch (AssertionError e)
+        {
+            return e;
+        }
+    }
+
+    public static void flakyTest(Runnable test, int rerunsOnFailure, String message)
+    {
+        AssertionError e = runCatchingAssertionError(test);
+        if (e == null)
+            return;     // success
+        System.err.format("Test failed. %s\n"
+                        + "Re-running %d times to verify it isn't failing more often than it should.\n"
+                        + "Failure was: %s\n", message, rerunsOnFailure, e);
+
+        boolean rerunFailed = false;
+        for (int i = 0; i < rerunsOnFailure; ++i)
+        {
+            AssertionError t = runCatchingAssertionError(test);
+            if (t != null)
+            {
+                rerunFailed = true;
+                e.addSuppressed(t);
+            }
+        }
+        if (rerunFailed)
+            throw e;
+
+        System.err.println("All reruns succeeded. Failure treated as flake.");
+    }
+
     // for use with Optional in tests, can be used as an argument to orElseThrow
     public static Supplier<AssertionError> throwAssert(final String message)
     {
