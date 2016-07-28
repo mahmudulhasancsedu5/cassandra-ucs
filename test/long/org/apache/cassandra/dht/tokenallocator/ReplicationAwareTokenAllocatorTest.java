@@ -553,6 +553,13 @@ public class ReplicationAwareTokenAllocatorTest
 
     public void flakyTestNewCluster()
     {
+        // This test is flaky because the selection of the tokens for the first RF nodes (which is random, with an
+        // uncontrolled seed) can sometimes cause a pathological situation where the algorithm will find a (close to)
+        // ideal distribution of tokens for some number of nodes, which in turn will inevitably cause it to go into a
+        // bad (unacceptable to the test criteria) distribution after adding one more node.
+
+        // This should happen very rarely, unless something is broken in the token allocation code.
+
         for (int rf = 2; rf <= 5; ++rf)
         {
             for (int perUnitCount = 1; perUnitCount <= MAX_VNODE_COUNT; perUnitCount *= 4)
