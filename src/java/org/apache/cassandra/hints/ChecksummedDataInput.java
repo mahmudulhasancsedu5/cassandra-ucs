@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.*;
+import org.apache.cassandra.utils.CLibrary;
 import org.apache.cassandra.utils.memory.BufferPool;
 
 /**
@@ -81,13 +82,37 @@ public class ChecksummedDataInput extends RebufferingInputStream
         return getPosition() == channel.size();
     }
 
-    /**
-     * Returns the position in the source file, which is different for getPosition() for compressed/encrypted files
-     * and may be imprecise.
-     */
-    public long getSourcePosition()
+    static class Position implements InputPosition
     {
-        return getPosition();
+        final long sourcePosition;
+
+        public Position(long sourcePosition)
+        {
+            super();
+            this.sourcePosition = sourcePosition;
+        }
+
+        @Override
+        public long subtract(InputPosition other)
+        {
+            return sourcePosition - ((Position)other).sourcePosition;
+        }
+    }
+
+    /**
+     * Return a seekable representation of the current position. For compressed files this is chunk position
+     * in file and offset within chunk.
+     */
+    public InputPosition getSeekPosition()
+    {
+        return new Position(getPosition());
+    }
+
+    public void seek(InputPosition pos)
+    {
+        updateCrc();
+        bufferOffset = ((Position) pos).sourcePosition;
+        buffer.position(0).limit(0);
     }
 
     public void resetCrc()
@@ -108,6 +133,15 @@ public class ChecksummedDataInput extends RebufferingInputStream
     protected long getPosition()
     {
         return bufferOffset + buffer.position();
+    }
+
+    /**
+     * Returns the position in the source file, which is different for getPosition() for compressed/encrypted files
+     * and may be imprecise.
+     */
+    protected long getSourcePosition()
+    {
+        return bufferOffset;
     }
 
     public void resetLimit()
@@ -177,6 +211,11 @@ public class ChecksummedDataInput extends RebufferingInputStream
         buffer.clear();
         while ((channel.read(buffer, bufferOffset)) == 0) {}
         buffer.flip();
+    }
+
+    public void tryUncacheRead()
+    {
+        CLibrary.trySkipCache(getChannel().getFileDescriptor(), 0, getSourcePosition(), getPath());
     }
 
     private void updateCrc()

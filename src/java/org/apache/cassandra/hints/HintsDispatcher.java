@@ -41,7 +41,7 @@ import org.apache.cassandra.utils.concurrent.SimpleCondition;
  */
 final class HintsDispatcher implements AutoCloseable
 {
-    private enum Action { CONTINUE, ABORT }
+    private enum Action { CONTINUE, ABORT, RETRY }
 
     private final HintsReader reader;
     private final UUID hostId;
@@ -49,11 +49,12 @@ final class HintsDispatcher implements AutoCloseable
     private final int messagingVersion;
     private final BooleanSupplier abortRequested;
 
-    private long currentPageOffset = 0L;
-    private long resumeAtPageOffset = 0L;
+    private InputPosition currentPagePosition;
 
     private HintsDispatcher(HintsReader reader, UUID hostId, InetAddress address, int messagingVersion, BooleanSupplier abortRequested)
     {
+        currentPagePosition = null;
+
         this.reader = reader;
         this.hostId = hostId;
         this.address = address;
@@ -72,9 +73,9 @@ final class HintsDispatcher implements AutoCloseable
         reader.close();
     }
 
-    void seekPage(long pageOffset)
+    void seek(InputPosition position)
     {
-        resumeAtPageOffset = pageOffset;
+        reader.seek(position);
     }
 
     /**
@@ -84,30 +85,30 @@ final class HintsDispatcher implements AutoCloseable
     {
         for (HintsReader.Page page : reader)
         {
-            if (!(currentPageOffset >= resumeAtPageOffset))
-            {
-                currentPageOffset++;
-                continue;
-            }
-
-            if (sendHintsAndAwait(page) == Action.CONTINUE)
-            {
-                currentPageOffset++;
-            }
-            else
-            {
+            currentPagePosition = page.position;
+            if (dispatch(page) != Action.CONTINUE)
                 return false;
-            }
         }
+
         return true;
     }
 
     /**
      * @return offset of the first non-delivered page
      */
-    long dispatchOffset()
+    InputPosition dispatchPosition()
     {
-        return currentPageOffset;
+        return currentPagePosition;
+    }
+
+
+    // retry in case of a timeout; stop in case of a failure, host going down, or delivery paused
+    private Action dispatch(HintsReader.Page page)
+    {
+        Action action = sendHintsAndAwait(page);
+        return action == Action.RETRY
+             ? dispatch(page)
+             : action;
     }
 
     private Action sendHintsAndAwait(HintsReader.Page page)
@@ -130,7 +131,7 @@ final class HintsDispatcher implements AutoCloseable
 
         for (Callback cb : callbacks)
             if (cb.await() != Callback.Outcome.SUCCESS)
-                return Action.ABORT;
+                return Action.RETRY;
 
         return Action.CONTINUE;
     }

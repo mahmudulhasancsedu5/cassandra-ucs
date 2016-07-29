@@ -170,9 +170,9 @@ public class HintsServiceTest
 
         // verify that we have a dispatch offset set for the page we're currently stuck at
         HintsStore store = HintsService.instance.getCatalog().get(StorageService.instance.getLocalHostUUID());
-        Optional<Long> dispatchOffset = store.getDispatchOffset(store.poll());
-        assertTrue(dispatchOffset.isPresent());
-        assertTrue(dispatchOffset.get() > 0);
+        InputPosition dispatchOffset = store.getDispatchOffset(store.poll());
+        assertTrue(dispatchOffset != null);
+        assertTrue(((ChecksummedDataInput.Position) dispatchOffset).sourcePosition > 0);
     }
 
     private MockMessagingSpy sendHintsAndResponses(int noOfHints, int noOfResponses)

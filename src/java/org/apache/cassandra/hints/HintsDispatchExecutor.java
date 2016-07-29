@@ -253,13 +253,13 @@ final class HintsDispatchExecutor
         private boolean deliver(HintsDescriptor descriptor, InetAddress address)
         {
             File file = new File(hintsDirectory, descriptor.fileName());
-            Long offset = store.getDispatchOffset(descriptor).orElse(null);
+            InputPosition offset = store.getDispatchOffset(descriptor);
 
             BooleanSupplier shouldAbort = () -> !isAlive.apply(address) || isPaused.get();
             try (HintsDispatcher dispatcher = HintsDispatcher.create(file, rateLimiter, address, descriptor.hostId, shouldAbort))
             {
                 if (offset != null)
-                    dispatcher.seekPage(offset);
+                    dispatcher.seek(offset);
 
                 if (dispatcher.dispatch())
                 {
@@ -270,7 +270,7 @@ final class HintsDispatchExecutor
                 }
                 else
                 {
-                    store.markDispatchOffset(descriptor, dispatcher.dispatchOffset());
+                    store.markDispatchOffset(descriptor, dispatcher.dispatchPosition());
                     store.offerFirst(descriptor);
                     logger.info("Finished hinted handoff of file {} to endpoint {}, partially", descriptor.fileName(), hostId);
                     return false;
