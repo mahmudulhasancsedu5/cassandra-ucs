@@ -131,7 +131,7 @@ final class HintsDispatcher implements AutoCloseable
 
         for (Callback cb : callbacks)
             if (cb.await() != Callback.Outcome.SUCCESS)
-                return Action.RETRY;
+                return Action.ABORT;
 
         return Action.CONTINUE;
     }
