@@ -18,20 +18,7 @@
 */
 package org.apache.cassandra.db.commitlog;
 
-<<<<<<< HEAD
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-=======
-import static junit.framework.Assert.assertTrue;
-import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
-import static org.junit.Assert.assertEquals;
-
 import java.io.*;
->>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
@@ -55,37 +42,18 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.ParameterizedClass;
-<<<<<<< HEAD
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.Mutation;
-import org.apache.cassandra.db.RowUpdateBuilder;
-=======
 import org.apache.cassandra.config.Config.DiskFailurePolicy;
 import org.apache.cassandra.db.*;
->>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
 import org.apache.cassandra.db.commitlog.CommitLogReplayer.CommitLogReplayException;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.exceptions.ConfigurationException;
-<<<<<<< HEAD
-import org.apache.cassandra.io.compress.DeflateCompressor;
-import org.apache.cassandra.io.compress.LZ4Compressor;
-import org.apache.cassandra.io.compress.SnappyCompressor;
-=======
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.DeflateCompressor;
 import org.apache.cassandra.io.compress.LZ4Compressor;
 import org.apache.cassandra.io.compress.SnappyCompressor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.util.DataInputBuffer;
-<<<<<<< HEAD
->>>>>>> Change commitlog to track dirty and clean intervals (CASSANDRA-11828).
-=======
-import org.apache.cassandra.io.util.DataInputPlus;
-import org.apache.cassandra.io.util.FastByteArrayInputStream;
->>>>>>> Adds tracking of log intervals in sstables.
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
