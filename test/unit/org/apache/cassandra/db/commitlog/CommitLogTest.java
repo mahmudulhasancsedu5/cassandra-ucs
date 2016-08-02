@@ -549,6 +549,7 @@ public class CommitLogTest
                     .apply();
 
                 if (i == 2)
+                {
                     try (Closeable c = Util.markDirectoriesUnwriteable(cfs))
                     {
                         cfs.forceBlockingFlush();
@@ -559,6 +560,7 @@ public class CommitLogTest
                         while (!(t instanceof FSWriteError))
                             t = t.getCause();
                     }
+                }
                 else
                     cfs.forceBlockingFlush();
             }
@@ -603,6 +605,9 @@ public class CommitLogTest
 
         CommitLog.instance.sync(true);
         System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);
+        // In the absence of error, this should be 0 because forceBlockingFlush/forceRecycleAllSegments would have
+        // persisted all data in the commit log. Because we know there was an error, there must be something left to
+        // replay.
         Assert.assertEquals(1, CommitLog.instance.resetUnsafe(false));
     }
 

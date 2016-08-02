@@ -31,7 +31,7 @@ import com.google.common.collect.Maps;
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus;
 import com.clearspring.analytics.stream.cardinality.ICardinality;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
+import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.partitions.PartitionStatisticsCollector;
 import org.apache.cassandra.db.rows.Cell;
@@ -68,7 +68,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
     {
         return new StatsMetadata(defaultPartitionSizeHistogram(),
                                  defaultCellPerPartitionCountHistogram(),
-                                 ReplayIntervalSet.EMPTY,
+                                 IntervalSet.empty(),
                                  Long.MIN_VALUE,
                                  Long.MAX_VALUE,
                                  Integer.MAX_VALUE,
@@ -89,7 +89,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
     protected EstimatedHistogram estimatedPartitionSize = defaultPartitionSizeHistogram();
     // TODO: cound the number of row per partition (either with the number of cells, or instead)
     protected EstimatedHistogram estimatedCellPerPartitionCount = defaultCellPerPartitionCountHistogram();
-    protected ReplayIntervalSet commitLogIntervals = ReplayIntervalSet.EMPTY;
+    protected IntervalSet commitLogIntervals = IntervalSet.empty();
     protected final MinMaxLongTracker timestampTracker = new MinMaxLongTracker();
     protected final MinMaxIntTracker localDeletionTimeTracker = new MinMaxIntTracker(Cell.NO_DELETION_TIME, Cell.NO_DELETION_TIME);
     protected final MinMaxIntTracker ttlTracker = new MinMaxIntTracker(Cell.NO_TTL, Cell.NO_TTL);
@@ -123,7 +123,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
     {
         this(comparator);
 
-        ReplayIntervalSet.Builder intervals = new ReplayIntervalSet.Builder();
+        IntervalSet.Builder intervals = new IntervalSet.Builder();
         for (SSTableReader sstable : sstables)
         {
             intervals.addAll(sstable.getSSTableMetadata().commitLogIntervals);
@@ -216,7 +216,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
         ttlTracker.update(newTTL);
     }
 
-    public MetadataCollector commitLogIntervals(ReplayIntervalSet commitLogIntervals)
+    public MetadataCollector commitLogIntervals(IntervalSet commitLogIntervals)
     {
         this.commitLogIntervals = commitLogIntervals;
         return this;

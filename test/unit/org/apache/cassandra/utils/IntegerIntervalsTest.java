@@ -8,15 +8,13 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 
 import org.junit.Test;
 
-import org.apache.cassandra.utils.IntegerIntervals.Set;
+import org.apache.cassandra.utils.IntegerInterval.Set;
 
 public class IntegerIntervalsTest
 {
@@ -25,59 +23,67 @@ public class IntegerIntervalsTest
     @Test
     public void testMake()
     {
-        long iv;
+        IntegerInterval iv;
         for (int i = 0; i < values.length; ++i)
+        {
             for (int j = i; j < values.length; ++j)
             {
-                iv = IntegerIntervals.make(values[i], values[j]);
-                assertEquals(values[i], IntegerIntervals.lower(iv));
-                assertEquals(values[j], IntegerIntervals.upper(iv));
+                iv = new IntegerInterval(values[i], values[j]);
+                assertEquals(values[i], iv.lower());
+                assertEquals(values[j], iv.upper());
             }
+        }
 
         for (int i = 0; i < values.length; ++i)
+        {
             for (int j = 0; j < i; ++j)
+            {
                 try
                 {
-                    iv = IntegerIntervals.make(values[i], values[j]);
+                    iv = new IntegerInterval(values[i], values[j]);
                     fail("Assertion not thrown: " + values[i] + ", " + values[j]);
                 }
                 catch (AssertionError e)
                 {
                     // expected
                 }
+            }
+        }
     }
 
     @Test
     public void testExpandToCoverSingleThread()
     {
-        long iv;
+        IntegerInterval iv;
         for (int i = 0; i < values.length; ++i)
+        {
             for (int j = i; j < values.length; ++j)
             {
-                iv = IntegerIntervals.make(values[i], values[j]);
+                iv = new IntegerInterval(values[i], values[j]);
                 int k = 0;
                 for (; k < i; ++k)
                 {
-                    AtomicLong v = new AtomicLong(iv);
-                    IntegerIntervals.expandToCover(v, values[k]);
-                    assertEquals(values[k], IntegerIntervals.lower(v.get()));
-                    assertEquals(values[j], IntegerIntervals.upper(v.get()));
+                    IntegerInterval v = new IntegerInterval(iv);
+                    v.expandToCover(values[k]);
+                    assertEquals(values[k], v.lower());
+                    assertEquals(values[j], v.upper());
                 }
                 for (; k < j; ++k)
                 {
-                    AtomicLong v = new AtomicLong(iv);
-                    IntegerIntervals.expandToCover(v, values[k]);
-                    assertEquals(values[i], IntegerIntervals.lower(v.get()));
-                    assertEquals(values[j], IntegerIntervals.upper(v.get()));
+                    IntegerInterval v = new IntegerInterval(iv);
+                    v.expandToCover(values[k]);
+                    assertEquals(values[i], v.lower());
+                    assertEquals(values[j], v.upper());
                 }
                 for (; k < values.length; ++k)
                 {
-                    AtomicLong v = new AtomicLong(iv);
-                    IntegerIntervals.expandToCover(v, values[k]);
-                    assertEquals(values[i], IntegerIntervals.lower(v.get()));
-                    assertEquals(values[k], IntegerIntervals.upper(v.get()));
+                    IntegerInterval v = new IntegerInterval(iv);
+                    v.expandToCover(values[k]);
+                    assertEquals(values[i], v.lower());
+                    assertEquals(values[k], v.upper());
                 }
             }
+        }
     }
 
     @Test
@@ -87,14 +93,14 @@ public class IntegerIntervalsTest
         int threads = 16;
         int streamSize = 1000000;
         List<Callable<Void>> tasks = new ArrayList<>(threads);
-        final AtomicLong interval = new AtomicLong(IntegerIntervals.make(0, 0));
+        final IntegerInterval interval = new IntegerInterval(0, 0);
         int min = 0;
         int max = 0;
         for (int i = 0; i < threads; ++i)
         {
             final int seed = r.nextInt();
             tasks.add(() -> {
-                new Random(seed).ints(streamSize).forEach(v -> IntegerIntervals.expandToCover(interval, v));
+                new Random(seed).ints(streamSize).forEach(v -> interval.expandToCover(v));
                 return null;
             });
             min = Math.min(min, new Random(seed).ints(streamSize).min().getAsInt());
@@ -102,8 +108,8 @@ public class IntegerIntervalsTest
         }
         for (Future<?> f : Executors.newFixedThreadPool(threads).invokeAll(tasks))
             Futures.getUnchecked(f);
-        assertEquals(min, IntegerIntervals.lower(interval.get()));
-        assertEquals(max, IntegerIntervals.upper(interval.get()));
+        assertEquals(min, interval.lower());
+        assertEquals(max, interval.upper());
     }
 
     void testSetAdd(int l, int r, Integer... expected)
@@ -115,9 +121,8 @@ public class IntegerIntervalsTest
         assertArrayEquals(expected, s
                                     .intervals()
                                     .stream()
-                                    .flatMap(x -> ImmutableList.of(IntegerIntervals.lower(x), IntegerIntervals.upper(x)).stream())
-                                    .collect(Collectors.toList())
-                                    .toArray(new Integer[0]));
+                                    .flatMap(x -> ImmutableList.of(x.lower(), x.upper()).stream())
+                                    .toArray());
     }
 
     void testSetAdd(int l, int r, String expected)
@@ -142,7 +147,7 @@ public class IntegerIntervalsTest
         testSetAdd(Integer.MIN_VALUE, 3, Integer.MIN_VALUE, 3);
         testSetAdd(Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE);
 
-        testSetAdd(-5, -4, "[(-5;-4), (-3;-1), (1;3)]");
+        testSetAdd(-5, -4, "[[-5,-4], [-3,-1], [1,3]]");
         testSetAdd(-5, -3, -5, -1, 1, 3);
         testSetAdd(-5, -2, -5, -1, 1, 3);
         testSetAdd(-5, -1, -5, -1, 1, 3);
@@ -157,7 +162,7 @@ public class IntegerIntervalsTest
         testSetAdd(-3, -2, -3, -1, 1, 3);
         testSetAdd(-3, -1, -3, -1, 1, 3);
         testSetAdd(-3, 0, -3, 0, 1, 3);
-        testSetAdd(-3, 1, "[(-3;3)]");
+        testSetAdd(-3, 1, "[[-3,3]]");
         testSetAdd(-3, 2, -3, 3);
         testSetAdd(-3, 3, -3, 3);
         testSetAdd(-3, 4, -3, 4);
@@ -165,7 +170,7 @@ public class IntegerIntervalsTest
 
         testSetAdd(-2, -2, -3, -1, 1, 3);
         testSetAdd(-2, -1, -3, -1, 1, 3);
-        testSetAdd(-2, 0, "[(-3;0), (1;3)]");
+        testSetAdd(-2, 0, "[[-3,0], [1,3]]");
         testSetAdd(-2, 1, -3, 3);
         testSetAdd(-2, 2, -3, 3);
         testSetAdd(-2, 3, -3, 3);
@@ -198,7 +203,7 @@ public class IntegerIntervalsTest
         testSetAdd(2, 4, -3, -1, 1, 4);
         testSetAdd(2, Integer.MAX_VALUE, -3, -1, 1, Integer.MAX_VALUE);
 
-        testSetAdd(3, 3, "[(-3;-1), (1;3)]");
+        testSetAdd(3, 3, "[[-3,-1], [1,3]]");
         testSetAdd(3, 4, -3, -1, 1, 4);
         testSetAdd(3, Integer.MAX_VALUE, -3, -1, 1, Integer.MAX_VALUE);
 
@@ -206,12 +211,39 @@ public class IntegerIntervalsTest
         testSetAdd(4, Integer.MAX_VALUE, -3, -1, 1, 3, 4, Integer.MAX_VALUE);
     }
 
+    @Test
+    public void testSetAddMultiThread() throws InterruptedException
+    {
+        Random r = new Random();
+        int threads = 16;
+        int streamSize = 10000;
+        List<Callable<Void>> tasks = new ArrayList<>(threads);
+        final IntegerInterval.Set st = new IntegerInterval.Set();
+        final IntegerInterval.Set mt = new IntegerInterval.Set();
+        for (int i = 0; i < threads; ++i)
+        {
+            final int seed = r.nextInt();
+            tasks.add(() -> {
+                new Random(seed)
+                    .ints(streamSize)
+                    .forEach(v -> mt.add(v, v + 5));
+                return null;
+            });
+            new Random(seed)
+                .ints(streamSize)
+                .forEach(v -> st.add(v, v + 5));
+        }
+        for (Future<?> f : Executors.newFixedThreadPool(threads).invokeAll(tasks))
+            Futures.getUnchecked(f);
+        assertEquals(st, mt);
+    }
+
     void testSetCovers(int l, int r, boolean expected)
     {
         Set s = new Set();
         s.add(-3, -1);
         s.add(1, 3);
-        assertEquals(expected, s.covers(IntegerIntervals.make(l, r)));
+        assertEquals(expected, s.covers(new IntegerInterval(l, r)));
     }
 
 

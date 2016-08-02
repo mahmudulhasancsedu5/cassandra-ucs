@@ -33,7 +33,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.commitlog.ReplayIntervalSet;
+import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
@@ -433,7 +433,7 @@ public class Memtable implements Comparable<Memtable>
         {
             txn = LifecycleTransaction.offline(OperationType.FLUSH);
             MetadataCollector sstableMetadataCollector = new MetadataCollector(cfs.metadata.comparator)
-                    .commitLogIntervals(new ReplayIntervalSet(commitLogLowerBound.get(), commitLogUpperBound.get()));
+                    .commitLogIntervals(new IntervalSet(commitLogLowerBound.get(), commitLogUpperBound.get()));
 
             return new SSTableTxnWriter(txn,
                                         cfs.createSSTableMultiWriter(Descriptor.fromFilename(filename),
