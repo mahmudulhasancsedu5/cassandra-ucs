@@ -55,6 +55,7 @@ import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.OutputHandler;
 
 import static junit.framework.Assert.assertNotNull;
 import static org.apache.cassandra.Util.column;
@@ -388,7 +389,8 @@ public class ScrubTest extends SchemaLoader
         components.add(Component.TOC);
         SSTableReader sstable = SSTableReader.openNoValidation(desc, components, metadata);
 
-        Scrubber scrubber = new Scrubber(cfs, sstable, false, true);
+        // Create offline scrubber to ensure tombstones are not purged.
+        Scrubber scrubber = new Scrubber(cfs, sstable, false, true, new OutputHandler.LogOutput(), true);
         scrubber.scrub();
         scrubber.getNewSSTable().close();
         scrubber.getNewInOrderSSTable().close();
