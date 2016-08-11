@@ -1,4 +1,5 @@
 3.8
+ * Fix clean interval not sent to commit log for empty memtable flush (CASSANDRA-12436)
  * RTE from new CDC column breaks in flight queries (CASSANDRA-12236)
  * Fix hdr logging for single operation workloads (CASSANDRA-12145)
  * Fix SASI PREFIX search in CONTAINS mode with partial terms (CASSANDRA-12073)
