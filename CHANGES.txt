@@ -6,6 +6,7 @@
  * Clean up the SSTableReader#getScanner API wrt removal of RateLimiter (CASSANDRA-12422)
 
 3.10
+ * Optimize the vnode allocation for single replica per DC (CASSANDRA-12777)
  * Add duration data type (CASSANDRA-11873)
  * Make the fanout size for LeveledCompactionStrategy to be configurable (CASSANDRA-11550)
  * Fix timeout in ReplicationAwareTokenAllocatorTest (CASSANDRA-12784)
