@@ -132,7 +132,7 @@ public final class CompressionParams
 
     public static CompressionParams snappy(int chunkLength)
     {
-        return snappy(chunkLength, DEFAULT_MIN_COMPRESS_RATIO);
+        return snappy(chunkLength, 1.1);
     }
 
     public static CompressionParams snappy(int chunkLength, double minCompressRatio)
@@ -157,7 +157,7 @@ public final class CompressionParams
 
     public static CompressionParams lz4(int chunkLength)
     {
-        return lz4(chunkLength, Integer.MAX_VALUE);
+        return lz4(chunkLength, chunkLength);
     }
 
     public static CompressionParams lz4(int chunkLength, int maxCompressedLength)
@@ -491,6 +491,9 @@ public final class CompressionParams
 
         if (maxCompressedLength < 0)
             throw new ConfigurationException("Invalid negative " + MIN_COMPRESS_RATIO);
+
+        if (maxCompressedLength > chunkLength && maxCompressedLength < Integer.MAX_VALUE)
+            throw new ConfigurationException(MIN_COMPRESS_RATIO + " can either be 0 or greater than or equal to 1");
     }
 
     public Map<String, String> asMap()
@@ -522,7 +525,7 @@ public final class CompressionParams
         return crcCheckChance;
     }
 
-    public boolean maybeCheckCrc()
+    public boolean shouldCheckCrc()
     {
         double checkChance = getCrcCheckChance();
         return checkChance > 0d && checkChance > ThreadLocalRandom.current().nextDouble();
