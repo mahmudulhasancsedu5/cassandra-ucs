@@ -49,7 +49,7 @@ public abstract class CompressedChunkReader extends AbstractReaderFileProxy impl
         return metadata.parameters.getCrcCheckChance();
     }
 
-    public boolean shouldCheckCrc()
+    boolean shouldCheckCrc()
     {
         return metadata.parameters.shouldCheckCrc();
     }
