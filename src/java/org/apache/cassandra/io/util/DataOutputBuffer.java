@@ -38,7 +38,7 @@ public class DataOutputBuffer extends BufferedDataOutputStreamPlus
     /*
      * Threshold at which resizing transitions from doubling to increasing by 50%
      */
-    private static final long DOUBLING_THRESHOLD = Long.getLong(Config.PROPERTY_PREFIX + "DOB_DOUBLING_THRESHOLD_MB", 64);
+    static final long DOUBLING_THRESHOLD = Long.getLong(Config.PROPERTY_PREFIX + "DOB_DOUBLING_THRESHOLD_MB", 64);
 
     /*
      * Only recycle OutputBuffers up to 1Mb. Larger buffers will be trimmed back to this size.

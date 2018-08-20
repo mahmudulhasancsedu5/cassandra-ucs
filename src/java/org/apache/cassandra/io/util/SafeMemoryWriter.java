@@ -102,7 +102,9 @@ public class SafeMemoryWriter extends DataOutputBuffer
     @Override
     public long validateReallocation(long newSize)
     {
-        return newSize;
+        // Make sure size does not grow by more than the max buffer size, otherwise we'll hit an exception
+        // when setting up the buffer position.
+        return Math.min(newSize, length() + Integer.MAX_VALUE);
     }
 
     private static long tailOffset(Memory memory)

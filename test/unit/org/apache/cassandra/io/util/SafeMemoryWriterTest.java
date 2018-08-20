@@ -24,6 +24,8 @@ import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
+import sun.misc.VM;
+
 import static org.junit.Assert.assertEquals;
 
 public class SafeMemoryWriterTest
@@ -34,20 +36,35 @@ public class SafeMemoryWriterTest
     @Test
     public void testTrim() throws IOException
     {
-        testSafeMemoryWriter(CHUNK * 5, CHUNK);
+        testSafeMemoryWriter(CHUNK * 5, CHUNK, 65536);
     }
 
     @Test
     public void testOver2GBuffer() throws IOException
     {
-        testSafeMemoryWriter(Integer.MAX_VALUE * 5L / 4, CHUNK);
+        // we want the last resize to happen at this size, so that calculateNewSize wants to expand by over 2G
+        long initialSize = (Integer.MAX_VALUE * 33L / 32) * 2;
+        // a little more than the value above
+        long testSize = initialSize * 33 / 32;
+
+        // start with smaller initial size, but make sure it would grow to the required value above
+        while (initialSize * 2 / 3 > 1024L * 1024L * DataOutputBuffer.DOUBLING_THRESHOLD)
+            initialSize = initialSize * 2 / 3;
+
+        if (VM.maxDirectMemory() * 2 / 3 < testSize)
+        {
+            testSize = VM.maxDirectMemory() * 2 / 3;
+            System.err.format("Insufficient direct memory for full test, reducing to: %,d %x\n", testSize, testSize);
+        }
+
+        testSafeMemoryWriter(testSize, CHUNK, initialSize);
     }
 
-    public void testSafeMemoryWriter(long toSize, int chunkSize) throws IOException
+    public void testSafeMemoryWriter(long toSize, int chunkSize, long initialSize) throws IOException
     {
         byte[] data = new byte[chunkSize];
         rand.nextBytes(data);
-        try (SafeMemoryWriter writer = new SafeMemoryWriter(65536))
+        try (SafeMemoryWriter writer = new SafeMemoryWriter(initialSize))
         {
 
             long l;
