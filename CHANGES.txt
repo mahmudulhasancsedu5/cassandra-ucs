@@ -1,4 +1,5 @@
 3.11.4
+ * Correct sstable sorting for garbagecollect and levelled compaction (CASSANDRA-14879)
 Merged from 3.0:
  * Sstable min/max metadata can cause data loss (CASSANDRA-14861)
  * Dropped columns can cause reverse sstable iteration to return prematurely (CASSANDRA-14838)
