@@ -18,11 +18,12 @@
 
 package org.apache.cassandra.locator;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
-
 import java.util.function.Predicate;
 
-public class InOurDcTester
+import static org.apache.cassandra.config.DatabaseDescriptor.getEndpointSnitch;
+import static org.apache.cassandra.config.DatabaseDescriptor.getLocalDataCenter;
+
+public class InOurDc
 {
     private static ReplicaTester replicas;
     private static EndpointTester endpoints;
@@ -30,7 +31,7 @@ public class InOurDcTester
     final String dc;
     final IEndpointSnitch snitch;
 
-    private InOurDcTester(String dc, IEndpointSnitch snitch)
+    private InOurDc(String dc, IEndpointSnitch snitch)
     {
         this.dc = dc;
         this.snitch = snitch;
@@ -38,15 +39,15 @@ public class InOurDcTester
 
     boolean stale()
     {
-        return dc != DatabaseDescriptor.getLocalDataCenter()
-                || snitch != DatabaseDescriptor.getEndpointSnitch()
+        return dc != getLocalDataCenter()
+                || snitch != getEndpointSnitch()
                 // this final clause checks if somehow the snitch/localDc have got out of whack;
                 // presently, this is possible but very unlikely, but this check will also help
                 // resolve races on these global fields as well
                 || !dc.equals(snitch.getLocalDatacenter());
     }
 
-    private static final class ReplicaTester extends InOurDcTester implements Predicate<Replica>
+    private static final class ReplicaTester extends InOurDc implements Predicate<Replica>
     {
         private ReplicaTester(String dc, IEndpointSnitch snitch)
         {
@@ -60,7 +61,7 @@ public class InOurDcTester
         }
     }
 
-    private static final class EndpointTester extends InOurDcTester implements Predicate<InetAddressAndPort>
+    private static final class EndpointTester extends InOurDc implements Predicate<InetAddressAndPort>
     {
         private EndpointTester(String dc, IEndpointSnitch snitch)
         {
@@ -78,7 +79,7 @@ public class InOurDcTester
     {
         ReplicaTester cur = replicas;
         if (cur == null || cur.stale())
-            replicas = cur = new ReplicaTester(DatabaseDescriptor.getLocalDataCenter(), DatabaseDescriptor.getEndpointSnitch());
+            replicas = cur = new ReplicaTester(getLocalDataCenter(), getEndpointSnitch());
         return cur;
     }
 
@@ -86,8 +87,18 @@ public class InOurDcTester
     {
         EndpointTester cur = endpoints;
         if (cur == null || cur.stale())
-            endpoints = cur = new EndpointTester(DatabaseDescriptor.getLocalDataCenter(), DatabaseDescriptor.getEndpointSnitch());
+            endpoints = cur = new EndpointTester(getLocalDataCenter(), getEndpointSnitch());
         return cur;
+    }
+
+    public static boolean isInOurDc(Replica replica)
+    {
+        return replicas().test(replica);
+    }
+
+    public static boolean isInOurDc(InetAddressAndPort endpoint)
+    {
+        return endpoints().test(endpoint);
     }
 
 }

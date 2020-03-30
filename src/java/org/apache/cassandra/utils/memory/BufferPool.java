@@ -155,7 +155,7 @@ public class BufferPool
         @Override
         protected LocalPool initialValue()
         {
-            return new LocalPool();
+            return new LocalPool(BufferPool.this);
         }
 
         protected void onRemoval(LocalPool value)
@@ -185,7 +185,7 @@ public class BufferPool
      */
     public LocalPool create()
     {
-        return new LocalPool();
+        return new LocalPool(this);
     }
 
     public ByteBuffer get(int size, BufferType bufferType)
@@ -736,12 +736,12 @@ public class BufferPool
         private final int tinyLimit;
         private boolean recycleWhenFree = true;
 
-        public LocalPool()
+        public LocalPool(BufferPool bufferPool)
         {
             this.parent = globalPool;
             this.tinyLimit = TINY_ALLOCATION_LIMIT;
             this.reuseObjects = new ArrayDeque<>();
-            localPoolReferences.add(leakRef = new LocalPoolRef(this, localPoolRefQueue));
+            localPoolReferences.add(leakRef = new LocalPoolRef(bufferPool, this, localPoolRefQueue));
         }
 
         /**
@@ -755,7 +755,7 @@ public class BufferPool
             };
             this.tinyLimit = 0; // we only currently permit one layer of nesting (which brings us down to 32 byte allocations, so is plenty)
             this.reuseObjects = parent.reuseObjects; // we share the same ByteBuffer object reuse pool, as we both have the same exclusive access to it
-            localPoolReferences.add(leakRef = new LocalPoolRef(this, localPoolRefQueue));
+            localPoolReferences.add(leakRef = new LocalPoolRef(null, this, localPoolRefQueue));
         }
 
         private LocalPool tinyPool()
@@ -1020,10 +1020,16 @@ public class BufferPool
     private static final class LocalPoolRef extends PhantomReference<LocalPool>
     {
         private final MicroQueueOfChunks chunks;
-        public LocalPoolRef(LocalPool localPool, ReferenceQueue<? super LocalPool> q)
+        private final String allocatedBy = Thread.currentThread().getName();
+        private final StackTraceElement[] allocatedAt = Thread.currentThread().getStackTrace();
+        private final Class<?> ownerClass;
+        private final String owner;
+        public LocalPoolRef(BufferPool pool, LocalPool localPool, ReferenceQueue<? super LocalPool> q)
         {
             super(localPool, q);
             chunks = localPool.chunks;
+            owner = pool == null ? "nested" : pool.name;
+            ownerClass = pool == null ? null : pool.localPool.getClass();
         }
 
         public void release()

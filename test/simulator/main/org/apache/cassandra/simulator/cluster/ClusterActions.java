@@ -44,7 +44,6 @@ import org.apache.cassandra.locator.ReplicaLayout;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.simulator.Action;
 import org.apache.cassandra.simulator.ActionList;
-import org.apache.cassandra.simulator.Actions;
 import org.apache.cassandra.simulator.Actions.ReliableAction;
 import org.apache.cassandra.simulator.Actions.StrictAction;
 import org.apache.cassandra.simulator.Debug;

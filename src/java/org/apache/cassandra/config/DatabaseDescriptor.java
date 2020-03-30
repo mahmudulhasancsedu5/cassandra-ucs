@@ -32,8 +32,11 @@ import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import com.google.common.util.concurrent.RateLimiter;
 
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.io.util.File;
+import org.apache.cassandra.config.Config.PaxosStatePurging;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +50,6 @@ import org.apache.cassandra.auth.IInternodeAuthenticator;
 import org.apache.cassandra.auth.INetworkAuthorizer;
 import org.apache.cassandra.auth.IRoleManager;
 import org.apache.cassandra.config.Config.CommitLogSync;
-import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.commitlog.AbstractCommitLogSegmentManager;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.commitlog.CommitLogSegmentManagerCDC;
@@ -132,6 +134,7 @@ public class DatabaseDescriptor
     private static long preparedStatementsCacheSizeInMB;
 
     private static long keyCacheSizeInMB;
+    private static long paxosCacheSizeInMB;
     private static long counterCacheSizeInMB;
     private static long indexSummaryCapacityInMB;
 
@@ -728,6 +731,28 @@ public class DatabaseDescriptor
                                              + conf.counter_cache_size_in_mb + "', supported values are <integer> >= 0.", false);
         }
 
+        try
+        {
+            // if paxos_cache_size_in_mb option was set to "auto" then size of the cache should be "min(1% of Heap (in MB), 50MB)
+            paxosCacheSizeInMB = (conf.paxos_cache_size_in_mb == null)
+                    ? Math.min(Math.max(1, (int) (Runtime.getRuntime().totalMemory() * 0.01 / 1024 / 1024)), 50)
+                    : conf.paxos_cache_size_in_mb;
+
+            if (paxosCacheSizeInMB < 0)
+                throw new NumberFormatException(); // to escape duplicating error message
+        }
+        catch (NumberFormatException e)
+        {
+            throw new ConfigurationException("paxos_cache_size_in_mb option was set incorrectly to '"
+                    + conf.paxos_cache_size_in_mb + "', supported values are <integer> >= 0.", false);
+        }
+
+        if (conf.paxos_auto_repair_threshold_mb < 0)
+        {
+            throw new ConfigurationException("paxos_auto_repair_threshold_mb option was set incorrectly to '"
+                                             + conf.paxos_auto_repair_threshold_mb + "', supported values are <integer> >= 0.", false);
+        }
+
         // if set to empty/"auto" then use 5% of Heap size
         indexSummaryCapacityInMB = (conf.index_summary_capacity_in_mb == null)
                                    ? Math.max(1, (int) (Runtime.getRuntime().totalMemory() * 0.05 / 1024 / 1024))
@@ -829,18 +854,12 @@ public class DatabaseDescriptor
                                                            conf.default_keyspace_rf, conf.minimum_keyspace_rf));
         }
 
-        if (conf.paxos_variant == Config.PaxosVariant.v1_without_linearizable_reads)
-        {
-            logger.warn("This node was started with paxos_variant config option set to v1_norrl. " +
-                        "SERIAL (and LOCAL_SERIAL) reads coordinated by this node " +
-                        "will not offer linearizability (see CASSANDRA-12126 for details on what this mean) with " +
-                        "respect to other SERIAL operations. Please note that, with this option, SERIAL reads will be " +
-                        "slower than QUORUM reads, yet offer no more guarantee. This flag should only be used in " +
-                        "the restricted case of upgrading from a pre-CASSANDRA-12126 version, and only if you " +
-                        "understand the tradeoff.");
-        }
+        if (conf.paxos_repair_parallelism <= 0)
+            conf.paxos_repair_parallelism = Math.max(1, conf.concurrent_writes / 8);
 
         Paxos.setPaxosVariant(conf.paxos_variant);
+        if (conf.paxos_state_purging == null)
+            conf.paxos_state_purging = PaxosStatePurging.legacy;
 
         logInitializationOutcome(logger);
     }
@@ -1709,6 +1728,16 @@ public class DatabaseDescriptor
         conf.truncate_request_timeout_in_ms = timeOutInMillis;
     }
 
+    public static long getRepairRpcTimeout()
+    {
+        return conf.repair_request_timeout_in_ms;
+    }
+
+    public static void setRepairRpcTimeout(Long timeOutInMillis)
+    {
+        conf.repair_request_timeout_in_ms = timeOutInMillis;
+    }
+
     public static boolean hasCrossNodeTimeout()
     {
         return conf.cross_node_timeout;
@@ -2383,6 +2412,131 @@ public class DatabaseDescriptor
         conf.paxos_variant = variant;
     }
 
+    public static String getPaxosContentionWaitRandomizer()
+    {
+        return conf.paxos_contention_wait_randomizer;
+    }
+
+    public static String getPaxosContentionMinWait()
+    {
+        return conf.paxos_contention_min_wait;
+    }
+
+    public static String getPaxosContentionMaxWait()
+    {
+        return conf.paxos_contention_max_wait;
+    }
+
+    public static String getPaxosContentionMinDelta()
+    {
+        return conf.paxos_contention_min_delta;
+    }
+
+    public static void setPaxosContentionWaitRandomizer(String waitRandomizer)
+    {
+        conf.paxos_contention_wait_randomizer = waitRandomizer;
+    }
+
+    public static void setPaxosContentionMinWait(String minWait)
+    {
+        conf.paxos_contention_min_wait = minWait;
+    }
+
+    public static void setPaxosContentionMaxWait(String maxWait)
+    {
+        conf.paxos_contention_max_wait = maxWait;
+    }
+
+    public static void setPaxosContentionMinDelta(String minDelta)
+    {
+        conf.paxos_contention_min_delta = minDelta;
+    }
+
+    public static boolean skipPaxosRepairOnTopologyChange()
+    {
+        return conf.skip_paxos_repair_on_topology_change;
+    }
+
+    public static void setSkipPaxosRepairOnTopologyChange(boolean value)
+    {
+        conf.skip_paxos_repair_on_topology_change = value;
+    }
+
+    public static long getPaxosPurgeGraceSeconds()
+    {
+        return conf.paxos_purge_grace_seconds;
+    }
+
+    public static void setPaxosPurgeGraceSeconds(long v)
+    {
+        conf.paxos_purge_grace_seconds = v;
+    }
+
+    public static boolean rejectPaxosLinearizabilityViolations()
+    {
+        return conf.reject_paxos_linearizability_violations;
+    }
+
+    public static void setRejectPaxosLinearizabilityViolations(boolean v)
+    {
+        conf.reject_paxos_linearizability_violations = v;
+    }
+
+    public static PaxosStatePurging paxosStatePurging()
+    {
+        return conf.paxos_state_purging;
+    }
+
+    public static void setPaxosStatePurging(PaxosStatePurging v)
+    {
+        conf.paxos_state_purging = v;
+    }
+
+    public static boolean paxosRepairEnabled()
+    {
+        return conf.paxos_repair_enabled;
+    }
+
+    public static void setPaxosRepairEnabled(boolean v)
+    {
+        conf.paxos_repair_enabled = v;
+    }
+
+    public static Set<String> skipPaxosRepairOnTopologyChangeKeyspaces()
+    {
+        return conf.skip_paxos_repair_on_topology_change_keyspaces;
+    }
+
+    public static void setSkipPaxosRepairOnTopologyChangeKeyspaces(String keyspaces)
+    {
+        conf.skip_paxos_repair_on_topology_change_keyspaces = Config.splitCommaDelimited(keyspaces);
+    }
+
+    public static boolean paxoTopologyRepairNoDcChecks()
+    {
+        return conf.paxos_topology_repair_no_dc_checks;
+    }
+
+    public static boolean paxoTopologyRepairStrictEachQuorum()
+    {
+        return conf.paxos_topology_repair_strict_each_quorum;
+    }
+
+    public static int getPaxosAutoRepairThresholdMB()
+    {
+        return conf.paxos_auto_repair_threshold_mb;
+    }
+
+    public static void setPaxosAutoRepairThresholdMB(int threshold)
+    {
+        conf.paxos_auto_repair_threshold_mb = threshold;
+    }
+
+    public static boolean getPaxosRepairDisabled()
+    {
+        return conf.disable_paxos_repair;
+    }
+
     public static void setNativeTransportMaxConcurrentRequestsInBytesPerIp(long maxConcurrentRequestsInBytes)
     {
         conf.native_transport_max_concurrent_requests_in_bytes_per_ip = maxConcurrentRequestsInBytes;
@@ -2857,6 +3011,11 @@ public class DatabaseDescriptor
         return conf.row_cache_keys_to_save;
     }
 
+    public static long getPaxosCacheSizeInMB()
+    {
+        return paxosCacheSizeInMB;
+    }
+
     public static long getCounterCacheSizeInMB()
     {
         return counterCacheSizeInMB;
@@ -2973,6 +3132,17 @@ public class DatabaseDescriptor
                         " megabytes is likely to cause heap pressure.");
 
         conf.repair_session_space_in_mb = sizeInMegabytes;
+    }
+
+    public static int getPaxosRepairParallelism()
+    {
+        return conf.paxos_repair_parallelism;
+    }
+
+    public static void setPaxosRepairParallelism(int v)
+    {
+        Preconditions.checkArgument(v > 0);
+        conf.paxos_repair_parallelism = v;
     }
 
     public static Float getMemtableCleanupThreshold()

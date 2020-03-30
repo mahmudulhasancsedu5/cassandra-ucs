@@ -33,7 +33,6 @@ import org.apache.cassandra.db.virtual.VirtualKeyspaceRegistry;
 import org.apache.cassandra.db.virtual.VirtualTable;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.ClientState;
 
 /**
  * A read query that selects a (part of a) single partition of a virtual table.
@@ -177,13 +176,13 @@ public class VirtualTableSinglePartitionReadQuery extends VirtualTableReadQuery 
             return new Group(Collections.singletonList(query), query.limits());
         }
 
-        public PartitionIterator execute(ConsistencyLevel consistency, ClientState clientState, long queryStartNanoTime) throws RequestExecutionException
+        public PartitionIterator execute(ConsistencyLevel consistency, long queryStartNanoTime) throws RequestExecutionException
         {
             if (queries.size() == 1)
-                return queries.get(0).execute(consistency, clientState, queryStartNanoTime);
+                return queries.get(0).execute(consistency, queryStartNanoTime);
 
             return PartitionIterators.concat(queries.stream()
-                                                    .map(q -> q.execute(consistency, clientState, queryStartNanoTime))
+                                                    .map(q -> q.execute(consistency, queryStartNanoTime))
                                                     .collect(Collectors.toList()));
         }
     }

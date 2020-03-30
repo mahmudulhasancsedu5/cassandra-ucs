@@ -252,7 +252,7 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
             query.trackWarnings();
 
         if (aggregationSpec == null && (pageSize <= 0 || (query.limits().count() <= pageSize)))
-            return execute(query, options, state, selectors, nowInSec, userLimit, queryStartNanoTime);
+            return execute(query, options, selectors, nowInSec, userLimit, queryStartNanoTime);
 
         QueryPager pager = getPager(query, options);
 
@@ -295,12 +295,11 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
 
     private ResultMessage.Rows execute(ReadQuery query,
                                        QueryOptions options,
-                                       QueryState state,
                                        Selectors selectors,
                                        int nowInSec,
                                        int userLimit, long queryStartNanoTime) throws RequestValidationException, RequestExecutionException
     {
-        try (PartitionIterator data = query.execute(options.getConsistency(), state.getClientState(), queryStartNanoTime))
+        try (PartitionIterator data = query.execute(options.getConsistency(), queryStartNanoTime))
         {
             return processResults(data, options, selectors, nowInSec, userLimit);
         }
@@ -479,6 +478,50 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
             return pager;
 
         return new AggregationQueryPager(pager, query.limits());
+    }
+
+    public Map<DecoratedKey, List<Row>> executeRawInternal(QueryOptions options, int nowInSec) throws RequestExecutionException, RequestValidationException
+    {
+        int userLimit = getLimit(options);
+        int userPerPartitionLimit = getPerPartitionLimit(options);
+        if (options.getPageSize() > 0)
+            throw new IllegalStateException();
+        if (aggregationSpec != null)
+            throw new IllegalStateException();
+
+        Selectors selectors = selection.newSelectors(options);
+        ReadQuery query = getQuery(options, selectors.getColumnFilter(), nowInSec, userLimit, userPerPartitionLimit, Integer.MAX_VALUE);
+
+        Map<DecoratedKey, List<Row>> result = Collections.emptyMap();
+        try (ReadExecutionController executionController = query.executionController())
+        {
+            try (PartitionIterator data = query.executeInternal(executionController))
+            {
+                while (data.hasNext())
+                {
+                    try (RowIterator in = data.next())
+                    {
+                        List<Row> out = Collections.emptyList();
+                        while (in.hasNext())
+                        {
+                            switch (out.size())
+                            {
+                                case 0:  out = Collections.singletonList(in.next()); break;
+                                case 1:  out = new ArrayList<>(out);
+                                default: out.add(in.next());
+                            }
+                        }
+                        switch (result.size())
+                        {
+                            case 0:  result = Collections.singletonMap(in.partitionKey(), out); break;
+                            case 1:  result = new TreeMap<>(result);
+                            default: result.put(in.partitionKey(), out);
+                        }
+                    }
+                }
+                return result;
+            }
+        }
     }
 
     public ResultSet process(PartitionIterator partitions, int nowInSec) throws InvalidRequestException

@@ -47,6 +47,7 @@ import org.apache.cassandra.utils.concurrent.UncheckedInterruptedException;
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
 import static org.apache.cassandra.net.MessagingService.*;
 
+// TODO: Simulator should schedule based on some streaming data rate
 public class DirectStreamingConnectionFactory
 {
     static class DirectConnection

@@ -1,6 +1,4 @@
-package org.apache.cassandra.service.paxos;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,25 +6,22 @@ package org.apache.cassandra.service.paxos;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
- *   http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- * 
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
+package org.apache.cassandra.service.paxos.v1;
 
-import java.util.Collections;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -36,11 +31,9 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.net.Message;
-import org.apache.cassandra.utils.UUIDGen;
-
-import static java.util.concurrent.TimeUnit.SECONDS;
+import org.apache.cassandra.service.paxos.Commit;
+import org.apache.cassandra.service.paxos.PrepareResponse;
 
 public class PrepareCallback extends AbstractPaxosCallback<PrepareResponse>
 {
@@ -85,27 +78,8 @@ public class PrepareCallback extends AbstractPaxosCallback<PrepareResponse>
         latch.decrement();
     }
 
-    public Iterable<InetAddressAndPort> replicasMissingMostRecentCommit(TableMetadata metadata, int nowInSec)
+    public Iterable<InetAddressAndPort> replicasMissingMostRecentCommit()
     {
-        // In general, we need every replicas that have answered to the prepare (a quorum) to agree on the MRC (see
-        // coment in StorageProxy.beginAndRepairPaxos(), but basically we need to make sure at least a quorum of nodes
-        // have learn a commit before commit a new one otherwise that previous commit is not guaranteed to have reach a
-        // quorum and further commit may proceed on incomplete information).
-        // However, if that commit is too hold, it may have been expired from some of the replicas paxos table (we don't
-        // keep the paxos state forever or that could grow unchecked), and we could end up in some infinite loop as
-        // explained on CASSANDRA-12043. To avoid that, we ignore a MRC that is too old, i.e. older than the TTL we set
-        // on paxos tables. For such old commit, we rely on hints and repair to ensure the commit has indeed be
-        // propagated to all nodes.
-        long paxosTtlSec = SystemKeyspace.paxosTtlSec(metadata);
-        if (mostRecentCommit.ballot.unix(SECONDS) + paxosTtlSec < nowInSec)
-            return Collections.emptySet();
-
-        return Iterables.filter(commitsByReplica.keySet(), new Predicate<InetAddressAndPort>()
-        {
-            public boolean apply(InetAddressAndPort inetAddress)
-            {
-                return (!commitsByReplica.get(inetAddress).ballot.equals(mostRecentCommit.ballot));
-            }
-        });
+        return Iterables.filter(commitsByReplica.keySet(), inetAddress -> (!commitsByReplica.get(inetAddress).ballot.equals(mostRecentCommit.ballot)));
     }
 }

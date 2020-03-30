@@ -27,9 +27,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
-
-
 import org.apache.cassandra.concurrent.ImmediateExecutor;
+import com.google.common.base.Preconditions;
 import org.apache.cassandra.distributed.api.IInvokableInstance;
 import org.apache.cassandra.distributed.api.IMessage;
 import org.apache.cassandra.exceptions.RequestFailureReason;
@@ -175,6 +174,9 @@ public abstract class SimulatedAction extends Action implements InterceptorOfCon
     public SimulatedAction(Object description, Kind kind, OrderOn orderOn, Modifiers self, Modifiers transitive, Map<Verb, Modifiers> verbModifiers, Verb forVerb, SimulatedSystems simulated)
     {
         super(description, orderOn, self, transitive);
+        Preconditions.checkNotNull(kind);
+        Preconditions.checkNotNull(verbModifiers);
+        Preconditions.checkNotNull(simulated);
         this.kind = kind;
         this.simulated = simulated;
         this.verbModifiers = verbModifiers;

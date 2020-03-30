@@ -101,12 +101,11 @@ public class RequestCallbacks implements OutboundMessageCallbacks
     void addWithExpiration(RequestCallback cb, Message message, InetAddressAndPort to)
     {
         // mutations need to call the overload with a ConsistencyLevel
-        assert message.verb() != Verb.MUTATION_REQ && message.verb() != Verb.COUNTER_MUTATION_REQ && message.verb() != Verb.PAXOS_COMMIT_REQ;
+        assert message.verb() != Verb.MUTATION_REQ && message.verb() != Verb.COUNTER_MUTATION_REQ;
         CallbackInfo previous = callbacks.put(key(message.id(), to), new CallbackInfo(message, to, cb));
         assert previous == null : format("Callback already exists for id %d/%s! (%s)", message.id(), to, previous);
     }
 
-    // FIXME: shouldn't need a special overload for writes; hinting should be part of AbstractWriteResponseHandler
     public void addWithExpiration(AbstractWriteResponseHandler<?> cb,
                                   Message<?> message,
                                   Replica to,
@@ -171,14 +170,6 @@ public class RequestCallbacks implements OutboundMessageCallbacks
 
         if (info.invokeOnFailure())
             INTERNAL_RESPONSE.submit(() -> info.callback.onFailure(info.peer, RequestFailureReason.TIMEOUT));
-
-        // FIXME: this has never belonged here, should be part of onFailure() in AbstractWriteResponseHandler
-        if (info.shouldHint())
-        {
-            WriteCallbackInfo writeCallbackInfo = ((WriteCallbackInfo) info);
-            Mutation mutation = writeCallbackInfo.mutation();
-            StorageProxy.submitHint(mutation, writeCallbackInfo.getReplica(), null);
-        }
     }
 
     void shutdownNow(boolean expireCallbacks)

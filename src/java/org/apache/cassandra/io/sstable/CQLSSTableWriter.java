@@ -249,7 +249,7 @@ public class CQLSSTableWriter implements Closeable
                                                        insert.updatedColumns(),
                                                        options,
                                                        insert.getTimestamp(TimeUnit.MILLISECONDS.toMicros(now), options),
-                                                       (int) TimeUnit.MILLISECONDS.toSeconds(now),
+                                                       options.getNowInSec((int) TimeUnit.MILLISECONDS.toSeconds(now)),
                                                        insert.getTimeToLive(options),
                                                        Collections.emptyMap());
 

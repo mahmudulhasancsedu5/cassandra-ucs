@@ -460,7 +460,6 @@ public class BatchStatement implements CQLStatement
                                                    casRequest,
                                                    options.getSerialConsistency(),
                                                    options.getConsistency(),
-                                                   state.getClientState(),
                                                    options.getNowInSeconds(state),
                                                    queryStartNanoTime))
         {

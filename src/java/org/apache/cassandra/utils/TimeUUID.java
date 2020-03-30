@@ -97,11 +97,6 @@ public class TimeUUID implements Serializable, Comparable<TimeUUID>
         return new TimeUUID(unixMicrosToRawTimestamp(unixMicros), uniqueLsb);
     }
 
-    public static TimeUUID atUnixMicrosWithLsb(long unixMicros, long uniqueLsb, boolean isSerial)
-    {
-        return new TimeUUID(unixMicrosToRawTimestamp(unixMicros) + (isSerial ? 2 : 1), uniqueLsb);
-    }
-
     public static UUID atUnixMicrosWithLsbAsUUID(long unixMicros, long uniqueLsb)
     {
         return new UUID(rawTimestampToMsb(unixMicrosToRawTimestamp(unixMicros)), uniqueLsb);

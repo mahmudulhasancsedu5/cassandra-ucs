@@ -50,4 +50,6 @@ public interface ActiveRepairServiceMBean
      * @return current size of the internal cache holding {@link ActiveRepairService.ParentRepairSession} instances
      */
     int parentRepairSessionsCount();
+    public int getPaxosRepairParallelism();
+    public void setPaxosRepairParallelism(int v);
 }

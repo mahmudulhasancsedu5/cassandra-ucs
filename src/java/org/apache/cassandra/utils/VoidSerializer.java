@@ -16,23 +16,19 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.serializers;
+package org.apache.cassandra.utils;
 
-import org.apache.cassandra.db.marshal.ValueAccessor;
+import java.io.IOException;
 
-public class TimeUUIDSerializer extends UUIDSerializer
+import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputPlus;
+
+public class VoidSerializer implements IVersionedSerializer<Void>
 {
-    public static final TimeUUIDSerializer instance = new TimeUUIDSerializer();
-
-    public <V> void validate(V value, ValueAccessor<V> accessor) throws MarshalException
-    {
-        super.validate(value, accessor);
-        // Super class only validates the Time UUID
-        // version is bits 4-7 of byte 6.
-        if (!accessor.isEmpty(value))
-        {
-            if ((accessor.getByte(value, 6) & 0xf0) != 0x10)
-                throw new MarshalException("Invalid version for TimeUUID type.");
-        }
-    }
+    public static final VoidSerializer serializer = new VoidSerializer();
+    private VoidSerializer() {}
+    public void serialize(Void v, DataOutputPlus out, int version) throws IOException {}
+    public Void deserialize(DataInputPlus in, int version) throws IOException { return null; }
+    public long serializedSize(Void v, int version) { return 0; }
 }

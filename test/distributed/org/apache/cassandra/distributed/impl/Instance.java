@@ -117,8 +117,11 @@ import org.apache.cassandra.service.PendingRangeCalculatorService;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.StorageServiceMBean;
+import org.apache.cassandra.service.paxos.PaxosRepair;
+import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.service.reads.trackwarnings.CoordinatorWarnings;
 import org.apache.cassandra.service.snapshot.SnapshotManager;
+import org.apache.cassandra.service.paxos.uncommitted.UncommittedTableData;
 import org.apache.cassandra.streaming.StreamReceiveTask;
 import org.apache.cassandra.streaming.StreamTransferTask;
 import org.apache.cassandra.streaming.async.NettyStreamingChannel;
@@ -313,10 +316,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     private void registerMockMessaging(ICluster<?> cluster)
     {
         MessagingService.instance().outboundSink.push((message, to, type) -> {
-            InetSocketAddress toAddr = fromCassandraInetAddressAndPort(to);
-            IInstance toInstance = cluster.get(toAddr);
-            if (toInstance != null)
-                toInstance.receiveMessage(serializeMessage(message.from(), to, message));
+            cluster.deliverMessage(to, serializeMessage(message.from(), to, message));
             return false;
         });
     }
@@ -342,12 +342,12 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     {
         MessagingService.instance().outboundSink.push((message, to, type) -> {
             if (isShutdown())
-                return false;
+                return false; // TODO: Simulator needs this to trigger a failure
             IMessage serialzied = serializeMessage(message.from(), to, message);
             int fromNum = config.num(); // since this instance is sending the message, from will always be this instance
             IInstance toInstance = cluster.get(fromCassandraInetAddressAndPort(to));
             if (toInstance == null)
-                return false;
+                return false; // TODO: Simulator needs this to trigger a failure
             int toNum = toInstance.config().num();
             return cluster.filters().permitOutbound(fromNum, toNum, serialzied);
         });
@@ -595,6 +595,15 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
                 // Re-populate token metadata after commit log recover (new peers might be loaded onto system keyspace #10293)
                 StorageService.instance.populateTokenMetadata();
 
+                try
+                {
+                    PaxosState.maybeRebuildUncommittedState();
+                }
+                catch (IOException e)
+                {
+                    throw new RuntimeException(e);
+                }
+
                 Verb.HINT_REQ.unsafeSetSerializer(DTestSerializer::new);
 
                 if (config.has(NETWORK))
@@ -636,6 +645,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
                 }
                 else
                 {
+                    SystemKeyspace.setLocalHostId(config.hostId());
                     if (config.has(BLANK_GOSSIP))
                         cluster.stream().forEach(peer -> GossipHelper.statusToBlank((IInvokableInstance) peer).accept(this));
                     else if (cluster instanceof Cluster)
@@ -742,7 +752,9 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
                                 () -> IndexSummaryManager.instance.shutdownAndWait(1L, MINUTES),
                                 () -> ColumnFamilyStore.shutdownExecutorsAndWait(1L, MINUTES),
                                 () -> BufferPools.shutdownLocalCleaner(1L, MINUTES),
+                                () -> PaxosRepair.shutdownAndWait(1L, MINUTES),
                                 () -> Ref.shutdownReferenceReaper(1L, MINUTES),
+                                () -> UncommittedTableData.shutdownAndWait(1L, MINUTES),
                                 () -> Memtable.MEMORY_POOL.shutdownAndWait(1L, MINUTES),
                                 () -> DiagnosticSnapshotService.instance.shutdownAndWait(1L, MINUTES),
                                 () -> SSTableReader.shutdownBlocking(1L, MINUTES),
@@ -955,8 +967,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
 
     private static void shutdownAndWait(List<ExecutorService> executors) throws TimeoutException, InterruptedException
     {
-        ExecutorUtils.shutdownNow(executors);
-        ExecutorUtils.awaitTermination(1L, MINUTES, executors);
+        ExecutorUtils.shutdownNowAndWait(1L, MINUTES, executors);
     }
 
     private static Throwable parallelRun(Throwable accumulate, ExecutorService runOn, ThrowingRunnable ... runnables)

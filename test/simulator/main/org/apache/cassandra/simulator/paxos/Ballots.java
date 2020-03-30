@@ -19,7 +19,6 @@
 package org.apache.cassandra.simulator.paxos;
 
 import java.util.List;
-import java.util.UUID;
 
 import com.google.common.collect.ImmutableList;
 
@@ -45,17 +44,17 @@ import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.simulator.systems.NonInterceptible;
+import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.service.paxos.Commit;
 import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Shared;
-import org.apache.cassandra.utils.TimeUUID;
-import org.apache.cassandra.utils.UUIDGen;
 
 import static java.lang.Long.max;
 import static java.util.Arrays.stream;
 import static org.apache.cassandra.db.SystemKeyspace.loadPaxosState;
-import static org.apache.cassandra.service.paxos.Commit.isAfter;
+import static org.apache.cassandra.service.paxos.Commit.latest;
+import static org.apache.cassandra.service.paxos.PaxosState.unsafeGetIfPresent;
 import static org.apache.cassandra.utils.Shared.Scope.SIMULATION;
 
 public class Ballots
@@ -99,18 +98,19 @@ public class Ballots
     public static LatestBallots read(DecoratedKey key, TableMetadata metadata, int nowInSec, boolean includeEmptyProposals)
     {
         return NonInterceptible.apply(() -> {
-              PaxosState state = loadPaxosState(key, metadata, nowInSec);
-              TimeUUID promised = state.promised.ballot;
-              Commit accepted = isAfter(state.accepted, state.mostRecentCommit) ? null : state.accepted;
-              Commit committed = state.mostRecentCommit;
-              long baseTable = latestBallotFromBaseTable(key, metadata);
-              return new LatestBallots(
-              promised.unixMicros(),
-              accepted == null || accepted.update.isEmpty() ? 0L : latestBallot(accepted.update),
-              latestBallot(committed.update),
-              baseTable
-              );
-          });
+            PaxosState.Snapshot state = unsafeGetIfPresent(key, metadata);
+            PaxosState.Snapshot persisted = loadPaxosState(key, metadata, nowInSec);
+            TimeUUID promised = latest(persisted.promised, state == null ? null : state.promised);
+            Commit.Accepted accepted = latest(persisted.accepted, state == null ? null : state.accepted);
+            Commit.Committed committed = latest(persisted.committed, state == null ? null : state.committed);
+            long baseTable = latestBallotFromBaseTable(key, metadata);
+            return new LatestBallots(
+                promised.unixMicros(),
+                accepted == null || accepted.update.isEmpty() ? 0L : latestBallot(accepted.update),
+                latestBallot(committed.update),
+                baseTable
+            );
+        });
     }
 
     static LatestBallots[][] read(Cluster cluster, String keyspace, String table, int[] primaryKeys, int[][] replicasForKeys, boolean includeEmptyProposals)
@@ -136,13 +136,15 @@ public class Ballots
     public static String paxosDebugInfo(DecoratedKey key, TableMetadata metadata, int nowInSec)
     {
         return NonInterceptible.apply(() -> {
-            PaxosState paxosTable = loadPaxosState(key, metadata, nowInSec);
-            long[] paxosMemtable = latestBallotsFromPaxosMemtable(key, metadata);
+            PaxosState.Snapshot state = unsafeGetIfPresent(key, metadata);
+            PaxosState.Snapshot persisted = loadPaxosState(key, metadata, nowInSec);
+            long[] memtable = latestBallotsFromPaxosMemtable(key, metadata);
+            PaxosState.Snapshot cache = state == null ? persisted : state;
             long baseTable = latestBallotFromBaseTable(key, metadata);
             long baseMemtable = latestBallotFromBaseMemtable(key, metadata);
-            return debugBallot(null, paxosMemtable[0], paxosTable.promised) + ", "
-                   + debugBallot(null, paxosMemtable[1], paxosTable.accepted) + ", "
-                   + debugBallot(null, paxosMemtable[2], paxosTable.mostRecentCommit) + ", "
+            return debugBallot(cache.promised, memtable[0], persisted.promised) + ", "
+                   + debugBallot(cache.accepted, memtable[1], persisted.accepted) + ", "
+                   + debugBallot(cache.committed, memtable[2], persisted.committed) + ", "
                    + debugBallot(baseMemtable, 0L, baseTable);
         });
     }

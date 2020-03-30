@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 
 import org.slf4j.Logger;
@@ -46,6 +47,20 @@ public class Config
 {
     private static final Logger logger = LoggerFactory.getLogger(Config.class);
 
+    public static Set<String> splitCommaDelimited(String src)
+    {
+        if (src == null)
+            return ImmutableSet.of();
+        String[] split = src.split(",\\s*");
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        for (String s : split)
+        {
+            s = s.trim();
+            if (!s.isEmpty())
+                builder.add(s);
+        }
+        return builder.build();
+    }
     /*
      * Prefix for Java properties for internal Cassandra configuration options
      */
@@ -107,9 +122,12 @@ public class Config
 
     public volatile long counter_write_request_timeout_in_ms = 5000L;
 
+    // TODO (next): bump to 1800L
     public volatile long cas_contention_timeout_in_ms = 1000L;
 
     public volatile long truncate_request_timeout_in_ms = 60000L;
+
+    public volatile Long repair_request_timeout_in_ms = 120000L;
 
     public Integer streaming_connections_per_host = 1;
     public Integer streaming_keep_alive_period_in_secs = 300; //5 minutes
@@ -620,9 +638,64 @@ public class Config
     public enum PaxosVariant
     {
         v1_without_linearizable_reads, // with legacy semantics for read/read linearizability (i.e. not guaranteed)
-        v1
+        v1,
+        v2_without_linearizable_reads, // with legacy semantics for read/read linearizability (i.e. not guaranteed)
+        v2_without_linearizable_reads_or_failed_writes, // with legacy semantics for read/read linearizability (i.e. not guaranteed)
+        v2 // provides read/read linearizability, doesn't incur an extra round-trip if no contending paxos operation is detected
+    }
+
+
+    public enum PaxosStatePurging
+    {
+        legacy, // writes with TTLs; once transitioned from cannot be returned to
+        gc_grace, // similar to legacy, but performed at compaction rather than at write time so can be used at any time
+        repaired; // only purge state once we're certain paxos state has been agreed by a quorum
+
+        public static PaxosStatePurging fromBoolean(boolean enabled)
+        {
+            return enabled ? repaired : gc_grace;
+        }
     }
     public volatile PaxosVariant paxos_variant = PaxosVariant.v1;
+
+    public volatile boolean skip_paxos_repair_on_topology_change = Boolean.getBoolean("cassandra.skip_paxos_repair_on_topology_change");
+
+    public volatile long paxos_purge_grace_seconds = TimeUnit.SECONDS.toMicros(Long.getLong("cassandra.paxos_purge_grace_seconds", 60));
+
+    public volatile boolean reject_paxos_linearizability_violations = false;
+
+    public volatile PaxosStatePurging paxos_state_purging;
+
+    public volatile boolean paxos_repair_enabled = true;
+
+    /**
+     * If true, paxos topology change repair only requires a global quorum of live nodes. If false,
+     * it requires a global quorum as well as a local quorum for each dc (EACH_QUORUM), with the
+     * exception explained in paxos_topology_repair_strict_each_quorum
+     */
+    public boolean paxos_topology_repair_no_dc_checks = false;
+
+    /**
+     * If true, a quorum will be required for the global and local quorum checks. If false, we will
+     * accept a quorum OR n - 1 live nodes. This is to allow for topologies like 2:2:2, where paxos queries
+     * always use SERIAL, and a single node down in a dc should not preclude a paxos repair
+     */
+    public boolean paxos_topology_repair_strict_each_quorum = false;
+    public volatile Set<String> skip_paxos_repair_on_topology_change_keyspaces = splitCommaDelimited(System.getProperty("cassandra.skip_paxos_repair_on_topology_change_keyspaces"));
+
+    public String paxos_contention_wait_randomizer;
+    public String paxos_contention_min_wait;
+    public String paxos_contention_max_wait;
+    public String paxos_contention_min_delta;
+
+    /**
+     * The amount of disk space paxos uncommitted key files can consume before we begin automatically scheduling paxos repairs
+     */
+    public volatile int paxos_auto_repair_threshold_mb = 32;
+    public volatile int paxos_repair_parallelism = -1;
+
+    @Deprecated
+    public Boolean disable_paxos_repair = null;
 
     public static Supplier<Config> getOverrideLoadConfig()
     {

@@ -18,7 +18,6 @@
 package org.apache.cassandra.net;
 
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
-import java.util.function.BiPredicate;
 
 import org.apache.cassandra.locator.InetAddressAndPort;
 

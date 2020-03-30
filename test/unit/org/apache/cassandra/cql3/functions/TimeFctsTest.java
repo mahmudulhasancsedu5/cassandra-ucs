@@ -26,7 +26,6 @@ import java.util.List;
 
 import org.junit.Test;
 
-import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;

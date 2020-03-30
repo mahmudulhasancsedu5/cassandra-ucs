@@ -81,9 +81,9 @@ import org.apache.cassandra.distributed.api.IUpgradeableInstance;
 import org.apache.cassandra.distributed.api.LogAction;
 import org.apache.cassandra.distributed.api.NodeToolResult;
 import org.apache.cassandra.distributed.api.TokenSupplier;
+import org.apache.cassandra.distributed.impl.MessageFilters;
 import org.apache.cassandra.distributed.shared.InstanceClassLoader;
 import org.apache.cassandra.utils.Isolated;
-import org.apache.cassandra.distributed.shared.MessageFilters;
 import org.apache.cassandra.distributed.shared.Metrics;
 import org.apache.cassandra.distributed.shared.NetworkTopology;
 import org.apache.cassandra.utils.Shared;
@@ -207,7 +207,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
         protected IInvokableInstance delegate()
         {
             if (delegate == null)
-                throw new IllegalStateException("Can't use shut down instances, delegate is null");
+                throw new IllegalStateException("Can't use shutdown instances, delegate is null");
             return delegate;
         }
 

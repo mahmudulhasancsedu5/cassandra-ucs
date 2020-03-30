@@ -77,6 +77,7 @@ import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.security.ThreadAwareSecurityManager;
+import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JMXServerUtils;
 import org.apache.cassandra.utils.JVMStabilityInspector;
@@ -352,6 +353,9 @@ public class CassandraDaemon
         }
 
         // Replay any CommitLogSegments found on disk
+        PaxosState.initializeTrackers();
+
+        // replay the log if necessary
         try
         {
             CommitLog.instance.recoverSegmentsOnDisk();
@@ -363,6 +367,16 @@ public class CassandraDaemon
 
         // Re-populate token metadata after commit log recover (new peers might be loaded onto system keyspace #10293)
         StorageService.instance.populateTokenMetadata();
+
+        // TODO (merge): should ActiveRepairService startup go here?
+        try
+        {
+            PaxosState.maybeRebuildUncommittedState();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
 
         SystemKeyspace.finishStartup();
 

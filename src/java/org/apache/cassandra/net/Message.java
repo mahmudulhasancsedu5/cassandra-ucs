@@ -45,7 +45,6 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.ReplicaPlan;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.tracing.Tracing.TraceType;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MonotonicClockTranslation;
 import org.apache.cassandra.utils.NoSpamLogger;
 import org.apache.cassandra.utils.TimeUUID;
@@ -59,6 +58,7 @@ import static org.apache.cassandra.net.MessagingService.VERSION_3014;
 import static org.apache.cassandra.net.MessagingService.VERSION_30;
 import static org.apache.cassandra.net.MessagingService.VERSION_40;
 import static org.apache.cassandra.net.MessagingService.instance;
+import static org.apache.cassandra.utils.FBUtilities.getBroadcastAddressAndPort;
 import static org.apache.cassandra.utils.MonotonicClock.Global.approxTime;
 import static org.apache.cassandra.utils.vint.VIntCoding.computeUnsignedVIntSize;
 import static org.apache.cassandra.utils.vint.VIntCoding.getUnsignedVInt;
@@ -78,7 +78,7 @@ public class Message<T>
     public final Header header;
     public final T payload;
 
-    private Message(Header header, T payload)
+    Message(Header header, T payload)
     {
         this.header = header;
         this.payload = payload;
@@ -93,7 +93,7 @@ public class Message<T>
     /** Whether the message has crossed the node boundary, that is whether it originated from another node. */
     public boolean isCrossNode()
     {
-        return !from().equals(FBUtilities.getBroadcastAddressAndPort());
+        return !from().equals(getBroadcastAddressAndPort());
     }
 
     /**
@@ -127,6 +127,11 @@ public class Message<T>
     public long expiresAtNanos()
     {
         return header.expiresAtNanos;
+    }
+
+    public long sendAtNanos()
+    {
+        return createdAtNanos();
     }
 
     /** For how long the message has lived. */
@@ -203,6 +208,11 @@ public class Message<T>
         return outWithParam(nextId(), verb, payload, null, null);
     }
 
+    public static <T> Message<T> synthetic(InetAddressAndPort from, Verb verb, T payload)
+    {
+        return new Message<>(new Header(-1, verb, from, -1, -1, 0, NO_PARAMS), payload);
+    }
+
     public static <T> Message<T> out(Verb verb, T payload, long expiresAtNanos)
     {
         return outWithParam(nextId(), verb, expiresAtNanos, payload, 0, null, null);
@@ -220,6 +230,7 @@ public class Message<T>
         return outWithParam(nextId(), verb, 0, payload, flag2.addTo(flag1.addTo(0)), null, null);
     }
 
+    @VisibleForTesting
     static <T> Message<T> outWithParam(long id, Verb verb, T payload, ParamType paramType, Object paramValue)
     {
         return outWithParam(id, verb, 0, payload, paramType, paramValue);
@@ -232,10 +243,14 @@ public class Message<T>
 
     private static <T> Message<T> outWithParam(long id, Verb verb, long expiresAtNanos, T payload, int flags, ParamType paramType, Object paramValue)
     {
+        return withParam(getBroadcastAddressAndPort(), id, verb, expiresAtNanos, payload, flags, paramType, paramValue);
+    }
+
+    private static <T> Message<T> withParam(InetAddressAndPort from, long id, Verb verb, long expiresAtNanos, T payload, int flags, ParamType paramType, Object paramValue)
+    {
         if (payload == null)
             throw new IllegalArgumentException();
 
-        InetAddressAndPort from = FBUtilities.getBroadcastAddressAndPort();
         long createdAtNanos = approxTime.now();
         if (expiresAtNanos == 0)
             expiresAtNanos = verb.expiresAtNanos(createdAtNanos);
@@ -278,7 +293,7 @@ public class Message<T>
         return new Message<>(header.withFlag(MessageFlag.ARTIFICIAL_LATENCY), payload);
     }
 
-    public Message<T> maybePermitArtificialLatency(ReplicaPlan<?> replicaPlan)
+    public Message<T> maybePermitArtificialLatency(ReplicaPlan<?, ?> replicaPlan)
     {
         return maybePermitArtificialLatency(replicaPlan.consistencyLevel());
     }
@@ -294,6 +309,11 @@ public class Message<T>
                 return permitArtificialLatency();
         }
         return this;
+    }
+
+    public <V> Message<V> withPayload(V newPayload)
+    {
+        return new Message<>(header, newPayload);
     }
 
     Message<T> withCallBackOnFailure()
@@ -483,7 +503,9 @@ public class Message<T>
         @Nullable
         InetAddressAndPort respondTo()
         {
-            return (InetAddressAndPort) params.get(ParamType.RESPOND_TO);
+            InetAddressAndPort respondTo = (InetAddressAndPort) params.get(ParamType.RESPOND_TO);
+            if (respondTo == null) respondTo = from;
+            return respondTo;
         }
 
         @Nullable
@@ -582,7 +604,7 @@ public class Message<T>
             if (expiresAtNanos == 0 && verb != null && createdAtNanos != 0)
                 expiresAtNanos = verb.expiresAtNanos(createdAtNanos);
             if (!this.verb.isResponse() && from == null) // default to sending from self if we're a request verb
-                from = FBUtilities.getBroadcastAddressAndPort();
+                from = getBroadcastAddressAndPort();
             return this;
         }
 
@@ -843,7 +865,7 @@ public class Message<T>
         {
             serializeHeaderPost40(message.header, out, version);
             out.writeUnsignedVInt(message.payloadSize(version));
-            message.getPayloadSerializer().serialize(message.payload, out, version);
+            message.verb().serializer().serialize(message.payload, out, version);
         }
 
         private <T> Message<T> deserializePost40(DataInputPlus in, InetAddressAndPort peer, int version) throws IOException

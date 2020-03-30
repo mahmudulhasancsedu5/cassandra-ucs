@@ -72,7 +72,7 @@ abstract class AbstractQueryPager<T extends ReadQuery> implements QueryPager
             exhausted = true;
             return EmptyIterators.partition();
         }
-        return Transformation.apply(readQuery.execute(consistency, clientState, queryStartNanoTime), pager);
+        return Transformation.apply(readQuery.execute(consistency, queryStartNanoTime), pager);
     }
 
     public PartitionIterator fetchPageInternal(int pageSize, ReadExecutionController executionController)

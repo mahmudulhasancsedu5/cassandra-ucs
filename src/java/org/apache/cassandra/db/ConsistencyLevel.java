@@ -20,6 +20,7 @@ package org.apache.cassandra.db;
 
 import com.carrotsearch.hppc.ObjectIntHashMap;
 import org.apache.cassandra.locator.Endpoints;
+import org.apache.cassandra.locator.InOurDc;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.exceptions.InvalidRequestException;
@@ -28,7 +29,6 @@ import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.transport.ProtocolException;
 
 import static org.apache.cassandra.locator.Replicas.addToCountPerDc;
-import static org.apache.cassandra.locator.Replicas.countInOurDc;
 
 public enum ConsistencyLevel
 {
@@ -184,7 +184,7 @@ public enum ConsistencyLevel
             case UNSAFE_DELAY_LOCAL_QUORUM: case LOCAL_QUORUM:
             case UNSAFE_DELAY_LOCAL_SERIAL: case LOCAL_SERIAL:
                 // we will only count local replicas towards our response count, as these queries only care about local guarantees
-                blockFor += countInOurDc(pending).allReplicas();
+                blockFor += pending.count(InOurDc.replicas());
                 break;
             case ONE: case TWO: case THREE:
             case UNSAFE_DELAY_QUORUM: case QUORUM:
