@@ -274,8 +274,7 @@ public final class AtomicBTreePartition extends AbstractBTreePartition
         if (!writeOp.isOldestLiveGroup())
         {
             Thread.yield();
-            if (!writeOp.isOldestLiveGroup())
-                return false;
+            return writeOp.isOldestLiveGroup();
         }
 
         return true;
@@ -370,7 +369,7 @@ public final class AtomicBTreePartition extends AbstractBTreePartition
             indexer.onInserted(insert);
 
             this.dataSize += data.dataSize();
-            this.heapSize += data.unsharedHeapSizeExcludingData();
+            this.allocated(data.unsharedHeapSizeExcludingData());
             if (inserted == null)
                 inserted = new ArrayList<>();
             inserted.add(data);
@@ -387,7 +386,7 @@ public final class AtomicBTreePartition extends AbstractBTreePartition
             indexer.onUpdated(existing, reconciled);
 
             dataSize += reconciled.dataSize() - existing.dataSize();
-            heapSize += reconciled.unsharedHeapSizeExcludingData() - existing.unsharedHeapSizeExcludingData();
+            this.allocated(reconciled.unsharedHeapSizeExcludingData() - existing.unsharedHeapSizeExcludingData());
             if (inserted == null)
                 inserted = new ArrayList<>();
             inserted.add(reconciled);
