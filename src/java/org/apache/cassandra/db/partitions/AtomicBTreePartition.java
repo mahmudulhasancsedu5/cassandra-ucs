@@ -141,6 +141,7 @@ public final class AtomicBTreePartition extends AbstractBTreePartition
                         : (current.staticRow.isEmpty() ? updater.apply(newStatic) : updater.apply(current.staticRow, newStatic));
         Object[] tree = BTree.update(current.tree, update.metadata().comparator, update, update.rowCount(), updater);
         EncodingStats newStats = current.stats.mergeWith(update.stats());
+        updater.allocated(newStats.unsharedHeapSize() - current.stats.unsharedHeapSize());
 
         if (tree != null && refUpdater.compareAndSet(this, current, new Holder(columns, tree, deletionInfo, staticRow, newStats)))
         {
