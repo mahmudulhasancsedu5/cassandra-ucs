@@ -161,7 +161,9 @@ public class BlockingPartitionRepair
 
             Tracing.trace("Sending read-repair-mutation to {}", destination);
             // use a separate verb here to avoid writing hints on timeouts
-            sendRR(Message.out(READ_REPAIR_REQ, mutation), destination.endpoint());
+            sendRR(Message.out(READ_REPAIR_REQ, mutation)
+                          .maybePermitArtificialLatency(writePlan),
+                   destination.endpoint());
             ColumnFamilyStore.metricsFor(tableId).readRepairRequests.mark();
 
             if (!shouldBlockOn.test(destination.endpoint()))
@@ -242,7 +244,9 @@ public class BlockingPartitionRepair
             }
 
             Tracing.trace("Sending speculative read-repair-mutation to {}", replica);
-            sendRR(Message.out(READ_REPAIR_REQ, mutation), replica.endpoint());
+            sendRR(Message.out(READ_REPAIR_REQ, mutation)
+                          .maybePermitArtificialLatency(writePlan),
+                   replica.endpoint());
             ReadRepairDiagnostics.speculatedWrite(this, replica.endpoint(), mutation);
         }
     }

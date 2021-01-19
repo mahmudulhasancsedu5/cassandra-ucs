@@ -35,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.io.IVersionedAsymmetricSerializer;
 import org.apache.cassandra.io.IVersionedSerializer;
@@ -42,6 +43,7 @@ import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.locator.ReplicaPlan;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.tracing.Tracing.TraceType;
 import org.apache.cassandra.utils.FBUtilities;
@@ -250,7 +252,8 @@ public class Message<T>
     /** Builds a response Message with provided payload, and all the right fields inferred from request Message */
     public <T> Message<T> responseWith(T payload)
     {
-        return outWithParam(id(), verb().responseVerb, expiresAtNanos(), payload, null, null);
+        return outWithParam(id(), verb().responseVerb, expiresAtNanos(), payload,
+                            header.permitsArtificialLatency() ? MessageFlag.ARTIFICIAL_LATENCY.addTo(0) : 0, null, null);
     }
 
     /** Builds a response Message with no payload, and all the right fields inferred from request Message */
@@ -268,6 +271,29 @@ public class Message<T>
     static Message<RequestFailureReason> failureResponse(long id, long expiresAtNanos, RequestFailureReason reason)
     {
         return outWithParam(id, Verb.FAILURE_RSP, expiresAtNanos, reason, null, null);
+    }
+
+    Message<T> permitArtificialLatency()
+    {
+        return new Message<>(header.withFlag(MessageFlag.ARTIFICIAL_LATENCY), payload);
+    }
+
+    public Message<T> maybePermitArtificialLatency(ReplicaPlan<?> replicaPlan)
+    {
+        return maybePermitArtificialLatency(replicaPlan.consistencyLevel());
+    }
+
+    public Message<T> maybePermitArtificialLatency(ConsistencyLevel consistencyLevel)
+    {
+        switch (consistencyLevel)
+        {
+            case UNSAFE_DELAY_LOCAL_QUORUM:
+            case UNSAFE_DELAY_LOCAL_SERIAL:
+            case UNSAFE_DELAY_QUORUM:
+            case UNSAFE_DELAY_SERIAL:
+                return permitArtificialLatency();
+        }
+        return this;
     }
 
     Message<T> withCallBackOnFailure()
@@ -441,6 +467,11 @@ public class Message<T>
         boolean trackWarnings()
         {
             return MessageFlag.TRACK_WARNINGS.isIn(flags);
+        }
+
+        boolean permitsArtificialLatency()
+        {
+            return MessageFlag.ARTIFICIAL_LATENCY.isIn(flags);
         }
 
         @Nullable
