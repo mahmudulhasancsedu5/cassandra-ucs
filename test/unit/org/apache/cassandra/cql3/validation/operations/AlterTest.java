@@ -20,6 +20,7 @@ package org.apache.cassandra.cql3.validation.operations;
 import java.util.UUID;
 
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -27,6 +28,7 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.memtable.Memtable;
+import org.apache.cassandra.db.memtable.ShardedSkipListMemtable;
 import org.apache.cassandra.db.memtable.SkipListMemtable;
 import org.apache.cassandra.db.memtable.TestMemtable;
 import org.apache.cassandra.dht.OrderPreservingPartitioner;
@@ -50,6 +52,15 @@ import static org.junit.Assert.fail;
 
 public class AlterTest extends CQLTester
 {
+    @BeforeClass
+    public static void setUpClass()
+    {
+        // AlterTest uses Murmur3 partitioner, but injects OrderPreservingPartitioner.StringToken
+        // into TokenMetadata; expect trouble
+        System.setProperty(ShardedSkipListMemtable.SHARD_COUNT_PROPERTY, "1");
+        CQLTester.setUpClass();
+    }
+
     @Test
     public void testAddList() throws Throwable
     {

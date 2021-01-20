@@ -135,10 +135,10 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         // close to the 2G limit.
         int v = allocatedPos;
         if (inChunkPointer(v) == 0)
-            {
+        {
             int leadBit = getChunkIdx(v, BUF_START_SHIFT, BUF_START_SIZE);
             if (leadBit == 31)
-                        throw new SpaceExhaustedException();
+                throw new SpaceExhaustedException();
 
             assert buffers[leadBit] == null;
             ByteBuffer newBuffer = bufferType.allocate(BUF_START_SIZE << leadBit);
@@ -167,7 +167,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             contentArrays[leadBit] = array = new AtomicReferenceArray<>(CONTENTS_START_SIZE << leadBit);
         }
         array.lazySet(ofs, value); // no need for a volatile set here; at this point the item is not referenced
-                                            // by any node in the trie, and a volatile set will be made to reference it.
+                                   // by any node in the trie, and a volatile set will be made to reference it.
         return index;
     }
 
@@ -977,9 +977,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     public long sizeOnHeap()
     {
         return contentCount * MemoryLayoutSpecification.SPEC.getReferenceSize() +
-               ObjectSizes.sizeOfEmptyByteArray() * getChunkIdx(contentCount, CONTENTS_START_SHIFT, CONTENTS_START_SIZE) +
+               MemoryLayoutSpecification.sizeOfArray(0, 1) * getChunkIdx(contentCount, CONTENTS_START_SHIFT, CONTENTS_START_SIZE) +
                (bufferType == BufferType.ON_HEAP ? allocatedPos + EMPTY_SIZE_ON_HEAP : EMPTY_SIZE_OFF_HEAP) +
-               ObjectSizes.sizeOfEmptyByteArray() * getChunkIdx(allocatedPos, BUF_START_SHIFT, BUF_START_SIZE);
+               MemoryLayoutSpecification.sizeOfArray(0, 1) * getChunkIdx(allocatedPos, BUF_START_SHIFT, BUF_START_SIZE);
     }
 
     @Override

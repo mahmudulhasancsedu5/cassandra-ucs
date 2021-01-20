@@ -197,6 +197,7 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
     }
 
     public abstract ByteBuffer getKey();
+    public abstract int getKeyLength();
 
     public void filterHash(long[] dest)
     {

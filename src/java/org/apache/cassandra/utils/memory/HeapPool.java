@@ -54,7 +54,7 @@ public class HeapPool extends MemtablePool
 
         public EnsureOnHeap ensureOnHeap()
         {
-            return ENSURE_NOOP;
+            return EnsureOnHeap.NOOP;
         }
     }
 
