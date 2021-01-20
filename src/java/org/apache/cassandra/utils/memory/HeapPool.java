@@ -20,7 +20,6 @@ package org.apache.cassandra.utils.memory;
 
 import java.nio.ByteBuffer;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public class HeapPool extends MemtablePool
@@ -32,7 +31,7 @@ public class HeapPool extends MemtablePool
         super(maxOnHeapMemory, 0, cleanupThreshold, cleaner);
     }
 
-    public MemtableAllocator newAllocator(ColumnFamilyStore table)
+    public MemtableAllocator newAllocator(String table)
     {
         return new Allocator(this);
     }
@@ -90,9 +89,9 @@ public class HeapPool extends MemtablePool
             super(maxOnHeapMemory, 0, cleanupThreshold, cleaner);
         }
 
-        public MemtableAllocator newAllocator(ColumnFamilyStore cfs)
+        public MemtableAllocator newAllocator(String table)
         {
-            return new Allocator(this, cfs == null ? "" : cfs.keyspace.getName() + '.' + cfs.name);
+            return new Allocator(this, table);
         }
 
         private static class Allocator extends MemtableBufferAllocator

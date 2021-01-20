@@ -424,7 +424,7 @@ public class Keyspace
     // disassociate a cfs from this keyspace instance.
     private void unloadCf(ColumnFamilyStore cfs)
     {
-        cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.DROP);
+        cfs.unloadCf();
         cfs.invalidate();
     }
 

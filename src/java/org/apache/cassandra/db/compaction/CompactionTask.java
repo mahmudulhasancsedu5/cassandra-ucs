@@ -122,7 +122,7 @@ public class CompactionTask extends AbstractCompactionTask
         {
             long epochMilli = currentTimeMillis();
             Instant creationTime = Instant.ofEpochMilli(epochMilli);
-            cfs.snapshotWithoutFlush(epochMilli + "-compact-" + cfs.name, creationTime);
+            cfs.snapshotWithoutMemtable(epochMilli + "-compact-" + cfs.name, creationTime);
         }
 
         try (CompactionController controller = getCompactionController(transaction.originals()))
