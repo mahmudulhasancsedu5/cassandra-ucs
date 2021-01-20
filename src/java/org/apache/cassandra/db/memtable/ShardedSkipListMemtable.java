@@ -41,6 +41,7 @@ import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.AbstractUnfilteredPartitionIterator;
 import org.apache.cassandra.db.partitions.AtomicBTreePartition;
+import org.apache.cassandra.db.partitions.BTreePartitionUpdater;
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
@@ -389,14 +390,14 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
                 }
             }
 
-            long[] pair = previous.addAllWithSizeDelta(update, cloner, opGroup, indexer);
+            BTreePartitionUpdater updater = previous.addAll(update, cloner, opGroup, indexer);
             updateMin(minTimestamp, update.stats().minTimestamp);
             updateMin(minLocalDeletionTime, update.stats().minLocalDeletionTime);
-            liveDataSize.addAndGet(initialSize + pair[0]);
+            liveDataSize.addAndGet(initialSize + updater.dataSize);
             columnsCollector.update(update.columns());
             statsCollector.update(update.stats());
             currentOperations.addAndGet(update.operationCount());
-            return pair[1];
+            return updater.colUpdateTimeDelta;
         }
 
         private Map<PartitionPosition, AtomicBTreePartition> getPartitionsSubMap(PartitionPosition left,

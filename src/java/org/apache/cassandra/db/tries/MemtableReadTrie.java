@@ -206,6 +206,8 @@ public class MemtableReadTrie<T> extends Trie<T>
 
      Note that a buffer is not allowed to split 32-byte blocks (code assumes same buffer can be used for all bytes
      inside the block).
+
+     TODO: implement delay and retry on space hitting the 2GB barrier.
      */
 
     static final int BUF_START_SHIFT = 8;

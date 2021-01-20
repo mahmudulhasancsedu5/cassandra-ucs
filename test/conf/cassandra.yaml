@@ -70,11 +70,12 @@ memtable:
         skiplist:
             inherits: default
             class_name: SkipListMemtable
+        trie:
+            class_name: TrieMemtable
         skiplist_sharded:
             class_name: ShardedSkipListMemtable
             parameters:
                 serialize_writes: false
-                shards: 4
         skiplist_sharded_locking:
             inherits: skiplist_sharded
             parameters:
