@@ -65,6 +65,8 @@ track_warnings:
         warn_threshold_kb: 4096
         abort_threshold_kb: 8192
 memtable_templates:
+    trie:
+        class: TrieMemtable
     skiplist:
         class: SkipListMemtable
 memtable:
