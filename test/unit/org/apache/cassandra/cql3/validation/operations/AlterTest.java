@@ -19,6 +19,7 @@ package org.apache.cassandra.cql3.validation.operations;
 
 import java.util.UUID;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -26,7 +27,7 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.memtable.SkipListMemtable;
-import org.apache.cassandra.db.memtable.TestMemtable;
+import org.apache.cassandra.db.memtable.TrieMemtable;
 import org.apache.cassandra.dht.OrderPreservingPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
@@ -47,6 +48,15 @@ import static org.junit.Assert.fail;
 
 public class AlterTest extends CQLTester
 {
+    @BeforeClass
+    public static void setUpClass()
+    {
+        // AlterTest uses Murmur3 partitioner, but injects OrderPreservingPartitioner.StringToken
+        // into TokenMetadata; expect trouble
+        System.setProperty(TrieMemtable.SHARD_COUNT_PROPERTY, "1");
+        CQLTester.setUpClass();
+    }
+
     @Test
     public void testAddList() throws Throwable
     {
@@ -593,20 +603,19 @@ public class AlterTest extends CQLTester
                    row(map("class", "SkipListMemtable")));
 
         alterTable("ALTER TABLE %s"
-                   + " WITH memtable = { 'class' : '" + TestMemtable.class.getName() + "'};");
-        assertSame(TestMemtable.FACTORY, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
-        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof SkipListMemtable);
+                    + " WITH memtable = { 'class' : 'org.apache.cassandra.db.memtable.TrieMemtable' };");
+        assertSame(TrieMemtable.FACTORY, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
                                   SchemaKeyspaceTables.TABLES),
                            KEYSPACE,
                            currentTable()),
-                   row(map("class", TestMemtable.class.getName())));
+                   row(map("class", "org.apache.cassandra.db.memtable.TrieMemtable")));
 
         alterTable("ALTER TABLE %s"
-                   + " WITH memtable = { 'class' : '" + TestMemtable.class.getName() + "', 'skiplist' : 'true' };");
-        assertSame(SkipListMemtable.FACTORY, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+                    + " WITH memtable = { 'class' : '" + CreateTest.TestMemtableFactory.class.getName() + "', 'skiplist' : 'true' };");
         assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof SkipListMemtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
@@ -614,7 +623,7 @@ public class AlterTest extends CQLTester
                                   SchemaKeyspaceTables.TABLES),
                            KEYSPACE,
                            currentTable()),
-                   row(map("class", TestMemtable.class.getName(),
+                   row(map("class", CreateTest.TestMemtableFactory.class.getName(),
                            "skiplist", "true")));
 
         alterTable("ALTER TABLE %s"
@@ -629,6 +638,17 @@ public class AlterTest extends CQLTester
                    row(map()));
 
         // Use templates defined in test/cassandra.yaml
+        alterTable("ALTER TABLE %s"
+                    + " WITH memtable = {'template' : 'trie'};");
+        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+
+        assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaConstants.SCHEMA_KEYSPACE_NAME,
+                                  SchemaKeyspaceTables.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("template", "trie")));
+
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = {'template' : 'skiplist'};");
         assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof SkipListMemtable);
@@ -653,7 +673,7 @@ public class AlterTest extends CQLTester
         assertAlterTableThrowsException(ConfigurationException.class,
                                         "Options {invalid=throw} not expected.",
                                         "ALTER TABLE %s"
-                                        + " WITH memtable = { 'class' : '" + TestMemtable.class.getName() + "', 'invalid' : 'throw' };");
+                                        + " WITH memtable = { 'class' : '" + CreateTest.TestMemtableFactory.class.getName() + "', 'invalid' : 'throw' };");
 
         assertAlterTableThrowsException(ConfigurationException.class,
                                         "Memtable template unknown not found.",
@@ -661,9 +681,9 @@ public class AlterTest extends CQLTester
                                         + " WITH memtable = { 'template' : 'unknown' };");
 
         assertAlterTableThrowsException(ConfigurationException.class,
-                                        "When a memtable template is specified no other parameters can be given, was {template=skiplist, invalid=throw}",
+                                        "When a memtable template is specified no other parameters can be given, was {template=trie, invalid=throw}",
                                         "ALTER TABLE %s"
-                                        + " WITH memtable = { 'template' : 'skiplist', 'invalid' : 'throw' };");
+                                        + " WITH memtable = { 'template' : 'trie', 'invalid' : 'throw' };");
     }
 
     @Test
