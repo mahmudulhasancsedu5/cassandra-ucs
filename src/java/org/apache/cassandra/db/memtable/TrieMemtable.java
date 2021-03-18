@@ -20,12 +20,16 @@ package org.apache.cassandra.db.memtable;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterators;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,6 +124,9 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         return partitions.isEmpty();
     }
 
+//    final Executor executor = MoreExecutors.newSequentialExecutor(MoreExecutors.directExecutor());
+    AtomicReference<CompletableFuture<Void>> lock = new AtomicReference<>(CompletableFuture.completedFuture(null));
+
     /**
      * Should only be called by ColumnFamilyStore.apply via Keyspace.apply, which supplies the appropriate
      * OpOrdering.
@@ -128,41 +135,86 @@ public class TrieMemtable extends AbstractAllocatorMemtable
      */
     public long put(PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup)
     {
-        BTreePartitionUpdater updater = new BTreePartitionUpdater(allocator, opGroup, indexer);
-        DecoratedKey key = update.partitionKey();
+        CompletableFuture<Void> ourSignal = new CompletableFuture<>();
+        MemtableInsertion insertion = new MemtableInsertion(update, opGroup, indexer, ourSignal);
+
+        CompletableFuture<Void> prevSignal = lock.getAndSet(ourSignal);
+        if (prevSignal.isDone())
+            return insertion.call();
+        else
+            return prevSignal.thenApply(v -> insertion.call()).join();
 
         // TODO: Improve locking.
-        synchronized (this)
-        {
-            long onHeap = partitions.sizeOnHeap();
-            long offHeap = partitions.sizeOffHeap();
+        // TODO: test previous vs synchronized vs dedicated thread vs current thread if possible
+//        executor.execute(insertion);
+//        return insertion.future.join();
+//        synchronized (this)
+//        {
+//            return insertion.call();
+//        }
+    }
 
+    class MemtableInsertion extends BTreePartitionUpdater implements Callable<Long>
+    {
+        final PartitionUpdate update;
+        final CompletableFuture<Void> signal;
+
+        public MemtableInsertion(PartitionUpdate update,
+                                 OpOrder.Group writeOp,
+                                 UpdateTransaction indexer,
+                                 CompletableFuture<Void> signal)
+        {
+            super(allocator, writeOp, indexer);
+            this.update = update;
+            this.signal = signal;
+        }
+
+        public Long call()
+        {
             try
             {
-                partitions.putSingleton(key, update, updater::mergePartitions, key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
+                DecoratedKey key = update.partitionKey();
+
+                long onHeap = partitions.sizeOnHeap();
+                long offHeap = partitions.sizeOffHeap();
+
+                try
+                {
+                    partitions.putSingleton(key,
+                                            update,
+                                            this::mergePartitions,
+                                            key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
+                }
+                catch (MemtableTrie.SpaceExhaustedException e)
+                {
+                    // This should never really happen as a flush would be triggered long before this limit is reached.
+                    throw Throwables.propagate(e);
+                }
+
+                OpOrder.Group opGroup = writeOp;
+                allocator.offHeap().adjust(partitions.sizeOffHeap() - offHeap, opGroup);
+                allocator.onHeap().adjust(partitions.sizeOnHeap() - onHeap, opGroup);
+
+                updateMin(minTimestamp, update.stats().minTimestamp);
+                liveDataSize.addAndGet(dataSize);
+                columnsCollector.update(update.columns());
+                statsCollector.update(update.stats());
+                currentOperations.addAndGet(update.operationCount());
+
+                if (partitions.reachedAllocatedSizeThreshold() && !switchRequested.getAndSet(true))
+                {
+                    logger.info("Scheduling flush due to trie size limit reached.");
+                    owner.signalFlushRequired(TrieMemtable.this, ColumnFamilyStore.FlushReason.MEMTABLE_LIMIT);
+                }
+                return colUpdateTimeDelta;
             }
-            catch (MemtableTrie.SpaceExhaustedException e)
+            finally
             {
-                // This should never really happen as a flush would be triggered long before this limit is reached.
-                throw Throwables.propagate(e);
+                if (signal != null)
+                    signal.complete(null);
             }
-
-            allocator.offHeap().adjust(partitions.sizeOffHeap() - offHeap, opGroup);
-            allocator.onHeap().adjust(partitions.sizeOnHeap() - onHeap, opGroup);
-            updateMin(minTimestamp, update.stats().minTimestamp);
-            liveDataSize.addAndGet(updater.dataSize);
-            columnsCollector.update(update.columns());
-            statsCollector.update(update.stats());
-            currentOperations.addAndGet(update.operationCount());
         }
 
-        if (partitions.reachedAllocatedSizeThreshold() && !switchRequested.getAndSet(true))
-        {
-            logger.info("Scheduling flush due to trie size limit reached.");
-            owner.signalFlushRequired(this, ColumnFamilyStore.FlushReason.MEMTABLE_LIMIT);
-        }
-
-        return updater.colUpdateTimeDelta;
     }
 
     public int partitionCount()
