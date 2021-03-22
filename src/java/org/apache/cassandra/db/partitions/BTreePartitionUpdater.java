@@ -37,8 +37,8 @@ import org.apache.cassandra.utils.memory.MemtableAllocator;
 public class BTreePartitionUpdater implements UpdateFunction<Row, Row>
 {
     final MemtableAllocator allocator;
-    protected final OpOrder.Group writeOp;
-    final UpdateTransaction indexer;
+    public final OpOrder.Group writeOp;
+    public final UpdateTransaction indexer;
     Row.Builder regularBuilder;
     public long dataSize;
     long heapSize;

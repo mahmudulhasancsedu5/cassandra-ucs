@@ -17,14 +17,20 @@
  */
 package org.apache.cassandra.db.memtable;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
@@ -124,8 +130,11 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         return partitions.isEmpty();
     }
 
-//    final Executor executor = MoreExecutors.newSequentialExecutor(MoreExecutors.directExecutor());
-    AtomicReference<CompletableFuture<Void>> lock = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    final Executor executor = MoreExecutors.newSequentialExecutor(MoreExecutors.directExecutor());
+    AtomicReference<CompletableFuture<Void>> cflock = new AtomicReference<>(CompletableFuture.completedFuture(null));
+    ReentrantLock relock = new ReentrantLock();
+    ConcurrentLinkedQueue<MemtableInsertion> queue = new ConcurrentLinkedQueue<>();
+    public volatile static int maxParralel = 0;
 
     /**
      * Should only be called by ColumnFamilyStore.apply via Keyspace.apply, which supplies the appropriate
@@ -138,20 +147,127 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         CompletableFuture<Void> ourSignal = new CompletableFuture<>();
         MemtableInsertion insertion = new MemtableInsertion(update, opGroup, indexer, ourSignal);
 
-        CompletableFuture<Void> prevSignal = lock.getAndSet(ourSignal);
-        if (prevSignal.isDone())
-            return insertion.call();
-        else
-            return prevSignal.thenApply(v -> insertion.call()).join();
+//        CompletableFuture<Void> prevSignal = cflock.getAndSet(ourSignal);
+//        if (prevSignal.isDone())
+//            return insertion.call();
+//        else
+//            return prevSignal.thenApply(v -> insertion.call()).join();
 
         // TODO: Improve locking.
-        // TODO: test previous vs synchronized vs dedicated thread vs current thread if possible
-//        executor.execute(insertion);
-//        return insertion.future.join();
+//        executor.execute(insertion::call);
+//        ourSignal.join();
+//        return insertion.colUpdateTimeDelta;
 //        synchronized (this)
 //        {
 //            return insertion.call();
 //        }
+//        relock.lock();
+//        try
+//        {
+//            return insertion.call();
+//        }
+//        finally
+//        {
+//            relock.unlock();
+//        }
+
+//        queue.add(insertion);
+//        synchronized (this)
+//        {
+//            runQueue();
+//        }
+////        ourSignal.join();
+//        return insertion.colUpdateTimeDelta;
+
+            queue.add(insertion);
+            executor.execute(this::runQueue);
+            ourSignal.join();
+            return insertion.colUpdateTimeDelta;
+    }
+
+    private void runQueue()
+    {
+        MemtableInsertion first = queue.poll();
+        if (first == null)
+            return;
+        if (queue.isEmpty())
+        {
+            first.call();
+            return;
+        }
+
+        List<Trie<MemtableInsertion>> updates = new ArrayList<>(queue.size() + 1);
+        addFromQueue(updates, first);
+
+        MemtableInsertion other;
+        while ((other = queue.poll()) != null)
+        {
+            addFromQueue(updates, other);
+        }
+        Trie<MemtableInsertion> mergedUpdates = Trie.merge(updates, this::mergeInsertions);
+        maxParralel = Math.max(maxParralel, updates.size());
+
+
+        long onHeap = partitions.sizeOnHeap();
+        long offHeap = partitions.sizeOffHeap();
+        try
+        {
+            partitions.apply(mergedUpdates, this::mergePartitions);
+        }
+        catch (MemtableTrie.SpaceExhaustedException e)
+        {
+            // This should never really happen as a flush would be triggered long before this limit is reached.
+            throw Throwables.propagate(e);
+        }
+
+        // FIXME: Make sure unblocking for sstable flush unblocks all
+        // TODO: it should be okay to attribute to any
+        OpOrder.Group opGroup = first.writeOp;
+        allocator.offHeap().adjust(partitions.sizeOffHeap() - offHeap, opGroup);
+        allocator.onHeap().adjust(partitions.sizeOnHeap() - onHeap, opGroup);
+
+        if (partitions.reachedAllocatedSizeThreshold() && !switchRequested.getAndSet(true))
+        {
+            logger.info("Scheduling flush due to trie size limit reached.");
+            owner.signalFlushRequired(TrieMemtable.this, ColumnFamilyStore.FlushReason.MEMTABLE_LIMIT);
+        }
+
+        for (MemtableInsertion insertion : mergedUpdates.valuesUnordered())
+            if (insertion.signal != null)
+                insertion.signal.complete(null);
+    }
+
+    private void addFromQueue(List<Trie<MemtableInsertion>> updates, MemtableInsertion other)
+    {
+        updates.add(Trie.singleton(other.update.partitionKey(), other));
+    }
+
+    MemtableInsertion mergeInsertions(Collection<MemtableInsertion> insertions)
+    {
+        // same partition
+        // what of different index transactions?
+        // FIXME: different indexers?
+        MemtableInsertion first = insertions.iterator().next();
+        return new MemtableInsertion(PartitionUpdate.merge(insertions.stream()
+                                                                     .map(ins -> ins.update)
+                                                                     .collect(Collectors.toList())),
+                                     insertions.stream()
+                                               .map(a -> a.writeOp)
+                                               .reduce((a, b) -> a.compareTo(b) < 0 ? a : b)
+                                               .get(),
+                                     first.indexer,
+                                     first.signal);
+    }
+
+    public BTreePartitionData mergePartitions(BTreePartitionData current, final MemtableInsertion other)
+    {
+        BTreePartitionData data = other.mergePartitions(current, other.update);
+        updateMin(minTimestamp, other.update.stats().minTimestamp);
+        columnsCollector.update(other.update.columns());
+        statsCollector.update(other.update.stats());
+        currentOperations.addAndGet(other.update.operationCount());
+        liveDataSize.addAndGet(other.dataSize);
+        return data;
     }
 
     class MemtableInsertion extends BTreePartitionUpdater implements Callable<Long>
