@@ -225,17 +225,17 @@ public class MemtableReadTrie<T> extends Trie<T>
      Reading node content
      */
 
-    boolean isNull(int node)
+    static boolean isNull(int node)
     {
         return node == NONE;
     }
 
-    boolean isLeaf(int node)
+    static boolean isLeaf(int node)
     {
         return node < NONE;
     }
 
-    boolean isNullOrLeaf(int node)
+    static boolean isNullOrLeaf(int node)
     {
         return node <= NONE;
     }
@@ -350,6 +350,43 @@ public class MemtableReadTrie<T> extends Trie<T>
         }
     }
 
+    /**
+     * Get the closest lesser child of the given node, i.e. the child with the highest transition character that
+     * is lower than the given.
+     * Note that content is also treated as a child that is smaller than all other children.
+     */
+    int lesserChild(int node, int trans, int ifNone)
+    {
+        if (isNull(node))
+            return ifNone;
+        if (isLeaf(node))
+            return node;
+
+        if (offset(node) == PREFIX_OFFSET)
+        {
+            int contentIndex = getInt(node + PREFIX_CONTENT_OFFSET);
+            if (contentIndex >= 0)
+                ifNone = ~contentIndex;
+            node = followContentTransition(node);
+        }
+
+        switch (offset(node))
+        {
+        case SPARSE_OFFSET:
+            return getSparseLesserChild(node, trans, ifNone);
+        case SPLIT_OFFSET:
+            return getSplitLesserChild(node, trans, ifNone);
+        case CHAIN_MAX_OFFSET:
+            if (trans <= getByte(node))
+                return ifNone;
+            return getInt(node + 1);
+        default:
+            if (trans <= getByte(node))
+                return ifNone;
+            return node + 1;
+        }
+    }
+
     /** Get the child for the given transition character, knowing that the node is sparse */
     int getSparseChild(int node, int trans)
     {
@@ -368,6 +405,23 @@ public class MemtableReadTrie<T> extends Trie<T>
             }
         }
         return NONE;
+    }
+
+    /** Get the lesser child for the given transition character, knowing that the node is sparse */
+    int getSparseLesserChild(int node, int trans, int ifNone)
+    {
+        int orderWord = getShort(node + SPARSE_ORDER_OFFSET) & 0xFFFF;
+        int lastIdx = -1;
+        while (orderWord != 0)
+        {
+            int pos = orderWord % SPARSE_CHILD_COUNT;
+            if (getByte(node + SPARSE_BYTES_OFFSET + pos) >= trans)
+                break;
+            lastIdx = pos;
+        }
+        if (lastIdx == -1)
+            return ifNone;
+        return getInt(node + SPARSE_CHILDREN_OFFSET + lastIdx * 4);
     }
 
     /** Given a transition, returns the corresponding index (within the node block) of the pointer to the mid block of
@@ -407,19 +461,65 @@ public class MemtableReadTrie<T> extends Trie<T>
         return getInt(tail + splitNodeChildIndex(trans) * 4);
     }
 
+    /** Get the lesser child for the given transition character, knowing that the node is split */
+    int getSplitLesserChild(int node, int trans, int ifNone)
+    {
+        if (trans <= 0)
+            return ifNone;
+        --trans;
+
+        // Splits the 2-3-3 parts of the transition
+        int midIndex = splitNodeMidIndex(trans);
+        int tailIdx = splitNodeTailIndex(trans);
+        int childIdx = splitNodeChildIndex(trans);
+
+        while (midIndex >= 0)
+        {
+            int mid = getInt(node + SPLIT_POINTER_OFFSET + midIndex * 4);
+            if (mid != NONE)
+            {
+                while (tailIdx >= 0)
+                {
+                    int tail = getInt(mid + tailIdx * 4);
+                    if (tail != NONE)
+                    {
+                        while (childIdx >= 0)
+                        {
+                            int child = getInt(tail + childIdx * 4);
+                            if (child != NONE)
+                                return child;
+                            childIdx--;
+                        }
+                    }
+                    childIdx = 7;
+                    tailIdx--;
+                }
+            }
+            tailIdx = 7;
+            midIndex--;
+        }
+        return ifNone;
+    }
+
     /** Get the content for a given node */
     T getNodeContent(int node)
     {
-        if (isLeaf(node))
-            return getContent(~node);
-
-        if (offset(node) != PREFIX_OFFSET)
-            return null;
-
-        int index = getInt(node + PREFIX_CONTENT_OFFSET);
-        return (index >= 0)
+        int index = getNodeContentIndex(node);
+        return index >= 0
                ? getContent(index)
                : null;
+    }
+
+    /** Get the content index for a given node, negative if no content is present. */
+    int getNodeContentIndex(int node)
+    {
+        if (isLeaf(node))
+            return ~node;
+
+        if (offset(node) != PREFIX_OFFSET)
+            return -1;
+
+        return getInt(node + PREFIX_CONTENT_OFFSET);
     }
 
     /*

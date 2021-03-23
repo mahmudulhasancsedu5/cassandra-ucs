@@ -120,4 +120,47 @@ public class MemtableTriePutTest extends MemtableTrieTestBase
         Assert.assertNull(trie.get(ByteComparable.of(t3)));
         Assert.assertTrue(trie.reachedAllocatedSizeThreshold());
     }
+
+
+    @Test
+    public void testSizeCalculation() throws MemtableTrie.SpaceExhaustedException
+    {
+        MemtableTrie<String> trie = new MemtableTrie<>(BufferType.ON_HEAP);
+        Assert.assertTrue(trie.calcNewSize(0x3FFFFFFE) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x40000000) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x40000001) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x40000010) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x50000010) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x60000010) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x70000010) > 0);
+        Assert.assertTrue(trie.calcNewSize(0x7FFFFEE0) > 0);
+
+        try
+        {
+            trie.calcNewSize(0x7FFFFFF0);
+            fail("MemtableTrie.SpaceExhaustedError was expected");
+        }
+        catch (MemtableTrie.SpaceExhaustedException e)
+        {
+            // expected
+        }
+
+        // Try growing from initial size
+        int size = trie.buffer.capacity();
+        int maxSize = size;
+        try
+        {
+            while (true)
+            {
+                maxSize = size;
+                size = trie.calcNewSize(size);
+            }
+        }
+        catch (MemtableTrie.SpaceExhaustedException e)
+        {
+            // expected
+        }
+        // Max should be close to 2G
+        Assert.assertTrue(Integer.MAX_VALUE - maxSize < 4096);
+    }
 }

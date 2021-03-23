@@ -24,10 +24,8 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -260,7 +258,6 @@ public class WriteTest extends CQLTester
         executorService.awaitTermination(15, TimeUnit.SECONDS);
         Memtable memtable = cfs.getTracker().getView().getCurrentMemtable();
         Memtable.MemoryUsage usage = memtable.getMemoryUsage();
-        System.err.println("TrieMemtable maxParallel " + TrieMemtable.maxParralel);
         System.err.format("\n%s in %s mode: %d ops, %s serialized bytes, %s\n",
                           memtable.getClass().getSimpleName(),
                           DatabaseDescriptor.getMemtableAllocationType(),

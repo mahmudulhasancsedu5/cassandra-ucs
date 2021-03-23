@@ -43,7 +43,7 @@ import org.github.jamm.MemoryLayoutSpecification;
  * This implementation does not currently guarantee this, but we still get the desired result as `apply` is only used
  * with singleton tries.
  */
-public class MemtableTrie<T> extends MemtableReadTrie<T>
+public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie<T>
 {
     // See the trie format description in MemtableReadTrie.
 
@@ -53,6 +53,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      * This must be done to avoid tries growing beyond their hard 2GB size limit (due to the 32-bit pointers).
      */
     private static final int ALLOCATED_SIZE_THRESHOLD;
+
     static
     {
         String propertyName = "dse.trie_size_limit_mb";
@@ -67,7 +68,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     private int allocatedPos = 0;
     private int contentCount = 0;
 
-    private final BufferType bufferType;    // on or off heap
+    final BufferType bufferType;    // on or off heap
 
     private static final long EMPTY_SIZE_ON_HEAP; // for space calculations
     private static final long EMPTY_SIZE_OFF_HEAP; // for space calculations
@@ -86,7 +87,12 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     public MemtableTrie(BufferType bufferType)
     {
-        super(new UnsafeBuffer(bufferType.allocate(INITIAL_BUFFER_CAPACITY)), new AtomicReferenceArray<>(16), NONE);
+        this(bufferType, INITIAL_BUFFER_CAPACITY, 16);
+    }
+
+    public MemtableTrie(BufferType bufferType, int initialBufferSize, int initialValueListSize)
+    {
+        super(new UnsafeBuffer(bufferType.allocate(initialBufferSize)), new AtomicReferenceArray<>(initialValueListSize), NONE);
         this.bufferType = bufferType;
         assert INITIAL_BUFFER_CAPACITY % BLOCK_SIZE == 0;
     }
@@ -103,48 +109,62 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     private int allocateBlock() throws SpaceExhaustedException
     {
-        // Note: If this method is modified, please run MemtableTrieTest.testOver1GSize to verify it acts correctly
-        // close to the 2G limit.
         int v = allocatedPos;
         if (buffer.capacity() == v)
-        {
-            int newSize;
-            if (v >= ALLOCATED_SIZE_THRESHOLD)
-            {
-                // we don't expect to write much after the threshold has been reached
-                // to avoid allocating too much space which will be left unused,
-                // grow by 10% of the limit, rounding up to BLOCK_SIZE
-                newSize = (v + ALLOCATED_SIZE_THRESHOLD / 10 + BLOCK_SIZE - 1) & -BLOCK_SIZE;
-                // If we do this repeatedly and the calculated size grows over 2G, it will overflow and result in a
-                // negative integer. In that case, cap it to a size that can be allocated.
-                if (newSize < 0)
-                {
-                    newSize = 0x7FFFFF00;   // 2G - 256 bytes
-                    if (newSize == allocatedPos)    // already at limit
-                        throw new SpaceExhaustedException();
-                    LoggerFactory.getLogger(getClass()).debug("Growing memtable trie to maximum size {}",
-                                                              FBUtilities.prettyPrintMemory(newSize));
-                }
-                else
-                    LoggerFactory.getLogger(getClass()).debug("Growing memtable trie by 10% over the {} limit to {}",
-                                                              FBUtilities.prettyPrintMemory(ALLOCATED_SIZE_THRESHOLD),
-                                                              FBUtilities.prettyPrintMemory(newSize));
-            } else
-                newSize = v * 2;
-
-            ByteBuffer newBuffer = bufferType.allocate(newSize);
-            buffer.getBytes(0, newBuffer, v);
-            buffer.wrap(newBuffer);
-            // The above does not contain any happens-before enforcing writes, thus at this point the new buffer may be
-            // invisible to any concurrent readers. Touching the volatile root pointer (which any new read must go
-            // through) enforces a happens-before that makes it visible to all new reads (note: when the write completes
-            // it must do some volatile write, but that will be in the new buffer and without the line below could
-            // remain unreachable by other cores).
-            root = root;
-        }
+            growBuffer(v);
 
         allocatedPos += BLOCK_SIZE;
         return v;
+    }
+
+    private void growBuffer(int oldSize) throws SpaceExhaustedException
+    {
+        int newSize = calcNewSize(oldSize);
+
+        ByteBuffer newBuffer = bufferType.allocate(newSize);
+        buffer.getBytes(0, newBuffer, oldSize);
+        buffer.wrap(newBuffer);
+        // The above does not contain any happens-before enforcing writes, thus at this point the new buffer may be
+        // invisible to any concurrent readers. Touching the volatile root pointer (which any new read must go
+        // through) enforces a happens-before that makes it visible to all new reads (note: when the write completes
+        // it must do some volatile write, but that will be in the new buffer and without the line below could
+        // remain unreachable by other cores).
+        root = root;
+    }
+
+    protected int calcNewSize(int oldSize) throws SpaceExhaustedException
+    {
+        // Note: If this method is modified, please run MemtableTrieTest.testOver1GSize to verify it acts correctly
+        // close to the 2G limit.
+        int newSize;
+        if (oldSize >= ALLOCATED_SIZE_THRESHOLD)
+        {
+            // we don't expect to write much after the threshold has been reached
+            // to avoid allocating too much space which will be left unused,
+            // grow by 10% of the limit, rounding up to BLOCK_SIZE
+            newSize = (oldSize + ALLOCATED_SIZE_THRESHOLD / 10 + BLOCK_SIZE - 1) & -BLOCK_SIZE;
+            // If we do this repeatedly and the calculated size grows over 2G, it will overflow and result in a
+            // negative integer. In that case, cap it to a size that can be allocated.
+            if (newSize < 0)
+            {
+                newSize = 0x7FFFFF00;   // 2G - 256 bytes
+                if (newSize <= oldSize)    // already at limit
+                    throw new SpaceExhaustedException();
+                LoggerFactory.getLogger(getClass()).debug("Growing memtable trie to maximum size {}",
+                                                          FBUtilities.prettyPrintMemory(newSize));
+            }
+            else
+                LoggerFactory.getLogger(getClass()).debug("Growing memtable trie by 10% over the {} limit to {}",
+                                                          FBUtilities.prettyPrintMemory(ALLOCATED_SIZE_THRESHOLD),
+                                                          FBUtilities.prettyPrintMemory(newSize));
+        } else
+            newSize = oldSize * 2;
+        return newSize;
+    }
+
+    public int allocatedSize()
+    {
+        return allocatedPos;
     }
 
     private int addContent(T value)
@@ -789,14 +809,14 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      * value (of a potentially different type), returning the final value that will stay in the memtable trie. Applied
      * even if there's no pre-existing value in the memtable trie.
      */
-    public <R> void putRecursive(ByteComparable key, R value, final UpsertTransformer<T, R> transformer) throws SpaceExhaustedException
+    public <R> void putRecursive(ByteComparable key, R value, final UpsertTransformer<T, ? super R> transformer) throws SpaceExhaustedException
     {
         int newRoot = putRecursive(root, key.asComparableBytes(BYTE_COMPARABLE_VERSION), value, transformer);
         if (newRoot != root)
             root = newRoot;
     }
 
-    private <R> int putRecursive(int node, ByteSource key, R value, final UpsertTransformer<T, R> transformer) throws SpaceExhaustedException
+    private <R> int putRecursive(int node, ByteSource key, R value, final UpsertTransformer<T, ? super R> transformer) throws SpaceExhaustedException
     {
         int transition = key.next();
         if (transition == ByteSource.END_OF_STREAM)
