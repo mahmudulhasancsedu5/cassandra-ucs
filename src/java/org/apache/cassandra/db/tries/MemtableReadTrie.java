@@ -418,6 +418,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             if (getByte(node + SPARSE_BYTES_OFFSET + pos) >= trans)
                 break;
             lastIdx = pos;
+            orderWord /= SPARSE_CHILD_COUNT;
         }
         if (lastIdx == -1)
             return ifNone;

@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.db.tries;
 
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 public interface WritableTrie<T>
@@ -59,5 +58,9 @@ public interface WritableTrie<T>
         return valuesCount() > 0;
     }
 
+    default public Trie<T> asTrie()
+    {
+        return subtrie(null, false, null, false);
+    }
     public Trie<T> subtrie(ByteComparable left, boolean includeLeft, ByteComparable right, boolean includeRight);
 }

@@ -29,7 +29,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 public class ShardingMemtableTrie<T> implements WritableTrie<T>
 {
     static final int DIRECT_MAX = 2;
-    static final int SIZE_LIMIT = 8 * 1024;// * 1024;
+    static final int SIZE_LIMIT = 32 * 1024;// * 1024;
 
     final List<LimitedSizeMemtableTrie<T>> shards;
     final Trie<T> merged;
@@ -40,7 +40,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         shards = new ArrayList<>();
         shards.add(new LimitedSizeMemtableTrie<T>(bufferType, SIZE_LIMIT));
         // create collection trie directly to make sure it tracks the shards list as it grows
-        merged = new CollectionMergeTrie<>(shards, Trie.throwingResolver());
+        merged = new CollectionMergeTrie<>(shards, c -> c.iterator().next());
         top = new MemtableTrie<>(bufferType);
         try
         {
@@ -55,20 +55,17 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 
     public T get(ByteComparable path)
     {
-        int shardCount = shards.size();
-        if (shardCount == 0)
-            return null;
-        if (shardCount == 1)
-            return shards.get(0).get(path);
-
-        if (shardCount <= DIRECT_MAX)
-            return walkInParallel(path);
-        else
+//        if (shardCount <= DIRECT_MAX)
+//            return walkInParallel(path);
+//        else
             return getFloor(path).get(path);
     }
 
     private MemtableTrie<T> getFloor(ByteComparable path)
     {
+        if (shards.size() == 1)
+            return shards.get(0);
+
         int node = top.root;
         ByteSource src = path.asComparableBytes(MemtableTrie.BYTE_COMPARABLE_VERSION);
         int lesserPath = MemtableTrie.NONE;
@@ -83,7 +80,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         }
         // Follow the max of the lower branch.
         while (!MemtableTrie.isNullOrLeaf(lesserPath))
-            lesserPath = top.lesserChild(node, 0x100, Integer.MIN_VALUE);
+            lesserPath = top.lesserChild(lesserPath, 0x100, Integer.MIN_VALUE);
 
         assert lesserPath != Integer.MIN_VALUE
             : "Branch without children in trie for " +  path.byteComparableAsString(MemtableTrie.BYTE_COMPARABLE_VERSION);
@@ -214,7 +211,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
             }
 
             // Return the shard the key belongs to after the split.
-            return ByteComparable.compare(slst.limit, key, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
+            return ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
@@ -277,7 +274,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                 if (limit != null)  // we are already stopped
                     return null;
 
-                Remaining result = wrapped.startIteration();
+                Remaining result = wrapped.advanceIteration();
                 currentTransition = wrapped.currentTransition;
 
                 if (result != null && destination.allocatedSize() >= sizeLimit)
