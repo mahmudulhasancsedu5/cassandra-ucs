@@ -18,8 +18,7 @@
 
 package org.apache.cassandra.db.tries;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 
 import org.apache.cassandra.db.memtable.TrieMemtable;
 import org.apache.cassandra.io.compress.BufferType;
@@ -31,20 +30,21 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
     static final int DIRECT_MAX = 2;
     static final int SIZE_LIMIT = 32 * 1024;// * 1024;
 
-    final List<LimitedSizeMemtableTrie<T>> shards;
-    final Trie<T> merged;
+    volatile LimitedSizeMemtableTrie<T>[] shards;
+    volatile Trie<T> merged;
     final MemtableTrie<Integer> top;
 
     public ShardingMemtableTrie(BufferType bufferType)
     {
-        shards = new ArrayList<>();
-        shards.add(new LimitedSizeMemtableTrie<T>(bufferType, SIZE_LIMIT));
-        // create collection trie directly to make sure it tracks the shards list as it grows
-        merged = new CollectionMergeTrie<>(shards, c -> c.iterator().next());
+        LimitedSizeMemtableTrie<T> first = new LimitedSizeMemtableTrie<>(bufferType, SIZE_LIMIT);
+        shards = new LimitedSizeMemtableTrie[1];
+        first.index = 0;
+        shards[first.index] = first;
+        merged = first;
         top = new MemtableTrie<>(bufferType);
         try
         {
-            top.putRecursive(ByteComparable.fixedLength(new byte[0]), 0, (a, b) -> b);
+            top.putRecursive(ByteComparable.fixedLength(new byte[0]), first.index, (a, b) -> b);
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
@@ -61,10 +61,10 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
             return getFloor(path).get(path);
     }
 
-    private MemtableTrie<T> getFloor(ByteComparable path)
+    private LimitedSizeMemtableTrie<T> getFloor(ByteComparable path)
     {
-        if (shards.size() == 1)
-            return shards.get(0);
+        if (shards.length == 1)
+            return shards[0];
 
         int node = top.root;
         ByteSource src = path.asComparableBytes(MemtableTrie.BYTE_COMPARABLE_VERSION);
@@ -87,12 +87,12 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         assert MemtableTrie.isLeaf(lesserPath)
             : "ConcurrentTrie has no match for " + path.byteComparableAsString(MemtableTrie.BYTE_COMPARABLE_VERSION);
 
-        return shards.get(top.getContent(~lesserPath));
+        return shards[top.getContent(~lesserPath)];
     }
 
     private T walkInParallel(ByteComparable path)
     {
-        int shardCount = shards.size();
+        int shardCount = shards.length;
         ShardWithNode<T>[] nodes = new ShardWithNode[shardCount];
         int nodeCount = 0;
         for (MemtableTrie<T> shard : shards)
@@ -143,15 +143,22 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 
     public <R> void putSingleton(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
     {
-        MemtableTrie<T> shard = getFloor(key);
+        LimitedSizeMemtableTrie<T> shard = getFloor(key);
         while (true)
         {
             synchronized (shard)
             {
                 try
                 {
-                    shard.putSingleton(key, value, transformer);
-                    return;
+                    // putRecursive is not guaranteed to need more space. Check if the shard has been split while we
+                    // were waiting for synchronization
+                    if (!shard.markedForRemoval)
+                    {
+                        shard.putSingleton(key, value, transformer);
+                        return;
+                    }
+                    else
+                        shard = getFloor(key);
                 }
                 catch (MemtableTrie.SpaceExhaustedException e)
                 {
@@ -163,15 +170,22 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 
     public <R> void putRecursive(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
     {
-        MemtableTrie<T> shard = getFloor(key);
+        LimitedSizeMemtableTrie<T> shard = getFloor(key);
         while (true)
         {
             synchronized (shard)
             {
                 try
                 {
-                    shard.putRecursive(key, value, transformer);
-                    return;
+                    // putRecursive is not guaranteed to need more space. Check if the shard has been split while we
+                    // were waiting for synchronization
+                    if (!shard.markedForRemoval)
+                    {
+                        shard.putRecursive(key, value, transformer);
+                        return;
+                    }
+                    else
+                        shard = getFloor(key);
                 }
                 catch (MemtableTrie.SpaceExhaustedException e)
                 {
@@ -181,9 +195,11 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         }
     }
 
-    private MemtableTrie<T> splitShard(MemtableTrie<T> shard, ByteComparable key)
+    private LimitedSizeMemtableTrie<T> splitShard(LimitedSizeMemtableTrie<T> shard, ByteComparable key)
     {
         // This must be called with a lock held on shard
+        if (!shard.markForRemoval())
+            throw new AssertionError();
 
         try
         {
@@ -200,14 +216,19 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                                                                              shard.valuesCount());
             right.apply(shard.subtrie(slst.limit, true, null, false), (a, b) -> b);
 
-            // Update list and trie mapping.
+            // Update list and merged trie.
             synchronized (this)
             {
-                int rightIndex = shards.size();
-                int leftIndex = shards.indexOf(shard);
-                shards.add(right);  // any reader that gets list at this point until the set below may be merging duplicate data from both shard and right
-                top.putRecursive(slst.limit, rightIndex, (a, b) -> b);  // we are now open to concurrent writes here
-                shards.set(leftIndex, left);
+                LimitedSizeMemtableTrie<T>[] newShards = Arrays.copyOf(shards, shards.length + 1);
+                right.index = shards.length;
+                newShards[right.index] = right;
+
+                left.index = shard.index;
+                shards = newShards; // concurrent reads might use new shards. This must still contain old shard until we update the trie mapping
+                top.putRecursive(slst.limit, right.index, (a, b) -> b);  // we are open to concurrent reads and writes on right
+                newShards[left.index] = left;   // we are open to concurrent reads and writes on left
+                shards = newShards; // shards is a volatile -- this ensures that getFloor will return the up-to-date value for left.index
+                merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // concurrent walks now read new shards
             }
 
             // Return the shard the key belongs to after the split.

@@ -23,17 +23,21 @@ import org.apache.cassandra.io.compress.BufferType;
 public class LimitedSizeMemtableTrie<T> extends MemtableTrie<T>
 {
     final int sizeLimit;
+    boolean markedForRemoval;
+    int index = -1;
 
     public LimitedSizeMemtableTrie(BufferType bufferType, int sizeLimit)
     {
         super(bufferType);
         this.sizeLimit = sizeLimit;
+        this.markedForRemoval = false;
     }
 
     public LimitedSizeMemtableTrie(BufferType bufferType, int sizeLimit, int initialSize, int initialValuesCount)
     {
         super(bufferType, initialSize, initialValuesCount);
         this.sizeLimit = sizeLimit;
+        this.markedForRemoval = false;
     }
 
     @Override
@@ -42,5 +46,13 @@ public class LimitedSizeMemtableTrie<T> extends MemtableTrie<T>
         if (oldSize >= sizeLimit)
             throw new SpaceExhaustedException();
         return Math.min(sizeLimit, oldSize * 2);
+    }
+
+    public synchronized boolean markForRemoval()
+    {
+        if (markedForRemoval)
+            return false;
+        markedForRemoval = true;
+        return true;
     }
 }

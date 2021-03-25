@@ -39,7 +39,7 @@ import static org.apache.cassandra.db.tries.MemtableTrieTestBase.generateKeys;
 
 public class MemtableTrieConcurrentWriteTest
 {
-    private static final int COUNT = 300000;
+    private static final int COUNT = 1000000;
     private static final int OTHERS = COUNT / 10;
     private static final int PROGRESS_UPDATE = COUNT / 100;
     private static final int READERS = 8;
