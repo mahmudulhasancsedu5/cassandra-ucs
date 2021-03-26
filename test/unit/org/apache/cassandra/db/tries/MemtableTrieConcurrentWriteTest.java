@@ -78,7 +78,6 @@ public class MemtableTrieConcurrentWriteTest
     {
         ByteComparable[] src = generateKeys(rand, COUNT + OTHERS);
         WritableTrie<String> trie = new ShardingMemtableTrie<>(BufferType.ON_HEAP);
-//        WritableTrie<String> trie = new SynchronizedMemtableTrie<>(BufferType.ON_HEAP);
 //        WritableTrie<String> trie = new MemtableTrie<>(BufferType.ON_HEAP);
         ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
         List<Thread> threads = new ArrayList<Thread>();
@@ -146,12 +145,13 @@ public class MemtableTrieConcurrentWriteTest
                     {
                         for (int i = base; i < COUNT; i += WRITERS)
                         {
+                            // TODO: we need to test overwrites too
                             ByteComparable b = src[i];
 
                             // Note: Because we don't ensure order when calling resolve, just use a hash of the key as payload
                             // (so that all sources have the same value).
                             String v = value(b);
-                            trie.putSingleton(b, v, (x, y) -> y, i % 2 > 0);
+                            trie.putConcurrent(b, v, (x, y) -> y, true);//i % 2 > 0);
 
                             if (i % PROGRESS_UPDATE == base)
                                 writeProgress.set(base, i);

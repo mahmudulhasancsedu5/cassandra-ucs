@@ -30,7 +30,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 {
     static final int DIRECT_MAX = 2;
     static final int SIZE_LIMIT = Integer.parseInt(System.getProperty(
-    Config.PROPERTY_PREFIX + "shard_size", String.valueOf(32))) * 1024 * 1024;
+    Config.PROPERTY_PREFIX + "shard_size", String.valueOf(4))) * 1024 * 1024;
 
     volatile Trie<T> merged;
     volatile LimitedSizeMemtableTrie<T>[] shards;
@@ -139,9 +139,10 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 //        }
 //    }
 
-    public <R> void putSingleton(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
+    public <R> AllocatedMemory putConcurrent(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer, boolean useRecursive)
     {
         LimitedSizeMemtableTrie<T> shard = getFloor(top, key);
+        AllocatedMemory allocated = null;
         while (true)
         {
             synchronized (shard)
@@ -152,13 +153,12 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                     // were waiting for synchronization
                     if (!shard.markedForRemoval)
                     {
-                        shard.putSingleton(key, value, transformer);
-                        return;
+                        return add(allocated, shard.putConcurrent(key, value, transformer, useRecursive));
                     }
                 }
                 catch (MemtableTrie.SpaceExhaustedException e)
                 {
-                    splitShard(shard, key);
+                    allocated = add(allocated, splitShard(shard, key));
                 }
             }
             // called on markedForRemoval
@@ -166,33 +166,15 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         }
     }
 
-    public <R> void putRecursive(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
+    AllocatedMemory add(AllocatedMemory prev, AllocatedMemory curr)
     {
-        LimitedSizeMemtableTrie<T> shard = getFloor(top, key);
-        while (true)
-        {
-            synchronized (shard)
-            {
-                try
-                {
-                    // putRecursive is not guaranteed to need more space. Check if the shard has been split while we
-                    // were waiting for synchronization
-                    if (!shard.markedForRemoval)
-                    {
-                        shard.putRecursive(key, value, transformer);
-                        return;
-                    }
-                }
-                catch (MemtableTrie.SpaceExhaustedException e)
-                {
-                    splitShard(shard, key);
-                }
-            }
-            shard = getFloor(top, key);
-        }
+        if (prev == null)
+            return curr;
+        return new AllocatedMemory(prev.onHeap + curr.onHeap, prev.offHeap + curr.offHeap);
     }
 
-    private LimitedSizeMemtableTrie<T> splitShard(LimitedSizeMemtableTrie<T> shard, ByteComparable key)
+
+    private AllocatedMemory splitShard(LimitedSizeMemtableTrie<T> shard, ByteComparable key)
     {
         // This must be called with a lock held on shard
         if (!shard.markForRemoval())
@@ -222,21 +204,28 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                 left.index = shard.index;
                 newShards[left.index] = left;
 
+                long topOnHeap = top.sizeOnHeap();
+                long topOffHeap = top.sizeOffHeap();
                 MemtableTrie<LimitedSizeMemtableTrie<T>> newTop = top.duplicateAdjustingContent(c -> c == shard ? left : c);
                 newTop.putRecursive(slst.limit, right, (a, b) -> b);
+
+                AllocatedMemory allocatedMemory = new AllocatedMemory(
+                left.sizeOnHeap() + right.sizeOnHeap() + top.sizeOnHeap() - shard.sizeOnHeap() - topOnHeap,
+                left.sizeOffHeap() + right.sizeOffHeap() + top.sizeOffHeap() - shard.sizeOffHeap() - topOffHeap);
+
                 top = newTop; // makes the split visible to put and get
                 merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // makes the split visible to iteration
                 shards = newShards; // makes the split visible to sizing
-                // FIXME: size-tracking is in trouble.
 //                System.err.println(String.format("Trie size %s into %s + %s top size %s",
 //                                                 FBUtilities.prettyPrintMemory(shard.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(left.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(right.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(top.allocatedSize())));
+                return allocatedMemory;
             }
 
             // Return the shard the key belongs to after the split.
-            return shard;//ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
+            //ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {

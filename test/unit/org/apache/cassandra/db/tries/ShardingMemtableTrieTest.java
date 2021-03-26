@@ -260,10 +260,10 @@ public class ShardingMemtableTrieTest
     {
         try
         {
-            trie.putSingleton(key,
-                              value,
-                              (existing, update) -> existing != null ? resolver.resolve(existing, update) : update,
-                              usePut);
+            trie.putConcurrent(key,
+                               value,
+                               (existing, update) -> existing != null ? resolver.resolve(existing, update) : update,
+                               usePut);
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {

@@ -24,26 +24,22 @@ public interface WritableTrie<T>
 {
     public T get(ByteComparable path);
 
-    default <R> void putSingleton(ByteComparable key,
-                                 R value,
-                                 MemtableTrie.UpsertTransformer<T, ? super R> transformer,
-                                 boolean useRecursive)
-    throws MemtableTrie.SpaceExhaustedException
+    class AllocatedMemory
     {
-        if (useRecursive)
-            putRecursive(key, value, transformer);
-        else
-            putSingleton(key, value, transformer);
+        public final long onHeap;
+        public final long offHeap;
+
+        public AllocatedMemory(long onHeap, long offHeap)
+        {
+            this.onHeap = onHeap;
+            this.offHeap = offHeap;
+        }
     }
 
-    public <R> void putSingleton(ByteComparable key,
-                                 R value,
-                                 MemtableTrie.UpsertTransformer<T, ? super R> transformer)
-    throws MemtableTrie.SpaceExhaustedException;
-
-    public <R> void putRecursive(ByteComparable key,
-                                 R value,
-                                 MemtableTrie.UpsertTransformer<T, ? super R> transformer)
+    public <R> AllocatedMemory putConcurrent(ByteComparable key,
+                                             R value,
+                                             MemtableTrie.UpsertTransformer<T, ? super R> transformer,
+                                             boolean useRecursive)
     throws MemtableTrie.SpaceExhaustedException;
 
     public long sizeOnHeap();
@@ -55,7 +51,7 @@ public interface WritableTrie<T>
 
     default public boolean isEmpty()
     {
-        return valuesCount() > 0;
+        return valuesCount() == 0;
     }
 
     default public Trie<T> asTrie()

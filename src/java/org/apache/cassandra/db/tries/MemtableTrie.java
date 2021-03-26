@@ -799,6 +799,22 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
     }
 
     /**
+     * A version of putSingleton which uses recursive put if the last argument is true.
+     * Returns the amount of trie space increase the new data caused.
+     */
+    public synchronized <R> AllocatedMemory putConcurrent(ByteComparable key,
+                                                          R value,
+                                                          UpsertTransformer<T, ? super R> transformer,
+                                                          boolean useRecursive) throws SpaceExhaustedException
+    {
+        long onHeapBefore = sizeOnHeap();
+        long offHeapBefore = sizeOffHeap();
+        // This needs CAS/locking as well
+        putSingleton(key, value, transformer, useRecursive);
+        return new AllocatedMemory(sizeOnHeap() - onHeapBefore, sizeOffHeap() - offHeapBefore);
+    }
+
+    /**
      * Map-like put method, using a fast recursive implementation through the key bytes. May run into stack overflow if
      * the trie becomes too deep. When the correct position in the trie has been reached, the value will be resolved
      * with the given function before being placed in the trie (even if there's no pre-existing content in this trie).
