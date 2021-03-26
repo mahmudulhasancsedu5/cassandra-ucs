@@ -102,9 +102,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
 
     public static class SpaceExhaustedException extends Exception
     {
-        public SpaceExhaustedException()
+        public SpaceExhaustedException(String message)
         {
-            super("The hard 2GB limit on trie size has been exceeded");
+            super(message);
         }
     }
 
@@ -150,7 +150,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
             {
                 newSize = 0x7FFFFF00;   // 2G - 256 bytes
                 if (newSize <= oldSize)    // already at limit
-                    throw new SpaceExhaustedException();
+                    throw new SpaceExhaustedException("The hard 2GB limit on trie size has been exceeded");
                 LoggerFactory.getLogger(getClass()).debug("Growing memtable trie to maximum size {}",
                                                           FBUtilities.prettyPrintMemory(newSize));
             }
@@ -935,5 +935,38 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
             dest.contentArray.set(i, mapper.apply(contentArray.get(i)));
         dest.contentCount = contentCount;
         return dest;
+    }
+
+    void copyInto(Trie<T> source) throws SpaceExhaustedException
+    {
+        assert root == NONE;
+        root = copyInto(source.root());
+    }
+
+    int copyInto(Node<T, Node> node) throws SpaceExhaustedException
+    {
+        int constructed = NONE;
+        Remaining rem = node.startIteration();
+        if (rem != null)
+        {
+            int child = copyInto(node.getCurrentChild(null));
+            constructed = expandOrCreateChainNode(node.currentTransition, child);
+            if (rem == Remaining.MULTIPLE)
+            {
+                rem = node.advanceIteration();
+                while (rem != null)
+                {
+                    child = copyInto(node.getCurrentChild(null));
+                    constructed = attachChild(constructed, node.currentTransition, child);
+                    rem = node.advanceIteration();
+                }
+            }
+        }
+
+        T content = node.content();
+        if (content != null)
+            constructed = createContentNode(addContent(content), constructed, true);
+
+        return constructed;
     }
 }

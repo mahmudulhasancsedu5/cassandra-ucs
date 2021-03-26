@@ -44,7 +44,7 @@ public class LimitedSizeMemtableTrie<T> extends MemtableTrie<T>
     protected int calcNewSize(int oldSize) throws SpaceExhaustedException
     {
         if (oldSize >= sizeLimit)
-            throw new SpaceExhaustedException();
+            throw new SpaceExhaustedException("Shard limit reached");
         return Math.min(sizeLimit, oldSize * 2);
     }
 

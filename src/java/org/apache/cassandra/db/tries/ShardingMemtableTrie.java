@@ -20,14 +20,17 @@ package org.apache.cassandra.db.tries;
 
 import java.util.Arrays;
 
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 public class ShardingMemtableTrie<T> implements WritableTrie<T>
 {
     static final int DIRECT_MAX = 2;
-    static final int SIZE_LIMIT = 1024 * 1024;
+    static final int SIZE_LIMIT = Integer.parseInt(System.getProperty(
+    Config.PROPERTY_PREFIX + "shard_size", String.valueOf(32))) * 1024 * 1024;
 
     volatile Trie<T> merged;
     volatile LimitedSizeMemtableTrie<T>[] shards;
@@ -203,12 +206,12 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                                                                             SIZE_LIMIT,
                                                                             shard.valuesCount());
             SizeLimitedSubTrie<T> slst = new SizeLimitedSubTrie<>(shard, left, SIZE_LIMIT / 2);
-            left.apply(slst, (a, b) -> b);
+            left.copyInto(slst);
             LimitedSizeMemtableTrie<T> right = new LimitedSizeMemtableTrie<>(shard.bufferType,
                                                                              SIZE_LIMIT,
                                                                              SIZE_LIMIT,
                                                                              shard.valuesCount());
-            right.apply(shard.subtrie(slst.limit, true, null, false), (a, b) -> b);
+            right.copyInto(shard.subtrie(slst.limit, true, null, false));
 
             // Update list and merged trie.
             synchronized (this)
@@ -225,6 +228,11 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                 merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // makes the split visible to iteration
                 shards = newShards; // makes the split visible to sizing
                 // FIXME: size-tracking is in trouble.
+//                System.err.println(String.format("Trie size %s into %s + %s top size %s",
+//                                                 FBUtilities.prettyPrintMemory(shard.allocatedSize()),
+//                                                 FBUtilities.prettyPrintMemory(left.allocatedSize()),
+//                                                 FBUtilities.prettyPrintMemory(right.allocatedSize()),
+//                                                 FBUtilities.prettyPrintMemory(top.allocatedSize())));
             }
 
             // Return the shard the key belongs to after the split.
@@ -232,7 +240,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
-            throw new AssertionError(); // Should never happen.
+            throw new AssertionError(e); // Should never happen.
         }
     }
 
