@@ -51,6 +51,7 @@ import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.tries.MemtableTrie;
 import org.apache.cassandra.db.tries.ShardingMemtableTrie;
+import org.apache.cassandra.db.tries.SynchronizedMemtableTrie;
 import org.apache.cassandra.db.tries.Trie;
 import org.apache.cassandra.db.tries.WritableTrie;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -104,6 +105,7 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     // We index the memtable by PartitionPosition only for the purpose of being able
     // to select key range using Token.KeyBound. However put() ensures that we
     // actually only store DecoratedKey.
+//    private final WritableTrie<BTreePartitionData> partitions = new SynchronizedMemtableTrie<>(BUFFER_TYPE);
     private final WritableTrie<BTreePartitionData> partitions = new ShardingMemtableTrie<>(BUFFER_TYPE);
 
     // only to be used by init(), to setup the very first memtable for the cfs
@@ -133,8 +135,8 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         BTreePartitionUpdater updater = new BTreePartitionUpdater(allocator, opGroup, indexer);
         DecoratedKey key = update.partitionKey();
 
-        long onHeap = partitions.sizeOnHeap();
-        long offHeap = partitions.sizeOffHeap();
+//        long onHeap = partitions.sizeOnHeap();
+//        long offHeap = partitions.sizeOffHeap();
 
         try
         {
@@ -146,8 +148,8 @@ public class TrieMemtable extends AbstractAllocatorMemtable
             throw Throwables.propagate(e);
         }
 
-        allocator.offHeap().adjust(partitions.sizeOffHeap() - offHeap, opGroup);
-        allocator.onHeap().adjust(partitions.sizeOnHeap() - onHeap, opGroup);
+//        allocator.offHeap().adjust(partitions.sizeOffHeap() - offHeap, opGroup);
+//        allocator.onHeap().adjust(partitions.sizeOnHeap() - onHeap, opGroup);
         updateMin(minTimestamp, update.stats().minTimestamp);
         liveDataSize.addAndGet(updater.dataSize);
         columnsCollector.update(update.columns());

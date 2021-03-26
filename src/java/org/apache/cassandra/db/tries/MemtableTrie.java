@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.function.Function;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -922,5 +923,17 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
     public int valuesCount()
     {
         return contentCount;
+    }
+
+    MemtableTrie<T> duplicateAdjustingContent(Function<T, T> mapper)
+    {
+        MemtableTrie<T> dest = new MemtableTrie<>(bufferType, buffer.capacity(), contentArray.length());
+        dest.buffer.putBytes(0, buffer, 0, buffer.capacity());
+        dest.root = root;
+        dest.allocatedPos = allocatedPos;
+        for (int i = 0; i < contentCount; ++i)
+            dest.contentArray.set(i, mapper.apply(contentArray.get(i)));
+        dest.contentCount = contentCount;
+        return dest;
     }
 }

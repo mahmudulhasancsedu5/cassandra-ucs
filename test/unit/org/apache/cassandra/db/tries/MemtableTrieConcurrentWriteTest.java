@@ -39,12 +39,12 @@ import static org.apache.cassandra.db.tries.MemtableTrieTestBase.generateKeys;
 
 public class MemtableTrieConcurrentWriteTest
 {
-    private static final int COUNT = 1000000;
+    private static final int COUNT = 10000000;
     private static final int OTHERS = COUNT / 10;
     private static final int PROGRESS_UPDATE = COUNT / 100;
     private static final int READERS = 8;
     private static final int WALKERS = 2;
-    private static final int WRITERS = 4;
+    private static final int WRITERS = 16;
     Random rand = new Random();
 
     static String value(ByteComparable b)
@@ -88,28 +88,10 @@ public class MemtableTrieConcurrentWriteTest
             {
                 public void run()
                 {
-                    try
+                    Random r = ThreadLocalRandom.current();
+                    while (!writeCompleted())
                     {
-                        Random r = ThreadLocalRandom.current();
-                        while (!writeCompleted())
-                        {
-                            int min = getProgress();
-                            int count = 0;
-                            for (Map.Entry<ByteComparable, String> en : trie.asTrie().entrySet())
-                            {
-                                String v = value(en.getKey());
-                                Assert.assertEquals(en.getKey()
-                                                      .byteComparableAsString(
-                                                      VERSION), v, en.getValue());
-                                ++count;
-                            }
-                            Assert.assertTrue("Got only " + count + " while progress is at " + min, count >= min);
-                        }
-                    }
-                    catch (Throwable t)
-                    {
-                        t.printStackTrace();
-                        errors.add(t);
+                        walkAndCheckProgress(trie, errors);
                     }
                 }
             });
@@ -120,10 +102,10 @@ public class MemtableTrieConcurrentWriteTest
             {
                 public void run()
                 {
-                    try
+                    Random r = ThreadLocalRandom.current();
+                    while (!writeCompleted())
                     {
-                        Random r = ThreadLocalRandom.current();
-                        while (!writeCompleted())
+                        try
                         {
                             int min = getProgress();
 
@@ -143,11 +125,11 @@ public class MemtableTrieConcurrentWriteTest
                                     Assert.fail("Failed index " + index + " while progress is at " + min);
                             }
                         }
-                    }
-                    catch (Throwable t)
-                    {
-                        t.printStackTrace();
-                        errors.add(t);
+                        catch (Throwable t)
+                        {
+                            t.printStackTrace();
+                            errors.add(t);
+                        }
                     }
                 }
             });
@@ -169,10 +151,7 @@ public class MemtableTrieConcurrentWriteTest
                             // Note: Because we don't ensure order when calling resolve, just use a hash of the key as payload
                             // (so that all sources have the same value).
                             String v = value(b);
-//                            if (i % 2 == 0)
-//                                trie.apply(Trie.singleton(b, v), (x, y) -> y);
-//                            else
-                                trie.putRecursive(b, v, (x, y) -> y);
+                            trie.putSingleton(b, v, (x, y) -> y, i % 2 > 0);
 
                             if (i % PROGRESS_UPDATE == base)
                                 writeProgress.set(base, i);
@@ -201,10 +180,38 @@ public class MemtableTrieConcurrentWriteTest
             Thread.sleep(100);
         }
 
+        System.out.println("Completed, progress at " + getProgress());
+        walkAndCheckProgress(trie, errors);
+
         for (Thread t : threads)
             t.join();
 
         if (!errors.isEmpty())
             Assert.fail("Got errors:\n" + errors);
+    }
+
+    private void walkAndCheckProgress(WritableTrie<String> trie, ConcurrentLinkedQueue<Throwable> errors)
+    {
+        try
+        {
+            int min = getProgress();
+            if (min > 0)
+                ++min;// progress is up to inclusive
+            int count = 0;
+            for (Map.Entry<ByteComparable, String> en : trie.asTrie().entrySet())
+            {
+                String v = value(en.getKey());
+                Assert.assertEquals(en.getKey()
+                                      .byteComparableAsString(
+                                      VERSION), v, en.getValue());
+                ++count;
+            }
+            Assert.assertTrue("Got only " + count + " while progress is at " + min, count >= min);
+        }
+        catch (Throwable t)
+        {
+            t.printStackTrace();
+            errors.add(t);
+        }
     }
 }

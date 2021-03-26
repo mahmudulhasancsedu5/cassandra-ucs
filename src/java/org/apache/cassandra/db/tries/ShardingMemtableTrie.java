@@ -20,7 +20,6 @@ package org.apache.cassandra.db.tries;
 
 import java.util.Arrays;
 
-import org.apache.cassandra.db.memtable.TrieMemtable;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
@@ -28,23 +27,22 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 public class ShardingMemtableTrie<T> implements WritableTrie<T>
 {
     static final int DIRECT_MAX = 2;
-    static final int SIZE_LIMIT = 32 * 1024;// * 1024;
+    static final int SIZE_LIMIT = 1024 * 1024;
 
-    volatile LimitedSizeMemtableTrie<T>[] shards;
     volatile Trie<T> merged;
-    final MemtableTrie<Integer> top;
+    volatile LimitedSizeMemtableTrie<T>[] shards;
+    volatile MemtableTrie<LimitedSizeMemtableTrie<T>> top;
 
     public ShardingMemtableTrie(BufferType bufferType)
     {
         LimitedSizeMemtableTrie<T> first = new LimitedSizeMemtableTrie<>(bufferType, SIZE_LIMIT);
-        shards = new LimitedSizeMemtableTrie[1];
-        first.index = 0;
-        shards[first.index] = first;
-        merged = first;
         top = new MemtableTrie<>(bufferType);
+        merged = first;
+        shards = new LimitedSizeMemtableTrie[]{ first };
+        first.index = 0;
         try
         {
-            top.putRecursive(ByteComparable.fixedLength(new byte[0]), first.index, (a, b) -> b);
+            top.putRecursive(ByteComparable.fixedLength(new byte[0]), first, (a, b) -> b);
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
@@ -58,92 +56,89 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 //        if (shardCount <= DIRECT_MAX)
 //            return walkInParallel(path);
 //        else
-            return getFloor(path).get(path);
+            return getFloor(top, path).get(path);
     }
 
-    private LimitedSizeMemtableTrie<T> getFloor(ByteComparable path)
+    private static <V> V getFloor(MemtableTrie<V> trie, ByteComparable path)
     {
-        if (shards.length == 1)
-            return shards[0];
-
-        int node = top.root;
+        int node = trie.root;
         ByteSource src = path.asComparableBytes(MemtableTrie.BYTE_COMPARABLE_VERSION);
         int lesserPath = MemtableTrie.NONE;
         // Follow path tracking closest lower branch
         while (!MemtableTrie.isNull(node))
         {
             int c = src.next();
-            lesserPath = top.lesserChild(node, c, lesserPath);  // also works for c < 0, getting content only
+            lesserPath = trie.lesserChild(node, c, lesserPath);  // also works for c < 0, getting content only
             if (c == ByteSource.END_OF_STREAM)
                 break;
-            node = top.getChild(node, c);
+            node = trie.getChild(node, c);
         }
         // Follow the max of the lower branch.
         while (!MemtableTrie.isNullOrLeaf(lesserPath))
-            lesserPath = top.lesserChild(lesserPath, 0x100, Integer.MIN_VALUE);
+            lesserPath = trie.lesserChild(lesserPath, 0x100, Integer.MIN_VALUE);
 
         assert lesserPath != Integer.MIN_VALUE
             : "Branch without children in trie for " +  path.byteComparableAsString(MemtableTrie.BYTE_COMPARABLE_VERSION);
         assert MemtableTrie.isLeaf(lesserPath)
             : "ConcurrentTrie has no match for " + path.byteComparableAsString(MemtableTrie.BYTE_COMPARABLE_VERSION);
 
-        return shards[top.getContent(~lesserPath)];
+        return trie.getContent(~lesserPath);
     }
 
-    private T walkInParallel(ByteComparable path)
-    {
-        int shardCount = shards.length;
-        ShardWithNode<T>[] nodes = new ShardWithNode[shardCount];
-        int nodeCount = 0;
-        for (MemtableTrie<T> shard : shards)
-        {
-            int root = shard.root;
-            if (root != MemtableTrie.NONE)
-                nodes[nodeCount++] = new ShardWithNode(shard, root);
-        }
-        ByteSource src = path.asComparableBytes(TrieMemtable.BYTE_COMPARABLE_VERSION);
-        int c = src.next();
-        while (c != ByteSource.END_OF_STREAM)
-        {
-            int destCount = 0;
-            for (int i = 0; i < nodeCount; ++i)
-            {
-                int node = nodes[i].trie.getChild(nodes[i].node, c);
-                if (node != MemtableTrie.NONE)
-                {
-                    nodes[i].node = node;
-                    nodes[destCount++] = nodes[i];
-                }
-            }
-            if (destCount == 0)
-                return null;
-            nodeCount = destCount;
-            c = src.next();
-        }
-        for (int i = 0; i < nodeCount; ++i)
-        {
-            T content = nodes[i].trie.getNodeContent(nodes[i].node);
-            if (content != null)
-                return content;
-        }
-        return null;
-    }
-
-    static class ShardWithNode<T>
-    {
-        MemtableTrie<T> trie;
-        int node;
-
-        public ShardWithNode(MemtableTrie<T> shard, int root)
-        {
-            this.trie = shard;
-            this.node = root;
-        }
-    }
+////    private T walkInParallel(ByteComparable path)
+////    {
+////        int shardCount = shards.length;
+////        ShardWithNode<T>[] nodes = new ShardWithNode[shardCount];
+////        int nodeCount = 0;
+////        for (MemtableTrie<T> shard : shards)
+////        {
+////            int root = shard.root;
+////            if (root != MemtableTrie.NONE)
+////                nodes[nodeCount++] = new ShardWithNode(shard, root);
+////        }
+////        ByteSource src = path.asComparableBytes(TrieMemtable.BYTE_COMPARABLE_VERSION);
+////        int c = src.next();
+////        while (c != ByteSource.END_OF_STREAM)
+////        {
+////            int destCount = 0;
+////            for (int i = 0; i < nodeCount; ++i)
+////            {
+////                int node = nodes[i].trie.getChild(nodes[i].node, c);
+////                if (node != MemtableTrie.NONE)
+////                {
+////                    nodes[i].node = node;
+////                    nodes[destCount++] = nodes[i];
+////                }
+////            }
+////            if (destCount == 0)
+////                return null;
+////            nodeCount = destCount;
+////            c = src.next();
+////        }
+////        for (int i = 0; i < nodeCount; ++i)
+////        {
+////            T content = nodes[i].trie.getNodeContent(nodes[i].node);
+////            if (content != null)
+////                return content;
+////        }
+////        return null;
+////    }
+//
+//    static class ShardWithNode<T>
+//    {
+//        MemtableTrie<T> trie;
+//        int node;
+//
+//        public ShardWithNode(MemtableTrie<T> shard, int root)
+//        {
+//            this.trie = shard;
+//            this.node = root;
+//        }
+//    }
 
     public <R> void putSingleton(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
     {
-        LimitedSizeMemtableTrie<T> shard = getFloor(key);
+        LimitedSizeMemtableTrie<T> shard = getFloor(top, key);
         while (true)
         {
             synchronized (shard)
@@ -157,20 +152,20 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                         shard.putSingleton(key, value, transformer);
                         return;
                     }
-                    else
-                        shard = getFloor(key);
                 }
                 catch (MemtableTrie.SpaceExhaustedException e)
                 {
-                    shard = splitShard(shard, key);
+                    splitShard(shard, key);
                 }
             }
+            // called on markedForRemoval
+            shard = getFloor(top, key);
         }
     }
 
     public <R> void putRecursive(ByteComparable key, R value, MemtableTrie.UpsertTransformer<T, ? super R> transformer)
     {
-        LimitedSizeMemtableTrie<T> shard = getFloor(key);
+        LimitedSizeMemtableTrie<T> shard = getFloor(top, key);
         while (true)
         {
             synchronized (shard)
@@ -184,14 +179,13 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                         shard.putRecursive(key, value, transformer);
                         return;
                     }
-                    else
-                        shard = getFloor(key);
                 }
                 catch (MemtableTrie.SpaceExhaustedException e)
                 {
-                    shard = splitShard(shard, key);
+                    splitShard(shard, key);
                 }
             }
+            shard = getFloor(top, key);
         }
     }
 
@@ -222,17 +216,19 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                 LimitedSizeMemtableTrie<T>[] newShards = Arrays.copyOf(shards, shards.length + 1);
                 right.index = shards.length;
                 newShards[right.index] = right;
-
                 left.index = shard.index;
-                shards = newShards; // concurrent reads might use new shards. This must still contain old shard until we update the trie mapping
-                top.putRecursive(slst.limit, right.index, (a, b) -> b);  // we are open to concurrent reads and writes on right
-                newShards[left.index] = left;   // we are open to concurrent reads and writes on left
-                shards = newShards; // shards is a volatile -- this ensures that getFloor will return the up-to-date value for left.index
-                merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // concurrent walks now read new shards
+                newShards[left.index] = left;
+
+                MemtableTrie<LimitedSizeMemtableTrie<T>> newTop = top.duplicateAdjustingContent(c -> c == shard ? left : c);
+                newTop.putRecursive(slst.limit, right, (a, b) -> b);
+                top = newTop; // makes the split visible to put and get
+                merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // makes the split visible to iteration
+                shards = newShards; // makes the split visible to sizing
+                // FIXME: size-tracking is in trouble.
             }
 
             // Return the shard the key belongs to after the split.
-            return ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
+            return shard;//ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
