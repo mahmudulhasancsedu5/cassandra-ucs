@@ -22,7 +22,6 @@ import java.util.Arrays;
 
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.io.compress.BufferType;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
