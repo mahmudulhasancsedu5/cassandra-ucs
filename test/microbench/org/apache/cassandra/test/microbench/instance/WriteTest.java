@@ -19,10 +19,13 @@
 package org.apache.cassandra.test.microbench.instance;
 
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import com.google.common.base.Throwables;
@@ -32,6 +35,8 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.commitlog.CommitLog;
+import org.apache.cassandra.db.memtable.Memtable;
+import org.apache.cassandra.utils.FBUtilities;
 import org.openjdk.jmh.annotations.*;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -78,10 +83,16 @@ public class WriteTest extends CQLTester
 
     String writeStatement;
 
+    @Param({"32"})
+    int threadCount;
+
+    ExecutorService executorService;
+
     @Setup(Level.Trial)
     public void setup() throws Throwable
     {
         rand = new Random(1);
+        executorService = Executors.newFixedThreadPool(threadCount);
         CQLTester.setUpClass();
         CQLTester.prepareServer();
         DatabaseDescriptor.setAutoSnapshot(false);
@@ -103,7 +114,7 @@ public class WriteTest extends CQLTester
             executeNet(getDefaultVersion(), "use " + keyspace + ";");
         }
         writeStatement = "INSERT INTO " + table + "(userid,picid,commentid)VALUES(?,?,?)";
-        System.err.println("Prepared, batch " + BATCH + " flush " + flush);
+        System.err.println("Prepared, batch " + BATCH + " threads " + threadCount + " flush " + flush);
         System.err.println("Disk access mode " + DatabaseDescriptor.getDiskAccessMode() + " index " +
                            DatabaseDescriptor.getIndexAccessMode());
 
@@ -119,7 +130,7 @@ public class WriteTest extends CQLTester
         for (i = 0; i <= count - BATCH; i += BATCH)
             performWrite(i, BATCH);
         if (i < count)
-            performWrite(i, count - i);
+            performWrite(i, Math.toIntExact(count - i));
 
         switch (flush)
         {
@@ -144,7 +155,7 @@ public class WriteTest extends CQLTester
     }
 //    abstract Object[] writeArguments(long i);
 
-    public void performWrite(long ofs, long count) throws Throwable
+    public void performWrite(long ofs, int count) throws Throwable
     {
         switch (async)
         {
@@ -163,39 +174,61 @@ public class WriteTest extends CQLTester
         }
     }
 
-    public void performWriteSerial(long ofs, long count) throws Throwable
+    public void performWriteSerial(long ofs, int count) throws Throwable
     {
         for (long i = ofs; i < ofs + count; ++i)
             execute(writeStatement, writeArguments(i));
     }
 
-    public void performWriteThreads(long ofs, long count) throws Throwable
+    public void performWriteThreads(long ofs, int count) throws Throwable
     {
-        long done = LongStream.range(ofs, ofs + count)
-                              .parallel()
-                              .map(i ->
-                                   {
-                                       try
-                                       {
-                                           execute(writeStatement, writeArguments(i));
-                                           return 1;
-                                       }
-                                       catch (Throwable throwable)
-                                       {
-                                           throw Throwables.propagate(throwable);
-                                       }
-                                   })
-                              .sum();
-        assert done == count;
+        List<Future<Integer>> futures = new ArrayList<>();
+        for (int i = 0; i < count; ++i)
+        {
+            long pos = ofs + i;
+            futures.add(executorService.submit(() ->
+            {
+                try
+                {
+                    execute(writeStatement, writeArguments(pos));
+                    return 1;
+                }
+                catch (Throwable throwable)
+                {
+                    throw Throwables.propagate(throwable);
+                }
+            }));
+        }
+        int done = 0;
+        for (Future<Integer> f : futures)
+            done += f.get();
+        assert count == done;
+
+//        long done = LongStream.range(ofs, ofs + count)
+//                              .parallel()
+//                              .map(i ->
+//                                   {
+//                                       try
+//                                       {
+//                                           execute(writeStatement, writeArguments(i));
+//                                           return 1;
+//                                       }
+//                                       catch (Throwable throwable)
+//                                       {
+//                                           throw Throwables.propagate(throwable);
+//                                       }
+//                                   })
+//                              .sum();
+//        assert done == count;
     }
 
-    public void performWriteSerialNet(long ofs, long count) throws Throwable
+    public void performWriteSerialNet(long ofs, int count) throws Throwable
     {
         for (long i = ofs; i < ofs + count; ++i)
             sessionNet().execute(writeStatement, writeArguments(i));
     }
 
-    public void performWriteThreadsNet(long ofs, long count) throws Throwable
+    public void performWriteThreadsNet(long ofs, int count) throws Throwable
     {
         long done = LongStream.range(ofs, ofs + count)
                               .parallel()
@@ -218,6 +251,17 @@ public class WriteTest extends CQLTester
     @TearDown(Level.Trial)
     public void teardown() throws InterruptedException
     {
+        executorService.shutdown();
+        executorService.awaitTermination(15, TimeUnit.SECONDS);
+        Memtable memtable = cfs.getTracker().getView().getCurrentMemtable();
+        Memtable.MemoryUsage usage = memtable.getMemoryUsage();
+        System.err.format("\n%s in %s mode: %d ops, %s serialized bytes, %s\n",
+                          memtable.getClass().getSimpleName(),
+                          DatabaseDescriptor.getMemtableAllocationType(),
+                          memtable.getOperations(),
+                          FBUtilities.prettyPrintMemory(memtable.getLiveDataSize()),
+                          usage);
+
         if (flush == EndOp.INMEM && !cfs.getLiveSSTables().isEmpty())
             throw new AssertionError("SSTables created for INMEM test.");
 
@@ -227,76 +271,5 @@ public class WriteTest extends CQLTester
         CommitLog.instance.shutdownBlocking();
         CQLTester.tearDownClass();
         CQLTester.cleanup();
-    }
-
-    public Object performReadSerial(String readStatement, Supplier<Object[]> supplier) throws Throwable
-    {
-        long sum = 0;
-        for (int i = 0; i < BATCH; ++i)
-            sum += execute(readStatement, supplier.get()).size();
-        return sum;
-    }
-
-    public Object performReadThreads(String readStatement, Supplier<Object[]> supplier) throws Throwable
-    {
-        return IntStream.range(0, BATCH)
-                        .parallel()
-                        .mapToLong(i ->
-                                   {
-                                       try
-                                       {
-                                           return execute(readStatement, supplier.get()).size();
-                                       }
-                                       catch (Throwable throwable)
-                                       {
-                                           throw Throwables.propagate(throwable);
-                                       }
-                                   })
-                        .sum();
-    }
-
-    public Object performReadSerialNet(String readStatement, Supplier<Object[]> supplier) throws Throwable
-    {
-        long sum = 0;
-        for (int i = 0; i < BATCH; ++i)
-            sum += executeNet(getDefaultVersion(), readStatement, supplier.get())
-                           .getAvailableWithoutFetching();
-        return sum;
-    }
-
-    public long performReadThreadsNet(String readStatement, Supplier<Object[]> supplier) throws Throwable
-    {
-        return IntStream.range(0, BATCH)
-                        .parallel()
-                        .mapToLong(i ->
-                                   {
-                                       try
-                                       {
-                                           return executeNet(getDefaultVersion(), readStatement, supplier.get())
-                                                          .getAvailableWithoutFetching();
-                                       }
-                                       catch (Throwable throwable)
-                                       {
-                                           throw Throwables.propagate(throwable);
-                                       }
-                                   })
-                        .sum();
-    }
-
-
-    public Object performRead(String readStatement, Supplier<Object[]> supplier) throws Throwable
-    {
-        switch (async)
-        {
-            case SERIAL:
-                return performReadSerial(readStatement, supplier);
-            case SERIAL_NET:
-                return performReadSerialNet(readStatement, supplier);
-            case PARALLEL:
-                return performReadThreads(readStatement, supplier);
-            case PARALLEL_NET:
-                return performReadThreadsNet(readStatement, supplier);
-        }
-        return null;
     }
 }

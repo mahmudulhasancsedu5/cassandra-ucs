@@ -130,8 +130,9 @@ public interface Memtable extends Comparable<Memtable>
     interface Owner
     {
         void signalFlushRequired(Memtable memtable, ColumnFamilyStore.FlushReason reason);
-    }
 
+        ShardBoundaries localRangeSplits(int shardCount);
+    }
 
     // Main write and read operations
 

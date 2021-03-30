@@ -40,12 +40,9 @@ public class PersistentMemoryMemtable
 //extends AbstractMemtable
 extends SkipListMemtable        // to test framework
 {
-    private final Owner owner;
-
     public PersistentMemoryMemtable(TableMetadataRef metadaRef, Owner owner)
     {
-        super(metadaRef);
-        this.owner = owner;
+        super(null, metadaRef, owner);
         // We should possibly link the persistent data of this memtable
     }
 
