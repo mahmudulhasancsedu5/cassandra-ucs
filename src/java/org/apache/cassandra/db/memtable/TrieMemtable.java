@@ -170,6 +170,12 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         return partitions.valuesCount();
     }
 
+    public void discard()
+    {
+        super.discard();
+        partitions.discardBuffers();
+    }
+
     public MemtableUnfilteredPartitionIterator makePartitionIterator(final ColumnFilter columnFilter, final DataRange dataRange)
     {
         AbstractBounds<PartitionPosition> keyRange = dataRange.keyRange();
