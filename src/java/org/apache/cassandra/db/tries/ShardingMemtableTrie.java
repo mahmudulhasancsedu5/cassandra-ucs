@@ -314,7 +314,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 
     public long sizeOnHeap()
     {
-        long size = 0;
+        long size = top.sizeOnHeap();
         for (MemtableTrie<T> shard : shards)
             size += shard.sizeOnHeap();
         return size;
@@ -322,7 +322,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 
     public long sizeOffHeap()
     {
-        long size = 0;
+        long size = top.sizeOffHeap();
         for (MemtableTrie<T> shard : shards)
             size += shard.sizeOffHeap();
         return size;
