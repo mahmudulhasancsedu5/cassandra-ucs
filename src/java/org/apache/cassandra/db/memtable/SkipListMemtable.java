@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DataRange;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
@@ -76,7 +77,19 @@ public class SkipListMemtable extends AbstractAllocatorMemtable
     @VisibleForTesting
     public SkipListMemtable(TableMetadataRef metadataRef)
     {
-        this(null, metadataRef, (m, r) -> {});
+        this(null, metadataRef, new Owner()
+        {
+            public void signalFlushRequired(Memtable memtable, ColumnFamilyStore.FlushReason reason)
+            {
+                // nothing
+            }
+
+            public OpOrder readOrder()
+            {
+                // no concurrency
+                return null;
+            }
+        });
     }
 
     protected Factory factory()

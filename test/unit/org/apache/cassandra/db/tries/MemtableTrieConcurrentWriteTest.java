@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import org.junit.Assert;
@@ -33,6 +31,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
+import org.apache.cassandra.utils.concurrent.OpOrder;
 
 import static org.apache.cassandra.db.tries.MemtableTrieTestBase.VERSION;
 import static org.apache.cassandra.db.tries.MemtableTrieTestBase.generateKeys;
@@ -54,6 +53,7 @@ public class MemtableTrieConcurrentWriteTest
 
     AtomicIntegerArray writeProgress = new AtomicIntegerArray(WRITERS);
     AtomicIntegerArray writeCompleted = new AtomicIntegerArray(WRITERS);
+    final OpOrder readOrder = new OpOrder();
 
     int getProgress()
     {
@@ -77,7 +77,7 @@ public class MemtableTrieConcurrentWriteTest
     public void testThreaded() throws InterruptedException
     {
         ByteComparable[] src = generateKeys(rand, COUNT + OTHERS);
-        WritableTrie<String> trie = new ShardingMemtableTrie<>(BufferType.ON_HEAP);
+        WritableTrie<String> trie = new ShardingMemtableTrie<>(BufferType.OFF_HEAP, readOrder);
 //        WritableTrie<String> trie = new MemtableTrie<>(BufferType.ON_HEAP);
         ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
         List<Thread> threads = new ArrayList<Thread>();
@@ -90,7 +90,10 @@ public class MemtableTrieConcurrentWriteTest
                     Random r = ThreadLocalRandom.current();
                     while (!writeCompleted())
                     {
-                        walkAndCheckProgress(trie, errors);
+                        try (OpOrder.Group read = readOrder.start())
+                        {
+                            walkAndCheckProgress(trie, errors);
+                        }
                     }
                 }
             });
@@ -113,7 +116,12 @@ public class MemtableTrieConcurrentWriteTest
                                 int index = r.nextInt(COUNT + OTHERS);
                                 ByteComparable b = src[index];
                                 String v = value(b);
-                                String result = trie.get(b);
+                                String result;
+                                try (OpOrder.Group read = readOrder.start())
+                                {
+                                    result = trie.get(b);
+                                }
+
                                 if (result != null)
                                 {
                                     Assert.assertTrue("Got not added " + index + " when COUNT is " + COUNT,

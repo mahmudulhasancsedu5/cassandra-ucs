@@ -130,6 +130,8 @@ public interface Memtable extends Comparable<Memtable>
     interface Owner
     {
         void signalFlushRequired(Memtable memtable, ColumnFamilyStore.FlushReason reason);
+
+        OpOrder readOrder();
     }
 
 

@@ -105,7 +105,7 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     // to select key range using Token.KeyBound. However put() ensures that we
     // actually only store DecoratedKey.
 //    private final WritableTrie<BTreePartitionData> partitions = new MemtableTrie<>(BUFFER_TYPE);
-    private final WritableTrie<BTreePartitionData> partitions = new ShardingMemtableTrie<>(BUFFER_TYPE);
+    private final WritableTrie<BTreePartitionData> partitions = new ShardingMemtableTrie<>(BUFFER_TYPE, owner.readOrder());
 
     // only to be used by init(), to setup the very first memtable for the cfs
     TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner)

@@ -19,11 +19,13 @@
 package org.apache.cassandra.db.tries;
 
 import java.util.Arrays;
+import java.util.concurrent.ForkJoinPool;
 
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
+import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public class ShardingMemtableTrie<T> implements WritableTrie<T>
 {
@@ -34,9 +36,11 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
     volatile Trie<T> merged;
     volatile LimitedSizeMemtableTrie<T>[] shards;
     volatile MemtableTrie<LimitedSizeMemtableTrie<T>> top;
+    final OpOrder readOrder;
 
-    public ShardingMemtableTrie(BufferType bufferType)
+    public ShardingMemtableTrie(BufferType bufferType, OpOrder readOrder)
     {
+        this.readOrder = readOrder;
         LimitedSizeMemtableTrie<T> first = new LimitedSizeMemtableTrie<>(bufferType, SIZE_LIMIT);
         top = new MemtableTrie<>(bufferType);
         merged = first;
@@ -194,6 +198,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                                                                              shard.valuesCount());
             right.copyInto(shard.subtrie(slst.limit, true, null, false));
 
+            AllocatedMemory allocatedMemory;
             // Update list and merged trie.
             synchronized (this)
             {
@@ -208,9 +213,8 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
                 MemtableTrie<LimitedSizeMemtableTrie<T>> newTop = top.duplicateAdjustingContent(c -> c == shard ? left : c);
                 newTop.putRecursive(slst.limit, right, (a, b) -> b);
 
-                AllocatedMemory allocatedMemory = new AllocatedMemory(
-                left.sizeOnHeap() + right.sizeOnHeap() + top.sizeOnHeap() - shard.sizeOnHeap() - topOnHeap,
-                left.sizeOffHeap() + right.sizeOffHeap() + top.sizeOffHeap() - shard.sizeOffHeap() - topOffHeap);
+                allocatedMemory = new AllocatedMemory(left.sizeOnHeap() + right.sizeOnHeap() + top.sizeOnHeap() - shard.sizeOnHeap() - topOnHeap,
+                                                      left.sizeOffHeap() + right.sizeOffHeap() + top.sizeOffHeap() - shard.sizeOffHeap() - topOffHeap);
 
                 top = newTop; // makes the split visible to put and get
                 merged = Trie.merge(Arrays.asList(newShards), Trie.throwingResolver()); // makes the split visible to iteration
@@ -220,10 +224,21 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 //                                                 FBUtilities.prettyPrintMemory(left.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(right.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(top.allocatedSize())));
-                // TODO: take oporder barrier and discard buffer when it expires
-                return allocatedMemory;
             }
 
+            if (readOrder != null && shard.bufferType != BufferType.ON_HEAP)
+            {
+                // We can only discard the shard we just split after no other thread
+                // can be reading it. This can only be reads that have started before
+                // this point in time, thus an oporder barrier issued now will expire
+                // after they have completed.
+                ForkJoinPool.commonPool().execute(() -> {
+                    readOrder.awaitNewBarrier();
+                    shard.discardBuffers();
+                });
+            }
+
+            return allocatedMemory;
             // Return the shard the key belongs to after the split.
             //ByteComparable.compare(key, slst.limit, MemtableTrie.BYTE_COMPARABLE_VERSION) < 0 ? left : right;
         }

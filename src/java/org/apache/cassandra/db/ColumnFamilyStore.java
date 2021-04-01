@@ -1376,6 +1376,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         switchMemtableIfCurrent(memtable, reason);
     }
 
+    public OpOrder readOrder()
+    {
+        return readOrdering;
+    }
+
     /**
      * @param sstables
      * @return sstables whose key range overlaps with that of the given sstables, not including itself.

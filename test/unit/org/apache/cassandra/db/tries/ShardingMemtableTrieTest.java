@@ -28,12 +28,9 @@ import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.Function;
-import java.util.stream.Stream;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multiset;
 import org.junit.Assert;
@@ -83,7 +80,7 @@ public class ShardingMemtableTrieTest
                                                      boolean usePut)
 
     {
-        WritableTrie<ByteBuffer> trie = new ShardingMemtableTrie<>(BufferType.OFF_HEAP);
+        WritableTrie<ByteBuffer> trie = new ShardingMemtableTrie<>(BufferType.OFF_HEAP, null); // no concurrency
         addToWritableTrie(src, content, trie, usePut);
         return trie;
     }
