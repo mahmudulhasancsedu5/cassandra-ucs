@@ -59,4 +59,6 @@ public interface WritableTrie<T>
         return subtrie(null, false, null, false);
     }
     public Trie<T> subtrie(ByteComparable left, boolean includeLeft, ByteComparable right, boolean includeRight);
+
+    public void discardBuffers();
 }

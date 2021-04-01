@@ -220,6 +220,7 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
 //                                                 FBUtilities.prettyPrintMemory(left.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(right.allocatedSize()),
 //                                                 FBUtilities.prettyPrintMemory(top.allocatedSize())));
+                // TODO: take oporder barrier and discard buffer when it expires
                 return allocatedMemory;
             }
 
@@ -345,5 +346,12 @@ public class ShardingMemtableTrie<T> implements WritableTrie<T>
     public Trie<T> subtrie(ByteComparable left, boolean includeLeft, ByteComparable right, boolean includeRight)
     {
         return merged.subtrie(left, includeLeft, right, includeRight);
+    }
+
+    public void discardBuffers()
+    {
+        top.discardBuffers();
+        for (WritableTrie<T> shard : shards)
+            shard.discardBuffers();
     }
 }

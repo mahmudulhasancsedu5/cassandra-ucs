@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import org.agrona.concurrent.UnsafeBuffer;
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.FBUtilities;
@@ -186,6 +187,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
     private void setContent(int index, T value)
     {
         contentArray.set(index, value);
+    }
+
+    public void discardBuffers()
+    {
+        FileUtils.clean(buffer.byteBuffer());
     }
 
     // Write methods
