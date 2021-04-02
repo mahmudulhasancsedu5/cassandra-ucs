@@ -25,14 +25,12 @@ import java.util.function.Function;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.LoggerFactory;
-
+import net.nicoulaj.compilecommand.annotations.DontInline;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.github.jamm.MemoryLayoutSpecification;
 
@@ -564,12 +562,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
     /**
      * State of the walk of the given mutation trie. Passed to mutation nodes in their parentState link.
      */
-    class ApplyState<U>
+    class ApplyState
     {
-        /**
-         * The node from the mutation trie.
-         */
-        final Node<U, ApplyState<U>> mutationNode;
+        final ApplyState parentState;
 
         /**
          * Pointer to the existing node before skipping over content nodes, i.e. this is either the same as
@@ -593,9 +588,14 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
          */
         int updatedPostContentNode;
 
-        ApplyState(Node<U, ApplyState<U>> mutationNode, int transition)
+        final int parentTransition;
+        final int contentIndex;
+
+        <U> ApplyState(ApplyState parentState, int transition, U mutationContent, UpsertTransformer<T, U> transformer)
         {
-            ApplyState<U> parentState = mutationNode.parentLink;
+            this.parentState = parentState;
+            this.parentTransition = transition;
+
             if (parentState == null)
                 existingPreContentNode = root;
             else
@@ -605,15 +605,49 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
                                          : getChild(parentState.existingPostContentNode, transition);
             }
 
-            existingPostContentNode = followContentTransition(existingPreContentNode);
-            updatedPostContentNode = existingPostContentNode;
+            int existingContentIndex = -1;
+            if (isLeaf(existingPreContentNode))
+            {
+                existingContentIndex = ~existingPreContentNode;
+                existingPostContentNode = NONE;
+            }
+            else if (offset(existingPreContentNode) == PREFIX_OFFSET)
+            {
+                existingContentIndex = getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET);
+                existingPostContentNode = followContentTransition(existingPreContentNode);
+            }
+            else
+                existingPostContentNode = existingPreContentNode;
 
-            this.mutationNode = mutationNode;
+            if (mutationContent != null)
+            {
+                if (existingContentIndex != -1)
+                {
+                    final T existingContent = contentArray.get(existingContentIndex);
+                    T combinedContent = transformer.apply(existingContent, mutationContent);
+                    setContent(existingContentIndex, combinedContent);
+                    if (combinedContent != null)
+                        contentIndex = existingContentIndex;
+                    else
+                        contentIndex = -1;
+                }
+                else
+                {
+                    T combinedContent = transformer.apply(null, mutationContent);
+                    if (combinedContent != null)
+                        contentIndex = addContent(combinedContent);
+                    else
+                        contentIndex = -1;
+                }
+            }
+            else
+                contentIndex = existingContentIndex;
+
+            updatedPostContentNode = existingPostContentNode;
         }
 
-        private void attachChild(int ourChild) throws SpaceExhaustedException
+        private void attachChild(int transition, int ourChild) throws SpaceExhaustedException
         {
-            int transition = mutationNode.currentTransition;
             if (isNull(updatedPostContentNode))
                 updatedPostContentNode = expandOrCreateChainNode(transition, ourChild);
             else
@@ -622,41 +656,8 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
                                                                        ourChild);
         }
 
-        private int applyContent(U mutationContent, UpsertTransformer<T, U> transformer) throws SpaceExhaustedException
+        private int applyContent() throws SpaceExhaustedException
         {
-            // common case, no new content
-            if (mutationContent == null)
-                return preserveContent(existingPreContentNode, existingPostContentNode, updatedPostContentNode);
-
-            int contentIndex = -1;
-            int existingContentIndex = -1;
-
-            if (existingPreContentNode != existingPostContentNode)
-            {
-                // There is pre-existing content which must be merged with the new.
-                if (isLeaf(existingPreContentNode))
-                    existingContentIndex = ~existingPreContentNode;
-                else
-                {
-                    assert offset(existingPreContentNode) == PREFIX_OFFSET;
-                    existingContentIndex = getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET);
-                }
-
-                final T existingContent = contentArray.get(existingContentIndex);
-                T combinedContent = transformer.apply(existingContent, mutationContent);
-                setContent(existingContentIndex, combinedContent);
-                if (combinedContent != null)
-                    contentIndex = existingContentIndex;
-            }
-            else
-            {
-                // No pre-existing content.
-                T combinedContent = transformer.apply(null, mutationContent);
-                if (combinedContent != null)
-                    contentIndex = addContent(combinedContent);
-            }
-
-            // The supplied transformer may return null, e.g. to delete data. In this case we don't have a content index.
             if (contentIndex == -1)
                 return updatedPostContentNode;
 
@@ -666,22 +667,22 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
             // We can't update in-place if there was no preexisting prefix, or if the prefix was embedded and the target
             // node must change.
             if (existingPreContentNode == existingPostContentNode ||
+                isNull(existingPostContentNode) ||
                 isEmbeddedPrefixNode(existingPreContentNode) && updatedPostContentNode != existingPostContentNode)
                 return createContentNode(contentIndex, updatedPostContentNode, isNull(existingPostContentNode));
 
             // Otherwise modify in place
             if (updatedPostContentNode != existingPostContentNode) // to use volatile write but also ensure we don't corrupt embedded nodes
                 buffer.putIntVolatile(existingPreContentNode + PREFIX_POINTER_OFFSET, updatedPostContentNode);
-            assert contentIndex == existingContentIndex;
+            assert contentIndex == getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET);
             return existingPreContentNode;
         }
 
-        private ApplyState<U> attachAndMoveToParentState(UpsertTransformer<T, U> transformer) throws SpaceExhaustedException
+        private <U> ApplyState attachAndMoveToParentState() throws SpaceExhaustedException
         {
-            ApplyState<U> parentState = mutationNode.parentLink;
+            ApplyState parentState = this.parentState;
 
-            int updatedPreContentNode = applyContent(mutationNode.content(),
-                                                     transformer);
+            int updatedPreContentNode = applyContent();
 
             if (parentState == null)
             {
@@ -697,7 +698,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
             }
 
             if (updatedPreContentNode != existingPreContentNode)
-                parentState.attachChild(updatedPreContentNode);
+                parentState.attachChild(parentTransition, updatedPreContentNode);
 
             return parentState;
         }
@@ -733,41 +734,33 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
      */
     public <U> void apply(Trie<U> mutation, final UpsertTransformer<T, U> transformer) throws SpaceExhaustedException
     {
-        Node<U, ApplyState<U>> current = mutation.root();
-        if (current == null)
+        Cursor<U> mutationCursor = mutation.cursor();
+        if (mutationCursor.level() == -1)
             return;
+        assert mutationCursor.level() == 0;
 
-        ApplyState<U> state = new ApplyState<U>(current, current.parentLink != null ? current.parentLink.mutationNode.currentTransition : -1);
+        ApplyState state = new ApplyState(null, -1, mutationCursor.content(), transformer);
+        int prevLevel = 0;
 
-        Trie.Remaining has = current.startIteration();
         while (true)
         {
-            if (has != null)
-            {
-                // We have a transition, get child to descend into
-                Node<U, ApplyState<U>> child = current.getCurrentChild(state);
-
-                if (child == null)
-                {
-                    // no child, get next
-                    has = current.advanceIteration();
-                }
-                else
-                {
-                    state = new ApplyState<U>(child, current.currentTransition);
-                    current = child;
-                    has = current.startIteration();
-                }
-            }
-            else
+            int level = mutationCursor.advance();
+            while (prevLevel >= level)
             {
                 // There are no more children. Ascend to the parent state to continue walk.
-                state = state.attachAndMoveToParentState(transformer);
+                state = state.attachAndMoveToParentState();
+                --prevLevel;
                 if (state == null)
-                    break;
-                current = state.mutationNode;
-                has = current.advanceIteration();
+                {
+                    assert prevLevel == -1;
+                    return;
+                }
             }
+            assert level == prevLevel + 1;
+
+            // We have a transition, get child to descend into
+            state = new ApplyState(state, mutationCursor.transition(), mutationCursor.content(), transformer);
+            prevLevel = level;
         }
     }
 
@@ -839,6 +832,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
             root = newRoot;
     }
 
+    @DontInline
     private <R> int putRecursive(int node, ByteSource key, R value, final UpsertTransformer<T, ? super R> transformer) throws SpaceExhaustedException
     {
         int transition = key.next();
