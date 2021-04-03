@@ -68,7 +68,6 @@ public class MemtableTrie<T> extends MemtableReadTrie<T> implements WritableTrie
 
     private int allocatedPos = 0;
     private int contentCount = 0;
-    private int maxDepth = 0;
 
     final BufferType bufferType;    // on or off heap
 
