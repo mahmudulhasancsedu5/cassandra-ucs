@@ -593,19 +593,25 @@ public class MemtableReadTrie<T> extends Trie<T>
             int tailIdx = splitNodeTailIndex(trans);
             int childIdx = splitNodeChildIndex(trans);
 
+            UnsafeBuffer nodeBuffer = getBuffer(node);
+            int nodeOfs = getOffset(node);
             while (midIndex < 4)
             {
-                int mid = getInt(node + SPLIT_POINTER_OFFSET + midIndex * 4);
+                int mid = nodeBuffer.getInt(nodeOfs + SPLIT_POINTER_OFFSET + midIndex * 4);
+                UnsafeBuffer midBuffer = getBuffer(mid);
+                int midOfs = getOffset(mid);
                 if (!isNull(mid))
                 {
                     while (tailIdx < 8)
                     {
-                        int tail = getInt(mid + tailIdx * 4);
+                        int tail = midBuffer.getInt(midOfs + tailIdx * 4);
+                        UnsafeBuffer tailBuffer = getBuffer(tail);
+                        int tailOfs = getOffset(tail);
                         if (!isNull(tail))
                         {
                             while (childIdx < 8)
                             {
-                                int child = getInt(tail + childIdx * 4);
+                                int child = tailBuffer.getInt(tailOfs + childIdx * 4);
                                 if (!isNull(child))
                                 {
                                     int transition = ((midIndex << 6) | (tailIdx << 3) | childIdx);
@@ -631,15 +637,15 @@ public class MemtableReadTrie<T> extends Trie<T>
             int minValid = Integer.MAX_VALUE;
             int minChild = NONE;
             int validCount = 0;
-            UnsafeBuffer buffer = getBuffer(node);
-            int ofs = getOffset(node);
+            UnsafeBuffer nodeBuffer = getBuffer(node);
+            int nodeOfs = getOffset(node);
 
             for (int i = 0; i < SPARSE_CHILD_COUNT; ++i)
             {
-                int child = buffer.getInt(ofs + SPARSE_CHILDREN_OFFSET + i * 4);
+                int child = nodeBuffer.getInt(nodeOfs + SPARSE_CHILDREN_OFFSET + i * 4);
                 if (child == NONE)
                     break;
-                int t = buffer.getByte(ofs + SPARSE_BYTES_OFFSET + i) & 0xFF;
+                int t = nodeBuffer.getByte(nodeOfs + SPARSE_BYTES_OFFSET + i) & 0xFF;
                 if (t >= transition)
                 {
                     if (t < minValid)
@@ -663,18 +669,21 @@ public class MemtableReadTrie<T> extends Trie<T>
         private boolean getChainTransition(int node)
         {
             // no backtracking needed
-            int transition = getByte(node);
+            UnsafeBuffer nodeBuffer = getBuffer(node);
+            int nodeOfs = getOffset(node);
+            int transition = nodeBuffer.getByte(nodeOfs) & 0xFF;
             int next = node + 1;
             if (offset(next) <= CHAIN_MAX_OFFSET)
                 descendIntoChain(next, transition);
             else
-                descendInto(getInt(next), transition);
+                descendInto(nodeBuffer.getInt(nodeOfs + 1), transition);
             return true;
         }
 
         // TODO: don't redo buffer/offset calculations
         // TODO: maybe use sparse order word
-        // TODO: reexamine backtracking, separate backtrack positions for dense sub-levels
+        // TODO: reexamine backtracking
+        // TODO: maybe separate backtrack positions for dense sub-levels
 
         @Override
         public int advanceMultiple(TransitionsReceiver receiver)
