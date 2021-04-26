@@ -868,22 +868,22 @@ public class MemtableReadTrie<T> extends Trie<T>
         @Override
         public int advance()
         {
-            return advance(-1);
+            return advance(0);
         }
 
-        private int advance(int transition)
+        private int advance(int data)
         {
             while (true)
             {
-                if (advanceToNextChild(currentNode, transition))
+                if (advanceToNextChild(currentNode, data))
                     return level;
 
                 if (--backtrackLevel < 0)
-                    return -1;
+                    return level = -1;
 
                 level = level(backtrackLevel);
                 currentNode = node(backtrackLevel);
-                transition = data(backtrackLevel);
+                data = data(backtrackLevel);
             }
         }
 
@@ -891,12 +891,12 @@ public class MemtableReadTrie<T> extends Trie<T>
         public int ascend()
         {
             if (--backtrackLevel < 0)
-                return -1;
+                return level = -1;
 
             level = level(backtrackLevel);
             currentNode = node(backtrackLevel);
-            int transition = data(backtrackLevel);
-            return advance(transition);
+            int data = data(backtrackLevel);
+            return advance(data);
         }
 
         private int descendInto(int child, int transition)
@@ -917,7 +917,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             return level;
         }
 
-        private boolean advanceToNextChild(int node, int transition)
+        private boolean advanceToNextChild(int node, int data)
         {
             if (isNull(node))
                 return false;
@@ -925,9 +925,9 @@ public class MemtableReadTrie<T> extends Trie<T>
             switch (offset(node))
             {
             case SPLIT_OFFSET:
-                return nextValidSplitTransition(node, transition + 1);
+                return nextValidSplitTransition(node, data);
             case SPARSE_OFFSET:
-                return nextValidSparseTransition(node, transition + 1);
+                return nextValidSparseTransition(node, data);
             default:
                 return getChainTransition(node);
             }
@@ -963,7 +963,8 @@ public class MemtableReadTrie<T> extends Trie<T>
                                 if (!isNull(child))
                                 {
                                     int transition = ((midIndex << 6) | (tailIdx << 3) | childIdx);
-                                    addBacktrack(node, transition, level);
+                                    if (transition < 0xFF)
+                                        addBacktrack(node, transition + 1, level);
                                     descendInto(child, transition);
                                     return true;
                                 }
@@ -980,37 +981,19 @@ public class MemtableReadTrie<T> extends Trie<T>
             return false;
         }
 
-        private boolean nextValidSparseTransition(int node, int transition)
+        private boolean nextValidSparseTransition(int node, int data)
         {
-            int minValid = Integer.MAX_VALUE;
-            int minChild = NONE;
-            int validCount = 0;
             UnsafeBuffer nodeBuffer = getBuffer(node);
             int nodeOfs = getOffset(node);
-
-            for (int i = 0; i < SPARSE_CHILD_COUNT; ++i)
-            {
-                int child = nodeBuffer.getInt(nodeOfs + SPARSE_CHILDREN_OFFSET + i * 4);
-                if (child == NONE)
-                    break;
-                int t = nodeBuffer.getByte(nodeOfs + SPARSE_BYTES_OFFSET + i) & 0xFF;
-                if (t >= transition)
-                {
-                    if (t < minValid)
-                    {
-                        minValid = t;
-                        minChild = child;
-                    }
-                    ++validCount;
-                }
-            }
-            if (validCount == 0)
-                return false;
-
-            if (validCount > 1)
-                addBacktrack(node, minValid, level);
-
-            descendInto(minChild, minValid);
+            if (data <= 0)
+                data = nodeBuffer.getShort(nodeOfs + SPARSE_ORDER_OFFSET) & 0xFFFF;
+            int index = data % SPARSE_CHILD_COUNT;
+            data = data / SPARSE_CHILD_COUNT;
+            if (data > 0)
+                addBacktrack(node, data, level);
+            int child = nodeBuffer.getInt(nodeOfs + SPARSE_CHILDREN_OFFSET + index * 4);
+            int transition = nodeBuffer.getByte(nodeOfs + SPARSE_BYTES_OFFSET + index) & 0xFF;
+            descendInto(child, transition);
             return true;
         }
 
@@ -1028,8 +1011,6 @@ public class MemtableReadTrie<T> extends Trie<T>
             return true;
         }
 
-        // TODO: don't redo buffer/offset calculations
-        // TODO: maybe use sparse order word
         // TODO: reexamine backtracking
         // TODO: maybe separate backtrack positions for dense sub-levels
 
@@ -1063,7 +1044,7 @@ public class MemtableReadTrie<T> extends Trie<T>
 
                 if (!isChainNode(child))
                 {
-                    boolean success = advanceToNextChild(child, -1);
+                    boolean success = advanceToNextChild(child, 0);
                     assert success;
                     return level;
                 }
