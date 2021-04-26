@@ -935,50 +935,65 @@ public class MemtableReadTrie<T> extends Trie<T>
 
         private boolean nextValidSplitTransition(int node, int trans)
         {
-            assert trans >= 0 && trans <= 0x100;
-            // Splits the 2-3-3 parts of the transition
-            int midIndex = splitNodeMidIndex(trans);
-            int tailIdx = splitNodeTailIndex(trans);
-            int childIdx = splitNodeChildIndex(trans);
+            assert trans >= 0 && trans <= 0xFF;
+            // To avoid repeatedly following the top transitions, we put backtracking entries for each level of the
+            // split sub-trie and use the bits of `trans` to understand which level the backtracking info points to.
 
-            UnsafeBuffer nodeBuffer = getBuffer(node);
-            int nodeOfs = getOffset(node);
-            while (midIndex < 4)
+            int childIndex = splitNodeChildIndex(trans);
+            if (childIndex == 0)
             {
-                int mid = nodeBuffer.getInt(nodeOfs + SPLIT_POINTER_OFFSET + midIndex * 4);
-                UnsafeBuffer midBuffer = getBuffer(mid);
-                int midOfs = getOffset(mid);
-                if (!isNull(mid))
+                int tailIndex = splitNodeTailIndex(trans);
+                if (tailIndex == 0)
                 {
-                    while (tailIdx < 8)
+                    int midIndex = splitNodeMidIndex(trans);
+                    int mid;
+                    while (true)
                     {
-                        int tail = midBuffer.getInt(midOfs + tailIdx * 4);
-                        UnsafeBuffer tailBuffer = getBuffer(tail);
-                        int tailOfs = getOffset(tail);
-                        if (!isNull(tail))
-                        {
-                            while (childIdx < 8)
-                            {
-                                int child = tailBuffer.getInt(tailOfs + childIdx * 4);
-                                if (!isNull(child))
-                                {
-                                    int transition = ((midIndex << 6) | (tailIdx << 3) | childIdx);
-                                    if (transition < 0xFF)
-                                        addBacktrack(node, transition + 1, level);
-                                    descendInto(child, transition);
-                                    return true;
-                                }
-                                ++childIdx;
-                            }
-                        }
-                        childIdx = 0;
-                        ++tailIdx;
+                        mid = getInt(node + SPLIT_POINTER_OFFSET + midIndex * 4);
+                        if (!isNull(mid))
+                            break;
+                        if (++midIndex == 4)
+                            return false;
                     }
+                    if (midIndex + 1 < 4)
+                        addBacktrack(node, (midIndex + 1) << 6, level); // Store backtracking pos for the top sub-node
+                    trans = midIndex << 6;
+                    node = mid + SPLIT_OFFSET;  // Adjust sub-node pointer so that backtracking can bring us here
                 }
-                tailIdx = 0;
-                ++midIndex;
+                else
+                    trans = trans & -(1 << 6);
+
+                int tail;
+                while (true)
+                {
+                    tail = getInt(node - SPLIT_OFFSET + tailIndex * 4);
+                    if (!isNull(tail))
+                        break;
+                    if (++tailIndex == 8)
+                        return false;
+                }
+                if (tailIndex + 1 < 8)
+                    addBacktrack(node, (tailIndex + 1) << 3 | trans, level); // Store backtracking pos for the mid sub-node
+                trans = tailIndex << 3 | trans;
+                node = tail + SPLIT_OFFSET;
             }
-            return false;
+            else
+                trans = trans & -(1 << 3);
+
+            int child;
+            while (true)
+            {
+                child = getInt(node - SPLIT_OFFSET + childIndex * 4);
+                if (!isNull(child))
+                    break;
+                if (++childIndex == 8)
+                    return false;
+            }
+            if (childIndex + 1 < 8)
+                addBacktrack(node, (childIndex + 1) | trans, level);
+            trans = childIndex | trans;
+            descendInto(child, trans);
+            return true;
         }
 
         private boolean nextValidSparseTransition(int node, int data)
@@ -1010,9 +1025,6 @@ public class MemtableReadTrie<T> extends Trie<T>
                 descendInto(nodeBuffer.getInt(nodeOfs + 1), transition);
             return true;
         }
-
-        // TODO: reexamine backtracking
-        // TODO: maybe separate backtrack positions for dense sub-levels
 
         @Override
         public int advanceMultiple(TransitionsReceiver receiver)
