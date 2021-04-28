@@ -81,18 +81,18 @@ public class RangeTrieSet extends TrieSet
             {
                 remainingLeftLimit = left.asComparableBytes(BYTE_COMPARABLE_VERSION);
                 leftLimitNext = remainingLeftLimit.next();
-                inSet = InSet.PREFIX;
+                inSet = InSet.EXCLUDED;
                 if (leftLimitNext == ByteSource.END_OF_STREAM)
                 {
                     atLeftLimit = false;
                     if (includeLeft)
-                        inSet = InSet.CONTAINED;
+                        inSet = InSet.INCLUDED;
                     transitionAtRightLevel = -1;
                 }
             }
             else
             {
-                inSet = InSet.CONTAINED;
+                inSet = InSet.INCLUDED;
                 transitionAtRightLevel = -1;
             }
 
@@ -109,7 +109,7 @@ public class RangeTrieSet extends TrieSet
                     if (!includeRight)
                     {
                         level = -1;
-                        inSet = InSet.PREFIX;
+                        inSet = InSet.EXCLUDED;
                         return;
                     }
                 }
@@ -124,7 +124,7 @@ public class RangeTrieSet extends TrieSet
             }
 
             incomingTransition = -1;
-            if (!atLeftLimit && !atRightLimit && rightLimitNext >= 0 && inSet == InSet.CONTAINED)
+            if (!atLeftLimit && !atRightLimit && rightLimitNext >= 0 && inSet == InSet.INCLUDED)
                 inSet = InSet.BRANCH;
         }
 
@@ -147,11 +147,25 @@ public class RangeTrieSet extends TrieSet
 
         private int descendAlongBoth()
         {
-            assert rightLimitNext >= leftLimitNext;
+            assert rightLimitNext >= leftLimitNext : "left > right";
+            if (leftLimitNext == ByteSource.END_OF_STREAM)
+            {
+                atLeftLimit = false;
+                incomingTransition = 0;
+                assert rightLimitNext != ByteSource.END_OF_STREAM || includeRight
+                    : "left = right without includeLeft or includeRight";
+                transitionAtRightLevel = 1;
+                atRightLimit = false;
+                inSet = InSet.BRANCH;
+                return ++level;
+            }
+
             int next = leftLimitNext;
             leftLimitNext = remainingLeftLimit.next();
             if (rightLimitNext == next)
+            {
                 rightLimitNext = remainingRightLimit.next();
+            }
             else
             {
                 transitionAtRightLevel = next + 1;
@@ -159,41 +173,37 @@ public class RangeTrieSet extends TrieSet
             }
 
             incomingTransition = next;
-            if (leftLimitNext != ByteSource.END_OF_STREAM)
-            {
-                inSet = InSet.PREFIX;
-            }
+            if (includeLeft && leftLimitNext == ByteSource.END_OF_STREAM)
+                inSet = atRightLimit ? InSet.INCLUDED : InSet.BRANCH;
             else
-            {
-                atLeftLimit = false;
-                if (rightLimitNext == ByteSource.END_OF_STREAM)
-                {
-                    if (includeLeft && includeRight)
-                        inSet = InSet.CONTAINED;
-                    else
-                        return -1;
-                }
-                inSet = includeLeft ? InSet.BRANCH : InSet.PREFIX;//: InSet.BRANCH_EXCLUDING;
-            }
+                inSet = InSet.EXCLUDED;
+
             return ++level;
         }
 
         private int descendAlongLeft()
         {
-            int next = leftLimitNext;
-            leftLimitNext = remainingLeftLimit.next();
-            addBacklog(next + 1);
-
-            incomingTransition = next;
-            if (leftLimitNext != ByteSource.END_OF_STREAM)
-            {
-                inSet = InSet.PREFIX;
-            }
-            else
+            if (!includeLeft && leftLimitNext == ByteSource.END_OF_STREAM)
             {
                 atLeftLimit = false;
-                inSet = includeLeft ? InSet.BRANCH : InSet.PREFIX;//: InSet.BRANCH_EXCLUDING;
+                incomingTransition = 0;
+                inSet = InSet.BRANCH;
+                addBacklog(1);
+                return ++level;
             }
+            int next = leftLimitNext;
+            addBacklog(next + 1);
+            leftLimitNext = remainingLeftLimit.next();
+
+            incomingTransition = next;
+            if (includeLeft && leftLimitNext == ByteSource.END_OF_STREAM)
+            {
+                atLeftLimit = false;
+                inSet = InSet.BRANCH;
+            }
+            else
+                inSet = InSet.EXCLUDED;
+
             return ++level;
         }
 
@@ -240,7 +250,7 @@ public class RangeTrieSet extends TrieSet
                         return -1;
                 }
                 transitionAtRightLevel = -1;
-                inSet = InSet.CONTAINED;
+                inSet = InSet.INCLUDED;
                 return level;
             }
         }
@@ -254,6 +264,9 @@ public class RangeTrieSet extends TrieSet
 
         public int ascend()
         {
+            if (atLeftLimit && atRightLimit)
+                return -1;
+
             atLeftLimit = false;
             if (processBacklog())
                 return level;
@@ -365,7 +378,7 @@ public class RangeTrieSet extends TrieSet
             this.remainingRLimit = remainingRLimit;
             this.atLLimit = atLLimit;
             this.atRLimit = atRLimit;
-            this.inSet = inSet ? InSet.CONTAINED : InSet.PREFIX;
+            this.inSet = inSet ? InSet.INCLUDED : InSet.EXCLUDED;
         }
 
         public Node<InSet, L> getCurrentChild(L parentLink)

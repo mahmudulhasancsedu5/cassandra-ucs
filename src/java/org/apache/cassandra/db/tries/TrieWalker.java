@@ -59,7 +59,7 @@ public interface TrieWalker<T, V>
 
         int prevLevel = 0;
         int level = cursor.advance();
-        while (level != -1)
+        while (level > 0)
         {
             while (prevLevel >= level)
             {
