@@ -19,6 +19,9 @@
 package org.apache.cassandra.db.tries;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Random;
@@ -41,7 +44,7 @@ import static org.junit.Assert.assertEquals;
 
 public class SetIntersectionTrieTest
 {
-    private static final int COUNT = 15000;
+    private static final int COUNT = 1000;
     Random rand = new Random();
 
     @Test
@@ -58,25 +61,96 @@ public class SetIntersectionTrieTest
         MemtableTrie<ByteBuffer> trie1 = makeMemtableTrie(src1, content1, true);
 
         checkEqualRange(content1, trie1, null, true, null, true);
-        checkEqualRange(content1, trie1, MemtableTrieTestBase.generateKey(rand), true, null, true);
-        checkEqualRange(content1, trie1, null, true, MemtableTrieTestBase.generateKey(rand), true);
-        for (int i = 0; i < 4; ++i)
+        for (int loop = 0; loop < 100; ++loop)
         {
-            ByteComparable l = rand.nextBoolean() ? MemtableTrieTestBase.generateKey(rand) : src1[rand.nextInt(src1.length)];
-            ByteComparable r = rand.nextBoolean() ? MemtableTrieTestBase.generateKey(rand) : src1[rand.nextInt(src1.length)];
-            int cmp = ByteComparable.compare(l, r, Trie.BYTE_COMPARABLE_VERSION);
-            if (cmp > 0)
+            checkEqualRange(content1, trie1, MemtableTrieTestBase.generateKey(rand), true, null, true);
+            checkEqualRange(content1, trie1, null, true, MemtableTrieTestBase.generateKey(rand), true);
+            for (int i = 0; i < 4; ++i)
             {
-                ByteComparable t = l;l = r;r = t; // swap
-            }
+                ByteComparable l = rand.nextBoolean() ? MemtableTrieTestBase.generateKey(rand) : src1[rand.nextInt(src1.length)];
+                ByteComparable r = rand.nextBoolean() ? MemtableTrieTestBase.generateKey(rand) : src1[rand.nextInt(src1.length)];
+                int cmp = ByteComparable.compare(l, r, Trie.BYTE_COMPARABLE_VERSION);
+                if (cmp > 0)
+                {
+                    ByteComparable t = l;
+                    l = r;
+                    r = t; // swap
+                }
 
-            boolean includeLeft = (i & 1) != 0;
-            boolean includeRight = (i & 2) != 0;
-            if (!includeLeft && !includeRight && cmp == 0)
-                includeRight = true;
-            checkEqualRange(content1, trie1, l, includeLeft, r, includeRight);
-            checkEqualRange(content1, trie1, null, includeLeft, r, includeRight);
-            checkEqualRange(content1, trie1, l, includeLeft, null, includeRight);
+                boolean includeLeft = (i & 1) != 0 || cmp == 0;
+                boolean includeRight = (i & 2) != 0 || cmp == 0;
+                checkEqualRange(content1, trie1, l, includeLeft, r, includeRight);
+                checkEqualRange(content1, trie1, null, includeLeft, r, includeRight);
+                checkEqualRange(content1, trie1, l, includeLeft, null, includeRight);
+            }
+        }
+    }
+
+    @Test
+    public void testSpecified()
+    {
+        testSpecifiedIntersections(new String[]{
+                                       "test1",
+                                       "test2",
+                                       "test55",
+                                       "test123",
+                                       "test124",
+                                       "test12",
+                                       "test21",
+                                       "tease",
+                                       "sort",
+                                       "sorting",
+                                       "square"
+                                   },
+                                   new String[]{
+                                       "test1",
+                                       "test11",
+                                       "test12",
+                                       "test13",
+                                       "test2",
+                                       "test21",
+                                       "te",
+                                       "s",
+                                       "q",
+                                       ""
+                                   });
+    }
+
+    public void testSpecifiedIntersections(String[] keys, String[] boundaries)
+    {
+        testSpecifiedIntersections(toByteComparable(keys),
+                                   toByteComparable(boundaries));
+    }
+
+    private ByteComparable[] toByteComparable(String[] keys)
+    {
+        return Arrays.stream(keys)
+                     .map(x -> ByteComparable.fixedLength(x.getBytes(StandardCharsets.UTF_8)))
+                     .toArray(ByteComparable[]::new);
+    }
+
+    public void testSpecifiedIntersections(ByteComparable[] keys, ByteComparable[] boundaries)
+    {
+        Comparator<ByteComparable> byteComparableComparator = (bytes1, bytes2) -> ByteComparable.compare(bytes1, bytes2, Trie.BYTE_COMPARABLE_VERSION);
+        Arrays.sort(boundaries, byteComparableComparator);
+        NavigableMap<ByteComparable, ByteBuffer> content1 = new TreeMap<>(byteComparableComparator);
+        MemtableTrie<ByteBuffer> trie1 = makeMemtableTrie(keys, content1, true);
+
+        for (int li = -1; li < boundaries.length; ++li)
+        {
+            ByteComparable l = li < 0 ? null : boundaries[li];
+            for (int ri = Math.max(0, li); ri <= boundaries.length; ++ri)
+            {
+                ByteComparable r = ri == boundaries.length ? null : boundaries[ri];
+                for (int i = 0; i < 4; ++i)
+                {
+                    boolean includeLeft = (i & 1) != 0;
+                    boolean includeRight = (i & 2) != 0;
+                    if ((!includeLeft || !includeRight) && li == ri)
+                        continue;
+                    checkEqualRange(content1, trie1, l, includeLeft, r, includeRight);
+                }
+            }
         }
     }
 

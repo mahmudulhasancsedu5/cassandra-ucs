@@ -97,7 +97,7 @@ public class RangeTrieSet extends TrieSet
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
                 {
                     level = -1;
-                    inSet = InSet.PREFIX;
+                    inSet = null;
                     return;
                 }
             }
@@ -105,8 +105,8 @@ public class RangeTrieSet extends TrieSet
                 rightLimitNext = 256;
 
             incomingTransition = -1;
-            inSet = atLeftLimit ? InSet.PREFIX
-                                : atRightLimit ? InSet.CONTAINED
+            inSet = atLeftLimit ? null
+                                : atRightLimit ? InSet.INCLUDED
                                                : InSet.BRANCH;
         }
 
@@ -145,7 +145,7 @@ public class RangeTrieSet extends TrieSet
             leftLimitNext = remainingLeftLimit.next();
             if (leftLimitNext != ByteSource.END_OF_STREAM)
             {
-                inSet = InSet.PREFIX;
+                inSet = null;
                 assert rightLimitNext != ByteSource.END_OF_STREAM;
             }
             else
@@ -154,7 +154,7 @@ public class RangeTrieSet extends TrieSet
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
                     return -1;
 
-                inSet = InSet.CONTAINED;
+                inSet = InSet.INCLUDED;
             }
             return ++level;
         }
@@ -167,7 +167,7 @@ public class RangeTrieSet extends TrieSet
             incomingTransition = next;
             if (leftLimitNext != ByteSource.END_OF_STREAM)
             {
-                inSet = InSet.PREFIX;
+                inSet = null;
             }
             else
             {
@@ -216,7 +216,7 @@ public class RangeTrieSet extends TrieSet
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
                     return -1;
                 transitionAtRightLevel = -1;
-                inSet = InSet.CONTAINED;
+                inSet = InSet.INCLUDED;
                 return level;
             }
         }
