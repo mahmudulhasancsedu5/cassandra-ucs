@@ -49,10 +49,10 @@ public class RangeTrieSet extends TrieSet
         this.includeRight = includeRight;
     }
 
-    protected Cursor<InSet> cursor()
-    {
-        return new RangeCursor();
-    }
+//    protected Cursor<InSet> cursor()
+//    {
+//        return new RangeCursor();
+//    }
 
     private class RangeCursor implements Cursor<InSet>
     {
@@ -81,7 +81,7 @@ public class RangeTrieSet extends TrieSet
             {
                 remainingLeftLimit = left.asComparableBytes(BYTE_COMPARABLE_VERSION);
                 leftLimitNext = remainingLeftLimit.next();
-                inSet = InSet.EXCLUDED;
+                inSet = null;
                 if (leftLimitNext == ByteSource.END_OF_STREAM)
                 {
                     atLeftLimit = false;
@@ -103,15 +103,10 @@ public class RangeTrieSet extends TrieSet
                 rightLimitNext = remainingRightLimit.next();
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
                 {
-                    rightLimitDone = true;
                     assert !atLeftLimit;
+                    assert includeRight;
+                    rightLimitDone = true;
                     atRightLimit = false;
-                    if (!includeRight)
-                    {
-                        level = -1;
-                        inSet = InSet.EXCLUDED;
-                        return;
-                    }
                 }
                 else
                     rightLimitDone = false;
@@ -119,7 +114,7 @@ public class RangeTrieSet extends TrieSet
             else
             {
                 // else we exhaust the backlog at level -1 and terminate before any continueAlongRight is called
-                rightLimitNext = 255;
+//                rightLimitNext = 256;
                 rightLimitDone = true;
             }
 
@@ -150,13 +145,30 @@ public class RangeTrieSet extends TrieSet
             assert rightLimitNext >= leftLimitNext : "left > right";
             if (leftLimitNext == ByteSource.END_OF_STREAM)
             {
+                if (rightLimitNext == ByteSource.END_OF_STREAM)
+                {
+                    assert includeRight : "left = right without includeLeft or includeRight";
+                    return level = -1;
+                }
                 atLeftLimit = false;
                 incomingTransition = 0;
-                assert rightLimitNext != ByteSource.END_OF_STREAM || includeRight
-                    : "left = right without includeLeft or includeRight";
-                transitionAtRightLevel = 1;
-                atRightLimit = false;
-                inSet = InSet.BRANCH;
+                if (rightLimitNext == incomingTransition)
+                {
+                    rightLimitNext = remainingRightLimit.next();
+//                    if (!includeRight && )
+//                    {
+//                        // This is a (xxx, xxx00) set, which is empty (it excludes both xxx and its immediate successor)
+//                        return -1;
+//                    }
+                    transitionAtRightLevel = 1;
+                    inSet = (rightLimitNext != ByteSource.END_OF_STREAM || includeRight) ? InSet.INCLUDED : null;
+                }
+                else
+                {
+                    transitionAtRightLevel = 1;
+                    atRightLimit = false;
+                    inSet = InSet.BRANCH;
+                }
                 return ++level;
             }
 
@@ -174,9 +186,17 @@ public class RangeTrieSet extends TrieSet
 
             incomingTransition = next;
             if (includeLeft && leftLimitNext == ByteSource.END_OF_STREAM)
-                inSet = atRightLimit ? InSet.INCLUDED : InSet.BRANCH;
+            {
+                if (atRightLimit)
+                    inSet = InSet.INCLUDED;
+                else
+                {
+                    atLeftLimit = false;
+                    inSet = InSet.BRANCH;
+                }
+            }
             else
-                inSet = InSet.EXCLUDED;
+                inSet = null;
 
             return ++level;
         }
@@ -202,7 +222,7 @@ public class RangeTrieSet extends TrieSet
                 inSet = InSet.BRANCH;
             }
             else
-                inSet = InSet.EXCLUDED;
+                inSet = null;
 
             return ++level;
         }
@@ -378,7 +398,7 @@ public class RangeTrieSet extends TrieSet
             this.remainingRLimit = remainingRLimit;
             this.atLLimit = atLLimit;
             this.atRLimit = atRLimit;
-            this.inSet = inSet ? InSet.INCLUDED : InSet.EXCLUDED;
+            this.inSet = inSet ? InSet.INCLUDED : null;
         }
 
         public Node<InSet, L> getCurrentChild(L parentLink)

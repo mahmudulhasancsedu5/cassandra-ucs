@@ -125,7 +125,7 @@ class SetIntersectionTrie<T> extends Trie<T>
 
         public T content()
         {
-            if (sNode.content().pointIncluded())
+            if (sNode.content() != null)
                 return tNode.content();
             return null;
         }
@@ -152,7 +152,7 @@ class SetIntersectionTrie<T> extends Trie<T>
         public int advance()
         {
             int tLevel = tCursor.advance();
-            if (sCursor.content().branchCovered())
+            if (sCursor.content() == TrieSet.InSet.BRANCH)
             {
                 if (tLevel > sCursor.level())
                     return tLevel;
@@ -167,7 +167,7 @@ class SetIntersectionTrie<T> extends Trie<T>
         public int advanceMultiple(TransitionsReceiver transitionsReceiver)
         {
             int tLevel;
-            if (sCursor.content().branchCovered())
+            if (sCursor.content() == TrieSet.InSet.BRANCH)
             {
                 tLevel = tCursor.advanceMultiple(transitionsReceiver);
                 if (tLevel > sCursor.level())
@@ -185,7 +185,7 @@ class SetIntersectionTrie<T> extends Trie<T>
         public int ascend() // this is not tested ATM
         {
             int tLevel = tCursor.ascend();
-            if (sCursor.content().branchCovered())
+            if (sCursor.content() == TrieSet.InSet.BRANCH)
             {
                 if (tLevel > sCursor.level())
                     return tLevel;
@@ -213,7 +213,7 @@ class SetIntersectionTrie<T> extends Trie<T>
                 }
                 else if (sLevel < tLevel)
                 {
-                    if (sCursor.content().branchCovered())
+                    if (sCursor.content() == TrieSet.InSet.BRANCH)
                         return tLevel;
                     tLevel = tCursor.ascend();
                 }
@@ -237,7 +237,7 @@ class SetIntersectionTrie<T> extends Trie<T>
 
         public T content()
         {
-            return sCursor.content().pointIncluded()
+            return sCursor.content() != null
                    ? tCursor.content()
                    : null;
         }

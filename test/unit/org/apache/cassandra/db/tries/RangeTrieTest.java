@@ -28,32 +28,34 @@ import org.junit.Test;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class RangeTrieTest
 {
     @Test
     public void testSpecified()
     {
-//        ByteComparable l = ByteComparable.fixedLength(new byte[] {-2});
-//        boolean includeLeft = true;
-//        ByteComparable r = ByteComparable.fixedLength(new byte[] {-2, 1});
-//        boolean includeRight = false;
-//
-//        TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
-//        System.out.println(String.format("Range %s%s,%s%s",
-//                                         includeLeft ? "[" : "(",
-//                                         l != null ? l.byteComparableAsString(ByteComparable.Version.OSS41) : null,
-//                                         r != null ? r.byteComparableAsString(ByteComparable.Version.OSS41) : null,
-//                                         includeRight ? "]" : ")"
-//        ));
-//        System.out.println(set.dump());
+        ByteComparable l = ByteComparable.fixedLength(new byte[] {0});
+        boolean includeLeft = false;
+        ByteComparable r = ByteComparable.fixedLength(new byte[] {0, 0, 0});
+        boolean includeRight = true;
+
+        TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
+        System.out.println(String.format("Range %s%s,%s%s",
+                                         includeLeft ? "[" : "(",
+                                         l != null ? l.byteComparableAsString(ByteComparable.Version.OSS41) : null,
+                                         r != null ? r.byteComparableAsString(ByteComparable.Version.OSS41) : null,
+                                         includeRight ? "]" : ")"
+        ));
+        System.out.println(set.dump());
 
 
 //        testSpecifiedRanges(new String[]{
-//                            "234"
+//                            "\000\000"
 //                            },
 //                            new String[]{
-//                            "35",
+//                            "\000",
 ////                            "test12",
 //                            });
         testSpecifiedRanges(new String[]{
@@ -67,7 +69,13 @@ public class RangeTrieTest
                             "tease",
                             "sort",
                             "sorting",
-                            "square"
+                            "square",
+                            "\777\000",
+                            "\000\777",
+                            "\000\000",
+                            "\000\000\000",
+                            "\000\000\777",
+                            "\777\777"
                             },
                             new String[]{
                             "test1",
@@ -78,7 +86,15 @@ public class RangeTrieTest
                             "test21",
                             "te",
                             "s",
-                            "q"
+                            "q",
+                            "\000",
+                            "\777",
+                            "\777\000",
+                            "\000\777",
+                            "\000\000",
+                            "\000\000\000",
+                            "\000\000\777",
+                            "\777\777"
                             });
     }
 
@@ -110,6 +126,9 @@ public class RangeTrieTest
                     boolean includeLeft = (i & 1) != 0;
                     boolean includeRight = (i & 2) != 0;
                     TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
+
+                    verifySetProperties(set);
+
                     for (ByteComparable key : keys)
                     {
                         int cmp1 = l != null ? ByteComparable.compare(key, l, ByteComparable.Version.OSS41) : 1;
@@ -140,6 +159,32 @@ public class RangeTrieTest
                     }
                 }
             }
+        }
+    }
+
+    private void verifySetProperties(TrieSet set)
+    {
+        try
+        {
+            Trie.Cursor<TrieSet.InSet> cursor = set.cursor();
+            int level = cursor.advance();
+            while (level > 0)
+            {
+                assertEquals(level, cursor.level());
+                TrieSet.InSet inSet = cursor.content();
+                int prevLevel = level;
+                level = cursor.advance();
+//                if (inSet == null)
+//                    assertTrue("non-included nodes presented by a set must have children", level > prevLevel);
+//                else
+                if (inSet == TrieSet.InSet.BRANCH)
+                    assertFalse("fully included branches presented by a set must not have children", level > prevLevel);
+            }
+        }
+        catch (AssertionError e)
+        {
+            System.err.println(set.dump());
+            throw e;
         }
     }
 }

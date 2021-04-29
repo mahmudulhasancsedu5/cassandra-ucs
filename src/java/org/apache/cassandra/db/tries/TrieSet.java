@@ -33,19 +33,9 @@ public abstract class TrieSet extends Trie<TrieSet.InSet>
 {
     enum InSet
     {
-        EXCLUDED, // the specific point is not contained in the set (e.g. points on the left range path)
+        // null content value specifies that the specific point is not contained in the set (e.g. points on the left range path)
         INCLUDED, // this point is contained in the set (e.g. points on the right range path)
         BRANCH; // the whole branch is contained in the set (e.g. interior nodes for a range)
-
-        boolean pointIncluded()
-        {
-            return this != EXCLUDED;
-        }
-
-        boolean branchCovered()
-        {
-            return this == BRANCH;
-        }
     }
 
     protected static final Node<InSet, Object> FULL = new NoChildrenNode<InSet, Object>(null)
