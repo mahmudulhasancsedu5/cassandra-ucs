@@ -44,7 +44,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
 
-import org.apache.cassandra.utils.concurrent.AsyncPromise;
 import org.apache.cassandra.utils.concurrent.CountDownLatch;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileOutputStreamPlus;
@@ -63,6 +62,7 @@ import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.memtable.Flushing;
 import org.apache.cassandra.db.memtable.Memtable;
+import org.apache.cassandra.db.memtable.ShardBoundaries;
 import org.apache.cassandra.db.streaming.CassandraStreamManager;
 import org.apache.cassandra.db.repair.CassandraTableRepairManager;
 import org.apache.cassandra.db.view.TableViews;
@@ -72,6 +72,7 @@ import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.rows.CellPath;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Splitter;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.StartupException;
 import org.apache.cassandra.index.SecondaryIndexManager;
@@ -103,17 +104,14 @@ import org.apache.cassandra.service.snapshot.TableSnapshot;
 import org.apache.cassandra.streaming.TableStreamManager;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.concurrent.Promise;
 import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.cassandra.utils.concurrent.UncheckedInterruptedException;
-import org.apache.cassandra.utils.memory.MemtableAllocator;
 
 import static com.google.common.base.Throwables.propagate;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
 import static org.apache.cassandra.config.DatabaseDescriptor.getFlushWriters;
-import static org.apache.cassandra.db.commitlog.CommitLog.instance;
 import static org.apache.cassandra.db.commitlog.CommitLogPosition.NONE;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
@@ -255,6 +253,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     @VisibleForTesting
     final DiskBoundaryManager diskBoundaryManager = new DiskBoundaryManager();
+    ShardBoundaries cachedShardBoundaries = null;
 
     private volatile boolean neverPurgeTombstones = false;
 
@@ -396,10 +395,14 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         logger.info("Initializing {}.{}", keyspace.getName(), name);
 
-        // Create Memtable only on online
+        // Create Memtable and its metrics object only on online
         Memtable initialMemtable = null;
+        TableMetrics.ReleasableMetric memtableMetrics = null;
         if (DatabaseDescriptor.isDaemonInitialized())
+        {
             initialMemtable = createMemtable(new AtomicReference<>(CommitLog.instance.getCurrentPosition()));
+            memtableMetrics = memtableFactory.createMemtableMetrics(metadata);
+        }
         data = new Tracker(this, initialMemtable, loadSSTables);
 
         // Note that this needs to happen before we load the first sstables, or the global sstable tracker will not
@@ -431,7 +434,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             indexManager.addIndex(info, true);
         }
 
-        metric = new TableMetrics(this);
+        metric = new TableMetrics(this, memtableMetrics);
 
         if (data.loadsstables)
         {
@@ -1332,6 +1335,43 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                                        + " for ks: "
                                        + keyspace.getName() + ", table: " + name, e);
         }
+    }
+
+    public ShardBoundaries localRangeSplits(int shardCount)
+    {
+        if (shardCount == 1 || !getPartitioner().splitter().isPresent() || SchemaConstants.isLocalSystemKeyspace(keyspace.getName()))
+            return ShardBoundaries.NONE;
+
+        ShardBoundaries shardBoundaries = cachedShardBoundaries;
+        if (shardBoundaries == null ||
+            shardBoundaries.shardCount() != shardCount ||
+            shardBoundaries.ringVersion != StorageService.instance.getTokenMetadata().getRingVersion())
+        {
+            DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
+            Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
+            List<Splitter.WeightedRange> weightedRanges;
+            if (localRanges.isEmpty())
+                weightedRanges = ImmutableList.of(new Splitter.WeightedRange(1.0, new Range<>(getPartitioner().getMinimumToken(), getPartitioner().getMaximumToken())));
+            else
+            {
+                weightedRanges = new ArrayList<>(localRanges.size());
+                for (Range<Token> r : localRanges)
+                {
+                    // WeightedRange supports only unwrapped ranges as it relies
+                    // on right - left == num tokens equality
+                    for (Range<Token> u: r.unwrap())
+                        weightedRanges.add(new Splitter.WeightedRange(1.0, u));
+                }
+                weightedRanges.sort(Comparator.comparing(Splitter.WeightedRange::left));
+            }
+
+            List<Token> boundaries = getPartitioner().splitter().get().splitOwnedRanges(shardCount, weightedRanges, false);
+            shardBoundaries = new ShardBoundaries(boundaries.subList(0, boundaries.size() - 1),
+                                                  versionedLocalRanges.ringVersion);
+            cachedShardBoundaries = shardBoundaries;
+            logger.info("Memtable shard boundaries for {}.{}: {}", keyspace.getName(), getTableName(), boundaries);
+        }
+        return shardBoundaries;
     }
 
     /**
