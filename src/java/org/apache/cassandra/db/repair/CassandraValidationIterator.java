@@ -56,7 +56,6 @@ import org.apache.cassandra.repair.ValidationPartitionIterator;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.repair.NoSuchRepairSessionException;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -194,7 +193,8 @@ public class CassandraValidationIterator extends ValidationPartitionIterator
             if (!isIncremental)
             {
                 // flush first so everyone is validating data that is as similar as possible
-                StorageService.instance.forceKeyspaceFlush(cfs.keyspace.getName(), cfs.name);
+                cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.REPAIR);
+                // Note: we also flush for incremental repair during the anti-compaction process.
             }
             sstables = getSSTablesToValidate(cfs, ranges, parentId, isIncremental);
         }
