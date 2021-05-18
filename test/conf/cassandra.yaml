@@ -70,5 +70,7 @@ memtable_templates:
         shards: 4
     skiplist:
         class: SkipListMemtable
+    hashordered:
+        class: HashOrderedMapMemtable
 memtable:
-    template: skiplist
+    template: hashordered

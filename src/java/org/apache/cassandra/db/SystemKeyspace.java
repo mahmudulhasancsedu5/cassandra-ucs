@@ -141,7 +141,7 @@ public final class SystemKeyspace
               + "version int,"
               + "PRIMARY KEY ((id)))")
               .partitioner(new LocalPartitioner(TimeUUIDType.instance))
-              .memtable(MemtableParams.DEFAULT)
+              .memtable(MemtableParams.fromMap(ImmutableMap.of("class", "SkipListMemtable")))
               .compaction(CompactionParams.stcs(singletonMap("min_threshold", "2")))
               .build();
 
