@@ -130,7 +130,6 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     private final CompactionExecutor executor = new CompactionExecutor();
-    private final DebuggableScheduledThreadPoolExecutor backgroundTaskExecutor = new DebuggableScheduledThreadPoolExecutor("BackgroundTaskExecutor");
     private final ValidationExecutor validationExecutor = new ValidationExecutor();
     private final CompactionExecutor cacheCleanupExecutor = new CacheCleanupExecutor();
     private final CompactionExecutor viewBuildExecutor = new ViewBuildExecutor();
@@ -140,8 +139,6 @@ public class CompactionManager implements CompactionManagerMBean
     public final ActiveOperations active = new ActiveOperations();
 
     private final BackgroundCompactionRunner backgroundCompactionRunner = new BackgroundCompactionRunner(executor, active);
-
-    private final Supplier<ScheduledFuture<?>> backgroundCompactionSchedule = Suppliers.memoize(() -> backgroundTaskExecutor.scheduleWithFixedDelay(backgroundCompactionRunner, 0, 1, TimeUnit.SECONDS));
 
     // used to temporarily pause non-strategy managed compactions (like index summary redistribution)
     private final AtomicInteger globalCompactionPauseCount = new AtomicInteger(0);
@@ -198,11 +195,13 @@ public class CompactionManager implements CompactionManagerMBean
             return CompletableFuture.completedFuture(RequestResult.SKIPPED);
         }
 
-        Future<RequestResult> resultFuture = backgroundCompactionRunner.requestCompaction(cfs);
-        backgroundCompactionSchedule.get(); // lazy start
-        return resultFuture;
+        return backgroundCompactionRunner.requestCompaction(cfs);
     }
 
+    public int getOngoingBackgroundCompactionsCount(ColumnFamilyStore cfs)
+    {
+        return backgroundCompactionRunner.getOngoingCompactionsCount(cfs);
+    }
 
     public boolean isCompacting(Iterable<ColumnFamilyStore> cfses, Predicate<SSTableReader> sstablePredicate)
     {
@@ -219,7 +218,7 @@ public class CompactionManager implements CompactionManagerMBean
     public void forceShutdown()
     {
         // shutdown executors to prevent further submission
-        backgroundTaskExecutor.shutdown();
+        backgroundCompactionRunner.shutdown();
         executor.shutdown();
         validationExecutor.shutdown();
         viewBuildExecutor.shutdown();
@@ -234,7 +233,7 @@ public class CompactionManager implements CompactionManagerMBean
         // wait for tasks to terminate
         // compaction tasks are interrupted above, so it shuold be fairy quick
         // until not interrupted tasks to complete.
-        for (ExecutorService exec : Arrays.asList(backgroundTaskExecutor, executor, validationExecutor, viewBuildExecutor, cacheCleanupExecutor))
+        for (ExecutorService exec : Arrays.asList(executor, validationExecutor, viewBuildExecutor, cacheCleanupExecutor))
         {
             try
             {
@@ -250,11 +249,9 @@ public class CompactionManager implements CompactionManagerMBean
 
     public void finishCompactionsAndShutdown(long timeout, TimeUnit unit) throws InterruptedException
     {
-        backgroundTaskExecutor.shutdown();
+        backgroundCompactionRunner.shutdown();
         executor.shutdown();
-        long deadline = System.nanoTime() + unit.toNanos(timeout);
-        backgroundTaskExecutor.awaitTermination(timeout, unit);
-        executor.awaitTermination(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        executor.awaitTermination(timeout, unit);
     }
 
     /**

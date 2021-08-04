@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -41,6 +43,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -52,7 +55,6 @@ import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;
-import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.Throwables;
 
 public class BackgroundCompactionRunner implements Runnable
@@ -77,6 +79,8 @@ public class BackgroundCompactionRunner implements Runnable
         COMPLETED
     }
 
+    private final DebuggableScheduledThreadPoolExecutor checkExecutor;
+
     /**
      * Each time we start a compaction, the CFS is added to this set; it is removed when the compaction finishes
      * or when it is cancelled
@@ -88,25 +92,26 @@ public class BackgroundCompactionRunner implements Runnable
      */
     private final ConcurrentMap<ColumnFamilyStore, List<SettableFuture<RequestResult>>> compactionRequests = new ConcurrentHashMap<>();
 
-    /**
-     * Futures of compactions or upgrades for each started task mapped to the corresponding CFS.
-     * This map is used to do the {@link #cleanup()} - when the compaction gets cancelled we need to remove one CFSs
-     * occurence from {@link #ongoingCompactions}.
-     */
-    private final ConcurrentMap<Future<?>, Pair<ColumnFamilyStore, List<SettableFuture<RequestResult>>>> compactionResults = new ConcurrentHashMap<>();
-
     private final AtomicInteger currentlyBackgroundUpgrading = new AtomicInteger(0);
 
     private final Random random = new Random();
 
-    private final DebuggableThreadPoolExecutor executor;
+    private final DebuggableThreadPoolExecutor compactionExecutor;
 
-    private final ActiveOperations active;
+    private final ActiveOperations activeOperations;
+
 
     BackgroundCompactionRunner(DebuggableThreadPoolExecutor compactionExecutor, ActiveOperations activeOperations)
     {
-        this.executor = compactionExecutor;
-        this.active = activeOperations;
+        this(compactionExecutor, new DebuggableScheduledThreadPoolExecutor("BackgroundTaskExecutor"), activeOperations);
+    }
+
+    @VisibleForTesting
+    BackgroundCompactionRunner(DebuggableThreadPoolExecutor compactionExecutor, DebuggableScheduledThreadPoolExecutor checkExecutor, ActiveOperations activeOperations)
+    {
+        this.compactionExecutor = compactionExecutor;
+        this.checkExecutor = checkExecutor;
+        this.activeOperations = activeOperations;
     }
 
     /**
@@ -117,6 +122,7 @@ public class BackgroundCompactionRunner implements Runnable
      */
     Future<RequestResult> requestCompaction(ColumnFamilyStore cfs)
     {
+        logger.trace("Requested background compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
         SettableFuture<RequestResult> futureResult = SettableFuture.create();
         compactionRequests.compute(cfs, (ignored, current) -> {
             if (current == null)
@@ -124,22 +130,33 @@ public class BackgroundCompactionRunner implements Runnable
             current.add(futureResult);
             return current;
         });
+
+        maybeScheduleNextCheck();
         return futureResult;
+    }
+
+    void shutdown()
+    {
+        checkExecutor.shutdown();
+    }
+
+    int getOngoingCompactionsCount(ColumnFamilyStore cfs)
+    {
+        return ongoingCompactions.count(cfs);
     }
 
     @Override
     public void run()
     {
+        logger.trace("Running background compactions check");
+
         // We shuffle the CFSs for which the compaction was requested so that with each run we traverse those CFSs
         // in different order and make each CFS have equal chance to be selected
         ArrayList<ColumnFamilyStore> compactionRequestsList = new ArrayList<>(compactionRequests.keySet());
         Collections.shuffle(compactionRequestsList, random);
 
-        cleanup();
-
         for (ColumnFamilyStore cfs : compactionRequestsList)
         {
-            // take the request
             List<SettableFuture<RequestResult>> promises = compactionRequests.remove(cfs);
 
             logger.trace("Checking compaction request for {}.{} - there are {} awaiting promises",
@@ -147,27 +164,10 @@ public class BackgroundCompactionRunner implements Runnable
                          cfs.getTableName(),
                          promises.size());
 
-            if (promises.stream().allMatch(p -> p.isDone()))
+            RequestResult completionStatus = canRunCompactionTasks(cfs, promises);
+            if (completionStatus != null)
             {
-                logger.trace("There are no awaiting requests for {}.{} (all the requests were cancelled)",
-                             cfs.getKeyspaceName(), cfs.getTableName());
-                continue;
-            }
-
-            // when the compaction is already running for CFS and the executor is fully occupied
-            // we will skip and cancel the request
-            if (hasEnoughCompactionsRunning(cfs))
-            {
-                logger.trace("Background compaction is still running for {}.{} - skipping",
-                             cfs.getKeyspaceName(), cfs.getTableName());
-                promises.forEach(p -> p.set(RequestResult.SKIPPED));
-                continue;
-            }
-
-            if (!cfs.isValid())
-            {
-                logger.trace("Aborting compaction for dropped CF {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-                promises.forEach(p -> p.set(RequestResult.ABORTED));
+                promises.stream().filter(p -> !p.isDone()).forEach(p -> p.set(completionStatus));
                 continue;
             }
 
@@ -176,20 +176,15 @@ public class BackgroundCompactionRunner implements Runnable
                          cfs.name,
                          cfs.getCompactionStrategy().getName());
 
-            Collection<AbstractCompactionTask> tasks = cfs.getCompactionStrategy()
-                                                          .getNextBackgroundTasks(CompactionManager.getDefaultGcBefore(cfs, FBUtilities.nowInSeconds()));
+            Supplier<CompletableFuture<?>> compactionTask = Optional.ofNullable(lazyRunCompactionTasks(cfs))
+                                                                    .orElseGet(() -> lazyRunUpgradeTasks(cfs));
 
-            CompletableFuture<?> resultFuture = tasks.isEmpty()
-                                                ? DatabaseDescriptor.automaticSSTableUpgrade() ? maybeRunUpgradeTask(cfs) : null
-                                                : runAllCompactionTasks(tasks);
-
-            if (resultFuture != null)
+            if (compactionTask != null)
             {
                 ongoingCompactions.add(cfs);
-                compactionResults.put(resultFuture, Pair.create(cfs, promises));
 
-                resultFuture.handle((ignored, throwable) -> {
-                    removeCompaction(resultFuture);
+                compactionTask.get().handle((ignored, throwable) -> {
+                    ongoingCompactions.remove(cfs);
 
                     if (throwable != null)
                     {
@@ -199,7 +194,12 @@ public class BackgroundCompactionRunner implements Runnable
                     }
                     else
                     {
+                        logger.trace("Finished compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
                         promises.forEach(p -> p.set(RequestResult.COMPLETED));
+
+                        // Since we have run at least one task and thus the set of sstables has changed,
+                        // check for new compaction possibilities
+                        requestCompaction(cfs);
                     }
 
                     return null;
@@ -208,65 +208,83 @@ public class BackgroundCompactionRunner implements Runnable
         }
     }
 
-
-    private void cleanup()
+    private void maybeScheduleNextCheck()
     {
-        List<Future<?>> toCleanUp = compactionResults.keySet().stream()
-                                                     .filter(Future::isCancelled)
-                                                     .collect(Collectors.toList());
-
-        toCleanUp.forEach(this::removeCompaction);
+        if (checkExecutor.getQueue().isEmpty())
+            checkExecutor.execute(this);
     }
 
-    private void removeCompaction(Future<?> resultFuture)
+    private Supplier<CompletableFuture<?>> lazyRunCompactionTasks(ColumnFamilyStore cfs)
     {
-        Pair<ColumnFamilyStore, List<SettableFuture<RequestResult>>> cfsWithPromises = compactionResults.remove(resultFuture);
-        if (cfsWithPromises != null)
+        Collection<AbstractCompactionTask> compactionTasks = cfs.getCompactionStrategy()
+                                                                .getNextBackgroundTasks(CompactionManager.getDefaultGcBefore(cfs, FBUtilities.nowInSeconds()));
+        if (!compactionTasks.isEmpty())
         {
-            ColumnFamilyStore cfs = cfsWithPromises.left;
-            ongoingCompactions.remove(cfs);
-            cfsWithPromises.right.forEach(p -> {
-                if (!p.isDone())
-                    p.cancel(false);
-            });
-            logger.trace("Removed compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+            return () -> {
+                logger.debug("Running compaction tasks: {}", compactionTasks);
+                return CompletableFuture.allOf(compactionTasks.stream()
+                                                              .map(task -> CompletableFuture.runAsync(() -> task.execute(activeOperations), compactionExecutor))
+                                                              .toArray(CompletableFuture<?>[]::new));
+            };
+        }
+        else
+        {
+            return null;
         }
     }
 
-    private CompletableFuture<?> runAllCompactionTasks(Collection<AbstractCompactionTask> tasks)
+    private Supplier<CompletableFuture<?>> lazyRunUpgradeTasks(ColumnFamilyStore cfs)
     {
-        logger.debug("Running compaction tasks: {}", tasks);
-        return CompletableFuture.allOf(tasks.stream()
-                                            .map(task -> CompletableFuture.runAsync(() -> task.execute(active), executor))
-                                            .toArray(CompletableFuture<?>[]::new));
-    }
+        AbstractCompactionTask upgradeTask = getUpgradeSSTableTask(cfs);
 
-    CompletableFuture<?> maybeRunUpgradeTask(ColumnFamilyStore cfs)
-    {
-        logger.trace("Checking for upgrade tasks {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-        if (currentlyBackgroundUpgrading.incrementAndGet() <= DatabaseDescriptor.maxConcurrentAutoUpgradeTasks())
+        if (upgradeTask != null)
         {
-            AbstractCompactionTask upgradeTask = findUpgradeSSTableTask(cfs);
-            if (upgradeTask != null)
-            {
+            return () -> {
                 logger.debug("Running upgrade task: {}", upgradeTask);
-                return CompletableFuture.runAsync(() -> upgradeTask.execute(active), executor)
+                return CompletableFuture.runAsync(() -> upgradeTask.execute(activeOperations), compactionExecutor)
                                         .handle((ignored1, ignored2) -> {
                                             currentlyBackgroundUpgrading.decrementAndGet();
                                             return null;
                                         });
-            }
-            else
-            {
-                logger.trace("No tasks available for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-                currentlyBackgroundUpgrading.decrementAndGet();
-            }
+            };
         }
         else
         {
-            currentlyBackgroundUpgrading.decrementAndGet();
-            logger.trace("Skipped upgrade task for {}.{} because the limit of concurrent upgrade tasks has been reached", cfs.getKeyspaceName(), cfs.getTableName());
+            return null;
         }
+    }
+
+    /**
+     * Checks if we can/should run compaction tasks for the CFS, given the provided promises. If we should run
+     * compaction tasks for that CFS, we will return {@code null}, as there is no status to be set yet on the promises.
+     * If the compaction tasks should not be run, we will return a non-null {@link RequestResult} to be set on the
+     * awaiting (not done) promises. In that case, we should skip the compaction for this CFS.
+     */
+    private RequestResult canRunCompactionTasks(ColumnFamilyStore cfs, List<SettableFuture<RequestResult>> promises)
+    {
+        if (promises.stream().allMatch(p -> p.isDone()))
+        {
+            logger.trace("There are no awaiting requests for {}.{} (all the requests were cancelled)",
+                         cfs.getKeyspaceName(), cfs.getTableName());
+            return RequestResult.COMPLETED;
+        }
+
+        // when the compaction is already running for CFS and the executor is fully occupied
+        // we will skip and cancel the request
+        if (ongoingCompactions.count(cfs) > 0 && compactionExecutor.getActiveTaskCount() >= compactionExecutor.getMaximumPoolSize())
+        {
+            logger.trace("Background compaction is still running for {}.{} - skipping",
+                         cfs.getKeyspaceName(), cfs.getTableName());
+            return RequestResult.SKIPPED;
+        }
+
+        if (!cfs.isValid())
+        {
+            logger.trace("Aborting compaction for dropped CF {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+            promises.forEach(p -> p.set(RequestResult.ABORTED));
+            return RequestResult.ABORTED;
+        }
+
         return null;
     }
 
@@ -274,36 +292,50 @@ public class BackgroundCompactionRunner implements Runnable
      * Finds the oldest (by modification date) non-latest-version sstable on disk and creates an upgrade task for it
      */
     @VisibleForTesting
-    public AbstractCompactionTask findUpgradeSSTableTask(ColumnFamilyStore cfs)
+    public AbstractCompactionTask getUpgradeSSTableTask(ColumnFamilyStore cfs)
     {
-        if (cfs.isAutoCompactionDisabled() || !DatabaseDescriptor.automaticSSTableUpgrade())
-            return null;
+        logger.trace("Checking for upgrade tasks {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
 
-        Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
-        List<SSTableReader> potentialUpgrade = cfs.getLiveSSTables()
-                                                  .stream()
-                                                  .filter(s -> !compacting.contains(s) && !s.descriptor.version.isLatestVersion())
-                                                  .sorted((o1, o2) -> {
-                                                      File f1 = new File(o1.descriptor.filenameFor(Component.DATA));
-                                                      File f2 = new File(o2.descriptor.filenameFor(Component.DATA));
-                                                      return Longs.compare(f1.lastModified(), f2.lastModified());
-                                                  }).collect(Collectors.toList());
-        for (SSTableReader sstable : potentialUpgrade)
+        if (!DatabaseDescriptor.automaticSSTableUpgrade())
         {
-            LifecycleTransaction txn = cfs.getTracker().tryModify(sstable, OperationType.UPGRADE_SSTABLES);
-            if (txn != null)
-            {
-                logger.debug("Running automatic sstable upgrade for {}", sstable);
-                return cfs.getCompactionStrategy().createCompactionTask(txn, Integer.MIN_VALUE, Long.MAX_VALUE);
-            }
+            logger.trace("Automatic sstable upgrade is disabled - will not try to upgrade sstables of {}.{}",
+                         cfs.getKeyspaceName(),
+                         cfs.getTableName());
+            return null;
         }
-        return null;
-    }
 
-    private boolean hasEnoughCompactionsRunning(ColumnFamilyStore cfs)
-    {
-        int count = ongoingCompactions.count(cfs);
-        return count > 0 && executor.getActiveTaskCount() >= executor.getMaximumPoolSize();
+        if (currentlyBackgroundUpgrading.incrementAndGet() <= DatabaseDescriptor.maxConcurrentAutoUpgradeTasks())
+        {
+            Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
+            List<SSTableReader> potentialUpgrade = cfs.getLiveSSTables()
+                                                      .stream()
+                                                      .filter(s -> !compacting.contains(s) && !s.descriptor.version.isLatestVersion())
+                                                      .sorted((o1, o2) -> {
+                                                          File f1 = new File(o1.descriptor.filenameFor(Component.DATA));
+                                                          File f2 = new File(o2.descriptor.filenameFor(Component.DATA));
+                                                          return Longs.compare(f1.lastModified(), f2.lastModified());
+                                                      }).collect(Collectors.toList());
+            for (SSTableReader sstable : potentialUpgrade)
+            {
+                LifecycleTransaction txn = cfs.getTracker().tryModify(sstable, OperationType.UPGRADE_SSTABLES);
+                if (txn != null)
+                {
+                    logger.debug("Found tasks for automatic sstable upgrade of {}", sstable);
+                    return cfs.getCompactionStrategy().createCompactionTask(txn, Integer.MIN_VALUE, Long.MAX_VALUE);
+                }
+            }
+            logger.trace("No upgrade tasks are available for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+        }
+        else
+        {
+            logger.trace("Skipped upgrade task for {}.{} because the limit {} of concurrent upgrade tasks has been reached",
+                         cfs.getKeyspaceName(),
+                         cfs.getTableName(),
+                         DatabaseDescriptor.maxConcurrentAutoUpgradeTasks());
+        }
+
+        currentlyBackgroundUpgrading.decrementAndGet();
+        return null;
     }
 
     private static void handleCompactionError(Throwable t, ColumnFamilyStore cfs)
