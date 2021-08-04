@@ -205,6 +205,10 @@ public class BackgroundCompactionRunner implements Runnable
                     return null;
                 });
             }
+            else
+            {
+                promises.forEach(p -> p.set(RequestResult.COMPLETED));
+            }
         }
     }
 
@@ -229,6 +233,7 @@ public class BackgroundCompactionRunner implements Runnable
         }
         else
         {
+            logger.debug("No compaction tasks for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
             return null;
         }
     }
@@ -250,6 +255,7 @@ public class BackgroundCompactionRunner implements Runnable
         }
         else
         {
+            logger.debug("No upgrade tasks for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
             return null;
         }
     }
@@ -324,7 +330,6 @@ public class BackgroundCompactionRunner implements Runnable
                     return cfs.getCompactionStrategy().createCompactionTask(txn, Integer.MIN_VALUE, Long.MAX_VALUE);
                 }
             }
-            logger.trace("No upgrade tasks are available for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
         }
         else
         {
