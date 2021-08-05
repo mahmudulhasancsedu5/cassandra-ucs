@@ -31,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -39,6 +40,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ConcurrentHashMultiset;
 import com.google.common.collect.Multiset;
 import com.google.common.primitives.Longs;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.SettableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -123,6 +125,13 @@ public class BackgroundCompactionRunner implements Runnable
     Future<RequestResult> requestCompaction(ColumnFamilyStore cfs)
     {
         logger.trace("Requested background compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+
+        if (checkExecutor.isShutdown())
+        {
+            logger.info("Executor has been shut down, background compactions check will not be scheduled");
+            return Futures.immediateCancelledFuture();
+        }
+
         SettableFuture<RequestResult> futureResult = SettableFuture.create();
         compactionRequests.compute(cfs, (ignored, current) -> {
             if (current == null)
@@ -131,13 +140,17 @@ public class BackgroundCompactionRunner implements Runnable
             return current;
         });
 
-        maybeScheduleNextCheck();
+        if (!maybeScheduleNextCheck())
+        {
+            futureResult.cancel(false);
+        }
         return futureResult;
     }
 
     void shutdown()
     {
         checkExecutor.shutdown();
+        compactionRequests.values().forEach(promises -> promises.forEach(p -> p.cancel(false)));
     }
 
     int getOngoingCompactionsCount(ColumnFamilyStore cfs)
@@ -189,17 +202,19 @@ public class BackgroundCompactionRunner implements Runnable
                     if (throwable != null)
                     {
                         logger.warn(String.format("Aborting compaction of %s.%s due to error", cfs.getKeyspaceName(), cfs.getTableName()), throwable);
-                        promises.forEach(p -> p.setException(throwable));
                         handleCompactionError(throwable, cfs);
+
+                        promises.forEach(p -> p.setException(throwable));
                     }
                     else
                     {
                         logger.trace("Finished compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-                        promises.forEach(p -> p.set(RequestResult.COMPLETED));
 
                         // Since we have run at least one task and thus the set of sstables has changed,
                         // check for new compaction possibilities
                         requestCompaction(cfs);
+
+                        promises.forEach(p -> p.set(RequestResult.COMPLETED));
                     }
 
                     return null;
@@ -212,10 +227,26 @@ public class BackgroundCompactionRunner implements Runnable
         }
     }
 
-    private void maybeScheduleNextCheck()
+    private boolean maybeScheduleNextCheck()
     {
         if (checkExecutor.getQueue().isEmpty())
-            checkExecutor.execute(this);
+        {
+            try
+            {
+                checkExecutor.execute(this);
+            }
+            catch (RejectedExecutionException ex)
+            {
+                if (checkExecutor.isShutdown())
+                    logger.info("Executor has been shut down, background compactions check will not be scheduled");
+                else
+                    logger.error("Failed to submit background compactions check", ex);
+
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private Supplier<CompletableFuture<?>> lazyRunCompactionTasks(ColumnFamilyStore cfs)
