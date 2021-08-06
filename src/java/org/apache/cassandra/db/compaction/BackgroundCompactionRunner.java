@@ -30,7 +30,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -40,8 +39,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ConcurrentHashMultiset;
 import com.google.common.collect.Multiset;
 import com.google.common.primitives.Longs;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.SettableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,7 +89,7 @@ public class BackgroundCompactionRunner implements Runnable
     /**
      * CFSs for which a compaction was requested mapped to the promise returned to the requesting code
      */
-    private final ConcurrentMap<ColumnFamilyStore, List<SettableFuture<RequestResult>>> compactionRequests = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ColumnFamilyStore, List<CompletableFuture<RequestResult>>> compactionRequests = new ConcurrentHashMap<>();
 
     private final AtomicInteger currentlyBackgroundUpgrading = new AtomicInteger(0);
 
@@ -122,17 +119,19 @@ public class BackgroundCompactionRunner implements Runnable
      *
      * @return a promise which will be completed when the mark is cleared
      */
-    Future<RequestResult> requestCompaction(ColumnFamilyStore cfs)
+    CompletableFuture<RequestResult> requestCompaction(ColumnFamilyStore cfs)
     {
         logger.trace("Requested background compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
 
         if (checkExecutor.isShutdown())
         {
             logger.info("Executor has been shut down, background compactions check will not be scheduled");
-            return Futures.immediateCancelledFuture();
+            CompletableFuture<RequestResult> futureResult = new CompletableFuture<>();
+            futureResult.cancel(false);
+            return futureResult;
         }
 
-        SettableFuture<RequestResult> futureResult = SettableFuture.create();
+        CompletableFuture<RequestResult> futureResult = new CompletableFuture<>();
         compactionRequests.compute(cfs, (ignored, current) -> {
             if (current == null)
                 current = Collections.synchronizedList(new ArrayList<>());
@@ -170,7 +169,7 @@ public class BackgroundCompactionRunner implements Runnable
 
         for (ColumnFamilyStore cfs : compactionRequestsList)
         {
-            List<SettableFuture<RequestResult>> promises = compactionRequests.remove(cfs);
+            List<CompletableFuture<RequestResult>> promises = compactionRequests.remove(cfs);
 
             logger.trace("Checking compaction request for {}.{} - there are {} awaiting promises",
                          cfs.getKeyspaceName(),
@@ -180,7 +179,7 @@ public class BackgroundCompactionRunner implements Runnable
             RequestResult completionStatus = canRunCompactionTasks(cfs, promises);
             if (completionStatus != null)
             {
-                promises.stream().filter(p -> !p.isDone()).forEach(p -> p.set(completionStatus));
+                promises.stream().filter(p -> !p.isDone()).forEach(p -> p.complete(completionStatus));
                 continue;
             }
 
@@ -204,7 +203,7 @@ public class BackgroundCompactionRunner implements Runnable
                         logger.warn(String.format("Aborting compaction of %s.%s due to error", cfs.getKeyspaceName(), cfs.getTableName()), throwable);
                         handleCompactionError(throwable, cfs);
 
-                        promises.forEach(p -> p.setException(throwable));
+                        promises.forEach(p -> p.completeExceptionally(throwable));
                     }
                     else
                     {
@@ -214,7 +213,7 @@ public class BackgroundCompactionRunner implements Runnable
                         // check for new compaction possibilities
                         requestCompaction(cfs);
 
-                        promises.forEach(p -> p.set(RequestResult.COMPLETED));
+                        promises.forEach(p -> p.complete(RequestResult.COMPLETED));
                     }
 
                     return null;
@@ -222,7 +221,7 @@ public class BackgroundCompactionRunner implements Runnable
             }
             else
             {
-                promises.forEach(p -> p.set(RequestResult.COMPLETED));
+                promises.forEach(p -> p.complete(RequestResult.COMPLETED));
             }
         }
     }
@@ -297,9 +296,9 @@ public class BackgroundCompactionRunner implements Runnable
      * If the compaction tasks should not be run, we will return a non-null {@link RequestResult} to be set on the
      * awaiting (not done) promises. In that case, we should skip the compaction for this CFS.
      */
-    private RequestResult canRunCompactionTasks(ColumnFamilyStore cfs, List<SettableFuture<RequestResult>> promises)
+    private RequestResult canRunCompactionTasks(ColumnFamilyStore cfs, List<CompletableFuture<RequestResult>> promises)
     {
-        if (promises.stream().allMatch(p -> p.isDone()))
+        if (promises.stream().allMatch(CompletableFuture::isDone))
         {
             logger.trace("There are no awaiting requests for {}.{} (all the requests were cancelled)",
                          cfs.getKeyspaceName(), cfs.getTableName());
@@ -318,7 +317,7 @@ public class BackgroundCompactionRunner implements Runnable
         if (!cfs.isValid())
         {
             logger.trace("Aborting compaction for dropped CF {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-            promises.forEach(p -> p.set(RequestResult.ABORTED));
+            promises.forEach(p -> p.complete(RequestResult.ABORTED));
             return RequestResult.ABORTED;
         }
 
