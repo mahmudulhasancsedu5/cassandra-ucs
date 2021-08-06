@@ -21,10 +21,10 @@ package org.apache.cassandra.db.compaction;
 import java.io.File;
 import java.io.IOError;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -188,33 +188,35 @@ public class BackgroundCompactionRunner implements Runnable
                          cfs.name,
                          cfs.getCompactionStrategy().getName());
 
-            Supplier<CompletableFuture<?>> compactionTask = Optional.ofNullable(lazyRunCompactionTasks(cfs))
-                                                                    .orElseGet(() -> lazyRunUpgradeTasks(cfs));
+            Supplier<CompletableFuture<?>[]> compactionTasks = lazyRunCompactionTasks(cfs);
+            if (compactionTasks == null)
+                compactionTasks = lazyRunUpgradeTasks(cfs);
 
-            if (compactionTask != null)
+            if (compactionTasks != null)
             {
                 ongoingCompactions.add(cfs);
 
-                compactionTask.get().handle((ignored, throwable) -> {
+                CompletableFuture<?>[] tasksResults = compactionTasks.get();
+
+                CompletableFuture.allOf(tasksResults).handle((ignored, throwable) -> {
                     ongoingCompactions.remove(cfs);
 
                     if (throwable != null)
                     {
                         logger.warn(String.format("Aborting compaction of %s.%s due to error", cfs.getKeyspaceName(), cfs.getTableName()), throwable);
                         handleCompactionError(throwable, cfs);
-
                         promises.forEach(p -> p.completeExceptionally(throwable));
                     }
                     else
                     {
                         logger.trace("Finished compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-
-                        // Since we have run at least one task and thus the set of sstables has changed,
-                        // check for new compaction possibilities
-                        requestCompaction(cfs);
-
                         promises.forEach(p -> p.complete(RequestResult.COMPLETED));
                     }
+
+                    // if at least one compaction task completes successfully, the set of sstables may be changed,
+                    // therefore we check for new compaction possibilities
+                    if (Arrays.stream(tasksResults).anyMatch(f -> !f.isCancelled() && !f.isCompletedExceptionally()))
+                        requestCompaction(cfs);
 
                     return null;
                 });
@@ -248,7 +250,7 @@ public class BackgroundCompactionRunner implements Runnable
         return true;
     }
 
-    private Supplier<CompletableFuture<?>> lazyRunCompactionTasks(ColumnFamilyStore cfs)
+    private Supplier<CompletableFuture<?>[]> lazyRunCompactionTasks(ColumnFamilyStore cfs)
     {
         Collection<AbstractCompactionTask> compactionTasks = cfs.getCompactionStrategy()
                                                                 .getNextBackgroundTasks(CompactionManager.getDefaultGcBefore(cfs, FBUtilities.nowInSeconds()));
@@ -256,9 +258,9 @@ public class BackgroundCompactionRunner implements Runnable
         {
             return () -> {
                 logger.debug("Running compaction tasks: {}", compactionTasks);
-                return CompletableFuture.allOf(compactionTasks.stream()
-                                                              .map(task -> CompletableFuture.runAsync(() -> task.execute(activeOperations), compactionExecutor))
-                                                              .toArray(CompletableFuture<?>[]::new));
+                return compactionTasks.stream()
+                                      .map(task -> CompletableFuture.runAsync(() -> task.execute(activeOperations), compactionExecutor))
+                                      .toArray(CompletableFuture<?>[]::new);
             };
         }
         else
@@ -268,7 +270,7 @@ public class BackgroundCompactionRunner implements Runnable
         }
     }
 
-    private Supplier<CompletableFuture<?>> lazyRunUpgradeTasks(ColumnFamilyStore cfs)
+    private Supplier<CompletableFuture<?>[]> lazyRunUpgradeTasks(ColumnFamilyStore cfs)
     {
         AbstractCompactionTask upgradeTask = getUpgradeSSTableTask(cfs);
 
@@ -276,11 +278,12 @@ public class BackgroundCompactionRunner implements Runnable
         {
             return () -> {
                 logger.debug("Running upgrade task: {}", upgradeTask);
-                return CompletableFuture.runAsync(() -> upgradeTask.execute(activeOperations), compactionExecutor)
-                                        .handle((ignored1, ignored2) -> {
-                                            currentlyBackgroundUpgrading.decrementAndGet();
-                                            return null;
-                                        });
+                CompletableFuture<Object> result = CompletableFuture.runAsync(() -> upgradeTask.execute(activeOperations), compactionExecutor)
+                                                                    .handle((ignored1, ignored2) -> {
+                                                                        currentlyBackgroundUpgrading.decrementAndGet();
+                                                                        return null;
+                                                                    });
+                return new CompletableFuture[]{ result };
             };
         }
         else
