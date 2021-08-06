@@ -63,9 +63,9 @@ public class BackgroundCompactionRunner implements Runnable
     public enum RequestResult
     {
         /**
-         * when the compaction was decided not to run because there were already running compactions for this CFS
+         * when the compaction check was done and there were no compaction tasks for the CFS
          */
-        SKIPPED,
+        NOT_NEEDED,
 
         /**
          * when the compaction was aborted for the CFS because the CF got dropped in the meantime
@@ -122,28 +122,37 @@ public class BackgroundCompactionRunner implements Runnable
     CompletableFuture<RequestResult> requestCompaction(ColumnFamilyStore cfs)
     {
         logger.trace("Requested background compaction for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+        CompletableFuture<RequestResult> futureResult = new CompletableFuture<>();
 
+        requestCompactionInternal(cfs, Collections.singletonList(futureResult));
+        return futureResult;
+    }
+
+    private void requestCompactionInternal(ColumnFamilyStore cfs, List<CompletableFuture<RequestResult>> futureResults)
+    {
         if (checkExecutor.isShutdown())
         {
             logger.info("Executor has been shut down, background compactions check will not be scheduled");
-            CompletableFuture<RequestResult> futureResult = new CompletableFuture<>();
-            futureResult.cancel(false);
-            return futureResult;
+            futureResults.forEach(f -> f.cancel(false));
         }
-
-        CompletableFuture<RequestResult> futureResult = new CompletableFuture<>();
-        compactionRequests.compute(cfs, (ignored, current) -> {
-            if (current == null)
-                current = Collections.synchronizedList(new ArrayList<>());
-            current.add(futureResult);
-            return current;
-        });
-
-        if (!maybeScheduleNextCheck())
+        else
         {
-            futureResult.cancel(false);
+            compactionRequests.compute(cfs, (ignored, current) -> {
+                if (current == null)
+                    current = Collections.synchronizedList(new ArrayList<>(futureResults.size()));
+
+                for (CompletableFuture<RequestResult> futureResult : futureResults)
+                {
+                    if (!futureResult.isDone())
+                        current.add(futureResult);
+                }
+
+                return current;
+            });
+
+            if (!maybeScheduleNextCheck())
+                futureResults.forEach(f -> f.cancel(false));
         }
-        return futureResult;
     }
 
     void shutdown()
@@ -176,10 +185,29 @@ public class BackgroundCompactionRunner implements Runnable
                          cfs.getTableName(),
                          promises.size());
 
-            RequestResult completionStatus = canRunCompactionTasks(cfs, promises);
-            if (completionStatus != null)
+
+            if (promises.stream().allMatch(CompletableFuture::isDone))
             {
-                promises.stream().filter(p -> !p.isDone()).forEach(p -> p.complete(completionStatus));
+                logger.trace("There are no awaiting requests for {}.{} (all the requests were cancelled)",
+                             cfs.getKeyspaceName(), cfs.getTableName());
+                continue;
+            }
+
+            if (!cfs.isValid())
+            {
+                logger.trace("Aborting compaction for dropped CF {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
+                promises.forEach(p -> p.complete(RequestResult.ABORTED));
+                continue;
+            }
+
+            // when the compaction is already running for CFS and the executor is fully occupied,
+            // we will make a new compaction request with the current promises, so that the promises will be completed
+            // after the compaction really happens or there are no compaction tasks to be done
+            if (ongoingCompactions.count(cfs) > 0 && compactionExecutor.getActiveTaskCount() >= compactionExecutor.getMaximumPoolSize())
+            {
+                logger.trace("Background compaction is still running for {}.{} - the check will be done after completion",
+                             cfs.getKeyspaceName(), cfs.getTableName());
+                requestCompactionInternal(cfs, promises);
                 continue;
             }
 
@@ -223,7 +251,7 @@ public class BackgroundCompactionRunner implements Runnable
             }
             else
             {
-                promises.forEach(p -> p.complete(RequestResult.COMPLETED));
+                promises.forEach(p -> p.complete(RequestResult.NOT_NEEDED));
             }
         }
     }
@@ -291,40 +319,6 @@ public class BackgroundCompactionRunner implements Runnable
             logger.debug("No upgrade tasks for {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
             return null;
         }
-    }
-
-    /**
-     * Checks if we can/should run compaction tasks for the CFS, given the provided promises. If we should run
-     * compaction tasks for that CFS, we will return {@code null}, as there is no status to be set yet on the promises.
-     * If the compaction tasks should not be run, we will return a non-null {@link RequestResult} to be set on the
-     * awaiting (not done) promises. In that case, we should skip the compaction for this CFS.
-     */
-    private RequestResult canRunCompactionTasks(ColumnFamilyStore cfs, List<CompletableFuture<RequestResult>> promises)
-    {
-        if (promises.stream().allMatch(CompletableFuture::isDone))
-        {
-            logger.trace("There are no awaiting requests for {}.{} (all the requests were cancelled)",
-                         cfs.getKeyspaceName(), cfs.getTableName());
-            return RequestResult.COMPLETED;
-        }
-
-        // when the compaction is already running for CFS and the executor is fully occupied
-        // we will skip and cancel the request
-        if (ongoingCompactions.count(cfs) > 0 && compactionExecutor.getActiveTaskCount() >= compactionExecutor.getMaximumPoolSize())
-        {
-            logger.trace("Background compaction is still running for {}.{} - skipping",
-                         cfs.getKeyspaceName(), cfs.getTableName());
-            return RequestResult.SKIPPED;
-        }
-
-        if (!cfs.isValid())
-        {
-            logger.trace("Aborting compaction for dropped CF {}.{}", cfs.getKeyspaceName(), cfs.getTableName());
-            promises.forEach(p -> p.complete(RequestResult.ABORTED));
-            return RequestResult.ABORTED;
-        }
-
-        return null;
     }
 
     /**

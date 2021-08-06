@@ -25,7 +25,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.TabularData;
@@ -33,11 +32,9 @@ import javax.management.openmbean.TabularData;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import com.google.common.base.Suppliers;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
 
-import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.compaction.BackgroundCompactionRunner.RequestResult;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -192,7 +189,7 @@ public class CompactionManager implements CompactionManagerMBean
         if (cfs.isAutoCompactionDisabled())
         {
             logger.trace("Autocompaction is disabled");
-            return CompletableFuture.completedFuture(RequestResult.SKIPPED);
+            return CompletableFuture.completedFuture(RequestResult.NOT_NEEDED);
         }
 
         return backgroundCompactionRunner.requestCompaction(cfs);
