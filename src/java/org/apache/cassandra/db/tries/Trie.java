@@ -309,11 +309,6 @@ public abstract class Trie<T>
         }
     }
 
-    public <V> V walk(TrieWalker<T, V> walker)
-    {
-        return TrieWalker.process(walker, this);
-    }
-
     public String dump()
     {
         return dump(Object::toString);
@@ -321,7 +316,7 @@ public abstract class Trie<T>
 
     public String dump(Function<T, String> contentToString)
     {
-        return walk(new TrieDumper<>(contentToString));
+        return TrieDumper.process(contentToString, this);
     }
 
     /**

@@ -19,59 +19,64 @@ package org.apache.cassandra.db.tries;
 
 import java.util.function.Function;
 
+import org.agrona.concurrent.UnsafeBuffer;
+
 /**
  * Simple utility class for dumping the structure of a trie to string.
  */
-class TrieDumper<T> implements TrieWalker<T, String>
+class TrieDumper<T>
 {
-    // TODO: Test then make simpler direct version
-    private final Function<T, String> contentToString;
-    private final StringBuilder b = new StringBuilder();
-    private int depth = -1;
-    private boolean indented = true;
-
-    TrieDumper(Function<T, String> contentToString)
+    public static <T> String process(Function<T, String> contentToString, Trie<T> trie)
     {
-        this.contentToString = contentToString;
+        StringBuilder sb = new StringBuilder();
+        Trie.ResettingTransitionsReceiver receiver = new TransitionsDumper(sb);
+        Trie.Cursor<T> cursor = trie.cursor();
+        while (true)
+        {
+            T content = cursor.advanceToContent(receiver);
+            if (content == null)
+                return sb.toString();
+            sb.append(" -> ");
+            sb.append(contentToString.apply(content));
+            receiver.reset(cursor.level());
+        }
     }
 
-    public void onNodeEntry(int incomingTransition, T content)
+    private static class TransitionsDumper implements Trie.ResettingTransitionsReceiver
     {
-        if (!indented)
+        private final StringBuilder b;
+        boolean justReset = true;
+
+        public TransitionsDumper(StringBuilder b)
         {
-            for (int i = 0; i < depth; ++i)
-                b.append("  ");
-            indented = true;
+            this.b = b;
         }
 
-        ++depth;
-        if (incomingTransition != -1)
+        @Override
+        public void reset(int newLength)
+        {
+            if (!justReset)
+            {
+                b.append('\n');
+                for (int i = 0; i < newLength; ++i)
+                    b.append("  ");
+                justReset = true;
+            }
+        }
+
+        @Override
+        public void add(int incomingTransition)
+        {
             b.append(String.format("%02x", incomingTransition));
-
-        if (content != null)
-        {
-            // Only go to a new line once a payload is reached
-            indented = false;
-            b.append(" -> ");
-            b.append(contentToString.apply(content));
-            b.append('\n');
+            justReset = false;
         }
-    }
 
-    public void onNodeExit()
-    {
-        if (indented)
+        @Override
+        public void add(UnsafeBuffer buf, int pos, int count)
         {
-            // We are backtracking without having printed content or meta. Although unexpected, this can legally happen
-            // (e.g. if an intersection has resulted in an empty node).
-            indented = false;
-            b.append('\n');
+            for (int i = 0; i < count; ++i)
+                b.append(String.format("%02x", buf.getByte(pos + i) & 0xFF));
+            justReset = false;
         }
-        --depth;
-    }
-
-    public String completion()
-    {
-        return b.toString();
     }
 }

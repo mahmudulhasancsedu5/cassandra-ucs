@@ -248,7 +248,9 @@ public class MemtableReadTrie<T> extends Trie<T>
     }
 
 
-    /** Pointer offset for a node pointer. */
+    /**
+     * Pointer offset for a node pointer.
+     */
     int offset(int pos)
     {
         return pos & (BLOCK_SIZE - 1);
@@ -264,7 +266,10 @@ public class MemtableReadTrie<T> extends Trie<T>
         return getBuffer(pos).getShort(getOffset(pos)) & 0xFFFF;
     }
 
-    final int getInt(int pos) { return getBuffer(pos).getInt(getOffset(pos)); }
+    final int getInt(int pos)
+    {
+        return getBuffer(pos).getInt(getOffset(pos));
+    }
 
     T getContent(int index)
     {
@@ -302,7 +307,9 @@ public class MemtableReadTrie<T> extends Trie<T>
         return (node & -BLOCK_SIZE) | LAST_POINTER_OFFSET;
     }
 
-    /** Create a trie node for the given pointer */
+    /**
+     * Create a trie node for the given pointer
+     */
     <L> BaseNode<L> makeNode(int node, L parent)
     {
         if (isNull(node))
@@ -324,7 +331,9 @@ public class MemtableReadTrie<T> extends Trie<T>
         }
     }
 
-    /** Get a node's child for the given transition character */
+    /**
+     * Get a node's child for the given transition character
+     */
     int getChild(int node, int trans)
     {
         if (isNullOrLeaf(node))
@@ -369,7 +378,7 @@ public class MemtableReadTrie<T> extends Trie<T>
 
     /**
      * Advance as long as the cell pointed to by the given pointer will let you.
-     *
+     * <p>
      * This is the same as getChild(node, first), except for chain nodes where it would walk the fill chain as long as
      * the input source matches.
      */
@@ -403,7 +412,9 @@ public class MemtableReadTrie<T> extends Trie<T>
         }
     }
 
-    /** Get the child for the given transition character, knowing that the node is sparse */
+    /**
+     * Get the child for the given transition character, knowing that the node is sparse
+     */
     int getSparseChild(int node, int trans)
     {
         for (int i = 0; i < SPARSE_CHILD_COUNT; ++i)
@@ -423,31 +434,39 @@ public class MemtableReadTrie<T> extends Trie<T>
         return NONE;
     }
 
-    /** Given a transition, returns the corresponding index (within the node block) of the pointer to the mid block of
-     * a split node. */
+    /**
+     * Given a transition, returns the corresponding index (within the node block) of the pointer to the mid block of
+     * a split node.
+     */
     int splitNodeMidIndex(int trans)
     {
         // first 2 bytes of the 2-3-3 split
         return (trans >> 6);
     }
 
-    /** Given a transition, returns the corresponding index (within the mid block) of the pointer to the tail block of
-     * a split node. */
+    /**
+     * Given a transition, returns the corresponding index (within the mid block) of the pointer to the tail block of
+     * a split node.
+     */
     int splitNodeTailIndex(int trans)
     {
         // second 3 bytes of the 2-3-3 split
         return (trans >> 3) & 0x7;
     }
 
-    /** Given a transition, returns the corresponding index (within the tail block) of the pointer to the child of
-     * a split node. */
+    /**
+     * Given a transition, returns the corresponding index (within the tail block) of the pointer to the child of
+     * a split node.
+     */
     int splitNodeChildIndex(int trans)
     {
         // third 3 bytes of the 2-3-3 split
         return trans & 0x7;
     }
 
-    /** Get the child for the given transition character, knowing that the node is split */
+    /**
+     * Get the child for the given transition character, knowing that the node is split
+     */
     int getSplitChild(int node, int trans)
     {
         int mid = getInt(node + SPLIT_POINTER_OFFSET + splitNodeMidIndex(trans) * 4);
@@ -460,7 +479,9 @@ public class MemtableReadTrie<T> extends Trie<T>
         return getInt(tail + splitNodeChildIndex(trans) * 4);
     }
 
-    /** Get the content for a given node */
+    /**
+     * Get the content for a given node
+     */
     T getNodeContent(int node)
     {
         if (isLeaf(node))
@@ -577,7 +598,7 @@ public class MemtableReadTrie<T> extends Trie<T>
         void dump(int indent, StringBuilder b, Function<T, String> contentToString)
         {
             indent++;
-            b.append(" -> Split\n");
+            b.append(" -> [Split]\n");
             for (int idx = 0; idx < 256; ++idx)
             {
                 BaseNode<L> child = makeNode(getChild(idx), null);
@@ -632,7 +653,7 @@ public class MemtableReadTrie<T> extends Trie<T>
         void dump(int indent, StringBuilder b, Function<T, String> contentToString)
         {
             indent++;
-            b.append(" -> Sparse\n");
+            b.append(" -> [Sparse]\n");
             for (int idx = 0; idx < SPARSE_CHILD_COUNT; ++idx)
             {
                 BaseNode<L> child = makeNode(getInt(node + SPARSE_CHILDREN_OFFSET + idx * 4), null);
@@ -699,13 +720,13 @@ public class MemtableReadTrie<T> extends Trie<T>
         @Override
         void dump(int indent, StringBuilder b, Function<T, String> contentToString)
         {
-            b.append(" -> Chain\n");
+            b.append(" -> [Chain]\n");
             for (int i = 0; i < indent + 1; ++i)
                 b.append("  ");
             int limit = chainBlockChildPointer(node);
             for (int p = node; p < limit; ++p)
             {
-                indent ++;
+                indent++;
                 b.append(String.format("%02x", getByte(p)));
             }
             makeNode(getInt(limit), null).dump(indent, b, contentToString);
@@ -847,14 +868,17 @@ public class MemtableReadTrie<T> extends Trie<T>
         {
             return backtrack[backtrackLevel * 3 + 0];
         }
+
         private int data(int backtrackLevel)
         {
             return backtrack[backtrackLevel * 3 + 1];
         }
+
         private int level(int backtrackLevel)
         {
             return backtrack[backtrackLevel * 3 + 2];
         }
+
         void addBacktrack(int node, int data, int level)
         {
             if (backtrackLevel * 3 >= backtrack.length)
@@ -924,12 +948,12 @@ public class MemtableReadTrie<T> extends Trie<T>
 
             switch (offset(node))
             {
-            case SPLIT_OFFSET:
-                return nextValidSplitTransition(node, transition + 1);
-            case SPARSE_OFFSET:
-                return nextValidSparseTransition(node, transition + 1);
-            default:
-                return getChainTransition(node);
+                case SPLIT_OFFSET:
+                    return nextValidSplitTransition(node, transition + 1);
+                case SPARSE_OFFSET:
+                    return nextValidSparseTransition(node, transition + 1);
+                default:
+                    return getChainTransition(node);
             }
         }
 
@@ -1088,7 +1112,6 @@ public class MemtableReadTrie<T> extends Trie<T>
         return new MemtableCursor();
     }
 
-
     /*
      Direct read methods
      */
@@ -1131,14 +1154,5 @@ public class MemtableReadTrie<T> extends Trie<T>
         else
             b.append("empty");
         return b.toString();
-    }
-
-    /**
-     * Override as non-throwing.
-     */
-    @Override
-    public String dump()
-    {
-        return dump(Object::toString);
     }
 }
