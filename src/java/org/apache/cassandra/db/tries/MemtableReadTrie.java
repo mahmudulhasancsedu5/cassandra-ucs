@@ -1086,6 +1086,25 @@ public class MemtableReadTrie<T> extends Trie<T>
             }
         }
 
+        int advanceChainPath(TransitionsReceiver receiver)
+        {
+            int node = currentNode;
+            if (!isChainNode(node))
+                return advance();
+
+            UnsafeBuffer buffer = getBuffer(node);
+            int ofs = getOffset(node);
+            int pointer = chainBlockChildPointer(ofs);
+            int child = buffer.getInt(pointer);
+            int length = pointer - ofs;
+            --length;   // leave the last byte for incomingTransition
+            if (receiver != null && length > 0)
+                receiver.add(buffer, ofs, length);
+            level += length;
+
+            return descendInto(child, buffer.getByte(pointer - 1) & 0xFF);
+        }
+
         public int level()
         {
             return level;
@@ -1148,11 +1167,74 @@ public class MemtableReadTrie<T> extends Trie<T>
     @Override
     public String dump(Function<T, String> contentToString)
     {
-        StringBuilder b = new StringBuilder();
-        if (!isNull(root))
-            root().dump(0, b, contentToString);
-        else
-            b.append("empty");
-        return b.toString();
+        MemtableCursor source = cursor();
+        class TypedNodesCursor implements Cursor<String>
+        {
+            @Override
+            public int advance()
+            {
+                return source.advance();
+            }
+
+
+            @Override
+            public int advanceMultiple(TransitionsReceiver receiver)
+            {
+                return source.advanceChainPath(receiver);
+            }
+
+            @Override
+            public int ascend()
+            {
+                return source.ascend();
+            }
+
+            @Override
+            public int level()
+            {
+                return source.level();
+            }
+
+            @Override
+            public int incomingTransition()
+            {
+                return source.incomingTransition();
+            }
+
+            @Override
+            public String content()
+            {
+                String type = null;
+                int node = source.currentNode;
+                if (!isNullOrLeaf(node))
+                {
+                    switch (offset(node))
+                    {
+                        case SPARSE_OFFSET:
+                            type = "[SPARSE]";
+                            break;
+                        case SPLIT_OFFSET:
+                            type = "[SPLIT]";
+                            break;
+                        case PREFIX_OFFSET:
+                            throw new AssertionError("Unexpected prefix as cursor currentNode.");
+                        default:
+                            type = "[CHAIN]";
+                            break;
+                    }
+                }
+                T content = source.content();
+                if (content != null)
+                {
+                    if (type != null)
+                        return contentToString.apply(content) + " -> " + type;
+                    else
+                        return contentToString.apply(content);
+                }
+                else
+                    return type;
+            }
+        }
+        return TrieDumper.dump(Object::toString, new TypedNodesCursor());
     }
 }

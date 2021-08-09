@@ -28,9 +28,13 @@ class TrieDumper<T>
 {
     public static <T> String process(Function<T, String> contentToString, Trie<T> trie)
     {
+        return dump(contentToString, trie.cursor());
+    }
+
+    static <T> String dump(Function<T, String> contentToString, Trie.Cursor<T> cursor)
+    {
         StringBuilder sb = new StringBuilder();
         Trie.ResettingTransitionsReceiver receiver = new TransitionsDumper(sb);
-        Trie.Cursor<T> cursor = trie.cursor();
         while (true)
         {
             T content = cursor.advanceToContent(receiver);
@@ -45,7 +49,7 @@ class TrieDumper<T>
     private static class TransitionsDumper implements Trie.ResettingTransitionsReceiver
     {
         private final StringBuilder b;
-        boolean justReset = true;
+        int needsIndent = -1;
 
         public TransitionsDumper(StringBuilder b)
         {
@@ -55,28 +59,33 @@ class TrieDumper<T>
         @Override
         public void reset(int newLength)
         {
-            if (!justReset)
+            needsIndent = newLength;
+        }
+
+        private void maybeIndent()
+        {
+            if (needsIndent >= 0)
             {
                 b.append('\n');
-                for (int i = 0; i < newLength; ++i)
+                for (int i = 0; i < needsIndent; ++i)
                     b.append("  ");
-                justReset = true;
+                needsIndent = -1;
             }
         }
 
         @Override
         public void add(int incomingTransition)
         {
+            maybeIndent();
             b.append(String.format("%02x", incomingTransition));
-            justReset = false;
         }
 
         @Override
         public void add(UnsafeBuffer buf, int pos, int count)
         {
+            maybeIndent();
             for (int i = 0; i < count; ++i)
                 b.append(String.format("%02x", buf.getByte(pos + i) & 0xFF));
-            justReset = false;
         }
     }
 }
