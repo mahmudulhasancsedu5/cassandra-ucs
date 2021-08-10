@@ -90,7 +90,7 @@ public abstract class Trie<T>
     }
 
     /**
-     * Used by {@link Node#getUniqueDescendant} to feed the transitions taken.
+     * Used by {@link Cursor#advanceMultiple} to feed the transitions taken.
      */
     protected interface TransitionsReceiver
     {
@@ -100,112 +100,14 @@ public abstract class Trie<T>
         void add(UnsafeBuffer b, int pos, int count);
     }
 
+    /**
+     * Used by {@link Cursor#advanceToContent} to track the transitions and backtracking taken.
+     */
     interface ResettingTransitionsReceiver extends TransitionsReceiver
     {
         /** Delete all bytes beyond the given length. */
         void reset(int newLength);
     }
-
-    /**
-     * A trie node. Provides methods for listing the transition bytes and children of the node, as well as its content.
-     * Once a node is made available, all its methods, except the ones retrieving children, must proceed without
-     * blocking or throwing exceptions.
-     *
-     * To enable efficient traversals the node effectively stores a call stack, a back link to the state that
-     * was used to obtain the node. This data is used to resume walks along the items in a trie.
-     *
-     * A node is a stateful non-thread-safe object. It is okay to access it from different threads, provided such
-     * accesses are not concurrent, i.e. there is a happens-before relationship between calling each of a node's
-     * methods.
-     */
-    protected abstract static class Node<T, L>
-    {
-        /**
-         * Parent state, as set when {@link #getCurrentChild} or {@link #getUniqueDescendant} is called, or
-         * {@code null} if this is a root node.
-         * Often a node (which also holds its iteration state), but it does not need to be. Users/subscribers of the
-         * trie interface can choose what this link needs to contain, e.g. a merge node with a list of source nodes
-         * or a pair of a parent node with a byte array containing the key that leads to it.
-         */
-        public final L parentLink;
-
-        /** Current transition byte, set after each call to {@link #startIteration} and {@link #advanceIteration}. */
-        protected int currentTransition = -1;
-
-        protected Node(L parentLink)
-        {
-            this.parentLink = parentLink;
-        }
-
-        /**
-         * Sets up the node for forward iteration, positions it on the first child and sets {@link #currentTransition}.
-         * Note: It is expected that the node will be traversed only once, more precisely that no consumer will ask
-         * twice for the same child. Some implementations (e.g. singleton, subtrie) may fail if this is violated.
-         *
-         * @return null if the node has no children, otherwise {@link Remaining#MULTIPLE} or {@link Remaining#ONE} (if
-         * it knows this is the only transition).
-         */
-        public abstract Remaining startIteration();
-
-        /**
-         * Advances the node state to the next transition of the node and sets {@link #currentTransition}.
-         * <p>
-         * This can only be called after an iteration has been started by {@link #startIteration}.
-         *
-         * @return null if the node has no more children, otherwise {@link Remaining#MULTIPLE} or {@link Remaining#ONE}
-         * (if it knows this is the last transition).
-         *
-         * @throws IllegalStateException if no iteration has been started (with {@link #startIteration}), or if the
-         * preceding call to {@link #startIteration} or this method returned {@code null}. (Note: Implementations
-         * should permit this to be called after {@link Remaining#ONE}, which is redundant but easier to work with.)
-         */
-        public abstract Remaining advanceIteration();
-
-        /**
-         * Gets the child of this node corresponding to the current transition and with the given parent link.
-         * The current transition must have been set using {@link #startIteration} or {@link #advanceIteration},
-         * and it's an error to call this after either has returned {@code null}. This should only be
-         * called once for a given transition/child.
-         *
-         * The method may return null if the child turns out to not be present (e.g. in a dense node where it could be
-         * better to leave the check for the request call, or if a concurrent write has prepared the transition but not
-         * yet made it active by writing the child).
-         *
-         * @param parentLink the parent state to use to set {@link Node#parentLink} in the node provided as result to
-         * this request.
-         * @return the child corresponding to the current transition or null if the child does not exist
-         * (even though {@link #startIteration}/{@link #advanceIteration} thought it did).
-         */
-        public abstract Node<T, L> getCurrentChild(L parentLink);
-
-        /**
-         * If the node has exactly one child and no content, go to that child and continue descending while this is
-         * the case.
-         * This is done so that iteration over the content of the trie does not need to remember the parts of the path
-         * that are not branching points and thus don't need to be revisited while backtracking up the trie.
-         * Overridden by chain nodes (MemtableTrie.ChainNode); see TrieValuesIterator for usage.
-         * The receiver argument can be null if the caller does not need a record of the transitions taken.
-         */
-        public Node<T, L> getUniqueDescendant(L parentLink, TransitionsReceiver receiver)
-        {
-            return this;
-        }
-
-        /**
-         * The content of this node, if any.
-         *
-         * @return the content of this node, or {@code null} if it has no attached content.
-         */
-        public abstract T content();
-    }
-
-    /**
-     * Returns an instantiation of the root node with null parent link.
-     * This is the only method that needs to be implemented in children.
-     *
-     * @param <L> The type of parent link that will be used in the traversal.
-     */
-    protected abstract <L> Node<T, L> root();
 
     // Cursor-style walks
     interface Cursor<T>
@@ -252,17 +154,10 @@ public abstract class Trie<T>
             }
         }
 
-//        int advanceTo(int transition); // advance to child with this transition or higher. if none exists, ascend to parent and advance
-
         /**
          * ignore the remaining children at this level or below and ascend to parent and advance
          */
         int ascend(); // ignore the remaining children at this level or below and ascend to parent and advance
-
-        //        default int ascend()
-//        {
-//            return advanceTo(Integer.MAX_VALUE);
-//        }
 
         int level(); // return current state; if just starting / on root, return 0
         int incomingTransition(); // return the last transition taken; if just starting / on root, return -1
@@ -270,44 +165,10 @@ public abstract class Trie<T>
 
     }
 
-    protected Cursor<T> cursor()
-    {
-        return new CursorFromNode<>(this);
-    }
+    protected abstract Cursor<T> cursor();
 
     // Version of the byte comparable conversion to use for all operations
     static final ByteComparable.Version BYTE_COMPARABLE_VERSION = ByteComparable.Version.OSS41;
-
-    /**
-     * Base helper class to write node having no childen.
-     */
-    protected abstract static class NoChildrenNode<T, L> extends Node<T, L>
-    {
-        NoChildrenNode(L parent)
-        {
-            super(parent);
-        }
-
-        public IllegalStateException error()
-        {
-            return new IllegalStateException("Node has no children.");
-        }
-
-        public Remaining startIteration()
-        {
-            return null;
-        }
-
-        public Remaining advanceIteration()
-        {
-            throw error();
-        }
-
-        public Node<T, L> getCurrentChild(L parent)
-        {
-            throw error();
-        }
-    }
 
     public String dump()
     {
@@ -508,11 +369,6 @@ public abstract class Trie<T>
 
     private static final Trie<Object> EMPTY = new Trie<Object>()
     {
-        public <L> Node<Object, L> root()
-        {
-            return null;
-        }
-
         protected Cursor<Object> cursor()
         {
             return new Cursor<Object>()

@@ -48,27 +48,45 @@ public abstract class TrieSet extends Trie<TrieSet.InSet>
         }
     }
 
-    protected static final Node<InSet, Object> FULL = new NoChildrenNode<InSet, Object>(null)
-    {
-        public InSet content()
-        {
-            return InSet.BRANCH;
-        }
-    };
-
     private static final TrieSet FULL_SET = new TrieSet()
     {
-        public <L> Node<InSet, L> root()
+        @Override
+        protected Cursor<InSet> cursor()
         {
-            return (Node<InSet, L>) FULL;
-        }
-    };
+            return new Cursor<InSet>()
+            {
+                int level = 0;
 
-    private static final TrieSet EMPTY_SET = new TrieSet()
-    {
-        public <L> Node<InSet, L> root()
-        {
-            return null;
+                @Override
+                public int advance()
+                {
+                    return level = -1;
+                }
+
+                @Override
+                public int ascend()
+                {
+                    return level = -1;
+                }
+
+                @Override
+                public int level()
+                {
+                    return level;
+                }
+
+                @Override
+                public int incomingTransition()
+                {
+                    return -1;
+                }
+
+                @Override
+                public InSet content()
+                {
+                    return InSet.BRANCH;
+                }
+            };
         }
     };
 
@@ -87,10 +105,5 @@ public abstract class TrieSet extends Trie<TrieSet.InSet>
     public static TrieSet full()
     {
         return FULL_SET;
-    }
-
-    public static TrieSet empty()
-    {
-        return EMPTY_SET;
     }
 }

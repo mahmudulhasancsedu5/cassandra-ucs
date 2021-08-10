@@ -121,73 +121,52 @@ public class SetIntersectionTrieTest
     {
         return new Trie<Integer>()
         {
-            protected <L> Node<Integer, L> root()
+            @Override
+            protected Cursor<Integer> cursor()
             {
-                return new RootNode<>();
+                return new SingleLevelCursor();
             }
 
-            /** Root node of the trie: has {@code childs} transition, each leading to a {@link LeafNode} whose content
-             * is the value of the transition. */
-            class RootNode<L> extends Node<Integer, L>
+            class SingleLevelCursor implements Cursor<Integer>
             {
-                RootNode()
+                int current = -1;
+
+                @Override
+                public int advance()
                 {
-                    super(null);
-                    currentTransition = 0;
+                    ++current;
+                    return level();
                 }
 
-                public Remaining startIteration()
+                @Override
+                public int ascend()
                 {
-                    currentTransition = 0;
-                    return childs == 0 ? null : (childs == 1 ? Remaining.ONE : Remaining.MULTIPLE);
+                    return advance();
                 }
 
-                public Remaining advanceIteration()
+                @Override
+                public int level()
                 {
-                    return ++currentTransition >= childs ? null : Remaining.MULTIPLE;
-                }
-
-                public Node<Integer, L> getCurrentChild(L parent)
-                {
-                    return new LeafNode<>(parent, currentTransition);
-                }
-
-                public Integer content()
-                {
+                    if (current == -1)
+                        return 0;
+                    if (current < childs)
+                        return 1;
                     return -1;
                 }
 
                 @Override
-                public String toString()
+                public int incomingTransition()
                 {
-                    return String.format("ROOT(t=%s, parent=%s)", currentTransition, parentLink);
-                }
-            }
-
-            /** Leaf nodes: no children but a content corresponding ot the transition leading to them */
-            class LeafNode<L> extends NoChildrenNode<Integer, L>
-            {
-                private final int value;
-
-                LeafNode(L parent, int value)
-                {
-                    super(parent);
-                    this.value = value;
-                }
-
-                public Integer content()
-                {
-                    return value;
+                    return current;
                 }
 
                 @Override
-                public String toString()
+                public Integer content()
                 {
-                    return String.format("LEAF(%d, parent=%s)", value, parentLink);
+                    return current;
                 }
             }
         };
-
     }
 
     /** Creates a single byte {@link ByteComparable} with the provide value */
