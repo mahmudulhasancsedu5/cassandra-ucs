@@ -76,6 +76,7 @@ public class RangeTrieSet extends TrieSet
             backlog = new int[32];
             backlogPos = 0;
             level = 0;
+            transitionAtRightLevel = -1;
             atLeftLimit = left != null;
             if (atLeftLimit)
             {
@@ -87,13 +88,11 @@ public class RangeTrieSet extends TrieSet
                     atLeftLimit = false;
                     if (includeLeft)
                         inSet = InSet.CONTAINED;
-                    transitionAtRightLevel = -1;
                 }
             }
             else
             {
                 inSet = InSet.CONTAINED;
-                transitionAtRightLevel = -1;
             }
 
             atRightLimit = right != null;

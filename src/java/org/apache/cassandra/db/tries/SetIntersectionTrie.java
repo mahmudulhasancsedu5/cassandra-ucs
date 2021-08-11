@@ -107,9 +107,9 @@ class SetIntersectionTrie<T> extends Trie<T>
                     if (sIncoming == tIncoming)
                         return tLevel;  // got entry
                     else if (sIncoming < tIncoming)
-                        sLevel = sCursor.advance();
+                        sLevel = sCursor.ascend();
                     else // sIncoming > tIncoming
-                        tLevel = tCursor.advance();
+                        tLevel = tCursor.ascend();
                 }
                 else if (sLevel < tLevel)
                 {

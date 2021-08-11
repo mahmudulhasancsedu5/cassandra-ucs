@@ -28,6 +28,7 @@ import java.util.TreeMap;
 import org.junit.Test;
 
 import com.googlecode.concurrenttrees.common.Iterables;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 import static org.apache.cassandra.db.tries.MemtableTrieTestBase.asString;
@@ -86,7 +87,7 @@ public class SetIntersectionTrieTest
                                 ByteComparable r,
                                 boolean includeRight)
     {
-        System.out.format("Intersection with %s%s:%s%s\n", includeLeft ? "[" : "(", asString(l), asString(r), includeRight ? "]" : ")");
+        System.out.println(String.format("Intersection with %s%s:%s%s", includeLeft ? "[" : "(", asString(l), asString(r), includeRight ? "]" : ")"));
         SortedMap<ByteComparable, ByteBuffer> imap = l == null
                                                      ? r == null
                                                        ? content1
