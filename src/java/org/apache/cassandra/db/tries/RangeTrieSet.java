@@ -77,53 +77,43 @@ public class RangeTrieSet extends TrieSet
             backlogPos = 0;
             level = 0;
             transitionAtRightLevel = -1;
-            atLeftLimit = left != null;
-            if (atLeftLimit)
+            if (left != null)
             {
                 remainingLeftLimit = left.asComparableBytes(BYTE_COMPARABLE_VERSION);
+                if (!includeLeft)
+                    remainingLeftLimit = ByteSource.nextKey(remainingLeftLimit);
                 leftLimitNext = remainingLeftLimit.next();
-                inSet = InSet.PREFIX;
-                if (leftLimitNext == ByteSource.END_OF_STREAM)
-                {
-                    atLeftLimit = false;
-                    if (includeLeft)
-                        inSet = InSet.CONTAINED;
-                }
+                atLeftLimit = leftLimitNext != ByteSource.END_OF_STREAM;
             }
             else
-            {
-                inSet = InSet.CONTAINED;
-            }
+                atLeftLimit = false;
+
+            inSet = atLeftLimit ? InSet.PREFIX : InSet.CONTAINED;
 
             atRightLimit = right != null;
             if (atRightLimit)
             {
                 remainingRightLimit = right.asComparableBytes(BYTE_COMPARABLE_VERSION);
+                if (includeRight)
+                    remainingRightLimit = ByteSource.nextKey(remainingRightLimit);
                 rightLimitNext = remainingRightLimit.next();
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
                 {
-                    rightLimitDone = true;
-                    assert !atLeftLimit;
-                    atRightLimit = false;
-                    if (!includeRight)
-                    {
-                        level = -1;
-                        inSet = InSet.PREFIX;
-                        return;
-                    }
+                    level = -1;
+                    inSet = InSet.PREFIX;
+                    return;
                 }
-                else
-                    rightLimitDone = false;
+                rightLimitDone = false;
             }
             else
             {
                 // else we exhaust the backlog at level -1 and terminate before any continueAlongRight is called
-                rightLimitNext = 255;
+                rightLimitNext = 256;
                 rightLimitDone = true;
             }
 
             incomingTransition = -1;
-            if (!atLeftLimit && !atRightLimit && rightLimitNext >= 0 && inSet == InSet.CONTAINED)
+            if (!atLeftLimit && !atRightLimit)
                 inSet = InSet.BRANCH;
         }
 
@@ -146,33 +136,42 @@ public class RangeTrieSet extends TrieSet
 
         private int descendAlongBoth()
         {
-            assert rightLimitNext >= leftLimitNext;
-            int next = leftLimitNext;
-            leftLimitNext = remainingLeftLimit.next();
-            if (rightLimitNext == next)
-                rightLimitNext = remainingRightLimit.next();
-            else
+            if (rightLimitNext > leftLimitNext)
             {
-                transitionAtRightLevel = next + 1;
+                transitionAtRightLevel = leftLimitNext + 1;
                 atRightLimit = false;
-            }
+                int next = leftLimitNext;
+                leftLimitNext = remainingLeftLimit.next();
 
-            incomingTransition = next;
+                incomingTransition = next;
+                if (leftLimitNext != ByteSource.END_OF_STREAM)
+                {
+                    inSet = InSet.PREFIX;
+                }
+                else
+                {
+                    atLeftLimit = false;
+                    inSet = InSet.BRANCH;
+                }
+                return ++level;
+            }
+            assert rightLimitNext == leftLimitNext;
+
+            incomingTransition = leftLimitNext;
+            rightLimitNext = remainingRightLimit.next();
+            leftLimitNext = remainingLeftLimit.next();
             if (leftLimitNext != ByteSource.END_OF_STREAM)
             {
                 inSet = InSet.PREFIX;
+                assert rightLimitNext != ByteSource.END_OF_STREAM;
             }
             else
             {
                 atLeftLimit = false;
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
-                {
-                    if (includeLeft && includeRight)
-                        inSet = InSet.CONTAINED;
-                    else
-                        return -1;
-                }
-                inSet = includeLeft ? InSet.BRANCH : InSet.PREFIX;//: InSet.BRANCH_EXCLUDING;
+                    return -1;
+
+                inSet = InSet.CONTAINED;
             }
             return ++level;
         }
@@ -191,7 +190,7 @@ public class RangeTrieSet extends TrieSet
             else
             {
                 atLeftLimit = false;
-                inSet = includeLeft ? InSet.BRANCH : InSet.PREFIX;//: InSet.BRANCH_EXCLUDING;
+                inSet = InSet.BRANCH;
             }
             return ++level;
         }
@@ -226,18 +225,14 @@ public class RangeTrieSet extends TrieSet
                 inSet = InSet.BRANCH;
                 return level;
             }
-            else // (incomingTransition == rightLimitNext)
+            else
             {
                 if (rightLimitDone)
                     return -1;
 
                 rightLimitNext = remainingRightLimit.next();
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
-                {
-                    rightLimitDone = true;
-                    if (!includeRight)
-                        return -1;
-                }
+                    return -1;
                 transitionAtRightLevel = -1;
                 inSet = InSet.CONTAINED;
                 return level;

@@ -669,6 +669,32 @@ public interface ByteSource
         };
     }
 
+    /**
+     * Returns the key that is immediately after src in the topology.
+     * @param src
+     * @return src with added 00 byte at the end
+     */
+    public static ByteSource nextKey(ByteSource src)
+    {
+        return new ByteSource()
+        {
+            boolean done = false;
+
+            @Override
+            public int next()
+            {
+                if (done)
+                    return END_OF_STREAM;
+                int n = src.next();
+                if (n != END_OF_STREAM)
+                    return n;
+
+                done = true;
+                return 0;
+            }
+        };
+    }
+
     public class Peekable implements ByteSource
     {
         static final int NONE = Integer.MIN_VALUE;

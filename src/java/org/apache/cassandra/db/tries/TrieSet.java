@@ -33,7 +33,7 @@ public abstract class TrieSet extends Trie<TrieSet.InSet>
 {
     enum InSet
     {
-        PREFIX, // this is a prefix node, and the specific point is not conained in the set (e.g. points on the left range path)
+        PREFIX, // this is a prefix node, and the specific point is not contained in the set (e.g. points on the left range path)
         CONTAINED, // this is a prefix node, and the point is contained in the set (e.g. points on the right range path)
         BRANCH; // the whole branch is contained in the set (e.g. interior nodes for a range)
 

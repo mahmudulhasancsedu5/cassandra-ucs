@@ -305,7 +305,9 @@ public class SetIntersectionTrieTest
         intersection = trie.subtrie(ByteComparable.EMPTY, false, ByteComparable.EMPTY, true);
         assertEquals(asList(), toList(intersection));
 
-        intersection = trie.subtrie(ByteComparable.EMPTY, false, ByteComparable.EMPTY, false);
+        intersection = trie.subtrie(ByteComparable.EMPTY, true, ByteComparable.EMPTY, false);
         assertEquals(asList(), toList(intersection));
+
+        // (empty, empty) is an invalid call as the "(empty" is greater than "empty)"
     }
 }
