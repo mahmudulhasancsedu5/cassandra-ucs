@@ -51,10 +51,10 @@ public class RangeTrieSet extends TrieSet
 
     protected Cursor<InSet> cursor()
     {
-        return new RangeCursor();
+        return new RangeCursor(this);
     }
 
-    private class RangeCursor implements Cursor<InSet>
+    private static class RangeCursor implements Cursor<InSet>
     {
         private int[] backlog;
         int backlogPos;
@@ -62,7 +62,6 @@ public class RangeTrieSet extends TrieSet
         private ByteSource remainingRightLimit;
         boolean atLeftLimit;
         boolean atRightLimit;
-        boolean rightLimitDone;
         int leftLimitNext;
         int rightLimitNext;
         int transitionAtRightLevel;
@@ -71,16 +70,16 @@ public class RangeTrieSet extends TrieSet
         InSet inSet;
 
 
-        private RangeCursor()
+        private RangeCursor(RangeTrieSet set)
         {
             backlog = new int[32];
             backlogPos = 0;
             level = 0;
             transitionAtRightLevel = -1;
-            if (left != null)
+            if (set.left != null)
             {
-                remainingLeftLimit = left.asComparableBytes(BYTE_COMPARABLE_VERSION);
-                if (!includeLeft)
+                remainingLeftLimit = set.left.asComparableBytes(BYTE_COMPARABLE_VERSION);
+                if (!set.includeLeft)
                     remainingLeftLimit = ByteSource.nextKey(remainingLeftLimit);
                 leftLimitNext = remainingLeftLimit.next();
                 atLeftLimit = leftLimitNext != ByteSource.END_OF_STREAM;
@@ -88,13 +87,11 @@ public class RangeTrieSet extends TrieSet
             else
                 atLeftLimit = false;
 
-            inSet = atLeftLimit ? InSet.PREFIX : InSet.CONTAINED;
-
-            atRightLimit = right != null;
+            atRightLimit = set.right != null;
             if (atRightLimit)
             {
-                remainingRightLimit = right.asComparableBytes(BYTE_COMPARABLE_VERSION);
-                if (includeRight)
+                remainingRightLimit = set.right.asComparableBytes(BYTE_COMPARABLE_VERSION);
+                if (set.includeRight)
                     remainingRightLimit = ByteSource.nextKey(remainingRightLimit);
                 rightLimitNext = remainingRightLimit.next();
                 if (rightLimitNext == ByteSource.END_OF_STREAM)
@@ -103,18 +100,14 @@ public class RangeTrieSet extends TrieSet
                     inSet = InSet.PREFIX;
                     return;
                 }
-                rightLimitDone = false;
             }
             else
-            {
-                // else we exhaust the backlog at level -1 and terminate before any continueAlongRight is called
                 rightLimitNext = 256;
-                rightLimitDone = true;
-            }
 
             incomingTransition = -1;
-            if (!atLeftLimit && !atRightLimit)
-                inSet = InSet.BRANCH;
+            inSet = atLeftLimit ? InSet.PREFIX
+                                : atRightLimit ? InSet.CONTAINED
+                                               : InSet.BRANCH;
         }
 
 
@@ -125,7 +118,10 @@ public class RangeTrieSet extends TrieSet
                 if (atRightLimit)
                     return descendAlongBoth();
                 else
+                {
+                    addBacklog(leftLimitNext + 1);
                     return descendAlongLeft();
+                }
             }
 
             if (processBacklog())
@@ -138,25 +134,12 @@ public class RangeTrieSet extends TrieSet
         {
             if (rightLimitNext > leftLimitNext)
             {
-                transitionAtRightLevel = leftLimitNext + 1;
                 atRightLimit = false;
-                int next = leftLimitNext;
-                leftLimitNext = remainingLeftLimit.next();
-
-                incomingTransition = next;
-                if (leftLimitNext != ByteSource.END_OF_STREAM)
-                {
-                    inSet = InSet.PREFIX;
-                }
-                else
-                {
-                    atLeftLimit = false;
-                    inSet = InSet.BRANCH;
-                }
-                return ++level;
+                transitionAtRightLevel = leftLimitNext + 1;
+                return descendAlongLeft();
             }
-            assert rightLimitNext == leftLimitNext;
 
+            assert rightLimitNext == leftLimitNext;
             incomingTransition = leftLimitNext;
             rightLimitNext = remainingRightLimit.next();
             leftLimitNext = remainingLeftLimit.next();
@@ -180,7 +163,6 @@ public class RangeTrieSet extends TrieSet
         {
             int next = leftLimitNext;
             leftLimitNext = remainingLeftLimit.next();
-            addBacklog(next + 1);
 
             incomingTransition = next;
             if (leftLimitNext != ByteSource.END_OF_STREAM)
@@ -227,7 +209,7 @@ public class RangeTrieSet extends TrieSet
             }
             else
             {
-                if (rightLimitDone)
+                if (incomingTransition >= 256)  // the no-right-limit case
                     return -1;
 
                 rightLimitNext = remainingRightLimit.next();
