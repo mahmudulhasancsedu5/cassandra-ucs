@@ -60,6 +60,8 @@ public class SlicedTrie<T> extends Trie<T>
     {
         private final ByteSource left;
         private final ByteSource right;
+        private final boolean includeLeft;
+        private final boolean excludeRight;
         private final Cursor<T> source;
 
         State state;
@@ -71,38 +73,39 @@ public class SlicedTrie<T> extends Trie<T>
         public SlicedCursor(SlicedTrie<T> slicedTrie)
         {
             source = slicedTrie.source.cursor();
-            ByteSource leftSource = null;
             if (slicedTrie.left != null)
             {
-                leftSource = slicedTrie.left.asComparableBytes(ByteComparable.Version.OSS41);
-                if (!slicedTrie.includeLeft)
-                    leftSource = ByteSource.nextKey(leftSource);
-                leftNext = leftSource.next();
+                left = slicedTrie.left.asComparableBytes(ByteComparable.Version.OSS41);
+                includeLeft = slicedTrie.includeLeft;
+                leftNext = left.next();
+                leftLevel = 1;
+                if (leftNext == ByteSource.END_OF_STREAM && includeLeft)
+                    state = State.INSIDE;
+                else
+                    state = State.BEFORE_LEFT;
             }
             else
-                leftNext = ByteSource.END_OF_STREAM;
-            left = leftSource;
-            leftLevel = 1;
+            {
+                left = null;
+                includeLeft = true;
+                state = State.INSIDE;
+            }
 
-            ByteSource rightSource = null;
             if (slicedTrie.right != null)
             {
-                rightSource = slicedTrie.right.asComparableBytes(ByteComparable.Version.OSS41);
-                if (slicedTrie.includeRight)
-                    rightSource = ByteSource.nextKey(rightSource);
-                rightNext = rightSource.next();
+                right = slicedTrie.right.asComparableBytes(ByteComparable.Version.OSS41);
+                excludeRight = !slicedTrie.includeRight;
+                rightNext = right.next();
+                rightLevel = 1;
+                if (rightNext == ByteSource.END_OF_STREAM && excludeRight)
+                    state = State.AFTER_RIGHT;
             }
             else
-                rightNext = 256;
-            right = rightSource;
-            rightLevel = 1;
-
-            if (rightNext == ByteSource.END_OF_STREAM)
-                state = State.AFTER_RIGHT;
-            else if (leftNext == ByteSource.END_OF_STREAM)
-                state = State.INSIDE;
-            else
-                state = State.BEFORE_LEFT;
+            {
+                right = null;
+                excludeRight = true;
+                rightLevel = 0;
+            }
         }
 
         @Override
@@ -116,30 +119,30 @@ public class SlicedTrie<T> extends Trie<T>
 
             if (state == State.BEFORE_LEFT)
             {
-                // Check left bound
+                // Skip any transitions before the left bound
                 while (newLevel == leftLevel && transition < leftNext)
                 {
                     newLevel = source.ascend();
                     transition = source.incomingTransition();
                 }
 
+                // Check if we are still following the left bound
                 if (newLevel == leftLevel && transition == leftNext)
                 {
-                    // Still following the left bound
                     assert leftNext != ByteSource.END_OF_STREAM;
                     leftNext = left.next();
                     ++leftLevel;
-                    if (leftNext == ByteSource.END_OF_STREAM)
-                        state = State.INSIDE; // include the left bound
+                    if (leftNext == ByteSource.END_OF_STREAM && includeLeft)
+                        state = State.INSIDE; // report the content on the left bound
                 }
-                else
+                else // otherwise we are beyond it
                     state = State.INSIDE;
             }
 
             return checkRightBound(newLevel, transition);
         }
 
-        private int done()
+        private int markDone()
         {
             state = State.AFTER_RIGHT;
             return -1;
@@ -147,21 +150,22 @@ public class SlicedTrie<T> extends Trie<T>
 
         private int checkRightBound(int newLevel, int transition)
         {
+            // Cursor positions compare by level descending and transition ascending.
             if (newLevel > rightLevel)
                 return newLevel;
             if (newLevel < rightLevel)
-                return done();
+                return markDone();
             // newLevel == rightLevel
             if (transition < rightNext)
                 return newLevel;
             if (transition > rightNext)
-                return done();
+                return markDone();
 
             // Following right bound
             rightNext = right.next();
             ++rightLevel;
-            if (rightNext == ByteSource.END_OF_STREAM)
-                return done();  // exclude the right bound
+            if (rightNext == ByteSource.END_OF_STREAM && excludeRight)
+                return markDone();  // do not report any content on the right bound
             return newLevel;
         }
 
@@ -171,6 +175,7 @@ public class SlicedTrie<T> extends Trie<T>
             if (state == State.AFTER_RIGHT)
                 return -1;
 
+            // We are either inside or following the left bound. In the latter case ascend takes us beyond it.
             state = State.INSIDE;
             return checkRightBound(source.ascend(), source.incomingTransition());
         }

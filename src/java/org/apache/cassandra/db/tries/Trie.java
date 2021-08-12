@@ -207,8 +207,6 @@ public abstract class Trie<T>
         if (left == null && right == null)
             return this;
         return new SlicedTrie<>(this, left, includeLeft, right, includeRight);
-
-//        return new SetIntersectionTrie<>(this, TrieSet.range(left, includeLeft, right, includeRight));
     }
 
     /**

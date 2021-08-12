@@ -133,7 +133,7 @@ public class RangeTrieTest
                     {
                         int cmp1 = l != null ? ByteComparable.compare(key, l, ByteComparable.Version.OSS41) : 1;
                         int cmp2 = r != null ? ByteComparable.compare(r, key, ByteComparable.Version.OSS41) : 1;
-                        Trie<Boolean> ix = Trie.singleton(key, true).subtrie(l, includeLeft, r, includeRight);
+                        Trie<Boolean> ix = new SlicedTrie<>(Trie.singleton(key, true), l, includeLeft, r, includeRight);
 //                        new SetIntersectionTrie<Boolean>(Trie.singleton(key, true), set);
                         boolean expected = true;
                         if (cmp1 < 0 || cmp1 == 0 && !includeLeft)
