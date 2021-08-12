@@ -36,19 +36,19 @@ public class RangeTrieTest
     @Test
     public void testSpecified()
     {
-        ByteComparable l = ByteComparable.fixedLength(new byte[] {0});
-        boolean includeLeft = false;
-        ByteComparable r = ByteComparable.fixedLength(new byte[] {0, 0, 0});
-        boolean includeRight = true;
-
-        TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
-        System.out.println(String.format("Range %s%s,%s%s",
-                                         includeLeft ? "[" : "(",
-                                         l != null ? l.byteComparableAsString(ByteComparable.Version.OSS41) : null,
-                                         r != null ? r.byteComparableAsString(ByteComparable.Version.OSS41) : null,
-                                         includeRight ? "]" : ")"
-        ));
-        System.out.println(set.dump());
+//        ByteComparable l = ByteComparable.fixedLength(new byte[] {0});
+//        boolean includeLeft = false;
+//        ByteComparable r = ByteComparable.fixedLength(new byte[] {0, 0, 0});
+//        boolean includeRight = true;
+//
+//        TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
+//        System.out.println(String.format("Range %s%s,%s%s",
+//                                         includeLeft ? "[" : "(",
+//                                         l != null ? l.byteComparableAsString(ByteComparable.Version.OSS41) : null,
+//                                         r != null ? r.byteComparableAsString(ByteComparable.Version.OSS41) : null,
+//                                         includeRight ? "]" : ")"
+//        ));
+//        System.out.println(set.dump());
 
 
 //        testSpecifiedRanges(new String[]{
@@ -125,16 +125,16 @@ public class RangeTrieTest
                 {
                     boolean includeLeft = (i & 1) != 0;
                     boolean includeRight = (i & 2) != 0;
-                    TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
+//                    TrieSet set = new RangeTrieSet(l, includeLeft, r, includeRight);
 
-                    verifySetProperties(set);
+//                    verifySetProperties(set);
 
                     for (ByteComparable key : keys)
                     {
                         int cmp1 = l != null ? ByteComparable.compare(key, l, ByteComparable.Version.OSS41) : 1;
                         int cmp2 = r != null ? ByteComparable.compare(r, key, ByteComparable.Version.OSS41) : 1;
-                        Trie<Boolean> ix = new SetIntersectionTrie<Boolean>(Trie.singleton(key, true),
-                                                                            set);
+                        Trie<Boolean> ix = Trie.singleton(key, true).subtrie(l, includeLeft, r, includeRight);
+//                        new SetIntersectionTrie<Boolean>(Trie.singleton(key, true), set);
                         boolean expected = true;
                         if (cmp1 < 0 || cmp1 == 0 && !includeLeft)
                             expected = false;
@@ -143,8 +143,8 @@ public class RangeTrieTest
                         boolean actual = Iterables.getFirst(ix.values(), false);
                         if (expected != actual)
                         {
-                            System.err.println("Range trie");
-                            System.err.println(set.dump());
+//                            System.err.println("Range trie");
+//                            System.err.println(set.dump());
                             System.err.println("Intersection");
                             System.err.println(ix.dump());
                             Assert.fail(String.format("Failed on range %s%s,%s%s key %s expected %s got %s\n",
