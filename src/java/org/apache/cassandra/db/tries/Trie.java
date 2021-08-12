@@ -109,7 +109,25 @@ public abstract class Trie<T>
         void reset(int newLength);
     }
 
-    // Cursor-style walks
+    /**
+     * A trie cursor.
+     *
+     * This is the internal representation of the trie, which enables efficient walks and basic operations (merge,
+     * slice) on tries.
+     *
+     * The cursor represents the state of a walk over the nodes of trie. It provides two main features:
+     * - the current "level" or descend-depth in the trie;
+     * - the "incomingTransition", i.e. the byte that was used to reach the current point,
+     * and provide methods for advancing to the next position. Advancing is always done in order; if one imagines
+     * the set of nodes in the trie with their associated paths, a cursor may only advance from a node with a
+     * lexicographically smaller path to one with bigger. The "advance" operation moves to the immediate next,
+     * it is also possible to skip over some items e.g. all children of the current node ("ascend").
+     *
+     * Because we exhaust transitions on higher levels before we go the next transition on the lower ones, cursors'
+     * positions can be easily compared using only the level and incomingTransition:
+     * - one that is higher in level is before one that is lower;
+     * - for equal levels, the one with smaller incomingTransition is first.
+     */
     interface Cursor<T>
     {
         /**
