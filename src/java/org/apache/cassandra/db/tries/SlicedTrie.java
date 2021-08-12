@@ -170,6 +170,29 @@ public class SlicedTrie<T> extends Trie<T>
         }
 
         @Override
+        public int advanceMultiple(TransitionsReceiver receiver)
+        {
+            switch (state)
+            {
+                case AFTER_RIGHT:
+                    return -1;
+                case BEFORE_LEFT:
+                    return advance();   // walk one byte at a time to skip items before left boundary
+                case INSIDE:
+                    int level = source.level();
+                    if (level < rightLevel)
+                        return advance();   // need to check next byte against right boundary
+                    int newLevel = source.advanceMultiple(receiver);
+                    if (newLevel > level)
+                        return newLevel;    // successfully advanced
+                    // we ascended, check if we are still within boundaries
+                    return checkRightBound(newLevel, source.incomingTransition());
+                default:
+                    throw new AssertionError();
+            }
+        }
+
+        @Override
         public int ascend()
         {
             if (state == State.AFTER_RIGHT)
