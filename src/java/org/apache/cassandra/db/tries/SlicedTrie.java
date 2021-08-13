@@ -21,6 +21,9 @@ package org.apache.cassandra.db.tries;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
+/**
+ * Represents a sliced view of a trie, i.e. the content within the given pair of bounds.
+ */
 public class SlicedTrie<T> extends Trie<T>
 {
     private final Trie<T> source;
@@ -66,19 +69,19 @@ public class SlicedTrie<T> extends Trie<T>
 
         State state;
         int leftNext;
-        int leftLevel;
+        int leftDepth;
         int rightNext;
-        int rightLevel;
+        int rightDepth;
 
         public SlicedCursor(SlicedTrie<T> slicedTrie)
         {
             source = slicedTrie.source.cursor();
             if (slicedTrie.left != null)
             {
-                left = slicedTrie.left.asComparableBytes(ByteComparable.Version.OSS41);
+                left = slicedTrie.left.asComparableBytes(BYTE_COMPARABLE_VERSION);
                 includeLeft = slicedTrie.includeLeft;
                 leftNext = left.next();
-                leftLevel = 1;
+                leftDepth = 1;
                 if (leftNext == ByteSource.END_OF_STREAM && includeLeft)
                     state = State.INSIDE;
                 else
@@ -93,45 +96,45 @@ public class SlicedTrie<T> extends Trie<T>
 
             if (slicedTrie.right != null)
             {
-                right = slicedTrie.right.asComparableBytes(ByteComparable.Version.OSS41);
+                right = slicedTrie.right.asComparableBytes(BYTE_COMPARABLE_VERSION);
                 excludeRight = !slicedTrie.includeRight;
                 rightNext = right.next();
-                rightLevel = 1;
+                rightDepth = 1;
                 if (rightNext == ByteSource.END_OF_STREAM && excludeRight)
-                    state = State.AFTER_RIGHT;
+                    state = State.BEFORE_LEFT;  // This is a hack, we are after the right bound but we don't want to
+                                                // report depth -1 yet. So just make sure root is not reported.
             }
             else
             {
                 right = null;
                 excludeRight = true;
-                rightLevel = 0;
+                rightDepth = 0;
             }
         }
 
         @Override
         public int advance()
         {
-            if (state == State.AFTER_RIGHT)
-                return -1;
+            assert (state != State.AFTER_RIGHT);
 
-            int newLevel = source.advance();
+            int newDepth = source.advance();
             int transition = source.incomingTransition();
 
             if (state == State.BEFORE_LEFT)
             {
                 // Skip any transitions before the left bound
-                while (newLevel == leftLevel && transition < leftNext)
+                while (newDepth == leftDepth && transition < leftNext)
                 {
-                    newLevel = source.ascend();
+                    newDepth = source.skipChildren();
                     transition = source.incomingTransition();
                 }
 
                 // Check if we are still following the left bound
-                if (newLevel == leftLevel && transition == leftNext)
+                if (newDepth == leftDepth && transition == leftNext)
                 {
                     assert leftNext != ByteSource.END_OF_STREAM;
                     leftNext = left.next();
-                    ++leftLevel;
+                    ++leftDepth;
                     if (leftNext == ByteSource.END_OF_STREAM && includeLeft)
                         state = State.INSIDE; // report the content on the left bound
                 }
@@ -139,7 +142,7 @@ public class SlicedTrie<T> extends Trie<T>
                     state = State.INSIDE;
             }
 
-            return checkRightBound(newLevel, transition);
+            return checkRightBound(newDepth, transition);
         }
 
         private int markDone()
@@ -148,25 +151,25 @@ public class SlicedTrie<T> extends Trie<T>
             return -1;
         }
 
-        private int checkRightBound(int newLevel, int transition)
+        private int checkRightBound(int newDepth, int transition)
         {
-            // Cursor positions compare by level descending and transition ascending.
-            if (newLevel > rightLevel)
-                return newLevel;
-            if (newLevel < rightLevel)
+            // Cursor positions compare by depth descending and transition ascending.
+            if (newDepth > rightDepth)
+                return newDepth;
+            if (newDepth < rightDepth)
                 return markDone();
-            // newLevel == rightLevel
+            // newDepth == rightDepth
             if (transition < rightNext)
-                return newLevel;
+                return newDepth;
             if (transition > rightNext)
                 return markDone();
 
             // Following right bound
             rightNext = right.next();
-            ++rightLevel;
+            ++rightDepth;
             if (rightNext == ByteSource.END_OF_STREAM && excludeRight)
                 return markDone();  // do not report any content on the right bound
-            return newLevel;
+            return newDepth;
         }
 
         @Override
@@ -174,39 +177,36 @@ public class SlicedTrie<T> extends Trie<T>
         {
             switch (state)
             {
-                case AFTER_RIGHT:
-                    return -1;
                 case BEFORE_LEFT:
                     return advance();   // walk one byte at a time to skip items before left boundary
                 case INSIDE:
-                    int level = source.level();
-                    if (level < rightLevel)
+                    int depth = source.depth();
+                    if (depth < rightDepth)
                         return advance();   // need to check next byte against right boundary
-                    int newLevel = source.advanceMultiple(receiver);
-                    if (newLevel > level)
-                        return newLevel;    // successfully advanced
+                    int newDepth = source.advanceMultiple(receiver);
+                    if (newDepth > depth)
+                        return newDepth;    // successfully advanced
                     // we ascended, check if we are still within boundaries
-                    return checkRightBound(newLevel, source.incomingTransition());
+                    return checkRightBound(newDepth, source.incomingTransition());
                 default:
                     throw new AssertionError();
             }
         }
 
         @Override
-        public int ascend()
+        public int skipChildren()
         {
-            if (state == State.AFTER_RIGHT)
-                return -1;
+            assert (state != State.AFTER_RIGHT);
 
             // We are either inside or following the left bound. In the latter case ascend takes us beyond it.
             state = State.INSIDE;
-            return checkRightBound(source.ascend(), source.incomingTransition());
+            return checkRightBound(source.skipChildren(), source.incomingTransition());
         }
 
         @Override
-        public int level()
+        public int depth()
         {
-            return state == State.AFTER_RIGHT ? -1 : source.level();
+            return state == State.AFTER_RIGHT ? -1 : source.depth();
         }
 
         @Override

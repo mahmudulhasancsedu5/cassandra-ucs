@@ -20,21 +20,18 @@ package org.apache.cassandra.db.tries;
 import java.util.Iterator;
 
 /**
- * Convertor of trie contents to flow.
- *
- * Note: the type argument L must be equal to {@code Trie.Node<T, L>}, but we can't define such a recursive type in
- * Java. Using {@code <>} when instantiating works, but any subclasses will also need to declare this useless type
- * argument.
+ * Ordered iterator of trie content.
  */
 class TrieValuesIterator<T> implements Iterator<T>
 {
     private final Trie.Cursor<T> cursor;
     T next;
-    boolean gotNext = false;
+    boolean gotNext;
 
     protected TrieValuesIterator(Trie<T> trie)
     {
         cursor = trie.cursor();
+        assert cursor.depth() == 0;
         next = cursor.content();
         gotNext = next != null;
     }

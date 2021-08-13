@@ -56,9 +56,9 @@ The pointer `0xFFFFFFF0` specifies a leaf node (being negative), where the conte
 negating all bits of the pointer).
 
 To save space and reduce pointer chasing, we use several different types of nodes that address different common patterns
-in a trie. It is common for a trie to have one or a couple of top levels which have many children, and where it is
+in a trie. It is common for a trie to have one or a couple of top depths which have many children, and where it is
 important to make decisions with as few if-then-else branches as possible (served by the `Split` type), another one or
-two levels of nodes with a small number of children, where it is most important to save space as the number of these
+two depths of nodes with a small number of children, where it is most important to save space as the number of these
 nodes is high (served by the `Sparse` type), and a lot of sequences of single-child nodes containing the trailing bytes
 of the key or of some common key prefix (served by the `Chain` type). Most of the payload/content of the trie resides
 at the leaves, where it makes sense to avoid taking any space for a node (the `Leaf` type), but we must also allow the
@@ -426,7 +426,7 @@ offset|content|example
 1C - 1F|mid-cell for leading 11|00000000 NONE
 
 Both `0x51C` and `0x51F` are valid pointers in this cell. The former refers to the plain split node, the latter to its
-content-augmented version. The only difference between the two is the result of a call to `Node.content()`.
+content-augmented version. The only difference between the two is the result of a call to `content()`.
 
 ![graph](MemtableTrie.md.g4.svg)
 

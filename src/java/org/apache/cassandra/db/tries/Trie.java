@@ -46,8 +46,8 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
  * light stateful objects and always contain a link to some parent state. The role of parent state can often be played
  * by the parent node, because its current state defines the transition that was taken to obtain the child, and it also
  * has a reference to its own parent, effectively building a stack of nodes left to process each holding its own state.
- * It is also possible to skip some levels of the descent in the state description, if e.g. there are no other paths to
- * examine at those levels to continue the traversal (see getUniqueDescendant). Some traversal types may require more
+ * It is also possible to skip some depths of the descent in the state description, if e.g. there are no other paths to
+ * examine at those depths to continue the traversal (see getUniqueDescendant). Some traversal types may require more
  * information (e.g. position in a character array or list of nodes being merged). The type of parent state link is
  * defined by the consumer through the generic parameter L and it is supplied by the consumer as an argument to the
  * getCurrentChild call -- that parent state is presented by the child in its parentLink field.
@@ -115,72 +115,107 @@ public abstract class Trie<T>
      * This is the internal representation of the trie, which enables efficient walks and basic operations (merge,
      * slice) on tries.
      *
-     * The cursor represents the state of a walk over the nodes of trie. It provides two main features:
-     * - the current "level" or descend-depth in the trie;
+     * The cursor represents the state of a walk over the nodes of trie. It provides three main features:
+     * - the "content" associated with the current node;
+     * - the current "depth" or descend-depth in the trie;
      * - the "incomingTransition", i.e. the byte that was used to reach the current point,
      * and provide methods for advancing to the next position. Advancing is always done in order; if one imagines
      * the set of nodes in the trie with their associated paths, a cursor may only advance from a node with a
      * lexicographically smaller path to one with bigger. The "advance" operation moves to the immediate next,
      * it is also possible to skip over some items e.g. all children of the current node ("ascend").
+     * Moving to the immediate next position in the lexicographic order is accomplished by:
+     * - if the current node has children, moving to its first child;
+     * - otherwise, ascend the parent chain and return the next child of the closest parent that still has any.
+     * As long as the trie is not exhausted, advancing always takes one step down, from the current node, or from a node
+     * on the parent chain. By comparing the new depth (which "advance" also returns) with the one before the advance,
+     * one can tell if the former was the case (if newDepth == oldDepth + 1) and how many steps up we had to take
+     * (oldDepth + 1 - newDepth).
      *
-     * Because we exhaust transitions on higher levels before we go the next transition on the lower ones, cursors'
-     * positions can be easily compared using only the level and incomingTransition:
-     * - one that is higher in level is before one that is lower;
-     * - for equal levels, the one with smaller incomingTransition is first.
+     * Because we exhaust transitions on bigger depths before we go the next transition on the smaller ones, cursors'
+     * positions can be easily compared using only the depth and incomingTransition:
+     * - one that is higher in depth is before one that is lower;
+     * - for equal depths, the one with smaller incomingTransition is first.
+     *
+     * When it is created the cursor is placed on the root node and with depth() = 0, incomingTransition() = -1. Since
+     * tries can have mappings for empty, content() can possibly be non-null. It is not allowed for a cursor to start
+     * in exhausted state (i.e. with depth() = -1).
+     *
      */
     interface Cursor<T>
     {
         /**
-         * Advance one position.
+         * Advance one position to the node whose associated path is next lexicographically.
          * This can be either:
-         * - descending one level
-         * - ascending to the closest parent that has remaining children, and then descending one level
-         * @return level (can be prev+1 or <=prev), -1 means done
+         * - descending one level to the first child of the current node
+         * - ascending to the closest parent that has remaining children, and then descending one level to its next
+         *   child
+         * @return depth (can be prev+1 or <=prev), -1 means that the trie is exhausted
          */
         int advance();
 
         /**
-         * Advance, descending multiple levels if that does not require extra work (e.g. chain nodes)
-         * Receiver will be given all transitions taken except the last; i.e. on an ascend it will not receive any
+         * Advance, descending multiple levels if that does not require extra work (e.g. chain nodes).
+         * If the current node does not have children this is exactly the same as advance(), otherwise it
+         * may take multiple steps down (but will not necessarily, even if they exist).
          *
-         * @param receiver
-         * @return
+         * @param receiver object that will receive all transitions taken except the last;
+         *                 on ascend, or if only one step down was taken, it will not receive any
+         * @return the new depth, -1 if the trie is exhausted
          */
         default int advanceMultiple(TransitionsReceiver receiver)
         {
             return advance();
         }
 
-        default T advanceToContent(ResettingTransitionsReceiver receiver) // advances all the way (to next content)
+        /**
+         * Advance all the way to the next node with non-null content.
+         *
+         * @param receiver object that will receive all taken transitions
+         * @return the content, null if the trie is exhausted
+         */
+        default T advanceToContent(ResettingTransitionsReceiver receiver)
         {
-            int prevLevel = level();
+            int prevDepth = depth();
             while (true)
             {
-                int currLevel = advanceMultiple(receiver);
-                if (currLevel <= 0)
+                int currDepth = advanceMultiple(receiver);
+                if (currDepth <= 0)
                     return null;
                 if (receiver != null)
                 {
-                    if (currLevel <= prevLevel)
-                        receiver.reset(currLevel - 1);
+                    if (currDepth <= prevDepth)
+                        receiver.reset(currDepth - 1);
                     receiver.add(incomingTransition());
                 }
                 T content = content();
                 if (content != null)
                     return content;
-                prevLevel = currLevel;
+                prevDepth = currDepth;
             }
         }
 
         /**
-         * ignore the remaining children at this level or below and ascend to parent and advance
+         * Ignore the current node's children and advance to the next child of the closest node on the parent chain that
+         * has any.
+         *
+         * @return the new depth, always <= previous depth; -1 if the trie is exhausted
          */
-        int ascend(); // ignore the remaining children at this level or below and ascend to parent and advance
+        int skipChildren();
 
-        int level(); // return current state; if just starting / on root, return 0
-        int incomingTransition(); // return the last transition taken; if just starting / on root, return -1
-        T content(); // return content -- may be non-null on root
+        /**
+         * @return the current depth; if the cursor has just been created and is positioned on the root, return 0.
+         */
+        int depth();
 
+        /**
+         * @return the last transition taken; if positioned on the root, return -1
+         */
+        int incomingTransition();
+
+        /**
+         * @return the content associated with the current node. This may be non-null for the root.
+         */
+        T content();
     }
 
     protected abstract Cursor<T> cursor();
@@ -390,19 +425,21 @@ public abstract class Trie<T>
         {
             return new Cursor<Object>()
             {
+                int depth = 0;
+
                 public int advance()
                 {
-                    return -1;
+                    return depth = -1;
                 }
 
-                public int ascend()
+                public int skipChildren()
                 {
-                    return -1;
+                    return depth = -1;
                 }
 
-                public int level()
+                public int depth()
                 {
-                    return -1;
+                    return depth;
                 }
 
                 public Object content()

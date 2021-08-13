@@ -479,42 +479,42 @@ public class MemtableReadTrie<T> extends Trie<T>
     class MemtableCursor implements Cursor<T>
     {
         private int[] backtrack = new int[48];
-        private int backtrackLevel = 0;
+        private int backtrackDepth = 0;
 
         private int currentNode;
 
         private int incomingTransition;
         private T content;
-        private int level = -1;
+        private int depth = -1;
 
         MemtableCursor()
         {
             descendInto(root, -1);
         }
 
-        private int node(int backtrackLevel)
+        private int node(int backtrackDepth)
         {
-            return backtrack[backtrackLevel * 3 + 0];
+            return backtrack[backtrackDepth * 3 + 0];
         }
 
-        private int data(int backtrackLevel)
+        private int data(int backtrackDepth)
         {
-            return backtrack[backtrackLevel * 3 + 1];
+            return backtrack[backtrackDepth * 3 + 1];
         }
 
-        private int level(int backtrackLevel)
+        private int depth(int backtrackDepth)
         {
-            return backtrack[backtrackLevel * 3 + 2];
+            return backtrack[backtrackDepth * 3 + 2];
         }
 
-        void addBacktrack(int node, int data, int level)
+        void addBacktrack(int node, int data, int depth)
         {
-            if (backtrackLevel * 3 >= backtrack.length)
+            if (backtrackDepth * 3 >= backtrack.length)
                 backtrack = Arrays.copyOf(backtrack, backtrack.length * 2);
-            backtrack[backtrackLevel * 3 + 0] = node;
-            backtrack[backtrackLevel * 3 + 1] = data;
-            backtrack[backtrackLevel * 3 + 2] = level;
-            ++backtrackLevel;
+            backtrack[backtrackDepth * 3 + 0] = node;
+            backtrack[backtrackDepth * 3 + 1] = data;
+            backtrack[backtrackDepth * 3 + 2] = depth;
+            ++backtrackDepth;
         }
 
         @Override
@@ -528,45 +528,45 @@ public class MemtableReadTrie<T> extends Trie<T>
             while (true)
             {
                 if (advanceToNextChild(currentNode, data))
-                    return level;
+                    return depth;
 
-                if (--backtrackLevel < 0)
-                    return level = -1;
+                if (--backtrackDepth < 0)
+                    return depth = -1;
 
-                level = level(backtrackLevel);
-                currentNode = node(backtrackLevel);
-                data = data(backtrackLevel);
+                depth = depth(backtrackDepth);
+                currentNode = node(backtrackDepth);
+                data = data(backtrackDepth);
             }
         }
 
         @Override
-        public int ascend()
+        public int skipChildren()
         {
-            if (--backtrackLevel < 0)
-                return level = -1;
+            if (--backtrackDepth < 0)
+                return depth = -1;
 
-            level = level(backtrackLevel);
-            currentNode = node(backtrackLevel);
-            int data = data(backtrackLevel);
+            depth = depth(backtrackDepth);
+            currentNode = node(backtrackDepth);
+            int data = data(backtrackDepth);
             return advance(data);
         }
 
         private int descendInto(int child, int transition)
         {
-            ++level;
+            ++depth;
             incomingTransition = transition;
             content = getNodeContent(child);
             currentNode = followContentTransition(child);
-            return level;
+            return depth;
         }
 
         private int descendIntoChain(int child, int transition)
         {
-            ++level;
+            ++depth;
             incomingTransition = transition;
             content = null;
             currentNode = child;
-            return level;
+            return depth;
         }
 
         private boolean advanceToNextChild(int node, int data)
@@ -588,8 +588,8 @@ public class MemtableReadTrie<T> extends Trie<T>
         private boolean nextValidSplitTransition(int node, int trans)
         {
             assert trans >= 0 && trans <= 0xFF;
-            // To avoid repeatedly following the top transitions, we put backtracking entries for each level of the
-            // split sub-trie and use the bits of `trans` to understand which level the backtracking info points to.
+            // To avoid repeatedly following the top transitions, we put backtracking entries for each depth of the
+            // split sub-trie and use the bits of `trans` to understand which depth the backtracking info points to.
 
             int childIndex = splitNodeChildIndex(trans);
             if (childIndex == 0)
@@ -608,7 +608,7 @@ public class MemtableReadTrie<T> extends Trie<T>
                             return false;
                     }
                     if (midIndex + 1 < 4)
-                        addBacktrack(node, (midIndex + 1) << 6, level); // Store backtracking pos for the top sub-node
+                        addBacktrack(node, (midIndex + 1) << 6, depth); // Store backtracking pos for the top sub-node
                     trans = midIndex << 6;
                     node = mid + SPLIT_OFFSET;  // Adjust sub-node pointer so that backtracking can bring us here
                 }
@@ -625,7 +625,7 @@ public class MemtableReadTrie<T> extends Trie<T>
                         return false;
                 }
                 if (tailIndex + 1 < 8)
-                    addBacktrack(node, (tailIndex + 1) << 3 | trans, level); // Store backtracking pos for the mid sub-node
+                    addBacktrack(node, (tailIndex + 1) << 3 | trans, depth); // Store backtracking pos for the mid sub-node
                 trans = tailIndex << 3 | trans;
                 node = tail + SPLIT_OFFSET;
             }
@@ -642,7 +642,7 @@ public class MemtableReadTrie<T> extends Trie<T>
                     return false;
             }
             if (childIndex + 1 < 8)
-                addBacktrack(node, (childIndex + 1) | trans, level);
+                addBacktrack(node, (childIndex + 1) | trans, depth);
             trans = childIndex | trans;
             descendInto(child, trans);
             return true;
@@ -657,7 +657,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             int index = data % SPARSE_CHILD_COUNT;
             data = data / SPARSE_CHILD_COUNT;
             if (data > 0)
-                addBacktrack(node, data, level);
+                addBacktrack(node, data, depth);
             int child = nodeBuffer.getInt(nodeOfs + SPARSE_CHILDREN_OFFSET + index * 4);
             int transition = nodeBuffer.getByte(nodeOfs + SPARSE_BYTES_OFFSET + index) & 0xFF;
             descendInto(child, transition);
@@ -697,20 +697,20 @@ public class MemtableReadTrie<T> extends Trie<T>
                     --length;   // leave the last byte for incomingTransition
                     if (receiver != null && length > 0)
                         receiver.add(buffer, ofs, length);
-                    level += length;
+                    depth += length;
 
                     return descendInto(child, buffer.getByte(pointer - 1) & 0xFF);
                 }
 
                 if (receiver != null)
                     receiver.add(buffer, ofs, length);
-                level += length;
+                depth += length;
 
                 if (!isChainNode(child))
                 {
                     boolean success = advanceToNextChild(child, 0);
                     assert success;
-                    return level;
+                    return depth;
                 }
                 node = child;
             }
@@ -730,14 +730,14 @@ public class MemtableReadTrie<T> extends Trie<T>
             --length;   // leave the last byte for incomingTransition
             if (receiver != null && length > 0)
                 receiver.add(buffer, ofs, length);
-            level += length;
+            depth += length;
 
             return descendInto(child, buffer.getByte(pointer - 1) & 0xFF);
         }
 
-        public int level()
+        public int depth()
         {
-            return level;
+            return depth;
         }
 
         public T content()
@@ -813,15 +813,15 @@ public class MemtableReadTrie<T> extends Trie<T>
             }
 
             @Override
-            public int ascend()
+            public int skipChildren()
             {
-                return source.ascend();
+                return source.skipChildren();
             }
 
             @Override
-            public int level()
+            public int depth()
             {
-                return source.level();
+                return source.depth();
             }
 
             @Override

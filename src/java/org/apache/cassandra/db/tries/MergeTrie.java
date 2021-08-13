@@ -67,72 +67,72 @@ class MergeTrie<T> extends Trie<T>
         @Override
         public int advance()
         {
-            return checkOrder(atC1 ? c1.advance() : c1.level(),
-                              atC2 ? c2.advance() : c2.level());
+            return checkOrder(atC1 ? c1.advance() : c1.depth(),
+                              atC2 ? c2.advance() : c2.depth());
         }
 
         @Override
-        public int ascend()
+        public int skipChildren()
         {
-            int c1level = c1.level();
-            int c2level = c2.level();
-            int level = Math.max(c1level, c2level);
-            return checkOrder(c1level == level ? c1.ascend() : c1level,
-                              c2level == level ? c2.ascend() : c2level);
+            int c1depth = c1.depth();
+            int c2depth = c2.depth();
+            int depth = Math.max(c1depth, c2depth);
+            return checkOrder(c1depth == depth ? c1.skipChildren() : c1depth,
+                              c2depth == depth ? c2.skipChildren() : c2depth);
         }
 
         @Override
         public int advanceMultiple(TransitionsReceiver receiver)
         {
             if (atC1 & atC2)
-                return advance();
+                return checkOrder(c1.advance(), c2.advance());
 
             if (atC1)
             {
-                int c2level = c2.level();
-                int c1level = c1.advanceMultiple(receiver);
-                if (c1level <= c2level)
-                    return checkOrder(c1level, c2level);
+                int c2depth = c2.depth();
+                int c1depth = c1.advanceMultiple(receiver);
+                if (c1depth <= c2depth)
+                    return checkOrder(c1depth, c2depth);
                 else
-                    return c1level;   // atC1 stays true, atC2 false, c2 remains where it is
+                    return c1depth;   // atC1 stays true, atC2 false, c2 remains where it is
             }
             else // atC2
             {
-                int c1level = c1.level();
-                int c2level = c2.advanceMultiple(receiver);
-                if (c2level <= c1level)
-                    return checkOrder(c1level, c2level);
+                int c1depth = c1.depth();
+                int c2depth = c2.advanceMultiple(receiver);
+                if (c2depth <= c1depth)
+                    return checkOrder(c1depth, c2depth);
                 else
-                    return c2level;   // atC2 stays true, atC1 false, c1 remains where it is
+                    return c2depth;   // atC2 stays true, atC1 false, c1 remains where it is
             }
         }
 
-        private int checkOrder(int c1level, int c2level)
+        private int checkOrder(int c1depth, int c2depth)
         {
-            if (c1level > c2level)
+            if (c1depth > c2depth)
             {
                 atC1 = true;
                 atC2 = false;
-                return c1level;
+                return c1depth;
             }
-            if (c1level < c2level)
+            if (c1depth < c2depth)
             {
                 atC1 = false;
                 atC2 = true;
-                return c2level;
+                return c2depth;
             }
             int c1trans = c1.incomingTransition();
             int c2trans = c2.incomingTransition();
             atC1 = c1trans <= c2trans;
             atC2 = c1trans >= c2trans;
             assert atC1 | atC2;
-            return c1level;
+            return c1depth;
         }
 
         @Override
-        public int level()
+        public int depth()
         {
-            return atC1 ? c1.level() : c2.level();
+            return atC1 ? c1.depth() : c2.depth();
         }
 
         @Override

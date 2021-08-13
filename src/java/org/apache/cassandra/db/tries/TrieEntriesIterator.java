@@ -40,6 +40,7 @@ public abstract class TrieEntriesIterator<T, V> implements Iterator<V>, Trie.Res
     protected TrieEntriesIterator(Trie<T> trie)
     {
         cursor = trie.cursor();
+        assert cursor.depth() == 0;
         next = cursor.content();
         gotNext = next != null;
     }

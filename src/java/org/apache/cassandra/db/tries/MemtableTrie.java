@@ -567,11 +567,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     class ApplyState
     {
         int[] data = new int[16 * 5];
-        int currentLevel = -1;
+        int currentDepth = -1;
 
         void reset()
         {
-            currentLevel = -1;
+            currentDepth = -1;
         }
 
         /**
@@ -580,11 +580,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
          */
         int existingPreContentNode()
         {
-            return data[currentLevel * 5 + 0];
+            return data[currentDepth * 5 + 0];
         }
         void setExistingPreContentNode(int value)
         {
-            data[currentLevel * 5 + 0] = value;
+            data[currentDepth * 5 + 0] = value;
         }
 
         /**
@@ -593,11 +593,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
          */
         int existingPostContentNode()
         {
-            return data[currentLevel * 5 + 1];
+            return data[currentDepth * 5 + 1];
         }
         void setExistingPostContentNode(int value)
         {
-            data[currentLevel * 5 + 1] = value;
+            data[currentDepth * 5 + 1] = value;
         }
 
         /**
@@ -610,35 +610,35 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
          */
         int updatedPostContentNode()
         {
-            return data[currentLevel * 5 + 2];
+            return data[currentDepth * 5 + 2];
         }
 
         void setUpdatedPostContentNode(int value)
         {
-            data[currentLevel * 5 + 2] = value;
+            data[currentDepth * 5 + 2] = value;
         }
 
         int transition()
         {
-            return data[currentLevel * 5 + 3];
+            return data[currentDepth * 5 + 3];
         }
         void setTransition(int transition)
         {
-            data[currentLevel * 5 + 3] = transition;
+            data[currentDepth * 5 + 3] = transition;
         }
         int contentIndex()
         {
-            return data[currentLevel * 5 + 4];
+            return data[currentDepth * 5 + 4];
         }
         void setContentIndex(int value)
         {
-            data[currentLevel * 5 + 4] = value;
+            data[currentDepth * 5 + 4] = value;
         }
 
         <U> void descend(int transition, U mutationContent, final UpsertTransformer<T, U> transformer)
         {
             int existingPreContentNode;
-            if (currentLevel < 0)
+            if (currentDepth < 0)
                 existingPreContentNode = root;
             else
             {
@@ -648,9 +648,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                                          : getChild(existingPostContentNode(), transition);
             }
 
-            ++currentLevel;
-            if (currentLevel * 5 >= data.length)
-                data = Arrays.copyOf(data, currentLevel * 5 * 2);
+            ++currentDepth;
+            if (currentDepth * 5 >= data.length)
+                data = Arrays.copyOf(data, currentDepth * 5 * 2);
             setExistingPreContentNode(existingPreContentNode);
 
             int existingContentIndex = -1;
@@ -744,8 +744,8 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         {
             int updatedPreContentNode = applyContent();
             int existingPreContentNode = existingPreContentNode();
-            --currentLevel;
-            if (currentLevel == -1)
+            --currentDepth;
+            if (currentDepth == -1)
             {
                 assert root == existingPreContentNode;
                 if (updatedPreContentNode != existingPreContentNode)
@@ -793,30 +793,30 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     public <U> void apply(Trie<U> mutation, final UpsertTransformer<T, U> transformer) throws SpaceExhaustedException
     {
         Cursor<U> mutationCursor = mutation.cursor();
-        if (mutationCursor.level() == -1)
+        if (mutationCursor.depth() == -1)
             return;
-        assert mutationCursor.level() == 0;
+        assert mutationCursor.depth() == 0;
         ApplyState state = applyState;
         state.reset();
         state.descend(-1, mutationCursor.content(), transformer);
-        assert state.currentLevel == 0;
+        assert state.currentDepth == 0;
 
         while (true)
         {
-            int level = mutationCursor.advance();
-            while (state.currentLevel >= level)
+            int depth = mutationCursor.advance();
+            while (state.currentDepth >= depth)
             {
                 // There are no more children. Ascend to the parent state to continue walk.
                 if (!state.attachAndMoveToParentState())
                 {
-                    assert level == -1;
+                    assert depth == -1;
                     return;
                 }
             }
 
             // We have a transition, get child to descend into
             state.descend(mutationCursor.incomingTransition(), mutationCursor.content(), transformer);
-            assert state.currentLevel == level;
+            assert state.currentDepth == depth;
         }
     }
 

@@ -136,14 +136,14 @@ public abstract class MemtableTrieTestBase
         }
     }
 
-    static class SpecLevel
+    static class SpecDepth
     {
         Object[] children;
         int curChild;
         Object content;
-        SpecLevel parent;
+        SpecDepth parent;
 
-        public SpecLevel(Object[] spec, Object content, SpecLevel parent)
+        public SpecDepth(Object[] spec, Object content, SpecDepth parent)
         {
             this.children = spec;
             this.content = content;
@@ -154,68 +154,68 @@ public abstract class MemtableTrieTestBase
 
     public static class CursorFromSpec implements Trie.Cursor<ByteBuffer>
     {
-        SpecLevel stack;
-        int level;
+        SpecDepth stack;
+        int depth;
 
         CursorFromSpec(Object[] spec)
         {
-            stack = new SpecLevel(spec, null, null);
-            level = 0;
+            stack = new SpecDepth(spec, null, null);
+            depth = 0;
         }
 
         public int advance()
         {
-            SpecLevel current = stack;
+            SpecDepth current = stack;
             while (current != null && ++current.curChild >= current.children.length)
             {
                 current = current.parent;
-                --level;
+                --depth;
             }
             if (current == null)
             {
-                assert level == -1;
-                return level;
+                assert depth == -1;
+                return depth;
             }
 
             Object child = current.children[current.curChild];
             if (child instanceof Object[])
-                stack = new SpecLevel((Object[]) child, null, current);
+                stack = new SpecDepth((Object[]) child, null, current);
             else
-                stack = new SpecLevel(new Object[0], child, current);
+                stack = new SpecDepth(new Object[0], child, current);
 
-            return ++level;
+            return ++depth;
         }
 
         public int advanceMultiple()
         {
             if (++stack.curChild >= stack.children.length)
-                return ascend();
+                return skipChildren();
 
             Object child = stack.children[stack.curChild];
             while (child instanceof Object[])
             {
-                stack = new SpecLevel((Object[]) child, null, stack);
-                ++level;
+                stack = new SpecDepth((Object[]) child, null, stack);
+                ++depth;
                 if (stack.children.length == 0)
-                    return level;
+                    return depth;
                 child = stack.children[0];
             }
-            stack = new SpecLevel(new Object[0], child, stack);
+            stack = new SpecDepth(new Object[0], child, stack);
 
 
-            return ++level;
+            return ++depth;
         }
 
-        public int ascend()
+        public int skipChildren()
         {
-            --level;
+            --depth;
             stack = stack.parent;
             return advance();
         }
 
-        public int level()
+        public int depth()
         {
-            return level;
+            return depth;
         }
 
         public ByteBuffer content()
@@ -225,7 +225,7 @@ public abstract class MemtableTrieTestBase
 
         public int incomingTransition()
         {
-            SpecLevel parent = stack.parent;
+            SpecDepth parent = stack.parent;
             return parent != null ? parent.curChild + 0x30 : -1;
         }
     }

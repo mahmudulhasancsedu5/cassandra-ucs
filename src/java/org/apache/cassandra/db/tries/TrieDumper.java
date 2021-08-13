@@ -35,14 +35,16 @@ class TrieDumper<T>
     {
         StringBuilder sb = new StringBuilder();
         Trie.ResettingTransitionsReceiver receiver = new TransitionsDumper(sb);
-        T content = cursor.content();
+        assert cursor.depth() == 0;
+        T content = cursor.content();   // handle content on the root node
         if (content == null)
             content = cursor.advanceToContent(receiver);
+
         while (content != null)
         {
             sb.append(" -> ");
             sb.append(contentToString.apply(content));
-            receiver.reset(cursor.level());
+            receiver.reset(cursor.depth());
             content = cursor.advanceToContent(receiver);
         }
         return sb.toString();

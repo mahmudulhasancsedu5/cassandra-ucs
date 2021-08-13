@@ -22,7 +22,6 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
  * Singleton trie, mapping the given key to value.
- * Formed as a chain of single-child SNodes leading to one ENode with no children and the given value as content.
  */
 class SingletonTrie<T> extends Trie<T>
 {
@@ -42,26 +41,30 @@ class SingletonTrie<T> extends Trie<T>
 
     class Cursor implements Trie.Cursor<T>
     {
-        ByteSource.Peekable src = ByteSource.peekable(key.asComparableBytes(BYTE_COMPARABLE_VERSION));
-        int currentLevel = 0;
+        ByteSource src = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
+        int currentDepth = 0;
         int currentTransition = -1;
+        int nextTransition = src.next();
 
         public int advance()
         {
-            currentTransition = src.next();
+            currentTransition = nextTransition;
             if (currentTransition != ByteSource.END_OF_STREAM)
-                return ++currentLevel;
+            {
+                nextTransition = src.next();
+                return ++currentDepth;
+            }
             else
-                return currentLevel = -1;
+                return currentDepth = -1;
         }
 
         @Override
         public int advanceMultiple(TransitionsReceiver receiver)
         {
-            int current = src.next();
-            int level = currentLevel;
-            if (current == ByteSource.END_OF_STREAM)
-                return currentLevel = -1;
+            if (nextTransition == ByteSource.END_OF_STREAM)
+                return currentDepth = -1;
+            int current = nextTransition;
+            int depth = currentDepth;
             int next = src.next();
             while (next != ByteSource.END_OF_STREAM)
             {
@@ -69,25 +72,26 @@ class SingletonTrie<T> extends Trie<T>
                     receiver.add(current);
                 current = next;
                 next = src.next();
-                ++level;
+                ++depth;
             }
             currentTransition = current;
-            return currentLevel = ++level;
+            nextTransition = src.next();
+            return currentDepth = ++depth;
         }
 
-        public int ascend()
+        public int skipChildren()
         {
-            return -1;  // no alternatives
+            return currentDepth = -1;  // no alternatives
         }
 
-        public int level()
+        public int depth()
         {
-            return currentLevel;
+            return currentDepth;
         }
 
         public T content()
         {
-            return src.peek() == ByteSource.END_OF_STREAM ? value : null;
+            return nextTransition == ByteSource.END_OF_STREAM ? value : null;
         }
 
         public int incomingTransition()

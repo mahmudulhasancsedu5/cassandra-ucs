@@ -186,23 +186,23 @@ public class SetIntersectionTrieTest
      * Creates a simple trie with a root having the provided number of childs, where each child is a leaf whose content
      * is simply the value of the transition leading to it.
      *
-     * In other words, {@code singleLevelIntTrie(4)} creates the following trie:
+     * In other words, {@code singleDepthIntTrie(4)} creates the following trie:
      *       Root
      * t= 0  1  2  3
      *    |  |  |  |
      *    0  1  2  3
      */
-    private static Trie<Integer> singleLevelIntTrie(int childs)
+    private static Trie<Integer> singleDepthIntTrie(int childs)
     {
         return new Trie<Integer>()
         {
             @Override
             protected Cursor<Integer> cursor()
             {
-                return new SingleLevelCursor();
+                return new SingleDepthCursor();
             }
 
-            class SingleLevelCursor implements Cursor<Integer>
+            class SingleDepthCursor implements Cursor<Integer>
             {
                 int current = -1;
 
@@ -210,17 +210,17 @@ public class SetIntersectionTrieTest
                 public int advance()
                 {
                     ++current;
-                    return level();
+                    return depth();
                 }
 
                 @Override
-                public int ascend()
+                public int skipChildren()
                 {
                     return advance();
                 }
 
                 @Override
-                public int level()
+                public int depth()
                 {
                     if (current == -1)
                         return 0;
@@ -254,7 +254,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleIntersectionII()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), true, of(7), true);
@@ -264,7 +264,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleIntersectionEI()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), false, of(7), true);
@@ -274,7 +274,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleIntersectionIE()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), true, of(7), false);
@@ -284,7 +284,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleIntersectionEE()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), false, of(7), false);
@@ -294,7 +294,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleLeftIntersectionE()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), false, null, true);
@@ -304,7 +304,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleLeftIntersectionI()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(of(3), true, null, true);
@@ -314,7 +314,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleRightIntersectionE()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(null, true, of(7), false);
@@ -324,7 +324,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleRightIntersectionI()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(null, true, of(7), true);
@@ -334,7 +334,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleNoIntersection()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(null, true, null, true);
@@ -344,7 +344,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleEmptyIntersectionLeft()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(ByteComparable.EMPTY, true, null, true);
@@ -364,7 +364,7 @@ public class SetIntersectionTrieTest
     @Test
     public void testSimpleEmptyIntersectionRight()
     {
-        Trie<Integer> trie = singleLevelIntTrie(10);
+        Trie<Integer> trie = singleDepthIntTrie(10);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(trie));
 
         Trie<Integer> intersection = trie.subtrie(null, true, ByteComparable.EMPTY, true);
