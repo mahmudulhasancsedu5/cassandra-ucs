@@ -28,17 +28,20 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.ObjectSizes;
+import org.github.jamm.MemoryMeter;
 
 @RunWith(Parameterized.class)
 public class MemtableSizeTest extends CQLTester
 {
+    // The meter in ObjectSizes uses omitSharedBufferOverhead which counts off-heap data too
+    static final MemoryMeter meter = new MemoryMeter().ignoreKnownSingletons()
+                                                      .withGuessing(MemoryMeter.Guess.FALLBACK_UNSAFE);
+
     static String keyspace;
     String table;
     ColumnFamilyStore cfs;
@@ -59,28 +62,23 @@ public class MemtableSizeTest extends CQLTester
                                 "TrieMemtable");
     }
 
-    // must be within 50 bytes per partition of the actual size
-    final int MAX_DIFFERENCE = (partitions + deletedPartitions + deletedRows) * 50;
+    // must be within 10 bytes per partition/row/tombstone of the actual size, plus 1/2 mb for fixed overheads
+    final int MAX_DIFFERENCE = (partitions * (1 + rowsPerPartition) + deletedPartitions + deletedRows) * 10 + (1 << 19);
 
     @BeforeClass
     public static void setUp()
     {
         CQLTester.setUpClass();
         CQLTester.prepareServer();
-        CQLTester.disablePreparedReuseForTest();
         System.err.println("setupClass done.");
     }
 
     @Test
-    public void testTruncationReleasesLogSpace()
-    {
-        Util.flakyTest(this::testSize, 2, "Fails occasionally, see CASSANDRA-16684");
-    }
-
-    private void testSize()
+    public void testSize()
     {
         try
         {
+            CQLTester.disablePreparedReuseForTest();
             keyspace = createKeyspace("CREATE KEYSPACE %s with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 } and durable_writes = false");
             table = createTable(keyspace, "CREATE TABLE %s ( userid bigint, picid bigint, commentid bigint, PRIMARY KEY(userid, picid))" +
                                       " with compression = {'enabled': false}" +
@@ -88,13 +86,15 @@ public class MemtableSizeTest extends CQLTester
             execute("use " + keyspace + ';');
 
             String writeStatement = "INSERT INTO " + table + "(userid,picid,commentid)VALUES(?,?,?)";
+            forcePreparedValues();
 
             cfs = Keyspace.open(keyspace).getColumnFamilyStore(table);
             cfs.disableAutoCompaction();
             cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.UNIT_TESTS);
 
-            long deepSizeBefore = ObjectSizes.measureDeep(cfs.getTracker().getView().getCurrentMemtable());
-            System.out.printf("Memtable deep size before %s\n%n",
+            Memtable memtable = cfs.getTracker().getView().getCurrentMemtable();
+            long deepSizeBefore = meter.measureDeep(memtable);
+            System.out.println("Memtable deep size before " +
                               FBUtilities.prettyPrintMemory(deepSizeBefore));
             long i;
             long limit = partitions;
@@ -121,33 +121,34 @@ public class MemtableSizeTest extends CQLTester
                 execute("DELETE FROM " + table + " WHERE userid = ? AND picid = ?", i, 0L);
             }
 
+            Assert.assertSame("Memtable flushed during test. Test was not carried out correctly.",
+                              memtable,
+                              cfs.getTracker().getView().getCurrentMemtable());
 
-            if (!cfs.getLiveSSTables().isEmpty())
-                System.out.println("Warning: " + cfs.getLiveSSTables().size() + " sstables created.");
-
-            Memtable memtable = cfs.getTracker().getView().getCurrentMemtable();
             Memtable.MemoryUsage usage = Memtable.getMemoryUsage(memtable);
-        long actualHeap = usage.ownsOnHeap;
-            System.out.printf("Memtable in %s mode: %d ops, %s serialized bytes, %s %n",
-                              DatabaseDescriptor.getMemtableAllocationType(),
-                              memtable.getOperations(),
-                              FBUtilities.prettyPrintMemory(memtable.getLiveDataSize()),
-                              usage);
+            long actualHeap = usage.ownsOnHeap;
+            System.out.println(String.format("Memtable in %s mode: %d ops, %s serialized bytes, %s",
+                                             DatabaseDescriptor.getMemtableAllocationType(),
+                                             memtable.getOperations(),
+                                             FBUtilities.prettyPrintMemory(memtable.getLiveDataSize()),
+                                             usage));
 
-            long deepSizeAfter = ObjectSizes.measureDeep(memtable);
-            System.out.printf("Memtable deep size %s\n%n",
+            long deepSizeAfter = meter.measureDeep(memtable);
+            System.out.println("Memtable deep size " +
                               FBUtilities.prettyPrintMemory(deepSizeAfter));
 
             long expectedHeap = deepSizeAfter - deepSizeBefore;
-            String message = String.format("Expected heap usage close to %s, got %s.\n",
+            String message = String.format("Expected heap usage close to %s, got %s, %s difference.\n",
                                            FBUtilities.prettyPrintMemory(expectedHeap),
-                                           FBUtilities.prettyPrintMemory(actualHeap));
+                                           FBUtilities.prettyPrintMemory(actualHeap),
+                                           FBUtilities.prettyPrintMemory(expectedHeap - actualHeap));
             System.out.println(message);
+            Thread.sleep(3000);
             Assert.assertTrue(message, Math.abs(actualHeap - expectedHeap) <= MAX_DIFFERENCE);
         }
         catch (Throwable throwable)
         {
-            Throwables.propagate(throwable);
+            throw Throwables.propagate(throwable);
         }
     }
 }
