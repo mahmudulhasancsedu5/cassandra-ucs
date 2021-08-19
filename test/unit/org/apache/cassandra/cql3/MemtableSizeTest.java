@@ -143,7 +143,6 @@ public class MemtableSizeTest extends CQLTester
                                            FBUtilities.prettyPrintMemory(actualHeap),
                                            FBUtilities.prettyPrintMemory(expectedHeap - actualHeap));
             System.out.println(message);
-            Thread.sleep(3000);
             Assert.assertTrue(message, Math.abs(actualHeap - expectedHeap) <= MAX_DIFFERENCE);
         }
         catch (Throwable throwable)
