@@ -37,7 +37,7 @@ public class ObjectSizes
                                              .ignoreKnownSingletons();
 
     private static final long BUFFER_EMPTY_SIZE = measure(ByteBufferUtil.EMPTY_BYTE_BUFFER);
-    private static final long DIRECT_BUFFER_HEAP_SIZE = measure(ByteBuffer.allocateDirect(0));
+    private static final long DIRECT_BUFFER_EMPTY_SIZE = measure(ByteBuffer.allocateDirect(0));
     private static final long STRING_EMPTY_SIZE = measure("");
 
     /**
@@ -124,7 +124,7 @@ public class ObjectSizes
     public static long sizeOnHeapOf(ByteBuffer buffer)
     {
         if (buffer.isDirect())
-            return DIRECT_BUFFER_HEAP_SIZE;
+            return DIRECT_BUFFER_EMPTY_SIZE;
         // if we're only referencing a sub-portion of the ByteBuffer, don't count the array overhead (assume it's slab
         // allocated, so amortized over all the allocations the overhead is negligible and better to undercount than over)
         int capacity = buffer.capacity();
@@ -136,7 +136,7 @@ public class ObjectSizes
     public static long sizeOnHeapExcludingData(ByteBuffer buffer)
     {
         if (buffer.isDirect())
-            return DIRECT_BUFFER_HEAP_SIZE;
+            return DIRECT_BUFFER_EMPTY_SIZE;
         int capacity = buffer.capacity();
         // if we're only referencing a sub-portion of the ByteBuffer, don't count the array overhead (assume it's slab
         // allocated, so amortized over all the allocations the overhead is negligible and better to undercount than over)

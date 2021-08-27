@@ -713,6 +713,15 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     }
 
     @VisibleForTesting
+    public long unusedReservedMemory()
+    {
+        long size = 0;
+        for (MemtableShard shard : shards)
+            size += shard.data.unusedReservedMemory();
+        return size;
+    }
+
+    @VisibleForTesting
     public static class TrieMemtableConfig implements TrieMemtableConfigMXBean
     {
         @Override
