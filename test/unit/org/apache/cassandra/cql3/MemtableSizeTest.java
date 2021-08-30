@@ -20,7 +20,6 @@ package org.apache.cassandra.cql3;
 
 import java.util.List;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -66,10 +65,13 @@ public class MemtableSizeTest extends CQLTester
                                 "TrieMemtable");
     }
 
-    // General fixed overhead.
-    final int MAX_DIFFERENCE = 128 * 1024;
+    // Must be within 2% of the real usage. We are actually more precise than this, but the threshold is set higher to
+    // avoid flakes. For on-heap allocators we allow for extra overheads below.
+    final int MAX_DIFFERENCE_PERCENT = 2;
     // Slab overhead, added when the memtable uses heap_buffers.
     final int SLAB_OVERHEAD = 1024 * 1024;
+    // Extra leniency for unslabbed buffers. We are not as precise there, and it's not a mode in real use.
+    final int UNSLABBED_EXTRA_PERCENT = 2;
 
     @BeforeClass
     public static void setUp()
@@ -142,7 +144,7 @@ public class MemtableSizeTest extends CQLTester
                           FBUtilities.prettyPrintMemory(deepSizeAfter));
 
         long expectedHeap = deepSizeAfter - deepSizeBefore;
-        long max_difference = MAX_DIFFERENCE;
+        long max_difference = MAX_DIFFERENCE_PERCENT * expectedHeap / 100;
         long trie_overhead = memtable instanceof TrieMemtable ? ((TrieMemtable)memtable).unusedReservedMemory() : 0;
         switch (DatabaseDescriptor.getMemtableAllocationType())
         {
@@ -152,7 +154,7 @@ public class MemtableSizeTest extends CQLTester
                 break;
             case unslabbed_heap_buffers:
                 if (memtable instanceof SkipListMemtable)
-                    max_difference += expectedHeap / 50;   // We are not as precise for this
+                    max_difference += expectedHeap * UNSLABBED_EXTRA_PERCENT / 100;   // We are not as precise for this
                 else
                     actualHeap += trie_overhead;    // adjust trie memory with unused buffer space if on-heap
                 break;
