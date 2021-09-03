@@ -16,28 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.cql3;
+package org.apache.cassandra.db.memtable;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.memtable.Memtable;
-import org.apache.cassandra.db.memtable.SkipListMemtable;
-import org.apache.cassandra.db.memtable.TrieMemtable;
 import org.apache.cassandra.utils.FBUtilities;
 import org.github.jamm.MemoryMeter;
 
-@RunWith(Parameterized.class)
-public class MemtableSizeTest extends CQLTester
+// Note: This test can be run in idea with the allocation type configured in the test yaml and memtable using the
+// value memtableClass is initialized with.
+public class MemtableSizeTestBase extends CQLTester
 {
     // The meter in ObjectSizes uses omitSharedBufferOverhead which counts off-heap data too
     // Note: To see a printout of the usage for each object, add .enableDebug() here (most useful with smaller number of
@@ -56,7 +56,7 @@ public class MemtableSizeTest extends CQLTester
     int deletedRows = 5_000;
 
     @Parameterized.Parameter()
-    public String memtableClass;
+    public String memtableClass = "TrieMemtable";
 
     @Parameterized.Parameters(name = "{0}")
     public static List<Object> parameters()
@@ -73,17 +73,37 @@ public class MemtableSizeTest extends CQLTester
     // Extra leniency for unslabbed buffers. We are not as precise there, and it's not a mode in real use.
     final int UNSLABBED_EXTRA_PERCENT = 2;
 
-    @BeforeClass
-    public static void setUp()
+    public static void setup(Config.MemtableAllocationType allocationType)
     {
+        try
+        {
+            Field confField = DatabaseDescriptor.class.getDeclaredField("conf");
+            confField.setAccessible(true);
+            Config conf = (Config) confField.get(null);
+            conf.memtable_allocation_type = allocationType;
+        }
+        catch (NoSuchFieldException | IllegalAccessException e)
+        {
+            throw Throwables.propagate(e);
+        }
+
         CQLTester.setUpClass();
         CQLTester.prepareServer();
-        System.err.println("setupClass done.");
+        System.out.println("setupClass done, allocation type " + allocationType);
+    }
+
+    void checkMemtablePool()
+    {
+        // overridden by instances
     }
 
     @Test
     public void testSize() throws Throwable
     {
+        // Make sure memtables use the correct allocation type, i.e. that setup has worked.
+        // If this fails, make sure the test is not reusing an already-initialized JVM.
+        checkMemtablePool();
+
         CQLTester.disablePreparedReuseForTest();
         keyspace = createKeyspace("CREATE KEYSPACE %s with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 } and durable_writes = false");
         table = createTable(keyspace, "CREATE TABLE %s ( userid bigint, picid bigint, commentid bigint, PRIMARY KEY(userid, picid))" +
@@ -153,10 +173,8 @@ public class MemtableSizeTest extends CQLTester
                 actualHeap += trie_overhead;    // adjust trie memory with unused buffer space if on-heap
                 break;
             case unslabbed_heap_buffers:
-                if (memtable instanceof SkipListMemtable)
-                    max_difference += expectedHeap * UNSLABBED_EXTRA_PERCENT / 100;   // We are not as precise for this
-                else
-                    actualHeap += trie_overhead;    // adjust trie memory with unused buffer space if on-heap
+                max_difference += expectedHeap * UNSLABBED_EXTRA_PERCENT / 100;   // We are not as precise for this
+                actualHeap += trie_overhead;    // adjust trie memory with unused buffer space if on-heap
                 break;
         }
         String message = String.format("Expected heap usage close to %s, got %s, %s difference.\n",

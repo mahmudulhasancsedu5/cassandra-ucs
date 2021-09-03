@@ -68,7 +68,8 @@ public abstract class AbstractAllocatorMemtable extends AbstractMemtableWithComm
 
     private final long creationNano = System.nanoTime();
 
-    private static MemtablePool createMemtableAllocatorPool()
+    @VisibleForTesting
+    static MemtablePool createMemtableAllocatorPool()
     {
         long heapLimit = DatabaseDescriptor.getMemtableHeapSpaceInMb() << 20;
         long offHeapLimit = DatabaseDescriptor.getMemtableOffheapSpaceInMb() << 20;
