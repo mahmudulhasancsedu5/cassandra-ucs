@@ -81,6 +81,7 @@ public class MemtableSizeTestBase extends CQLTester
             confField.setAccessible(true);
             Config conf = (Config) confField.get(null);
             conf.memtable_allocation_type = allocationType;
+            conf.memtable_cleanup_threshold = 0.8f; // give us more space to fit test data without flushing
         }
         catch (NoSuchFieldException | IllegalAccessException e)
         {
