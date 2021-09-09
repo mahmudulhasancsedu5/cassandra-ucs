@@ -257,8 +257,7 @@ public class CompactionController extends AbstractCompactionController
         {
             // if we don't have bloom filter(bf_fp_chance=1.0 or filter file is missing),
             // we check index file instead.
-            if (sstable.getBloomFilter() instanceof AlwaysPresentFilter && sstable.checkEntryExists(key, SSTableReader.Operator.EQ, false)
-                || sstable.getBloomFilter().isPresent(key))
+            if (sstable.couldContain(key))
             {
                 minTimestampSeen = Math.min(minTimestampSeen, sstable.getMinTimestamp());
                 hasTimestamp = true;

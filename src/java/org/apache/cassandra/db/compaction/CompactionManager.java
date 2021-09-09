@@ -39,6 +39,7 @@ import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.compaction.BackgroundCompactionRunner.RequestResult;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.io.sstable.ScannerList;
+import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -640,7 +641,7 @@ public class CompactionManager implements CompactionManagerMBean
 
         Set<SSTableReader> fullyContainedSSTables = findSSTablesToAnticompact(sstableIterator, normalizedRanges, sessionID);
 
-        cfs.metric.bytesMutatedAnticompaction.inc(SSTableReader.getTotalBytes(fullyContainedSSTables));
+        cfs.metric.bytesMutatedAnticompaction.inc(SSTableBasicStats.getTotalBytes(fullyContainedSSTables));
         cfs.mutateRepaired(fullyContainedSSTables, UNREPAIRED_SSTABLE, sessionID, isTransient);
         // since we're just re-writing the sstable metdata for the fully contained sstables, we don't want
         // them obsoleted when the anti-compaction is complete. So they're removed from the transaction here
@@ -1401,7 +1402,7 @@ public class CompactionManager implements CompactionManagerMBean
         // repairedAt values for these, we still avoid anti-compacting already repaired sstables, as we currently don't
         // make use of any actual repairedAt value and splitting up sstables just for that is not worth it at this point.
         Set<SSTableReader> unrepairedSSTables = sstables.stream().filter((s) -> !s.isRepaired()).collect(Collectors.toSet());
-        cfs.metric.bytesAnticompacted.inc(SSTableReader.getTotalBytes(unrepairedSSTables));
+        cfs.metric.bytesAnticompacted.inc(SSTableBasicStats.getTotalBytes(unrepairedSSTables));
         Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(unrepairedSSTables);
 
         // iterate over sstables to check if the full / transient / unrepaired ranges intersect them.

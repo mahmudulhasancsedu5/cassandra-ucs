@@ -52,7 +52,9 @@ import org.apache.cassandra.io.sstable.format.SSTableReadsListener.SkippingReaso
 import org.apache.cassandra.io.sstable.format.ScrubPartitionIterator;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**

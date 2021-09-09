@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.Config;
+import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -280,7 +281,7 @@ class LeveledGenerations
                     logger.trace("L{} contains {} SSTables ({}) in {}",
                                  i,
                                  level.size(),
-                                 FBUtilities.prettyPrintMemory(SSTableReader.getTotalBytes(level)),
+                                 FBUtilities.prettyPrintMemory(SSTableBasicStats.getTotalBytes(level)),
                                  this);
                 }
             }

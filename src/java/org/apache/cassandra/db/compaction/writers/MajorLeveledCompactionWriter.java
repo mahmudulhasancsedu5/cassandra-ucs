@@ -23,6 +23,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
@@ -62,7 +63,7 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
         super(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
         this.maxSSTableSize = maxSSTableSize;
         this.levelFanoutSize = cfs.getLevelFanoutSize();
-        long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
+        long estimatedSSTables = Math.max(1, SSTableBasicStats.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
         keysPerSSTable = estimatedTotalKeys / estimatedSSTables;
     }
 

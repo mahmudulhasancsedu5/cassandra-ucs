@@ -122,6 +122,7 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.metrics.RestorableMeter;
 import org.apache.cassandra.schema.CachingParams;
 import org.apache.cassandra.schema.Schema;
@@ -131,16 +132,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.CacheService;
-import org.apache.cassandra.utils.BloomFilter;
-import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Comparables;
-import org.apache.cassandra.utils.EstimatedHistogram;
-import org.apache.cassandra.utils.ExecutorUtils;
-import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.IFilter;
-import org.apache.cassandra.utils.JVMStabilityInspector;
-import org.apache.cassandra.utils.NativeLibrary;
-import org.apache.cassandra.utils.Throwables;
+import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.RefCounted;
@@ -207,7 +199,7 @@ import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR
  *
  * TODO: fill in details about Tracker and lifecycle interactions for tools, and for compaction strategies
  */
-public abstract class SSTableReader extends SSTable implements SelfRefCounted<SSTableReader>
+public abstract class SSTableReader extends SSTable implements SelfRefCounted<SSTableReader>, SSTableBasicStats
 {
     private static final Logger logger = LoggerFactory.getLogger(SSTableReader.class);
 
@@ -778,23 +770,6 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         this.openReason = openReason;
         tidy = new InstanceTidier(descriptor, metadata.id);
         selfRef = new Ref<>(this, tidy);
-    }
-
-    public static long getTotalBytes(Iterable<SSTableReader> sstables)
-    {
-        long sum = 0;
-        for (SSTableReader sstable : sstables)
-            sum += sstable.onDiskLength();
-        return sum;
-    }
-
-    public static long getTotalUncompressedBytes(Iterable<SSTableReader> sstables)
-    {
-        long sum = 0;
-        for (SSTableReader sstable : sstables)
-            sum += sstable.uncompressedLength();
-
-        return sum;
     }
 
     public abstract PartitionIndexIterator allKeysIterator() throws IOException;
@@ -1502,6 +1477,13 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         return keyCache != null && metadata().params.caching.cacheKeys();
     }
 
+    public boolean couldContain(DecoratedKey dk)
+    {
+        return !(bf instanceof AlwaysPresentFilter)
+               ? bf.isPresent(dk)
+               : checkEntryExists(dk, Operator.EQ, false);
+    }
+
     /**
      * Retrieves the position while updating the key cache and the stats.
      * @param key The key to apply as the rhs to the given Operator. A 'fake' key is allowed to
@@ -1659,6 +1641,12 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     public boolean isMarkedSuspect()
     {
         return isSuspect.get();
+    }
+
+    @Override
+    public boolean isSuitableForCompaction()
+    {
+        return !isMarkedSuspect() && openReason != SSTableReader.OpenReason.EARLY;
     }
 
     /**

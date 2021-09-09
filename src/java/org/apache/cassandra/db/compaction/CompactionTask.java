@@ -47,6 +47,7 @@ import org.apache.cassandra.db.compaction.writers.DefaultCompactionWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.ScannerList;
+import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.schema.CompactionParams;
@@ -492,7 +493,7 @@ public class CompactionTask extends AbstractCompactionTask
             @Override
             public long inputDiskSize()
             {
-                return SSTableReader.getTotalBytes(actuallyCompact);
+                return SSTableBasicStats.getTotalBytes(actuallyCompact);
             }
 
             @Override
@@ -510,7 +511,7 @@ public class CompactionTask extends AbstractCompactionTask
             @Override
             public long outputDiskSize()
             {
-                return SSTableReader.getTotalBytes(newSStables);
+                return SSTableBasicStats.getTotalBytes(newSStables);
             }
 
             @Override
