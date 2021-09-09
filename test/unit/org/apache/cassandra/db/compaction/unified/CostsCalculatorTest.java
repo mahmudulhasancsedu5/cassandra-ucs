@@ -167,8 +167,8 @@ public class CostsCalculatorTest
         when(environment.cacheMissRatio()).thenReturn(cacheMissRatio);
         when(environment.bloomFilterFpRatio()).thenReturn(bfprRatio);
         when(environment.sstablePartitionReadLatencyNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(readTimeMicros));
-        when(environment.flushLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(writeTimeMicros));
-        when(environment.compactionLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(writeTimeMicros));
+        when(environment.flushTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(writeTimeMicros));
+        when(environment.compactionTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(writeTimeMicros));
 
         CostsCalculator cost = new CostsCalculator(environment, strategy, executorService, survivalFactor, readMultiplier, writeMultiplier);
         assertNotNull(cost);
@@ -212,8 +212,8 @@ public class CostsCalculatorTest
         when(environment.cacheMissRatio()).thenReturn(0.05);
         when(environment.bloomFilterFpRatio()).thenReturn(0.01);
         when(environment.sstablePartitionReadLatencyNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
-        when(environment.flushLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
-        when(environment.compactionLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
+        when(environment.flushTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
+        when(environment.compactionTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
 
         CostsCalculator cost = new CostsCalculator(environment, strategy, executorService, survivalFactor, 1, 1);
         assertNotNull(cost);
@@ -240,8 +240,8 @@ public class CostsCalculatorTest
         when(environment.cacheMissRatio()).thenReturn(0.05);
         when(environment.bloomFilterFpRatio()).thenReturn(0.01);
         when(environment.sstablePartitionReadLatencyNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
-        when(environment.flushLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
-        when(environment.compactionLatencyPerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
+        when(environment.flushTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
+        when(environment.compactionTimePerKbInNanos()).thenReturn((double) TimeUnit.MICROSECONDS.toNanos(20));
 
         CostsCalculator cost = new CostsCalculator(environment, strategy, executorService, survivalFactor, 1, 1);
         assertNotNull(cost);

@@ -104,7 +104,7 @@ import static org.apache.cassandra.utils.Throwables.maybeFail;
 import static org.apache.cassandra.utils.Throwables.merge;
 import static org.apache.cassandra.utils.Throwables.perform;
 
-public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
+public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner, CompactionRealm<SSTableReader>
 {
     private static final Logger logger = LoggerFactory.getLogger(ColumnFamilyStore.class);
 
@@ -517,6 +517,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public TableMetadata metadata()
     {
         return metadata.get();
+    }
+
+    public TableMetadataRef metadataRef()
+    {
+        return metadata;
+    }
+
+    public TableMetrics metrics()
+    {
+        return metric;
     }
 
     public Directories getDirectories()
@@ -1291,6 +1301,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                                    cfs -> cfs.getTracker().getView().getCurrentMemtable());
     }
 
+    public SecondaryIndexManager getIndexManager()
+    {
+        return indexManager;
+    }
+
     /**
      * Insert/Update the column family for this key.
      * Caller is responsible for acquiring Keyspace.switchLock
@@ -1634,6 +1649,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public Set<SSTableReader> getCompactingSSTables()
     {
         return data.getCompacting();
+    }
+
+    public Iterable<Memtable> getAllMemtables()
+    {
+        return data.getView().getAllMemtables();
     }
 
     public Map<UUID, PendingStat> getPendingRepairStats()
@@ -2759,21 +2779,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return count > 0 ? sum * 1.0 / count : 0;
     }
 
-    public double sstablePartitionReadLatency()
-    {
-        return metric == null ? 0 : metric.sstablePartitionReadLatency.get();
-    }
-
-    public double getCompactionTimePerKb()
-    {
-        return metric == null ? 0 : metric.compactionTimePerKb.get();
-    }
-
-    public double getFlushTimePerKb()
-    {
-        return metric == null ? 0 : metric.flushTimePerKb.get();
-    }
-
     public int getMeanRowCount()
     {
         long totalRows = 0;
@@ -2838,11 +2843,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public double getRecentBloomFilterTrueNegativeRate()
     {
         return bloomFilterTracker.getRecentTrueNegativeRate();
-    }
-
-    public double bloomFilterFpRatio()
-    {
-        return metric == null ? 0 : metric.bloomFilterFalseRatio.getValue();
     }
 
     public long getReadRequests()
@@ -3281,5 +3281,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public static Predicate<SSTableReader> nonSuspectAndNotInPredicate(Set<SSTableReader> compacting)
     {
         return sstable -> !sstable.isMarkedSuspect() && !compacting.contains(sstable);
+    }
+
+    public SSTableReader toSSTableReader(SSTableReader ssTableReader)
+    {
+        return ssTableReader;
+    }
+
+    public Iterable<SSTableReader> toSSTableReaders(Iterable<SSTableReader> ssTableReaders)
+    {
+        return ssTableReaders;
     }
 }

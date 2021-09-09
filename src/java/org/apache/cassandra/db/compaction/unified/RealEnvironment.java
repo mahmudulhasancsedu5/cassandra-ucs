@@ -20,7 +20,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.CompressionParams;
+import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ExpMovingAverage;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MovingAverage;
@@ -32,11 +34,13 @@ import org.apache.cassandra.utils.PageAware;
  */
 class RealEnvironment implements Environment
 {
-    private final ColumnFamilyStore cfs;
+    private final TableMetrics metrics;
+    private final TableMetadataRef metadata;
 
-    RealEnvironment(ColumnFamilyStore cfs)
+    RealEnvironment(TableMetadataRef metadata, TableMetrics metrics)
     {
-        this.cfs = cfs;
+        this.metadata = metadata;
+        this.metrics = metrics;
     }
 
     @Override
@@ -58,13 +62,13 @@ class RealEnvironment implements Environment
     @Override
     public double bloomFilterFpRatio()
     {
-        return cfs.bloomFilterFpRatio();
+        return metrics.bloomFilterFalseRatio.getValue();
     }
 
     @Override
     public int chunkSize()
     {
-        CompressionParams compressionParams = cfs.metadata().params.compression;
+        CompressionParams compressionParams = metadata.get().params.compression;
         if (compressionParams.isEnabled())
             return compressionParams.chunkLength();
 
@@ -74,43 +78,45 @@ class RealEnvironment implements Environment
     @Override
     public long partitionsRead()
     {
-        return cfs.getReadRequests();
+        return metrics.readRequests.getCount();
     }
 
     @Override
     public double sstablePartitionReadLatencyNanos()
     {
-        return cfs.sstablePartitionReadLatency();
+        return metrics.sstablePartitionReadLatency.get();
     }
 
     @Override
-    public double compactionLatencyPerKbInNanos()
+    public double compactionTimePerKbInNanos()
     {
-        return cfs.getCompactionTimePerKb();
+        return metrics.compactionTimePerKb.get();
     }
 
     @Override
-    public double flushLatencyPerKbInNanos()
+    public double flushTimePerKbInNanos()
     {
-        return cfs.getFlushTimePerKb();
+        return metrics.flushTimePerKb.get();
     }
 
     @Override
     public long bytesInserted()
     {
-        return cfs.getBytesInserted();
+        return metrics.bytesInserted.getCount();
     }
 
     @Override
     public double WA()
     {
-        return cfs.getWA();
+        double bytesCompacted = metrics.compactionBytesWritten.getCount();
+        double bytesFlushed = metrics.bytesFlushed.getCount();
+        return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
     }
 
     @Override
     public double flushSize()
     {
-        return cfs.getFlushSizeOnDisk();
+        return metrics.flushSizeOnDisk.get();
     }
 
     @Override
@@ -118,8 +124,8 @@ class RealEnvironment implements Environment
     {
         return String.format("Read latency: %d us / partition, flush latency: %d us / KiB, compaction latency: %d us / KiB, bfpr: %f, measured WA: %.2f, flush size %s",
                              TimeUnit.NANOSECONDS.toMicros((long) sstablePartitionReadLatencyNanos()),
-                             TimeUnit.NANOSECONDS.toMicros((long) flushLatencyPerKbInNanos()),
-                             TimeUnit.NANOSECONDS.toMicros((long) compactionLatencyPerKbInNanos()),
+                             TimeUnit.NANOSECONDS.toMicros((long) flushTimePerKbInNanos()),
+                             TimeUnit.NANOSECONDS.toMicros((long) compactionTimePerKbInNanos()),
                              bloomFilterFpRatio(),
                              WA(),
                              FBUtilities.prettyPrintMemory((long)flushSize()));

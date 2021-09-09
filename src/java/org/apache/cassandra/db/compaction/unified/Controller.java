@@ -518,7 +518,7 @@ public abstract class Controller
                 ? Boolean.parseBoolean(options.get(ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION))
                 : DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION;
 
-        Environment env = new RealEnvironment(cfs);
+        Environment env = new RealEnvironment(cfs.metadataRef(), cfs.metrics());
 
         return adaptive
                ? AdaptiveController.fromOptions(env,

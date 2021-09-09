@@ -184,14 +184,14 @@ public class CostsCalculator
 
     private double getFlushCost(double bytesWritten)
     {
-        return ((bytesWritten / (1 << 10)) * env.flushLatencyPerKbInNanos()) / (double) TimeUnit.MILLISECONDS.toNanos(1);
+        return ((bytesWritten / (1 << 10)) * env.flushTimePerKbInNanos()) / (double) TimeUnit.MILLISECONDS.toNanos(1);
     }
 
     private double getCompactionCost(double bytesWritten)
     {
         // So, the compaction latency will depend on the size of the sstables, so in the correct solution each level
         // should pass its output size and we should measure latency in MB or something like that
-        return ((bytesWritten / (1 << 10)) * env.compactionLatencyPerKbInNanos()) / (double)  TimeUnit.MILLISECONDS.toNanos(1);
+        return ((bytesWritten / (1 << 10)) * env.compactionTimePerKbInNanos()) / (double)  TimeUnit.MILLISECONDS.toNanos(1);
     }
 
     /**
