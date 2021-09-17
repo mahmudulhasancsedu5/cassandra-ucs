@@ -30,9 +30,9 @@ public class SSTableSplitter
 {
     private final AbstractCompactionTask task;
 
-    public SSTableSplitter(ColumnFamilyStore cfs, LifecycleTransaction transaction, int sstableSizeInMB)
+    public SSTableSplitter(CompactionRealm realm, LifecycleTransaction transaction, int sstableSizeInMB)
     {
-        this.task = new SplittingCompactionTask(cfs, transaction, sstableSizeInMB);
+        this.task = new SplittingCompactionTask(realm, transaction, sstableSizeInMB);
     }
 
     public void split()
@@ -44,9 +44,9 @@ public class SSTableSplitter
     {
         private final int sstableSizeInMB;
 
-        public SplittingCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction transaction, int sstableSizeInMB)
+        public SplittingCompactionTask(CompactionRealm realm, LifecycleTransaction transaction, int sstableSizeInMB)
         {
-            super(cfs, transaction, CompactionManager.NO_GC, false, null);
+            super(realm, transaction, CompactionManager.NO_GC, false, null);
             this.sstableSizeInMB = sstableSizeInMB;
 
             if (sstableSizeInMB <= 0)

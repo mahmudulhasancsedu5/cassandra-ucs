@@ -146,7 +146,7 @@ public class BaseCompactionStrategyTest
         compactionLogger = new CompactionLogger(cfs.metadata());
         compactionLogger.enable();
 
-        when(strategyFactory.getCfs()).thenReturn(cfs);
+        when(strategyFactory.getRealm()).thenReturn(cfs);
         when(strategyFactory.getCompactionLogger()).thenReturn(compactionLogger);
 
         when(diskBoundaries.getNumBoundaries()).thenAnswer(invocation -> diskIndexes.size());

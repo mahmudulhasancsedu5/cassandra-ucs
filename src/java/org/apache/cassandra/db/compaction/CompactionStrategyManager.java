@@ -40,7 +40,6 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.AbstractStrategyHolder.TasksSupplier;
@@ -94,7 +93,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
 {
     private static final Logger logger = LoggerFactory.getLogger(CompactionStrategyManager.class);
     public final CompactionLogger compactionLogger;
-    private final ColumnFamilyStore cfs;
+    private final CompactionRealm realm;
     private final boolean partitionSSTablesByTokenRange;
     private final Supplier<DiskBoundaries> boundariesSupplier;
 
@@ -139,8 +138,8 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     public CompactionStrategyManager(CompactionStrategyFactory strategyFactory)
     {
         this(strategyFactory,
-             () -> strategyFactory.getCfs().getDiskBoundaries(),
-             strategyFactory.getCfs().getPartitioner().splitter().isPresent());
+             () -> strategyFactory.getRealm().getDiskBoundaries(),
+             strategyFactory.getRealm().getPartitioner().splitter().isPresent());
     }
 
     @VisibleForTesting
@@ -161,18 +160,18 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
             }
         };
 
-        cfs = strategyFactory.getCfs();
+        realm = strategyFactory.getRealm();
 
-        transientRepairs = new PendingRepairHolder(cfs, strategyFactory, router, true);
-        pendingRepairs = new PendingRepairHolder(cfs, strategyFactory, router, false);
-        repaired = new CompactionStrategyHolder(cfs, strategyFactory, router, true);
-        unrepaired = new CompactionStrategyHolder(cfs, strategyFactory, router, false);
+        transientRepairs = new PendingRepairHolder(realm, strategyFactory, router, true);
+        pendingRepairs = new PendingRepairHolder(realm, strategyFactory, router, false);
+        repaired = new CompactionStrategyHolder(realm, strategyFactory, router, true);
+        unrepaired = new CompactionStrategyHolder(realm, strategyFactory, router, false);
         holders = ImmutableList.of(transientRepairs, pendingRepairs, repaired, unrepaired);
 
         compactionLogger = strategyFactory.getCompactionLogger();
         this.boundariesSupplier = boundariesSupplier;
         this.partitionSSTablesByTokenRange = partitionSSTablesByTokenRange;
-        params = cfs.metadata().params.compaction;
+        params = realm.metadata().params.compaction;
         enabled = params.isEnabled();
     }
 
@@ -297,7 +296,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
         writeLock.lock();
         try
         {
-            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
+            for (SSTableReader sstable : realm.getSSTables(SSTableSet.CANONICAL))
             {
                 if (sstable.openReason != SSTableReader.OpenReason.EARLY)
                     compactionStrategyFor(sstable).addSSTable(sstable);
@@ -480,7 +479,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
         boolean enabledOnReload = CompactionStrategyFactory.enableCompactionOnReload(previous, compactionParams, reason);
 
         logger.debug("Recreating compaction strategy for {}.{}, reason: {}, params updated: {}, disk boundaries updated: {}, enabled: {}, params: {} -> {}, metadataParams: {}",
-                     cfs.getKeyspaceName(), cfs.getTableName(), reason, !compactionParams.equals(params), updateDiskBoundaries, enabledOnReload, params, compactionParams, metadataParams);
+                     realm.getKeyspaceName(), realm.getTableName(), reason, !compactionParams.equals(params), updateDiskBoundaries, enabledOnReload, params, compactionParams, metadataParams);
 
         if (updateDiskBoundaries)
             currentBoundaries = boundariesSupplier.get();
@@ -493,7 +492,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
 
         // full reload or switch from a strategy not managed by CompactionStrategyManager
         if (metadataParams == null || reason == ReloadReason.FULL)
-            metadataParams = cfs.metadata().params.compaction;
+            metadataParams = realm.metadata().params.compaction;
         else if (reason == ReloadReason.METADATA_CHANGE)
             // metadataParams are aligned with compactionParams. We do not access TableParams.COMPACTION to avoid racing with
             // concurrent ALTER TABLE metadata change.
@@ -930,7 +929,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
         // runWithCompactionsDisabled cancels active compactions and disables them, then we are able
         // to make the repaired/unrepaired strategies mark their own sstables as compacting. Once the
         // sstables are marked the compactions are re-enabled
-        return cfs.runWithCompactionsDisabled(() -> {
+        return realm.runWithCompactionsDisabled(() -> {
             List<AbstractCompactionTask> tasks = new ArrayList<>();
             readLock.lock();
             try

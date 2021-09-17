@@ -319,7 +319,14 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
      */
     private void reloadCompactionStrategy(CompactionParams compactionParams, CompactionStrategyContainer.ReloadReason reason)
     {
+        CompactionStrategyContainer previous = strategyContainer;
         strategyContainer = strategyFactory.reload(strategyContainer, compactionParams, reason);
+        if (strategyContainer != previous)
+        {
+            getTracker().subscribe(strategyContainer);
+            if (previous != null)
+                getTracker().unsubscribe(previous);
+        }
     }
 
     public static Runnable getBackgroundCompactionTaskSubmitter()
@@ -1617,6 +1624,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore)
     {
         getTracker().notifySSTableMetadataChanged(sstable, metadataBefore);
+    }
+
+    public void notifySSTableRepairedStatusChanged(Collection<SSTableReader> sstables)
+    {
+        getTracker().notifySSTableRepairedStatusChanged(sstables);
     }
 
     public boolean isValid()
@@ -3279,6 +3291,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         }
     }
 
+    public int mutateRepairedWithLock(Collection<SSTableReader> sstables, long repairedAt, UUID pendingRepair, boolean isTransient) throws IOException
+    {
+        return mutateRepaired(getCompactionStrategyContainer().getWriteLock(), sstables, repairedAt, pendingRepair, isTransient);
+    }
+
+    public void repairSessionCompleted(UUID sessionID)
+    {
+        getCompactionStrategyContainer().repairSessionCompleted(sessionID);
+    }
+
     public boolean hasPendingRepairSSTables(UUID sessionID)
     {
         return Iterables.any(data.getLiveSSTables(), pendingRepairPredicate(sessionID));
@@ -3292,11 +3314,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public static Predicate<SSTableReader> pendingRepairPredicate(@Nonnull UUID sessionID)
     {
         return sstable -> sstable.getPendingRepair() != null && sessionID.equals(sstable.getPendingRepair());
-    }
-
-    public static Predicate<SSTableReader> nonSuspectAndNotInPredicate(Set<SSTableReader> compacting)
-    {
-        return sstable -> !sstable.isMarkedSuspect() && !compacting.contains(sstable);
     }
 
     public LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> ssTableReaders, OperationType operationType)

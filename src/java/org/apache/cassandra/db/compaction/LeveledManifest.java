@@ -27,7 +27,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 
 import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.db.lifecycle.Tracker;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 
@@ -35,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -88,14 +86,14 @@ public class LeveledManifest
         compactionCounter = new int[MAX_LEVEL_COUNT];
     }
 
-    public static LeveledManifest create(ColumnFamilyStore cfs, int maxSSTableSize, int fanoutSize, List<SSTableReader> sstables)
+    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, List<SSTableReader> sstables)
     {
-        return create(cfs, maxSSTableSize, fanoutSize, sstables, new SizeTieredCompactionStrategyOptions());
+        return create(realm, maxSSTableSize, fanoutSize, sstables, new SizeTieredCompactionStrategyOptions());
     }
 
-    public static LeveledManifest create(ColumnFamilyStore cfs, int maxSSTableSize, int fanoutSize, Iterable<SSTableReader> sstables, SizeTieredCompactionStrategyOptions options)
+    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, Iterable<SSTableReader> sstables, SizeTieredCompactionStrategyOptions options)
     {
-        LeveledManifest manifest = new LeveledManifest(cfs, maxSSTableSize, fanoutSize, options);
+        LeveledManifest manifest = new LeveledManifest(realm, maxSSTableSize, fanoutSize, options);
 
         // ensure all SSTables are in the manifest
         manifest.addSSTables(sstables);

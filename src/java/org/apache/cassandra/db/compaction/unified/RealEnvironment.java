@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction.unified;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.cache.ChunkCache;
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.schema.TableMetadataRef;

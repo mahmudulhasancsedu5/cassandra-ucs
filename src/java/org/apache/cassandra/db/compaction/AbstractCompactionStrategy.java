@@ -35,7 +35,6 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
-import org.apache.cassandra.db.lifecycle.Tracker;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -47,8 +46,6 @@ import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.SimpleSSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-
-import static org.apache.cassandra.db.ColumnFamilyStore.nonSuspectAndNotInPredicate;
 
 abstract class AbstractCompactionStrategy implements CompactionStrategy
 {
@@ -81,7 +78,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     protected AbstractCompactionStrategy(CompactionStrategyFactory factory, BackgroundCompactions backgroundCompactions, Map<String, String> options)
     {
         assert factory != null;
-        this.realm = factory.getCfs();
+        this.realm = factory.getRealm();
         this.compactionLogger = factory.getCompactionLogger();
         this.options = new CompactionStrategyOptions(getClass(), options, false);
         this.directories = realm.getDirectories();
@@ -267,7 +264,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
 
     public static Iterable<SSTableReader> nonSuspectAndNotIn(Iterable<SSTableReader> sstables, Set<SSTableReader> compacting)
     {
-        return Iterables.filter(sstables, nonSuspectAndNotInPredicate(compacting));
+        return Iterables.filter(sstables, x -> !x.isMarkedSuspect() && !compacting.contains(x));
     }
 
     @Override

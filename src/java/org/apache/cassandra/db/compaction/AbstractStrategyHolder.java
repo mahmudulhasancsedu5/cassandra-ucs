@@ -28,7 +28,6 @@ import java.util.function.Supplier;
 
 import com.google.common.base.Preconditions;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.dht.Range;
@@ -128,14 +127,14 @@ public abstract class AbstractStrategyHolder
         }
     }
 
-    protected final ColumnFamilyStore cfs;
+    protected final CompactionRealm realm;
     protected final CompactionStrategyFactory strategyFactory;
     final DestinationRouter router;
     private int numTokenPartitions = -1;
 
-    AbstractStrategyHolder(ColumnFamilyStore cfs, CompactionStrategyFactory strategyFactory, DestinationRouter router)
+    AbstractStrategyHolder(CompactionRealm realm, CompactionStrategyFactory strategyFactory, DestinationRouter router)
     {
-        this.cfs = cfs;
+        this.realm = realm;
         this.strategyFactory = strategyFactory;
         this.router = router;
     }

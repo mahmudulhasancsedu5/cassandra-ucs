@@ -75,7 +75,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
     public UnifiedCompactionStrategy(CompactionStrategyFactory factory, BackgroundCompactions backgroundCompactions, Map<String, String> options)
     {
-        this(factory, backgroundCompactions, options, Controller.fromOptions(factory.getCfs(), options));
+        this(factory, backgroundCompactions, options, Controller.fromOptions(factory.getRealm(), options));
     }
 
     public UnifiedCompactionStrategy(CompactionStrategyFactory factory, BackgroundCompactions backgroundCompactions, Controller controller)
@@ -92,7 +92,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     @VisibleForTesting
     public UnifiedCompactionStrategy(CompactionStrategyFactory factory, Controller controller)
     {
-        this(factory, new BackgroundCompactions(factory.getCfs()), new HashMap<>(), controller);
+        this(factory, new BackgroundCompactions(factory.getRealm()), new HashMap<>(), controller);
     }
 
     public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException

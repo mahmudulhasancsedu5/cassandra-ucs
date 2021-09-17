@@ -37,7 +37,6 @@ import com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -60,7 +59,7 @@ class PendingRepairManager
 {
     private static final Logger logger = LoggerFactory.getLogger(PendingRepairManager.class);
 
-    private final ColumnFamilyStore cfs;
+    private final CompactionRealm realm;
     private final CompactionStrategyFactory strategyFactory;
     private final CompactionParams params;
     private final boolean isTransient;
@@ -77,9 +76,9 @@ class PendingRepairManager
         }
     }
 
-    PendingRepairManager(ColumnFamilyStore cfs, CompactionStrategyFactory strategyFactory, CompactionParams params, boolean isTransient)
+    PendingRepairManager(CompactionRealm realm, CompactionStrategyFactory strategyFactory, CompactionParams params, boolean isTransient)
     {
-        this.cfs = cfs;
+        this.realm = realm;
         this.strategyFactory = strategyFactory;
         this.params = params;
         this.isTransient = isTransient;
@@ -114,7 +113,7 @@ class PendingRepairManager
 
                 if (strategy == null)
                 {
-                    logger.debug("Creating {}.{} compaction strategy for pending repair: {}", cfs.metadata.keyspace, cfs.metadata.name, id);
+                    logger.debug("Creating {}.{} compaction strategy for pending repair: {}", realm.getKeyspaceName(), realm.getTableName(), id);
                     strategy = strategyFactory.createLegacyStrategy(params);
                     strategies = mapBuilder().putAll(strategies).put(id, strategy).build();
                 }
@@ -141,7 +140,7 @@ class PendingRepairManager
         if (!strategies.containsKey(sessionID) || !strategies.get(sessionID).getSSTables().isEmpty())
             return;
 
-        logger.debug("Removing compaction strategy for pending repair {} on  {}.{}", sessionID, cfs.metadata.keyspace, cfs.metadata.name);
+        logger.debug("Removing compaction strategy for pending repair {} on  {}.{}", sessionID, realm.getKeyspaceName(), realm.getTableName());
         strategies = ImmutableMap.copyOf(Maps.filterKeys(strategies, k -> !k.equals(sessionID)));
     }
 
@@ -268,8 +267,8 @@ class PendingRepairManager
             return null;
         Set<SSTableReader> sstables = compactionStrategy.getSSTables();
         long repairedAt = ActiveRepairService.instance.consistent.local.getFinalSessionRepairedAt(sessionID);
-        LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.COMPACTION);
-        return txn == null ? null : new RepairFinishedCompactionTask(cfs, txn, sessionID, repairedAt, isTransient);
+        LifecycleTransaction txn = realm.tryModify(sstables, OperationType.COMPACTION);
+        return txn == null ? null : new RepairFinishedCompactionTask(realm, txn, sessionID, repairedAt, isTransient);
     }
 
     public CleanupTask releaseSessionData(Collection<UUID> sessionIDs)
@@ -282,7 +281,7 @@ class PendingRepairManager
                 tasks.add(Pair.create(session, getRepairFinishedCompactionTask(session)));
             }
         }
-        return new CleanupTask(cfs, tasks);
+        return new CleanupTask(realm, tasks);
     }
 
     synchronized int getNumPendingRepairFinishedTasks()

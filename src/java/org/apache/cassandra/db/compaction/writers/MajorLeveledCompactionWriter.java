@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction.writers;
 
 import java.util.Set;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;

@@ -49,7 +49,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
 {
     protected LegacyAbstractCompactionStrategy(CompactionStrategyFactory factory, Map<String, String> options)
     {
-        super(factory, new BackgroundCompactions(factory.getCfs()), options);
+        super(factory, new BackgroundCompactions(factory.getRealm()), options);
         assert factory != null;
     }
 

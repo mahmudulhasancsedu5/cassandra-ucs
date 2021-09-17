@@ -78,7 +78,7 @@ public interface CompactionStrategy extends CompactionObserver
     /**
      * @param gcBefore throw away tombstones older than this
      *
-     * @return a compaction task that should be run to compact this columnfamilystore
+     * @return a compaction task that should be run to compact this table
      * as much as possible.  Null if nothing to do.
      *
      * Is responsible for marking its sstables as compaction-pending.

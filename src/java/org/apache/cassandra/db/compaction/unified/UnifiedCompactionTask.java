@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction.unified;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.CompactionRealm;

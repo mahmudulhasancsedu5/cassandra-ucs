@@ -1313,7 +1313,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public static SSTableWriter createWriter(ColumnFamilyStore cfs,
+    public static SSTableWriter createWriter(CompactionRealm cfs,
                                              File compactionFileLocation,
                                              long expectedBloomFilterSize,
                                              long repairedAt,
@@ -1324,7 +1324,7 @@ public class CompactionManager implements CompactionManagerMBean
     {
         FileUtils.createDirectory(compactionFileLocation);
 
-        return SSTableWriter.create(cfs.metadata,
+        return SSTableWriter.create(cfs.metadataRef(),
                                     cfs.newSSTableDescriptor(compactionFileLocation),
                                     expectedBloomFilterSize,
                                     repairedAt,
@@ -1332,7 +1332,7 @@ public class CompactionManager implements CompactionManagerMBean
                                     isTransient,
                                     sstable.getSSTableLevel(),
                                     sstable.header,
-                                    cfs.indexManager.listIndexGroups(),
+                                    cfs.getIndexManager().listIndexGroups(),
                                     txn);
     }
 

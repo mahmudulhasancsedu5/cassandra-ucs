@@ -19,15 +19,20 @@
 package org.apache.cassandra.db.compaction;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Callable;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
+import com.google.common.collect.ImmutableList;
+
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.index.SecondaryIndexManager;
@@ -138,8 +143,9 @@ public interface CompactionRealm
     void invalidateCachedPartition(DecoratedKey key);
 
     LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
+
     Refs<SSTableReader> getAndReferenceOverlappingLiveSSTables(Iterable<SSTableReader> sstables);
-    ScannerList getScanners(Set<SSTableReader> actuallyCompact);
+    ScannerList getScanners(Set<SSTableReader> actuallyCompact);    // note: remains SSTableReader, they come from txn
 
     boolean isCompactionActive();
     CompactionParams getCompactionParams();
@@ -160,10 +166,17 @@ public interface CompactionRealm
     Iterable<SSTableReader> getNoncompactingSSTables();
     Iterable<SSTableReader> getNoncompactingSSTables(Iterable<SSTableReader> sstables);
     Set<SSTableReader> getLiveSSTables();
+    Iterable<SSTableReader> getSSTables(SSTableSet set);
 
     Descriptor newSSTableDescriptor(File locationForDisk);
 
+    void notifySSTableRepairedStatusChanged(Collection<SSTableReader> sstables);
     void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore);
 
     void snapshotWithoutMemtable(String snapshotId);
+
+    int mutateRepairedWithLock(Collection<SSTableReader> originals, long repairedAt, UUID pendingRepair, boolean isTransient) throws IOException;
+    void repairSessionCompleted(UUID sessionID);
+
+    <V> V runWithCompactionsDisabled(Callable<V> callable, boolean interruptValidation, boolean interruptViews);
 }

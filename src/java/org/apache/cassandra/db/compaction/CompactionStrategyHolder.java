@@ -26,7 +26,6 @@ import java.util.UUID;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.dht.Range;
@@ -45,9 +44,9 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     private final List<LegacyAbstractCompactionStrategy> strategies = new ArrayList<>();
     private final boolean isRepaired;
 
-    public CompactionStrategyHolder(ColumnFamilyStore cfs, CompactionStrategyFactory strategyFactory, DestinationRouter router, boolean isRepaired)
+    public CompactionStrategyHolder(CompactionRealm realm, CompactionStrategyFactory strategyFactory, DestinationRouter router, boolean isRepaired)
     {
-        super(cfs, strategyFactory, router);
+        super(realm, strategyFactory, router);
         this.isRepaired = isRepaired;
     }
 

@@ -45,16 +45,14 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
     private final UUID sessionID;
     private final long repairedAt;
     private final boolean isTransient;
-    private final ColumnFamilyStore cfs;
 
-    public RepairFinishedCompactionTask(ColumnFamilyStore cfs,
+    public RepairFinishedCompactionTask(CompactionRealm realm,
                                         LifecycleTransaction transaction,
                                         UUID sessionID,
                                         long repairedAt,
                                         boolean isTransient)
     {
-        super(cfs, transaction);
-        this.cfs = cfs;
+        super(realm, transaction);
         this.sessionID = sessionID;
         this.repairedAt = repairedAt;
         this.isTransient = isTransient;
@@ -81,13 +79,11 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
             else
             {
                 logger.info("Moving {} from pending to repaired with repaired at = {} and session id = {}", transaction.originals(), repairedAt, sessionID);
-                CompactionStrategyContainer compactionStrategyContainer = cfs.getCompactionStrategyContainer();
-                cfs.mutateRepaired(compactionStrategyContainer.getWriteLock(),
-                                   transaction.originals(),
-                                   repairedAt,
-                                   ActiveRepairService.NO_PENDING_REPAIR,
-                                   false);
-                compactionStrategyContainer.repairSessionCompleted(sessionID);
+                realm.mutateRepairedWithLock(transaction.originals(),
+                                             repairedAt,
+                                             ActiveRepairService.NO_PENDING_REPAIR,
+                                             false);
+                realm.repairSessionCompleted(sessionID);
             }
             completed = true;
         }
@@ -106,7 +102,7 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
             }
             if (completed)
             {
-                cfs.getCompactionStrategyContainer().repairSessionCompleted(sessionID);
+                realm.repairSessionCompleted(sessionID);
             }
         }
     }
