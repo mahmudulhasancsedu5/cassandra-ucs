@@ -79,7 +79,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
                                                        boolean isMaximal,
                                                        boolean splitOutput)
     {
-        return new TimeWindowCompactionTask(cfs, txn, gcBefore, ignoreOverlaps(), this);
+        return new TimeWindowCompactionTask(realm, txn, gcBefore, ignoreOverlaps(), this);
     }
 
     /**
@@ -90,10 +90,10 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
     @Override
     protected synchronized CompactionAggregate getNextBackgroundAggregate(final int gcBefore)
     {
-        if (Iterables.isEmpty(dataTracker.getView().select(SSTableSet.LIVE)))
+        if (Iterables.isEmpty(realm.getLiveSSTables()))
             return null;
 
-        Set<SSTableReader> compacting = dataTracker.getCompacting();
+        Set<SSTableReader> compacting = realm.getCompactingSSTables();
         Set<CompactionSSTable> uncompacting;
         synchronized (sstables)
         {
@@ -106,11 +106,11 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
         if (System.currentTimeMillis() - lastExpiredCheck > twcsOptions.expiredSSTableCheckFrequency)
         {
             logger.debug("TWCS expired check sufficiently far in the past, checking for fully expired SSTables");
-            expired = CompactionController.getFullyExpiredSSTables(cfs,
+            expired = CompactionController.getFullyExpiredSSTables(realm,
                                                                    uncompacting,
                                                                    twcsOptions.ignoreOverlaps
                                                                        ? Collections.emptySet()
-                                                                       : cfs.getOverlappingLiveSSTables(uncompacting),
+                                                                       : realm.getOverlappingLiveSSTables(uncompacting),
                                                                    gcBefore,
                                                                    twcsOptions.ignoreOverlaps);
             lastExpiredCheck = System.currentTimeMillis();
@@ -164,8 +164,8 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
         }
 
         return getBucketAggregates(buckets,
-                                   cfs.getMinimumCompactionThreshold(),
-                                   cfs.getMaximumCompactionThreshold(),
+                                   realm.getMinimumCompactionThreshold(),
+                                   realm.getMaximumCompactionThreshold(),
                                    twcsOptions.stcsOptions,
                                    this.highestWindowSeen);
     }
@@ -408,7 +408,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
     public String toString()
     {
         return String.format("TimeWindowCompactionStrategy[%s/%s]",
-                cfs.getMinimumCompactionThreshold(),
-                cfs.getMaximumCompactionThreshold());
+                             realm.getMinimumCompactionThreshold(),
+                             realm.getMaximumCompactionThreshold());
     }
 }

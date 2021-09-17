@@ -45,6 +45,7 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
     private final UUID sessionID;
     private final long repairedAt;
     private final boolean isTransient;
+    private final ColumnFamilyStore cfs;
 
     public RepairFinishedCompactionTask(ColumnFamilyStore cfs,
                                         LifecycleTransaction transaction,
@@ -53,6 +54,7 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
                                         boolean isTransient)
     {
         super(cfs, transaction);
+        this.cfs = cfs;
         this.sessionID = sessionID;
         this.repairedAt = repairedAt;
         this.isTransient = isTransient;
@@ -109,7 +111,7 @@ public class RepairFinishedCompactionTask extends AbstractCompactionTask
         }
     }
 
-    public CompactionAwareWriter getCompactionAwareWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables)
+    public CompactionAwareWriter getCompactionAwareWriter(CompactionRealm realm, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables)
     {
         throw new UnsupportedOperationException();
     }

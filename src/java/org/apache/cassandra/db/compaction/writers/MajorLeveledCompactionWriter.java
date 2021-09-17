@@ -23,6 +23,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.db.SerializationHeader;
@@ -43,26 +44,26 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     private final long keysPerSSTable;
     private final int levelFanoutSize;
 
-    public MajorLeveledCompactionWriter(ColumnFamilyStore cfs,
+    public MajorLeveledCompactionWriter(CompactionRealm realm,
                                         Directories directories,
                                         LifecycleTransaction txn,
                                         Set<SSTableReader> nonExpiredSSTables,
                                         long maxSSTableSize)
     {
-        this(cfs, directories, txn, nonExpiredSSTables, maxSSTableSize, false);
+        this(realm, directories, txn, nonExpiredSSTables, maxSSTableSize, false);
     }
 
     @SuppressWarnings("resource")
-    public MajorLeveledCompactionWriter(ColumnFamilyStore cfs,
+    public MajorLeveledCompactionWriter(CompactionRealm realm,
                                         Directories directories,
                                         LifecycleTransaction txn,
                                         Set<SSTableReader> nonExpiredSSTables,
                                         long maxSSTableSize,
                                         boolean keepOriginals)
     {
-        super(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
+        super(realm, directories, txn, nonExpiredSSTables, keepOriginals);
         this.maxSSTableSize = maxSSTableSize;
-        this.levelFanoutSize = cfs.getLevelFanoutSize();
+        this.levelFanoutSize = realm.getLevelFanoutSize();
         long estimatedSSTables = Math.max(1, CompactionSSTable.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
         keysPerSSTable = estimatedTotalKeys / estimatedSSTables;
     }
@@ -105,15 +106,15 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     @SuppressWarnings("resource")
     protected SSTableWriter sstableWriter(Directories.DataDirectory directory, PartitionPosition diskBoundary)
     {
-        return SSTableWriter.create(cfs.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
+        return SSTableWriter.create(realm.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
                                     keysPerSSTable,
                                     minRepairedAt,
                                     pendingRepair,
                                     isTransient,
-                                    cfs.metadata,
-                                    new MetadataCollector(txn.originals(), cfs.metadata().comparator, currentLevel),
-                                    SerializationHeader.make(cfs.metadata(), txn.originals()),
-                                    cfs.indexManager.listIndexGroups(),
+                                    realm.metadataRef(),
+                                    new MetadataCollector(txn.originals(), realm.metadata().comparator, currentLevel),
+                                    SerializationHeader.make(realm.metadata(), txn.originals()),
+                                    realm.getIndexManager().listIndexGroups(),
                                     txn);
     }
 }

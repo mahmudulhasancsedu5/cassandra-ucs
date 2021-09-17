@@ -87,8 +87,10 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SSTableUniqueIdentifier;
 import org.apache.cassandra.io.sstable.SSTableUniqueIdentifierFactory;
+import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.Sampler;
 import org.apache.cassandra.metrics.Sampler.Sample;
@@ -1462,6 +1464,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         }
     }
 
+    public ScannerList getScanners(Set<SSTableReader> toCompact)
+    {
+        return getCompactionStrategy().getScanners(toCompact);
+    }
+
     /*
      * Called after a BinaryMemtable flushes its in-memory data, or we add a file
      * via bootstrap. This information is cached in the ColumnFamilyStore.
@@ -1518,24 +1525,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             expectedFileSize *= compressionRatio;
 
         return expectedFileSize;
-    }
-
-    /*
-     *  Find the maximum size file in the list .
-     */
-    public SSTableReader getMaxSizeFile(Iterable<SSTableReader> sstables)
-    {
-        long maxSize = 0L;
-        SSTableReader maxFile = null;
-        for (SSTableReader sstable : sstables)
-        {
-            if (sstable.onDiskLength() > maxSize)
-            {
-                maxSize = sstable.onDiskLength();
-                maxFile = sstable;
-            }
-        }
-        return maxFile;
     }
 
     public CompactionManager.AllSSTableOpStatus forceCleanup(int jobs) throws ExecutionException, InterruptedException
@@ -1625,6 +1614,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             CompactionManager.instance.submitBackground(this);
     }
 
+    public void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore)
+    {
+        getTracker().notifySSTableMetadataChanged(sstable, metadataBefore);
+    }
+
     public boolean isValid()
     {
         return valid;
@@ -1653,7 +1647,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return data.getNoncompacting();
     }
 
-    public Iterable<? extends SSTableReader> getNoncompactingSSTables(Iterable<? extends SSTableReader> candidates)
+    public Iterable<SSTableReader> getNoncompactingSSTables(Iterable<SSTableReader> candidates)
     {
         return data.getNoncompacting(candidates);
     }
@@ -2697,21 +2691,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return Boolean.parseBoolean(params.options().get(CompactionStrategyOptions.ONLY_PURGE_REPAIRED_TOMBSTONES));
     }
 
-    public void addLiveSSTables(Collection<? super SSTableReader> sstables)
-    {
-        sstables.addAll(data.getLiveSSTables());
-    }
-
-    public void addCompactingSSTables(Collection<? super SSTableReader> sstables)
-    {
-        sstables.addAll(data.getCompacting());
-    }
-
-    public void addNoncompactingSSTables(Collection<? super SSTableReader> sstables)
-    {
-        Iterables.addAll(sstables, data.getNoncompacting());
-    }
-
     public void setCrcCheckChance(double crcCheckChance)
     {
         try
@@ -2779,6 +2758,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     }
 
     // End JMX get/set.
+
+    public boolean isCompactionActive()
+    {
+        return getCompactionStrategyContainer().isActive();
+    }
+
+    public long getMaxSSTableBytes()
+    {
+        return getCompactionStrategy().getMaxSSTableBytes();
+    }
 
     public int getMeanEstimatedCellPerPartitionCount()
     {

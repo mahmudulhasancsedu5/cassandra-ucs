@@ -171,7 +171,7 @@ public class View
     }
 
 
-    public Iterable<? extends SSTableReader> getNoncompacting(Iterable<? extends SSTableReader> candidates)
+    public Iterable<SSTableReader> getNoncompacting(Iterable<SSTableReader> candidates)
     {
         return filter(candidates, (Predicate<SSTableReader>) sstable -> !compacting.contains(sstable));
     }

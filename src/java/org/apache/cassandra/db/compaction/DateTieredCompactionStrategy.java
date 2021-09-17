@@ -88,7 +88,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
             if (sstables.isEmpty())
                 return ImmutableList.of();
 
-            uncompacting = ImmutableSet.copyOf(cfs.getNoncompactingSSTables(sstables));
+            uncompacting = ImmutableSet.copyOf(realm.getNoncompactingSSTables(sstables));
         }
 
         Set<CompactionSSTable> expired = Collections.emptySet();
@@ -96,9 +96,9 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         if (System.currentTimeMillis() - lastExpiredCheck > dtOptions.expiredSSTableCheckFrequency)
         {
             // Find fully expired SSTables. Those will be included no matter what.
-            expired = CompactionController.getFullyExpiredSSTables(cfs,
+            expired = CompactionController.getFullyExpiredSSTables(realm,
                                                                    uncompacting,
-                                                                   cfs.getOverlappingLiveSSTables(uncompacting),
+                                                                   realm.getOverlappingLiveSSTables(uncompacting),
                                                                    gcBefore);
             lastExpiredCheck = System.currentTimeMillis();
         }
@@ -115,7 +115,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
     private List<CompactionSSTable> getNextNonExpiredSSTables(Iterable<CompactionSSTable> nonExpiringSSTables, final int gcBefore)
     {
-        int base = cfs.getMinimumCompactionThreshold();
+        int base = realm.getMinimumCompactionThreshold();
         long now = getNow();
         List<CompactionSSTable> mostInteresting = getCompactionCandidates(nonExpiringSSTables, now, base);
         if (mostInteresting != null)
@@ -145,12 +145,12 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         logger.debug("Compaction buckets are {}", buckets);
         updateEstimatedCompactionsByTasks(buckets);
         List<CompactionSSTable> mostInteresting = newestBucket(buckets,
-                                                           cfs.getMinimumCompactionThreshold(),
-                                                           cfs.getMaximumCompactionThreshold(),
-                                                           now,
-                                                           dtOptions.baseTime,
-                                                           dtOptions.maxWindowSize,
-                                                           stcsOptions);
+                                                               realm.getMinimumCompactionThreshold(),
+                                                               realm.getMaximumCompactionThreshold(),
+                                                               now,
+                                                               dtOptions.baseTime,
+                                                               dtOptions.maxWindowSize,
+                                                               stcsOptions);
         if (!mostInteresting.isEmpty())
             return mostInteresting;
         return null;
@@ -165,7 +165,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     {
         // no need to convert to collection if had an Iterables.max(), but not present in standard toolkit, and not worth adding
         List<CompactionSSTable> list = new ArrayList<>();
-        Iterables.addAll(list, cfs.getSSTables(SSTableSet.LIVE));
+        Iterables.addAll(list, realm.getLiveSSTables());
         if (list.isEmpty())
             return 0;
         return Collections.max(list, (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp()))
@@ -363,9 +363,9 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         int n = 0;
         for (List<CompactionSSTable> bucket : tasks)
         {
-            for (List<CompactionSSTable> stcsBucket : getSTCSBuckets(bucket, stcsOptions, cfs.getMinimumCompactionThreshold(), cfs.getMaximumCompactionThreshold()))
-                if (stcsBucket.size() >= cfs.getMinimumCompactionThreshold())
-                    n += Math.ceil((double)stcsBucket.size() / cfs.getMaximumCompactionThreshold());
+            for (List<CompactionSSTable> stcsBucket : getSTCSBuckets(bucket, stcsOptions, realm.getMinimumCompactionThreshold(), realm.getMaximumCompactionThreshold()))
+                if (stcsBucket.size() >= realm.getMinimumCompactionThreshold())
+                    n += Math.ceil((double)stcsBucket.size() / realm.getMaximumCompactionThreshold());
         }
         estimatedRemainingTasks = n;
         getCompactionLogger().pending(this, n);
@@ -460,7 +460,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     public String toString()
     {
         return String.format("DateTieredCompactionStrategy[%s/%s]",
-                cfs.getMinimumCompactionThreshold(),
-                cfs.getMaximumCompactionThreshold());
+                             realm.getMinimumCompactionThreshold(),
+                             realm.getMaximumCompactionThreshold());
     }
 }

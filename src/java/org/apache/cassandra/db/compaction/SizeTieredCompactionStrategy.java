@@ -69,13 +69,13 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     protected synchronized CompactionAggregate getNextBackgroundAggregate(final int gcBefore)
     {
         // make local copies so they can't be changed out from under us mid-method
-        int minThreshold = cfs.getMinimumCompactionThreshold();
-        int maxThreshold = cfs.getMaximumCompactionThreshold();
+        int minThreshold = realm.getMinimumCompactionThreshold();
+        int maxThreshold = realm.getMaximumCompactionThreshold();
 
         List<SSTableReader> candidates = new ArrayList<>();
         synchronized (sstables)
         {
-            Iterables.addAll(candidates, nonSuspectAndNotIn(sstables, dataTracker.getCompacting()));
+            Iterables.addAll(candidates, nonSuspectAndNotIn(sstables, realm.getCompactingSSTables()));
         }
 
         SizeTieredBuckets sizeTieredBuckets = new SizeTieredBuckets(candidates, sizeTieredOptions, minThreshold, maxThreshold);
@@ -334,8 +334,8 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     protected AbstractCompactionTask createCompactionTask(final int gcBefore, LifecycleTransaction txn, boolean isMaximal, boolean splitOutput)
     {
         return isMaximal && splitOutput
-               ? new SplittingCompactionTask(cfs, txn, gcBefore, this)
-               : new CompactionTask(cfs, txn, gcBefore, false, this);
+               ? new SplittingCompactionTask(realm, txn, gcBefore, this)
+               : new CompactionTask(realm, txn, gcBefore, false, this);
     }
 
     public long getMaxSSTableBytes()
@@ -401,24 +401,24 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     public String toString()
     {
         return String.format("SizeTieredCompactionStrategy[%s/%s]",
-            cfs.getMinimumCompactionThreshold(),
-            cfs.getMaximumCompactionThreshold());
+                             realm.getMinimumCompactionThreshold(),
+                             realm.getMaximumCompactionThreshold());
     }
 
     private static class SplittingCompactionTask extends CompactionTask
     {
-        public SplittingCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore, CompactionStrategy strategy)
+        public SplittingCompactionTask(CompactionRealm realm, LifecycleTransaction txn, int gcBefore, CompactionStrategy strategy)
         {
-            super(cfs, txn, gcBefore, false, strategy);
+            super(realm, txn, gcBefore, false, strategy);
         }
 
         @Override
-        public CompactionAwareWriter getCompactionAwareWriter(ColumnFamilyStore cfs,
+        public CompactionAwareWriter getCompactionAwareWriter(CompactionRealm realm,
                                                               Directories directories,
                                                               LifecycleTransaction txn,
                                                               Set<SSTableReader> nonExpiredSSTables)
         {
-            return new SplittingSizeTieredCompactionWriter(cfs, directories, txn, nonExpiredSSTables);
+            return new SplittingSizeTieredCompactionWriter(realm, directories, txn, nonExpiredSSTables);
         }
     }
 }

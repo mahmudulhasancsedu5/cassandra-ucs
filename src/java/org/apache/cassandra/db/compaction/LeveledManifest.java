@@ -66,8 +66,7 @@ public class LeveledManifest
      */
     private static final int NO_COMPACTION_LIMIT = 25;
 
-    private final ColumnFamilyStore cfs;
-    private final Tracker dataTracker;
+    private final CompactionRealm realm;
 
     private final LeveledGenerations generations;
 
@@ -77,10 +76,9 @@ public class LeveledManifest
     private final int [] compactionCounter;
     private final int levelFanoutSize;
 
-    LeveledManifest(ColumnFamilyStore cfs, int maxSSTableSizeInMB, int fanoutSize, SizeTieredCompactionStrategyOptions options)
+    LeveledManifest(CompactionRealm realm, int maxSSTableSizeInMB, int fanoutSize, SizeTieredCompactionStrategyOptions options)
     {
-        this.cfs = cfs;
-        this.dataTracker = cfs.getTracker();
+        this.realm = realm;
         this.maxSSTableSizeInBytes = maxSSTableSizeInMB * 1024L * 1024L;
         this.options = options;
         this.levelFanoutSize = fanoutSize;
@@ -168,7 +166,7 @@ public class LeveledManifest
     public synchronized void removeDeadSSTables()
     {
         int removed = 0;
-        Set<SSTableReader> liveSet = cfs.getLiveSSTables();
+        Set<SSTableReader> liveSet = realm.getLiveSSTables();
 
         for (int i = 0; i < generations.levelCount(); i++)
         {
@@ -275,7 +273,7 @@ public class LeveledManifest
                 continue; // mostly this just avoids polluting the debug log with zero scores
             // we want to calculate score excluding compacting ones
             Set<SSTableReader> sstablesInLevel = Sets.newHashSet(sstables);
-            Set<SSTableReader> remaining = Sets.difference(sstablesInLevel, dataTracker.getCompacting());
+            Set<SSTableReader> remaining = Sets.difference(sstablesInLevel, realm.getCompactingSSTables());
             long remainingBytesForLevel = CompactionSSTable.getTotalBytes(remaining);
             long maxBytesForLevel = maxBytesForLevel(i, maxSSTableSizeInBytes);
             double score = (double) remainingBytesForLevel / (double) maxBytesForLevel;
@@ -353,21 +351,21 @@ public class LeveledManifest
         Set<SSTableReader> sstables = getLevel(0);
         double score = (double) CompactionSSTable.getTotalBytes(sstables) / (double) maxBytesForLevel(0, maxSSTableSizeInBytes);
         int remainingSSTables = sstables.size() - compaction.sstables.size();
-        int pendingTasks = remainingSSTables > cfs.getMinimumCompactionThreshold()
-                           ? (int) Math.ceil(remainingSSTables / cfs.getMaximumCompactionThreshold())
+        int pendingTasks = remainingSSTables > realm.getMinimumCompactionThreshold()
+                           ? (int) Math.ceil(remainingSSTables / realm.getMaximumCompactionThreshold())
                            : 0;
         return CompactionAggregate.createLeveledForSTCS(sstables, compaction, pendingTasks, score, levelFanoutSize);
     }
 
     private CompactionPick getSSTablesForSTCS(Collection<SSTableReader> sstables)
     {
-        Iterable<? extends SSTableReader> candidates = dataTracker.getNoncompacting(sstables);
+        Iterable<? extends SSTableReader> candidates = realm.getNoncompactingSSTables(sstables);
 
         SizeTieredCompactionStrategy.SizeTieredBuckets sizeTieredBuckets;
         sizeTieredBuckets = new SizeTieredCompactionStrategy.SizeTieredBuckets(candidates,
                                                                                options,
-                                                                               cfs.getMinimumCompactionThreshold(),
-                                                                               cfs.getMaximumCompactionThreshold());
+                                                                               realm.getMinimumCompactionThreshold(),
+                                                                               realm.getMaximumCompactionThreshold());
         sizeTieredBuckets.aggregate();
 
         return CompactionAggregate.getSelected(sizeTieredBuckets.getAggregates());
@@ -418,7 +416,7 @@ public class LeveledManifest
                     }
                     if (min == null || max == null || min.equals(max)) // single partition sstables - we cannot include a high level sstable.
                         return candidates;
-                    Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
+                    Set<SSTableReader> compacting = realm.getCompactingSSTables();
                     Range<PartitionPosition> boundaries = new Range<>(min, max);
                     for (SSTableReader sstable : generations.get(i))
                     {
@@ -552,7 +550,7 @@ public class LeveledManifest
         assert !generations.get(level).isEmpty();
         logger.trace("Choosing candidates for L{}", level);
 
-        final Set<SSTableReader> compacting = dataTracker.getCompacting();
+        final Set<SSTableReader> compacting = realm.getCompactingSSTables();
 
         if (level == 0)
         {
@@ -600,10 +598,10 @@ public class LeveledManifest
                     remaining.remove(newCandidate);
                 }
 
-                if (candidates.size() > cfs.getMaximumCompactionThreshold())
+                if (candidates.size() > realm.getMaximumCompactionThreshold())
                 {
                     // limit to only the cfs.getMaximumCompactionThreshold() oldest candidates
-                    candidates = new HashSet<>(ageSortedSSTables(candidates).subList(0, cfs.getMaximumCompactionThreshold()));
+                    candidates = new HashSet<>(ageSortedSSTables(candidates).subList(0, realm.getMaximumCompactionThreshold()));
                     break;
                 }
             }
@@ -650,7 +648,7 @@ public class LeveledManifest
     {
         Set<SSTableReader> sstables = new HashSet<>();
         Set<SSTableReader> levelSSTables = new HashSet<>(generations.get(0));
-        for (SSTableReader sstable : dataTracker.getCompacting())
+        for (SSTableReader sstable : realm.getCompactingSSTables())
         {
             if (levelSSTables.contains(sstable))
                 sstables.add(sstable);
@@ -718,7 +716,7 @@ public class LeveledManifest
             ret.add(CompactionAggregate.createLeveled(sstables, pendingTasks, maxSSTableSizeInBytes, i, score, levelFanoutSize));
         }
 
-        logger.trace("Estimating {} compactions to do for {}", ret.size(), cfs.metadata());
+        logger.trace("Estimating {} compactions to do for {}", ret.size(), realm.metadata());
         return ret;
     }
 
@@ -735,11 +733,11 @@ public class LeveledManifest
         if (sstables.isEmpty())
             return 0;
 
-        final Set<SSTableReader> compacting = dataTracker.getCompacting();
+        final Set<SSTableReader> compacting = realm.getCompactingSSTables();
         final Set<SSTableReader> remaining = Sets.difference(Sets.newHashSet(sstables), compacting);
 
         if (level == 0 && !DatabaseDescriptor.getDisableSTCSInL0() && remaining.size() > MAX_COMPACTING_L0)
-            return remaining.size() / cfs.getMaximumCompactionThreshold();
+            return remaining.size() / realm.getMaximumCompactionThreshold();
 
         // If there is 1 byte over TBL - (MBL * 1.001), there is still a task left, so we need to round up.
         return Math.toIntExact((long) Math.ceil((Math.max(0L, CompactionSSTable.getTotalBytes(remaining) -

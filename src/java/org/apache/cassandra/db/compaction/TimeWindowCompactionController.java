@@ -33,9 +33,9 @@ public class TimeWindowCompactionController extends CompactionController
 
     private final boolean ignoreOverlaps;
 
-    public TimeWindowCompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, boolean ignoreOverlaps)
+    public TimeWindowCompactionController(CompactionRealm realm, Set<SSTableReader> compacting, int gcBefore, boolean ignoreOverlaps)
     {
-        super(cfs, compacting, gcBefore);
+        super(realm, compacting, gcBefore);
         this.ignoreOverlaps = ignoreOverlaps;
         if (ignoreOverlaps)
             logger.warn("You are running with sstables overlapping checks disabled, it can result in loss of data");

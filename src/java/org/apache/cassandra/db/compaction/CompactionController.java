@@ -61,19 +61,19 @@ public class CompactionController extends AbstractCompactionController
     private final long minTimestamp;
     final Map<SSTableReader, FileDataInput> openDataFiles = new HashMap<>();
 
-    protected CompactionController(ColumnFamilyStore cfs, int maxValue)
+    protected CompactionController(CompactionRealm realm, int maxValue)
     {
-        this(cfs, null, maxValue);
+        this(realm, null, maxValue);
     }
 
-    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore)
+    public CompactionController(CompactionRealm realm, Set<SSTableReader> compacting, int gcBefore)
     {
-        this(cfs, compacting, gcBefore, null, cfs.getCompactionParams().tombstoneOption());
+        this(realm, compacting, gcBefore, null, realm.getCompactionParams().tombstoneOption());
     }
 
-    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, TombstoneOption tombstoneOption)
+    public CompactionController(CompactionRealm realm, Set<SSTableReader> compacting, int gcBefore, RateLimiter limiter, TombstoneOption tombstoneOption)
     {
-        super(cfs, gcBefore, tombstoneOption);
+        super(realm, gcBefore, tombstoneOption);
         this.compacting = compacting;
         this.limiter = limiter;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
@@ -100,9 +100,9 @@ public class CompactionController extends AbstractCompactionController
             return;
         }
 
-        if (cfs.getNeverPurgeTombstones())
+        if (realm.getNeverPurgeTombstones())
         {
-            logger.debug("not refreshing overlaps for {}.{} - neverPurgeTombstones is enabled", cfs.keyspace.getName(), cfs.getTableName());
+            logger.debug("not refreshing overlaps for {}.{} - neverPurgeTombstones is enabled", realm.getKeyspaceName(), realm.getTableName());
             return;
         }
 
@@ -118,7 +118,7 @@ public class CompactionController extends AbstractCompactionController
 
     private void refreshOverlaps()
     {
-        if (NEVER_PURGE_TOMBSTONES || cfs.getNeverPurgeTombstones())
+        if (NEVER_PURGE_TOMBSTONES || realm.getNeverPurgeTombstones())
             return;
 
         if (this.overlappingSSTables != null)
@@ -127,13 +127,13 @@ public class CompactionController extends AbstractCompactionController
         if (compacting == null || ignoreOverlaps())
             overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
         else
-            overlappingSSTables = cfs.getAndReferenceOverlappingLiveSSTables(compacting);
+            overlappingSSTables = realm.getAndReferenceOverlappingLiveSSTables(compacting);
         this.overlapIterator = new OverlapIterator<>(buildIntervals(overlappingSSTables));
     }
 
     public Set<SSTableReader> getFullyExpiredSSTables()
     {
-        return getFullyExpiredSSTables(cfs, compacting, overlappingSSTables, gcBefore, ignoreOverlaps());
+        return getFullyExpiredSSTables(realm, compacting, overlappingSSTables, gcBefore, ignoreOverlaps());
     }
 
     /**
@@ -146,7 +146,7 @@ public class CompactionController extends AbstractCompactionController
      *    - if not droppable, remove from candidates
      * 4. return candidates.
      *
-     * @param cfStore
+     * @param realm
      * @param compacting we take the drop-candidates from this set, it is usually the sstables included in the compaction
      * @param overlapping the sstables that overlap the ones in compacting.
      * @param gcBefore
@@ -154,18 +154,18 @@ public class CompactionController extends AbstractCompactionController
      * @return
      */
     public static <SSTABLE extends CompactionSSTable>
-    Set<SSTABLE> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
+    Set<SSTABLE> getFullyExpiredSSTables(CompactionRealm realm,
                                          Iterable<SSTABLE> compacting,
                                          Iterable<SSTABLE> overlapping,
                                          int gcBefore,
                                          boolean ignoreOverlaps)
     {
-        logger.trace("Checking droppable sstables in {}", cfStore);
+        logger.trace("Checking droppable sstables in {}", realm);
 
-        if (NEVER_PURGE_TOMBSTONES || compacting == null || cfStore.getNeverPurgeTombstones())
+        if (NEVER_PURGE_TOMBSTONES || compacting == null || realm.getNeverPurgeTombstones())
             return Collections.<SSTABLE>emptySet();
 
-        if (cfStore.onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTABLE::isRepaired))
+        if (realm.onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTABLE::isRepaired))
             return Collections.emptySet();
 
         if (ignoreOverlaps)
@@ -202,7 +202,7 @@ public class CompactionController extends AbstractCompactionController
                 minTimestamp = Math.min(minTimestamp, candidate.getMinTimestamp());
         }
 
-        for (Memtable memtable : cfStore.getTracker().getView().getAllMemtables())
+        for (Memtable memtable : realm.getAllMemtables())
             minTimestamp = Math.min(minTimestamp, memtable.getMinTimestamp());
 
         // At this point, minTimestamp denotes the lowest timestamp of any relevant
@@ -228,12 +228,12 @@ public class CompactionController extends AbstractCompactionController
     }
 
     public static <SSTABLE extends CompactionSSTable>
-    Set<SSTABLE> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
+    Set<SSTABLE> getFullyExpiredSSTables(CompactionRealm realm,
                                          Iterable<SSTABLE> compacting,
                                          Iterable<SSTABLE> overlapping,
                                          int gcBefore)
     {
-        return getFullyExpiredSSTables(cfStore, compacting, overlapping, gcBefore, false);
+        return getFullyExpiredSSTables(realm, compacting, overlapping, gcBefore, false);
     }
 
     /**
@@ -246,12 +246,12 @@ public class CompactionController extends AbstractCompactionController
     @Override
     public LongPredicate getPurgeEvaluator(DecoratedKey key)
     {
-        if (NEVER_PURGE_TOMBSTONES || !compactingRepaired() || cfs.getNeverPurgeTombstones())
+        if (NEVER_PURGE_TOMBSTONES || !compactingRepaired() || realm.getNeverPurgeTombstones())
             return time -> false;
 
         overlapIterator.update(key);
         Set<SSTableReader> filteredSSTables = overlapIterator.overlaps();
-        Iterable<Memtable> memtables = cfs.getAllMemtables();
+        Iterable<Memtable> memtables = realm.getAllMemtables();
         long minTimestampSeen = Long.MAX_VALUE;
         boolean hasTimestamp = false;
 
@@ -296,7 +296,7 @@ public class CompactionController extends AbstractCompactionController
 
     public boolean compactingRepaired()
     {
-        return !cfs.onlyPurgeRepairedTombstones() || compactingRepaired;
+        return !realm.onlyPurgeRepairedTombstones() || compactingRepaired;
     }
 
     boolean provideTombstoneSources()
@@ -307,7 +307,7 @@ public class CompactionController extends AbstractCompactionController
     // caller must close iterators
     public Iterable<UnfilteredRowIterator> shadowSources(DecoratedKey key, boolean tombstoneOnly)
     {
-        if (!provideTombstoneSources() || !compactingRepaired() || NEVER_PURGE_TOMBSTONES || cfs.getNeverPurgeTombstones())
+        if (!provideTombstoneSources() || !compactingRepaired() || NEVER_PURGE_TOMBSTONES || realm.getNeverPurgeTombstones())
             return null;
         overlapIterator.update(key);
         return Iterables.filter(Iterables.transform(overlapIterator.overlaps(),

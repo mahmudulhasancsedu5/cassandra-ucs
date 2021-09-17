@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.db.compaction;
 
+import java.io.File;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -30,10 +31,15 @@ import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.index.SecondaryIndexManager;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.metrics.TableMetrics;
+import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
+import org.apache.cassandra.utils.concurrent.Refs;
 
 
 /**
@@ -114,21 +120,6 @@ public interface CompactionRealm
     boolean onlyPurgeRepairedTombstones();
 
     /**
-     * @return all live sstables, whether they are compacting or not.
-     */
-    void addLiveSSTables(Collection<? super SSTableReader> sstables);
-
-    /**
-     * @return all live sstables that are also taking part into a compaction.
-     */
-    void addCompactingSSTables(Collection<? super SSTableReader> sstables);
-
-    /**
-     * @return all live sstables that are not yet taking part into a compaction.
-     */
-    void addNoncompactingSSTables(Collection<? super SSTableReader> sstables);
-
-    /**
      * Inserts the live sstables that overlap with the given sstables into the collection in the first argument.
      */
     void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
@@ -142,14 +133,37 @@ public interface CompactionRealm
     }
 
     /**
-     * @return all live memtables, or empty if no memtables are available.
-     */
-    Iterable<Memtable> getAllMemtables();
-
-    /**
      * Invalidate the given key from local caches.
      */
     void invalidateCachedPartition(DecoratedKey key);
 
-    public LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
+    LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
+    Refs<SSTableReader> getAndReferenceOverlappingLiveSSTables(Iterable<SSTableReader> sstables);
+    ScannerList getScanners(Set<SSTableReader> actuallyCompact);
+
+    boolean isCompactionActive();
+    CompactionParams getCompactionParams();
+    boolean getNeverPurgeTombstones();
+    int getMinimumCompactionThreshold();
+    int getMaximumCompactionThreshold();
+    int getLevelFanoutSize();
+    boolean supportsEarlyOpen();
+    long getExpectedCompactedFileSize(Iterable<SSTableReader> sstables, OperationType operationType);
+    boolean isCompactionDiskSpaceCheckEnabled();
+    long getMaxSSTableBytes();
+
+    /**
+     * @return all live memtables, or empty if no memtables are available.
+     */
+    Iterable<Memtable> getAllMemtables();
+    Set<SSTableReader> getCompactingSSTables();
+    Iterable<SSTableReader> getNoncompactingSSTables();
+    Iterable<SSTableReader> getNoncompactingSSTables(Iterable<SSTableReader> sstables);
+    Set<SSTableReader> getLiveSSTables();
+
+    Descriptor newSSTableDescriptor(File locationForDisk);
+
+    void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore);
+
+    void snapshotWithoutMemtable(String snapshotId);
 }

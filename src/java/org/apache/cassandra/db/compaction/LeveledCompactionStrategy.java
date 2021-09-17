@@ -84,10 +84,10 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
                 {
                     if (configuredMaxSSTableSize >= 1000)
                         logger.warn("Max sstable size of {}MB is configured for {}.{}; having a unit of compaction this large is probably a bad idea",
-                                configuredMaxSSTableSize, cfs.getKeyspaceName(), cfs.getTableName());
+                                    configuredMaxSSTableSize, realm.getKeyspaceName(), realm.getTableName());
                     if (configuredMaxSSTableSize < 50)
                         logger.warn("Max sstable size of {}MB is configured for {}.{}.  Testing done for CASSANDRA-5727 indicates that performance improves up to 160MB",
-                                configuredMaxSSTableSize, cfs.getKeyspaceName(), cfs.getTableName());
+                                    configuredMaxSSTableSize, realm.getKeyspaceName(), realm.getTableName());
                 }
             }
 
@@ -105,7 +105,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
         levelFanoutSize = configuredLevelFanoutSize;
         singleSSTableUplevel = configuredSingleSSTableUplevel;
 
-        manifest = new LeveledManifest(cfs, this.maxSSTableSizeInMB, this.levelFanoutSize, localOptions);
+        manifest = new LeveledManifest(realm, this.maxSSTableSizeInMB, this.levelFanoutSize, localOptions);
         logger.trace("Created {}", manifest);
     }
 
@@ -299,7 +299,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
                     if (!intersecting.isEmpty())
                     {
                         @SuppressWarnings("resource") // The ScannerList will be in charge of closing (and we close properly on errors)
-                        ISSTableScanner scanner = new LeveledScanner(cfs.metadata(), intersecting, ranges, level);
+                        ISSTableScanner scanner = new LeveledScanner(realm.metadata(), intersecting, ranges, level);
                         scanners.add(scanner);
                     }
                 }
@@ -493,7 +493,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
     @Override
     public String toString()
     {
-        return String.format("LCS@%d(%s)", hashCode(), cfs.getTableName());
+        return String.format("LCS@%d(%s)", hashCode(), realm.getTableName());
     }
 
     private CompactionAggregate findDroppableSSTable(final int gcBefore)
@@ -504,7 +504,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
             return -1 * Doubles.compare(r1, r2);
         };
         Function<Collection<SSTableReader>, SSTableReader> selector = list -> Collections.max(list, comparator);
-        Set<SSTableReader> compacting = dataTracker.getCompacting();
+        Set<SSTableReader> compacting = realm.getCompactingSSTables();
 
         for (int i = manifest.getLevelCount(); i >= 0; i--)
         {

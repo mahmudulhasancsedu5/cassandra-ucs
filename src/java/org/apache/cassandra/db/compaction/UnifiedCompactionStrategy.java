@@ -21,14 +21,12 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Ordering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
@@ -147,7 +145,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         Collection<AbstractCompactionTask> tasks = new ArrayList<>(compactionAggregates.size());
         for (CompactionAggregate aggregate : compactionAggregates)
         {
-            LifecycleTransaction transaction = cfs.tryModify(aggregate.getSelected().sstables, OperationType.COMPACTION);
+            LifecycleTransaction transaction = realm.tryModify(aggregate.getSelected().sstables, OperationType.COMPACTION);
             if (transaction != null)
             {
                 backgroundCompactions.setSubmitted(this, transaction.opId(), aggregate);
@@ -191,7 +189,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                   indexGroups,
                                                   lifecycleNewTracker);
 
-        return new ShardedMultiWriter(cfs,
+        return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,
                                       repairedAt,
@@ -214,9 +212,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     private CompactionTask createCompactionTask(LifecycleTransaction transaction, int gcBefore)
     {
         if (controller.getNumShards() <= 1)
-            return new CompactionTask(cfs, transaction, gcBefore, false, this);
+            return new CompactionTask(realm, transaction, gcBefore, false, this);
 
-        return new UnifiedCompactionTask(cfs, this, transaction, gcBefore, controller.getMinSstableSizeBytes(), getShardBoundaries());
+        return new UnifiedCompactionTask(realm, this, transaction, gcBefore, controller.getMinSstableSizeBytes(), getShardBoundaries());
     }
 
     private void maybeUpdateSelector()
@@ -229,11 +227,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (arenaSelector != null && !arenaSelector.diskBoundaries.isOutOfDate())
                 return; // another thread beat us to the update
 
-            DiskBoundaries currentBoundaries = cfs.getDiskBoundaries();
+            DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
             List<PartitionPosition> shardBoundaries = computeShardBoundaries(currentBoundaries.getLocalRanges(),
                                                                              currentBoundaries.getPositions(),
                                                                              controller.getNumShards(),
-                                                                             cfs.getPartitioner());
+                                                                             realm.getPartitioner());
             arenaSelector = new ArenaSelector(currentBoundaries, shardBoundaries);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.
@@ -629,7 +627,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public Set<SSTableReader> getSSTables()
     {
-        return dataTracker.getLiveSSTables();
+        return realm.getLiveSSTables();
     }
 
     @VisibleForTesting
@@ -654,7 +652,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     @VisibleForTesting
     Collection<Shard> getCompactionShards()
     {
-        return getCompactionShards(cfs.getLiveSSTables());
+        return getCompactionShards(realm.getLiveSSTables());
     }
 
     Collection<Shard> getCompactionShards(Collection<? extends CompactionSSTable> sstables)
@@ -663,7 +661,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         Map<CompactionSSTable, Shard> tables = new TreeMap<>(arenaSelector);
         for (CompactionSSTable table : sstables)
             if (table.isSuitableForCompaction())
-                tables.computeIfAbsent(table, t -> new Shard(arenaSelector, cfs))
+                tables.computeIfAbsent(table, t -> new Shard(arenaSelector, realm))
                       .add(table);
 
         return tables.values();
@@ -726,7 +724,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 logger.trace("Shard {} has {} buckets", shard, buckets.size());
         }
 
-        logger.debug("Found {} shards with buckets for {}.{}", ret.size(), cfs.getKeyspaceName(), cfs.getTableName());
+        logger.debug("Found {} shards with buckets for {}.{}", ret.size(), realm.getKeyspaceName(), realm.getTableName());
         return ret;
     }
 
@@ -737,7 +735,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
     public TableMetadata getMetadata()
     {
-        return cfs.metadata();
+        return realm.metadata();
     }
 
     /**
@@ -748,11 +746,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     {
         final List<CompactionSSTable> sstables;
         final ArenaSelector selector;
-        private final ColumnFamilyStore cfs;
+        private final CompactionRealm realm;
 
-        Shard(ArenaSelector selector, ColumnFamilyStore cfs)
+        Shard(ArenaSelector selector, CompactionRealm realm)
         {
-            this.cfs = cfs;
+            this.realm = realm;
             this.sstables = new ArrayList<>();
             this.selector = selector;
         }
@@ -788,9 +786,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          */
         Set<CompactionSSTable> getExpiredSSTables(int gcBefore, boolean ignoreOverlaps)
         {
-            return CompactionController.getFullyExpiredSSTables(cfs,
+            return CompactionController.getFullyExpiredSSTables(realm,
                                                                 sstables,
-                                                                cfs.getOverlappingLiveSSTables(sstables),
+                                                                realm.getOverlappingLiveSSTables(sstables),
                                                                 gcBefore,
                                                                 ignoreOverlaps);
         }

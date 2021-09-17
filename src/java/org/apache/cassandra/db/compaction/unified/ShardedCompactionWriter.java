@@ -28,6 +28,7 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.ArenaSelector;
+import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -51,7 +52,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
     private int currentIndex;
 
-    public ShardedCompactionWriter(ColumnFamilyStore cfs,
+    public ShardedCompactionWriter(CompactionRealm realm,
                                    Directories directories,
                                    LifecycleTransaction txn,
                                    Set<SSTableReader> nonExpiredSSTables,
@@ -59,7 +60,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
                                    long minSstableSizeInBytes,
                                    List<PartitionPosition> boundaries)
     {
-        super(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
+        super(realm, directories, txn, nonExpiredSSTables, keepOriginals);
 
         this.minSstableSizeInBytes = minSstableSizeInBytes;
         this.boundaries = boundaries;
@@ -89,7 +90,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
             logger.debug("Switching writer at boundary {}/{} index {}, with size {} for {}.{}",
                          key.getToken(), boundaries.get(currentIndex-1), currentIndex-1,
                          FBUtilities.prettyPrintMemory(sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten()),
-                         cfs.getKeyspaceName(), cfs.getTableName());
+                         realm.getKeyspaceName(), realm.getTableName());
             return true;
         }
 
@@ -103,15 +104,15 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
         while (diskBoundary != null && currentIndex < boundaries.size() && diskBoundary.compareTo(boundaries.get(currentIndex)) < 0)
             currentIndex++;
 
-        return SSTableWriter.create(cfs.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
+        return SSTableWriter.create(realm.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
                                     shardAdjustedKeyCount(currentIndex, boundaries, minSstableSizeInBytes, nonExpiredSSTables, overwriteRatio),
                                     minRepairedAt,
                                     pendingRepair,
                                     isTransient,
-                                    cfs.metadata,
-                                    new MetadataCollector(txn.originals(), cfs.metadata().comparator, 0),
-                                    SerializationHeader.make(cfs.metadata(), nonExpiredSSTables),
-                                    cfs.indexManager.listIndexGroups(),
+                                    realm.metadataRef(),
+                                    new MetadataCollector(txn.originals(), realm.metadata().comparator, 0),
+                                    SerializationHeader.make(realm.metadata(), nonExpiredSSTables),
+                                    realm.getIndexManager().listIndexGroups(),
                                     txn);
     }
 

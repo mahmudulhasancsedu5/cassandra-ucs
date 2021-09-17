@@ -85,7 +85,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
                     return ImmutableList.of();
                 }
 
-                LifecycleTransaction transaction = cfs.tryModify(compaction.getSelected().sstables, OperationType.COMPACTION);
+                LifecycleTransaction transaction = realm.tryModify(compaction.getSelected().sstables, OperationType.COMPACTION);
                 if (transaction != null)
                 {
                     backgroundCompactions.setSubmitted(this, transaction.opId(), compaction);
@@ -108,7 +108,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
 
         protected AbstractCompactionTask createCompactionTask(final int gcBefore, LifecycleTransaction txn, CompactionAggregate compaction)
         {
-            return new CompactionTask(cfs, txn, gcBefore, false, this);
+            return new CompactionTask(realm, txn, gcBefore, false, this);
         }
 
         /**
@@ -158,7 +158,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
                     return ImmutableList.of();
                 }
 
-                LifecycleTransaction modifier = cfs.tryModify(latestBucket, OperationType.COMPACTION);
+                LifecycleTransaction modifier = realm.tryModify(latestBucket, OperationType.COMPACTION);
                 if (modifier != null)
                     return ImmutableList.of(createCompactionTask(gcBefore, modifier, false, false));
 
@@ -229,7 +229,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         synchronized (sstables)
         {
             int removed = 0;
-            Set<SSTableReader> liveSet = cfs.getLiveSSTables();
+            Set<SSTableReader> liveSet = realm.getLiveSSTables();
             for (Iterator<SSTableReader> it = sstables.iterator(); it.hasNext(); )
             {
                 SSTableReader sstable = it.next();
@@ -298,7 +298,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (!(sstable instanceof SSTableReader)
             || options.isDisableTombstoneCompactions()
             || CompactionController.NEVER_PURGE_TOMBSTONES
-            || cfs.getNeverPurgeTombstones())
+            || realm.getNeverPurgeTombstones())
             return false;
         SSTableReader reader = (SSTableReader) sstable;
         // since we use estimations to calculate, there is a chance that compaction will not drop tombstones actually.
@@ -316,13 +316,13 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
             return true;
 
         Set<CompactionSSTable> overlaps = new HashSet<>();
-        cfs.addOverlappingLiveSSTables(overlaps, Collections.singleton(reader));
+        realm.addOverlappingLiveSSTables(overlaps, Collections.singleton(reader));
         if (overlaps.isEmpty())
         {
             // there is no overlap, tombstones are safely droppable
             return true;
         }
-        else if (CompactionController.getFullyExpiredSSTables(cfs, Collections.singleton(reader), overlaps, gcBefore).size() > 0)
+        else if (CompactionController.getFullyExpiredSSTables(realm, Collections.singleton(reader), overlaps, gcBefore).size() > 0)
         {
             return true;
         }

@@ -407,7 +407,7 @@ public class Tracker
         return view.get().select(SSTableSet.NONCOMPACTING);
     }
 
-    public Iterable<? extends SSTableReader> getNoncompacting(Iterable<? extends SSTableReader> candidates)
+    public Iterable<SSTableReader> getNoncompacting(Iterable<SSTableReader> candidates)
     {
         return view.get().getNoncompacting(candidates);
     }

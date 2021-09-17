@@ -31,7 +31,6 @@ import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
@@ -58,8 +57,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     protected static final Logger logger = LoggerFactory.getLogger(AbstractCompactionStrategy.class);
 
     protected final CompactionStrategyOptions options;
-    protected final ColumnFamilyStore cfs;
-    protected final Tracker dataTracker;
+    protected final CompactionRealm realm;
 
     protected final CompactionLogger compactionLogger;
     protected final Directories directories;
@@ -83,11 +81,10 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     protected AbstractCompactionStrategy(CompactionStrategyFactory factory, BackgroundCompactions backgroundCompactions, Map<String, String> options)
     {
         assert factory != null;
-        this.cfs = factory.getCfs();
-        this.dataTracker = cfs.getTracker();
+        this.realm = factory.getCfs();
         this.compactionLogger = factory.getCompactionLogger();
         this.options = new CompactionStrategyOptions(getClass(), options, false);
-        this.directories = cfs.getDirectories();
+        this.directories = realm.getDirectories();
         this.backgroundCompactions = backgroundCompactions;
     }
 
@@ -174,7 +171,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
         Iterable<SSTableReader> filteredSSTables = Iterables.filter(getSSTables(), sstable -> !sstable.isMarkedSuspect());
         if (Iterables.isEmpty(filteredSSTables))
             return CompactionTasks.empty();
-        LifecycleTransaction txn = dataTracker.tryModify(filteredSSTables, OperationType.COMPACTION);
+        LifecycleTransaction txn = realm.tryModify(filteredSSTables, OperationType.COMPACTION);
         if (txn == null)
             return CompactionTasks.empty();
         return CompactionTasks.create(Collections.singleton(createCompactionTask(gcBefore, txn, true, splitOutput)));
@@ -195,7 +192,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     {
         assert !sstables.isEmpty(); // checked for by CM.submitUserDefined
 
-        LifecycleTransaction modifier = dataTracker.tryModify(sstables, OperationType.COMPACTION);
+        LifecycleTransaction modifier = realm.tryModify(sstables, OperationType.COMPACTION);
         if (modifier == null)
         {
             logger.trace("Unable to mark {} for compaction; probably a background compaction got to it first.  You can disable background compactions temporarily if this is a problem", sstables);
@@ -220,7 +217,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
      */
     protected AbstractCompactionTask createCompactionTask(final int gcBefore, LifecycleTransaction txn, boolean isMaximal, boolean splitOutput)
     {
-        return new CompactionTask(cfs, txn, gcBefore, false, this);
+        return new CompactionTask(realm, txn, gcBefore, false, this);
     }
 
     /**
@@ -235,7 +232,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     @Override
     public AbstractCompactionTask createCompactionTask(LifecycleTransaction txn, final int gcBefore, long maxSSTableBytes)
     {
-        return new CompactionTask(cfs, txn, gcBefore, false, this);
+        return new CompactionTask(realm, txn, gcBefore, false, this);
     }
 
     /**
@@ -360,7 +357,16 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
                                                        Collection<Index.Group> indexGroups,
                                                        LifecycleNewTracker lifecycleNewTracker)
     {
-        return SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, pendingRepair, isTransient, cfs.metadata, meta, header, indexGroups, lifecycleNewTracker);
+        return SimpleSSTableMultiWriter.create(descriptor,
+                                               keyCount,
+                                               repairedAt,
+                                               pendingRepair,
+                                               isTransient,
+                                               realm.metadataRef(),
+                                               meta,
+                                               header,
+                                               indexGroups,
+                                               lifecycleNewTracker);
     }
 
     @Override
