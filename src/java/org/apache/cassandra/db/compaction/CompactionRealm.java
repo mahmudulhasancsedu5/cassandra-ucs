@@ -16,17 +16,20 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.compaction;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.cassandra.db.compaction.CompactionController;
-import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
-import org.apache.cassandra.db.compaction.unified.Environment;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Directories;
+import org.apache.cassandra.db.DiskBoundaries;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.index.SecondaryIndexManager;
-import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.TableMetadata;
@@ -34,8 +37,8 @@ import org.apache.cassandra.schema.TableMetadataRef;
 
 
 /**
- * An interface for supplying table data, or {@link SSTableBasicStats}, to modules that only
- * need this information, and create instances of {@link SSTableReader} lazily via {@link CompactionRealm#toSSTableReaders}.
+ * An interface for supplying table data, or {@link CompactionSSTable}, to modules that only
+ * need this information, and create instances of {@link SSTableReader} lazily via {@link CompactionRealm#tryModify}.
  * <p/>
  * It is currently only used by {@link UnifiedCompactionStrategy}, and {@link CompactionController}.
  *
@@ -43,7 +46,7 @@ import org.apache.cassandra.schema.TableMetadataRef;
  * reducing the scope of CFS and readers. However, at the moment {@link ColumnFamilyStore} is still used in some places
  * even in the compaction code.
  */
-public interface CompactionRealm<SSTABLE extends SSTableBasicStats>
+public interface CompactionRealm
 {
     /**
      * @return the {@link Directories} backing this table.
@@ -56,14 +59,36 @@ public interface CompactionRealm<SSTABLE extends SSTableBasicStats>
     DiskBoundaries getDiskBoundaries();
 
     /**
-     * @return the partitioner used by this table.
+     * @return the schema metadata of this table as a reference, used for long-living objects to keep up-to-date with
+     *         changes.
      */
-    IPartitioner getPartitioner();
+    TableMetadataRef metadataRef();
 
     /**
      * @return the schema metadata of this table.
      */
-    TableMetadataRef metadataRef();
+    default TableMetadata metadata()
+    {
+        return metadataRef().get();
+    }
+
+    default String getTableName()
+    {
+        return metadata().name;
+    }
+
+    default String getKeyspaceName()
+    {
+        return metadata().keyspace;
+    }
+
+    /**
+     * @return the partitioner used by this table.
+     */
+    default IPartitioner getPartitioner()
+    {
+        return metadata().partitioner;
+    }
 
     /**
      * @return metrics object for the realm, if available.
@@ -91,22 +116,30 @@ public interface CompactionRealm<SSTABLE extends SSTableBasicStats>
     /**
      * @return all live sstables, whether they are compacting or not.
      */
-    Set<SSTABLE> getLiveSSTables();
+    void addLiveSSTables(Collection<? super SSTableReader> sstables);
 
     /**
      * @return all live sstables that are also taking part into a compaction.
      */
-    Set<SSTABLE> getCompactingSSTables();
+    void addCompactingSSTables(Collection<? super SSTableReader> sstables);
 
     /**
      * @return all live sstables that are not yet taking part into a compaction.
      */
-    Iterable<SSTABLE> getNoncompactingSSTables();
+    void addNoncompactingSSTables(Collection<? super SSTableReader> sstables);
 
     /**
-     * @return the live sstables that overlap with the given sstables passed in.
+     * Inserts the live sstables that overlap with the given sstables into the collection in the first argument.
      */
-    Iterable<SSTABLE> getOverlappingLiveSSTables(Iterable<SSTABLE> sstables);
+    void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
+                                    Iterable<? extends CompactionSSTable> sstables);
+
+    default Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables)
+    {
+        Set<CompactionSSTable> overlaps = new HashSet<>();
+        addOverlappingLiveSSTables(overlaps, sstables);
+        return overlaps;
+    }
 
     /**
      * @return all live memtables, or empty if no memtables are available.
@@ -118,16 +151,5 @@ public interface CompactionRealm<SSTABLE extends SSTableBasicStats>
      */
     void invalidateCachedPartition(DecoratedKey key);
 
-    /**
-     * Convert an abstract sstable data into a concrete reader. This is just a cast or a lookup
-     * if the abstract sstable is already a full reader, but in some cases it may involve opening
-     * a reader.
-     */
-    SSTableReader toSSTableReader(SSTABLE sstable);
-
-    /**
-     * Convert a set of abstract sstables into concrete readers. This is just a set of casts or lookups if
-     * the abstract sstables are already full readers, but in some cases it may involve opening readers.
-     */
-    Iterable<SSTableReader> toSSTableReaders(Iterable<SSTABLE> sstables);
+    public LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
 }

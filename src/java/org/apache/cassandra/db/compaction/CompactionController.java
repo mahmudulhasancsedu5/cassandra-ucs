@@ -153,24 +153,25 @@ public class CompactionController extends AbstractCompactionController
      * @param ignoreOverlaps don't check if data shadows/overlaps any data in other sstables
      * @return
      */
-    public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
-                                                             Iterable<SSTableReader> compacting,
-                                                             Iterable<SSTableReader> overlapping,
-                                                             int gcBefore,
-                                                             boolean ignoreOverlaps)
+    public static <SSTABLE extends CompactionSSTable>
+    Set<SSTABLE> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
+                                         Iterable<SSTABLE> compacting,
+                                         Iterable<SSTABLE> overlapping,
+                                         int gcBefore,
+                                         boolean ignoreOverlaps)
     {
         logger.trace("Checking droppable sstables in {}", cfStore);
 
         if (NEVER_PURGE_TOMBSTONES || compacting == null || cfStore.getNeverPurgeTombstones())
-            return Collections.<SSTableReader>emptySet();
+            return Collections.<SSTABLE>emptySet();
 
-        if (cfStore.onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTableReader::isRepaired))
+        if (cfStore.onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTABLE::isRepaired))
             return Collections.emptySet();
 
         if (ignoreOverlaps)
         {
-            Set<SSTableReader> fullyExpired = new HashSet<>();
-            for (SSTableReader candidate : compacting)
+            Set<SSTABLE> fullyExpired = new HashSet<>();
+            for (SSTABLE candidate : compacting)
             {
                 if (candidate.getMaxLocalDeletionTime() < gcBefore)
                 {
@@ -182,10 +183,10 @@ public class CompactionController extends AbstractCompactionController
             return fullyExpired;
         }
 
-        List<SSTableReader> candidates = new ArrayList<>();
+        List<SSTABLE> candidates = new ArrayList<>();
         long minTimestamp = Long.MAX_VALUE;
 
-        for (SSTableReader sstable : overlapping)
+        for (SSTABLE sstable : overlapping)
         {
             // Overlapping might include fully expired sstables. What we care about here is
             // the min timestamp of the overlapping sstables that actually contain live data.
@@ -193,7 +194,7 @@ public class CompactionController extends AbstractCompactionController
                 minTimestamp = Math.min(minTimestamp, sstable.getMinTimestamp());
         }
 
-        for (SSTableReader candidate : compacting)
+        for (SSTABLE candidate : compacting)
         {
             if (candidate.getMaxLocalDeletionTime() < gcBefore)
                 candidates.add(candidate);
@@ -209,10 +210,10 @@ public class CompactionController extends AbstractCompactionController
         // candidates with no constructive values. The ones out of these that have
         // (getMaxTimestamp() < minTimestamp) serve no purpose anymore.
 
-        Iterator<SSTableReader> iterator = candidates.iterator();
+        Iterator<SSTABLE> iterator = candidates.iterator();
         while (iterator.hasNext())
         {
-            SSTableReader candidate = iterator.next();
+            SSTABLE candidate = iterator.next();
             if (candidate.getMaxTimestamp() >= minTimestamp)
             {
                 iterator.remove();
@@ -226,10 +227,11 @@ public class CompactionController extends AbstractCompactionController
         return new HashSet<>(candidates);
     }
 
-    public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
-                                                             Iterable<SSTableReader> compacting,
-                                                             Iterable<SSTableReader> overlapping,
-                                                             int gcBefore)
+    public static <SSTABLE extends CompactionSSTable>
+    Set<SSTABLE> getFullyExpiredSSTables(ColumnFamilyStore cfStore,
+                                         Iterable<SSTABLE> compacting,
+                                         Iterable<SSTABLE> overlapping,
+                                         int gcBefore)
     {
         return getFullyExpiredSSTables(cfStore, compacting, overlapping, gcBefore, false);
     }
@@ -249,7 +251,7 @@ public class CompactionController extends AbstractCompactionController
 
         overlapIterator.update(key);
         Set<SSTableReader> filteredSSTables = overlapIterator.overlaps();
-        Iterable<Memtable> memtables = cfs.getTracker().getView().getAllMemtables();
+        Iterable<Memtable> memtables = cfs.getAllMemtables();
         long minTimestampSeen = Long.MAX_VALUE;
         boolean hasTimestamp = false;
 

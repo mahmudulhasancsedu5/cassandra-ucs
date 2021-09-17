@@ -28,6 +28,7 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.ArenaSelector;
+import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -124,8 +125,8 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
         long shardAdjustedKeyCount = 0;
         for (int i = shardIdx; i < boundaries.size(); i++)
         {
-            Set<SSTableReader> sstablesForShard = ArenaSelector.sstablesFor(i, boundaries, sstables);
-            for (SSTableReader sstable : sstablesForShard)
+            Set<CompactionSSTable> sstablesForShard = ArenaSelector.sstablesFor(i, boundaries, sstables);
+            for (CompactionSSTable sstable : sstablesForShard)
             {
                 int shardsSpanned = ArenaSelector.shardsSpanned(sstable, boundaries);
                 // calculating manually instead of calling ArenaSelector.shardAdjustedSize to save 1 call to ArenaSelector.shardsSpanned

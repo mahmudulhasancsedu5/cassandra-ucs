@@ -903,7 +903,7 @@ public class UnifiedCompactionContainerPendingRepairTest extends AbstractPending
                                                         if (shard.sstables.isEmpty())
                                                             return false;
 
-                                                        SSTableReader shardSSTable = shard.sstables.get(0);
+                                                        SSTableReader shardSSTable = (SSTableReader) shard.sstables.get(0);
                                                         return shardSSTable.isRepaired() == expectedIsRepaired &&
                                                                shardSSTable.isTransient() == expectedIsTransient &&
                                                                shardSSTable.isPendingRepair() == expectedIsPending &&

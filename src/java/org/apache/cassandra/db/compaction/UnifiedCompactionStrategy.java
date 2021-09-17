@@ -16,23 +16,12 @@
 
 package org.apache.cassandra.db.compaction;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.UUID;
+import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Ordering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -119,7 +108,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         Collection<Collection<SSTableReader>> groups = new ArrayList<>();
         for (Shard shard : getCompactionShards(sstablesToGroup))
         {
-            groups.addAll(super.groupSSTablesForAntiCompaction(shard.sstables));
+            groups.addAll(super.groupSSTablesForAntiCompaction(Collections2.transform(shard.sstables, SSTableReader.class::cast)));
         }
 
         return groups;
@@ -158,7 +147,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         Collection<AbstractCompactionTask> tasks = new ArrayList<>(compactionAggregates.size());
         for (CompactionAggregate aggregate : compactionAggregates)
         {
-            LifecycleTransaction transaction = dataTracker.tryModify(aggregate.getSelected().sstables, OperationType.COMPACTION);
+            LifecycleTransaction transaction = cfs.tryModify(aggregate.getSelected().sstables, OperationType.COMPACTION);
             if (transaction != null)
             {
                 backgroundCompactions.setSubmitted(this, transaction.opId(), aggregate);
@@ -446,7 +435,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         for (Map.Entry<Shard, List<Bucket>> entry : getShardsWithBuckets().entrySet())
         {
             Shard shard = entry.getKey();
-            Set<SSTableReader> expired;
+            Set<CompactionSSTable> expired;
             if (expiredCheck)
             {
                 expired = shard.getExpiredSSTables(gcBefore, controller.getIgnoreOverlapsInExpirationCheck());
@@ -620,8 +609,8 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
     private int shardsSpanned(CompactionPick pick)
     {
-        DecoratedKey min = pick.sstables.stream().map(SSTableReader::getFirst).min(Ordering.natural()).get();
-        DecoratedKey max = pick.sstables.stream().map(SSTableReader::getLast).max(Ordering.natural()).get();
+        DecoratedKey min = pick.sstables.stream().map(CompactionSSTable::getFirst).min(Ordering.natural()).get();
+        DecoratedKey max = pick.sstables.stream().map(CompactionSSTable::getLast).max(Ordering.natural()).get();
         return arenaSelector.shardFor(max) - arenaSelector.shardFor(min) + 1;
     }
 
@@ -665,26 +654,19 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     @VisibleForTesting
     Collection<Shard> getCompactionShards()
     {
-        return getCompactionShards(dataTracker.getLiveSSTables());
+        return getCompactionShards(cfs.getLiveSSTables());
     }
 
-    Collection<Shard> getCompactionShards(Collection<SSTableReader> sstables)
+    Collection<Shard> getCompactionShards(Collection<? extends CompactionSSTable> sstables)
     {
         final ArenaSelector arenaSelector = this.arenaSelector;
-        Map<SSTableReader, Shard> tables = new TreeMap<>(arenaSelector);
-        for (SSTableReader table : sstables)
-            if (isSuitableForCompaction(table))
+        Map<CompactionSSTable, Shard> tables = new TreeMap<>(arenaSelector);
+        for (CompactionSSTable table : sstables)
+            if (table.isSuitableForCompaction())
                 tables.computeIfAbsent(table, t -> new Shard(arenaSelector, cfs))
                       .add(table);
 
         return tables.values();
-    }
-
-    private boolean isSuitableForCompaction(SSTableReader r)
-    {
-        return !r.isMarkedSuspect()
-               && r.openReason != SSTableReader.OpenReason.EARLY
-               && !dataTracker.getCompacting().contains(r);
     }
 
     /**
@@ -704,7 +686,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
             int index = 0;
             Bucket bucket = new Bucket(controller, index, 0);
-            for (SSTableReader candidate : shard.sstables)
+            for (CompactionSSTable candidate : shard.sstables)
             {
                 final long size = arenaSelector.shardAdjustedSize(candidate);
                 if (size < bucket.max)
@@ -764,7 +746,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      */
     final static class Shard implements Comparable<Shard>
     {
-        final List<SSTableReader> sstables;
+        final List<CompactionSSTable> sstables;
         final ArenaSelector selector;
         private final ColumnFamilyStore cfs;
 
@@ -775,14 +757,14 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             this.selector = selector;
         }
 
-        void add(SSTableReader ssTableReader)
+        void add(CompactionSSTable ssTableReader)
         {
             sstables.add(ssTableReader);
         }
 
         public String name()
         {
-            SSTableReader t = sstables.get(0);
+            CompactionSSTable t = sstables.get(0);
             return selector.name(t);
         }
 
@@ -804,7 +786,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          * @param ignoreOverlaps
          * @return expired SSTables
          */
-        Set<SSTableReader> getExpiredSSTables(int gcBefore, boolean ignoreOverlaps)
+        Set<CompactionSSTable> getExpiredSSTables(int gcBefore, boolean ignoreOverlaps)
         {
             return CompactionController.getFullyExpiredSSTables(cfs,
                                                                 sstables,
@@ -825,7 +807,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      */
     static class Bucket
     {
-        final List<SSTableReader> sstables;
+        final List<CompactionSSTable> sstables;
         final int index;
         final double survivalFactor;
         final int scalingParameter; // scaling parameter used to calculate fanout and threshold
@@ -852,7 +834,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             this.max = (long) Math.floor(baseSize * fanout * controller.getSurvivalFactor());
         }
 
-        void add(SSTableReader sstable)
+        void add(CompactionSSTable sstable)
         {
             this.sstables.add(sstable);
             this.avg += (sstable.onDiskLength() - avg) / sstables.size();
@@ -862,7 +844,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         {
             // Always sort by timestamp, older sstables first. If only a subset of the tables is compacted, let it
             // be from a contiguous time span to aid whole-sstable expiration.
-            sstables.sort(Comparator.comparing(SSTableReader::getMaxTimestamp));
+            sstables.sort(Comparator.comparing(CompactionSSTable::getMaxTimestamp));
 
             if (logger.isTraceEnabled())
                 logger.trace("Bucket: {}", this);
@@ -872,12 +854,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          * Return the compaction aggregate
          */
         CompactionAggregate.UnifiedAggregate getCompactionAggregate(Shard shard,
-                                                                    Set<SSTableReader> allExpiredSSTables,
+                                                                    Set<CompactionSSTable> allExpiredSSTables,
                                                                     Controller controller,
                                                                     long spaceAvailable)
         {
-            List<SSTableReader> expiredSet = Collections.emptyList();
-            List<SSTableReader> liveSet = sstables;
+            List<CompactionSSTable> expiredSet = Collections.emptyList();
+            List<CompactionSSTable> liveSet = sstables;
             if (!allExpiredSSTables.isEmpty())
             {
                 liveSet = new ArrayList<>();
@@ -960,12 +942,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          * @param liveSet empty list that is going to be filled up with SSTables that are not present in {@param allExpiredSSTables}
          * @param expiredSet empty list that is going to be filled up with SSTables that are present in {@param allExpiredSSTables}
          */
-        private static void bipartitionSSTables(List<SSTableReader> sstables,
-                                                Set<SSTableReader> allExpiredSSTables,
-                                                List<SSTableReader> liveSet,
-                                                List<SSTableReader> expiredSet)
+        private static void bipartitionSSTables(List<CompactionSSTable> sstables,
+                                                Set<CompactionSSTable> allExpiredSSTables,
+                                                List<CompactionSSTable> liveSet,
+                                                List<CompactionSSTable> expiredSet)
         {
-            for (SSTableReader sstable : sstables)
+            for (CompactionSSTable sstable : sstables)
             {
                 if (allExpiredSSTables.contains(sstable))
                     expiredSet.add(sstable);
@@ -974,7 +956,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             }
         }
 
-        private List<CompactionPick> layoutCompactions(Controller controller, List<SSTableReader> liveSet, int maxSSTablesToCompact)
+        private List<CompactionPick> layoutCompactions(Controller controller, List<CompactionSSTable> liveSet, int maxSSTablesToCompact)
         {
             List<CompactionPick> pending = new ArrayList<>();
             int pos = layoutCompactions(controller, liveSet, index + 1, fanout, maxSSTablesToCompact, pending);
@@ -1007,7 +989,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          *         than step
          */
         private int layoutCompactions(Controller controller,
-                                      List<SSTableReader> sstables,
+                                      List<CompactionSSTable> sstables,
                                       int level,
                                       int step,
                                       int maxSSTablesToCompact,

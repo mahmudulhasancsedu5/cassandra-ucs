@@ -109,9 +109,9 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     final static class SizeTieredBuckets
     {
         private final SizeTieredCompactionStrategyOptions options;
-        private final List<SSTableReader> tablesBySize;
-        private final Map<Long, List<SSTableReader>> buckets;
-        private final Map<SSTableReader, Double> hotnessSnapshot;
+        private final List<CompactionSSTable> tablesBySize;
+        private final Map<Long, List<CompactionSSTable>> buckets;
+        private final Map<CompactionSSTable, Double> hotnessSnapshot;
         private final int minThreshold;
         private final int maxThreshold;
 
@@ -126,7 +126,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
          * @param minThreshold minimum number of sstables in a bucket to qualify as interesting
          * @param maxThreshold maximum number of sstables to compact at once (the returned bucket will be trimmed down to this)
          */
-        SizeTieredBuckets(Iterable<? extends SSTableReader> candidates,
+        SizeTieredBuckets(Iterable<? extends CompactionSSTable> candidates,
                           SizeTieredCompactionStrategyOptions options,
                           int minThreshold,
                           int maxThreshold)
@@ -134,7 +134,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
             this.options = options;
             this.tablesBySize = new ArrayList<>();
             Iterables.addAll(this.tablesBySize, candidates);
-            this.tablesBySize.sort(SSTableReader.sizeComparator);
+            this.tablesBySize.sort(CompactionSSTable.sizeComparator);
             this.buckets = getBuckets(tablesBySize, options);
             this.hotnessSnapshot = getHotnessSnapshot(buckets.values());
             this.minThreshold = minThreshold;
@@ -148,19 +148,19 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
         /**
          * Group sstables of similar on disk size into buckets.
-         * The given set must be sorted using SSTableReader.sizeComparator
+         * The given set must be sorted using CompactionSSTable.sizeComparator
          */
-        private static Map<Long, List<SSTableReader>> getBuckets(List<SSTableReader> sstables, SizeTieredCompactionStrategyOptions options)
+        private static Map<Long, List<CompactionSSTable>> getBuckets(List<CompactionSSTable> sstables, SizeTieredCompactionStrategyOptions options)
         {
             if (sstables.isEmpty())
                 return Collections.EMPTY_MAP;
 
-            Map<Long, List<SSTableReader>> buckets = new HashMap<>();
+            Map<Long, List<CompactionSSTable>> buckets = new HashMap<>();
 
             long currentAverageSize = 0;
-            List<SSTableReader> currentBucket = new ArrayList<>();
+            List<CompactionSSTable> currentBucket = new ArrayList<>();
 
-            for (SSTableReader sstable: sstables)
+            for (CompactionSSTable sstable: sstables)
             {
                 long size = sstable.onDiskLength();
                 assert size >= currentAverageSize;
@@ -201,13 +201,13 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
             List<CompactionAggregate> aggregatesWithoutCompactions = new ArrayList<>(buckets.size());
             List<CompactionAggregate> aggregatesWithCompactions = new ArrayList<>(buckets.size());
 
-            for (Map.Entry<Long, List<SSTableReader>> entry : buckets.entrySet())
+            for (Map.Entry<Long, List<CompactionSSTable>> entry : buckets.entrySet())
             {
                 long avgSizeBytes = entry.getKey();
                 long minSizeBytes = (long) (avgSizeBytes * options.bucketLow);
                 long maxSizeBytes = (long) (avgSizeBytes * options.bucketHigh);
 
-                List<SSTableReader> bucket = entry.getValue();
+                List<CompactionSSTable> bucket = entry.getValue();
                 double hotness = totHotness(bucket, hotnessSnapshot);
 
                 if (bucket.size() < minThreshold)
@@ -237,7 +237,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
                 while ((bucket.size() - i) >= minThreshold)
                 {
-                    List<SSTableReader> sstables = bucket.subList(i, i + Math.min(bucket.size() - i, maxThreshold));
+                    List<CompactionSSTable> sstables = bucket.subList(i, i + Math.min(bucket.size() - i, maxThreshold));
                     if (selected == null)
                         selected = CompactionPick.create(avgSizeBytes, sstables, totHotness(sstables, hotnessSnapshot));
                     else
@@ -277,12 +277,12 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         /**
          * For diagnostics only. Returns the sorted tables paired with their on-disk length.
          */
-        public Collection<Pair<SSTableReader, Long>> pairs()
+        public Collection<Pair<CompactionSSTable, Long>> pairs()
         {
-            return Collections2.transform(tablesBySize, (SSTableReader table) -> Pair.create(table, table.onDiskLength()));
+            return Collections2.transform(tablesBySize, (CompactionSSTable table) -> Pair.create(table, table.onDiskLength()));
         }
 
-        public List<List<SSTableReader>> buckets()
+        public List<List<CompactionSSTable>> buckets()
         {
             return new ArrayList<>(buckets.values());
         }
@@ -302,13 +302,13 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
      * @return a snapshot mapping sstables to their current read hotness.
      */
     @VisibleForTesting
-    static Map<SSTableReader, Double> getHotnessSnapshot(Collection<List<SSTableReader>> buckets)
+    static Map<CompactionSSTable, Double> getHotnessSnapshot(Collection<List<CompactionSSTable>> buckets)
     {
-        Map<SSTableReader, Double> ret = new HashMap<>();
+        Map<CompactionSSTable, Double> ret = new HashMap<>();
 
-        for (List<SSTableReader> sstables: buckets)
+        for (List<CompactionSSTable> sstables: buckets)
         {
-            for (SSTableReader sstable : sstables)
+            for (CompactionSSTable sstable : sstables)
                 ret.put(sstable, sstable.hotness());
         }
 
@@ -318,10 +318,10 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     /**
      * @return the sum of the hotness of all the sstables
      */
-    private static double totHotness(Iterable<SSTableReader> sstables, @Nullable final Map<SSTableReader, Double> hotnessSnapshot)
+    private static double totHotness(Iterable<CompactionSSTable> sstables, @Nullable final Map<CompactionSSTable, Double> hotnessSnapshot)
     {
         double hotness = 0.0;
-        for (SSTableReader sstable : sstables)
+        for (CompactionSSTable sstable : sstables)
         {
             double h = hotnessSnapshot == null ? 0.0 : hotnessSnapshot.getOrDefault(sstable, 0.0);
             hotness += h == 0.0  ? sstable.hotness() : h;

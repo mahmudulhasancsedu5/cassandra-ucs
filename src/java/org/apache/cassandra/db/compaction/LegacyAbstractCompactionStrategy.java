@@ -85,7 +85,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
                     return ImmutableList.of();
                 }
 
-                LifecycleTransaction transaction = dataTracker.tryModify(compaction.getSelected().sstables, OperationType.COMPACTION);
+                LifecycleTransaction transaction = cfs.tryModify(compaction.getSelected().sstables, OperationType.COMPACTION);
                 if (transaction != null)
                 {
                     backgroundCompactions.setSubmitted(this, transaction.opId(), compaction);
@@ -140,10 +140,10 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         @SuppressWarnings("resource")
         public Collection<AbstractCompactionTask> getNextBackgroundTasks(int gcBefore)
         {
-            List<SSTableReader> previousCandidate = null;
+            List<CompactionSSTable> previousCandidate = null;
             while (true)
             {
-                List<SSTableReader> latestBucket = getNextBackgroundSSTables(gcBefore);
+                List<CompactionSSTable> latestBucket = getNextBackgroundSSTables(gcBefore);
 
                 if (latestBucket.isEmpty())
                     return ImmutableList.of();
@@ -158,7 +158,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
                     return ImmutableList.of();
                 }
 
-                LifecycleTransaction modifier = dataTracker.tryModify(latestBucket, OperationType.COMPACTION);
+                LifecycleTransaction modifier = cfs.tryModify(latestBucket, OperationType.COMPACTION);
                 if (modifier != null)
                     return ImmutableList.of(createCompactionTask(gcBefore, modifier, false, false));
 
@@ -173,8 +173,9 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
 
         /**
          * Select the next tables to compact. This method is typically synchronized.
+         * @return
          */
-        protected abstract List<SSTableReader> getNextBackgroundSSTables(final int gcBefore);
+        protected abstract List<CompactionSSTable> getNextBackgroundSSTables(final int gcBefore);
     }
 
     /**
@@ -266,12 +267,13 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      * Select a table for tombstone-removing compaction from the given set. Returns null if no table is suitable.
      */
     @Nullable
+    <SSTABLE extends CompactionSSTable>
     CompactionAggregate makeTombstoneCompaction(int gcBefore,
-                                                Iterable<SSTableReader> candidates,
-                                                Function<Collection<SSTableReader>, SSTableReader> selector)
+                                                Iterable<SSTABLE> candidates,
+                                                Function<Collection<SSTABLE>, SSTABLE> selector)
     {
-        List<SSTableReader> sstablesWithTombstones = new ArrayList<>();
-        for (SSTableReader sstable : candidates)
+        List<SSTABLE> sstablesWithTombstones = new ArrayList<>();
+        for (SSTABLE sstable : candidates)
         {
             if (worthDroppingTombstones(sstable, gcBefore))
                 sstablesWithTombstones.add(sstable);
@@ -279,7 +281,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (sstablesWithTombstones.isEmpty())
             return null;
 
-        final SSTableReader sstable = selector.apply(sstablesWithTombstones);
+        final SSTABLE sstable = selector.apply(sstablesWithTombstones);
         return CompactionAggregate.createForTombstones(sstable);
     }
 
@@ -291,17 +293,21 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      * @param gcBefore time to drop tombstones
      * @return true if given sstable's tombstones are expected to be removed
      */
-    protected boolean worthDroppingTombstones(SSTableReader sstable, int gcBefore)
+    protected boolean worthDroppingTombstones(CompactionSSTable sstable, int gcBefore)
     {
-        if (options.isDisableTombstoneCompactions() || CompactionController.NEVER_PURGE_TOMBSTONES || cfs.getNeverPurgeTombstones())
+        if (!(sstable instanceof SSTableReader)
+            || options.isDisableTombstoneCompactions()
+            || CompactionController.NEVER_PURGE_TOMBSTONES
+            || cfs.getNeverPurgeTombstones())
             return false;
+        SSTableReader reader = (SSTableReader) sstable;
         // since we use estimations to calculate, there is a chance that compaction will not drop tombstones actually.
         // if that happens we will end up in infinite compaction loop, so first we check enough if enough time has
         // elapsed since SSTable created.
-        if (System.currentTimeMillis() < sstable.getCreationTimeFor(Component.DATA) + options.getTombstoneCompactionInterval() * 1000)
+        if (System.currentTimeMillis() < reader.getCreationTimeFor(Component.DATA) + options.getTombstoneCompactionInterval() * 1000)
             return false;
 
-        double droppableRatio = sstable.getEstimatedDroppableTombstoneRatio(gcBefore);
+        double droppableRatio = reader.getEstimatedDroppableTombstoneRatio(gcBefore);
         if (droppableRatio <= options.getTombstoneThreshold())
             return false;
 
@@ -309,33 +315,35 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (options.isUncheckedTombstoneCompaction())
             return true;
 
-        Collection<SSTableReader> overlaps = cfs.getOverlappingLiveSSTables(Collections.singleton(sstable));
+        Set<CompactionSSTable> overlaps = new HashSet<>();
+        cfs.addOverlappingLiveSSTables(overlaps, Collections.singleton(reader));
         if (overlaps.isEmpty())
         {
             // there is no overlap, tombstones are safely droppable
             return true;
         }
-        else if (CompactionController.getFullyExpiredSSTables(cfs, Collections.singleton(sstable), overlaps, gcBefore).size() > 0)
+        else if (CompactionController.getFullyExpiredSSTables(cfs, Collections.singleton(reader), overlaps, gcBefore).size() > 0)
         {
             return true;
         }
         else
         {
             // what percentage of columns do we expect to compact outside of overlap?
-            if (sstable.getIndexSummarySize() < 2)
+            if (reader.getIndexSummarySize() < 2)
             {
                 // we have too few samples to estimate correct percentage
                 return false;
             }
             // first, calculate estimated keys that do not overlap
-            long keys = sstable.estimatedKeys();
+            long keys = reader.estimatedKeys();
             Set<Range<Token>> ranges = new HashSet<Range<Token>>(overlaps.size());
-            for (SSTableReader overlap : overlaps)
-                ranges.add(new Range<>(overlap.first.getToken(), overlap.last.getToken()));
-            long remainingKeys = keys - sstable.estimatedKeysForRanges(ranges);
+            for (CompactionSSTable overlap : overlaps)
+                ranges.add(new Range<>(overlap.getFirst().getToken(), overlap.getLast().getToken()));
+            long remainingKeys = keys - reader.estimatedKeysForRanges(ranges);
             // next, calculate what percentage of columns we have within those keys
-            long columns = sstable.getEstimatedCellPerPartitionCount().mean() * remainingKeys;
-            double remainingColumnsRatio = ((double) columns) / (sstable.getEstimatedCellPerPartitionCount().count() * sstable.getEstimatedCellPerPartitionCount().mean());
+            long columns = reader.getEstimatedCellPerPartitionCount().mean() * remainingKeys;
+            double remainingColumnsRatio = ((double) columns) / (reader.getEstimatedCellPerPartitionCount().count() *
+                                                                 reader.getEstimatedCellPerPartitionCount().mean());
 
             // return if we still expect to have droppable tombstones in rest of columns
             return remainingColumnsRatio * droppableRatio > options.getTombstoneThreshold();

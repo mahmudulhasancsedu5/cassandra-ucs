@@ -1307,12 +1307,12 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
             {
                 assertFalse(pick.hasExpiredOnly());
                 assertEquals(pick.sstables.size() / 2, pick.expired.size());
-                Set<SSTableReader> nonExpired = pick.sstables.stream()
-                                                             .filter(sstable -> !pick.expired.contains(sstable))
-                                                             .collect(Collectors.toSet());
+                Set<CompactionSSTable> nonExpired = pick.sstables.stream()
+                                                                 .filter(sstable -> !pick.expired.contains(sstable))
+                                                                 .collect(Collectors.toSet());
                 assertEquals(pick.sstables.size() / 2, nonExpired.size());
                 long expectedTotSize = nonExpired.stream()
-                                                 .mapToLong(SSTableReader::onDiskLength)
+                                                 .mapToLong(CompactionSSTable::onDiskLength)
                                                  .sum();
                 assertEquals(expectedTotSize, pick.totSizeInBytes);
                 assertEquals(expectedTotSize / nonExpired.size(), pick.avgSizeInBytes);

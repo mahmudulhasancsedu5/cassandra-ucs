@@ -53,7 +53,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
-import org.apache.cassandra.io.sstable.format.SSTableBasicStats;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
@@ -280,7 +279,7 @@ public class LeveledCompactionStrategyTest
             scanner.next();
 
         // scanner.getCurrentPosition should be equal to total bytes of L1 sstables
-        assertEquals(scanner.getCurrentPosition(), SSTableBasicStats.getTotalUncompressedBytes(sstables));
+        assertEquals(scanner.getCurrentPosition(), CompactionSSTable.getTotalUncompressedBytes(sstables));
     }
 
     @Test
@@ -854,7 +853,7 @@ public class LeveledCompactionStrategyTest
 
         // compaction for L8 sstables is not supposed to be run because there is no upper level to promote sstables
         // that's why we expect compaction candidates for L7 only
-        Collection<SSTableReader> compactionCandidates = lm.getCompactionCandidate().sstables;
+        Collection<CompactionSSTable> compactionCandidates = lm.getCompactionCandidate().sstables;
         assertThat(compactionCandidates).containsAll(sstablesOnL7);
         assertThat(compactionCandidates).doesNotContainAnyElementsOf(sstablesOnL8);
     }

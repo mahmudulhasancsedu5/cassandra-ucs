@@ -48,7 +48,17 @@ import org.apache.cassandra.concurrent.*;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
-import org.apache.cassandra.db.compaction.*;
+import org.apache.cassandra.db.compaction.AbstractTableOperation;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.CompactionRealm;
+import org.apache.cassandra.db.compaction.CompactionSSTable;
+import org.apache.cassandra.db.compaction.CompactionStrategy;
+import org.apache.cassandra.db.compaction.CompactionStrategyContainer;
+import org.apache.cassandra.db.compaction.CompactionStrategyFactory;
+import org.apache.cassandra.db.compaction.CompactionStrategyManager;
+import org.apache.cassandra.db.compaction.CompactionStrategyOptions;
+import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.db.compaction.Verifier;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.DataLimits;
 import org.apache.cassandra.db.memtable.Flushing;
@@ -104,7 +114,7 @@ import static org.apache.cassandra.utils.Throwables.maybeFail;
 import static org.apache.cassandra.utils.Throwables.merge;
 import static org.apache.cassandra.utils.Throwables.perform;
 
-public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner, CompactionRealm<SSTableReader>
+public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner, CompactionRealm
 {
     private static final Logger logger = LoggerFactory.getLogger(ColumnFamilyStore.class);
 
@@ -1380,19 +1390,20 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
      * @return sstables whose key range overlaps with that of the given sstables, not including itself.
      * (The given sstables may or may not overlap with each other.)
      */
-    public Collection<SSTableReader> getOverlappingLiveSSTables(Iterable<SSTableReader> sstables)
+    public void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
+                                           Iterable<? extends CompactionSSTable> sstables)
     {
         logger.trace("Checking for sstables overlapping {}", sstables);
 
         // a normal compaction won't ever have an empty sstables list, but we create a skeleton
         // compaction controller for streaming, and that passes an empty list.
         if (!sstables.iterator().hasNext())
-            return ImmutableSet.of();
+            return;
 
         View view = data.getView();
 
-        List<SSTableReader> sortedByFirst = Lists.newArrayList(sstables);
-        Collections.sort(sortedByFirst, (o1, o2) -> o1.first.compareTo(o2.first));
+        List<CompactionSSTable> sortedByFirst = Lists.newArrayList(sstables);
+        Collections.sort(sortedByFirst, CompactionSSTable.firstKeyComparator);
 
         List<AbstractBounds<PartitionPosition>> bounds = new ArrayList<>();
         DecoratedKey first = null, last = null;
@@ -1405,35 +1416,35 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         only query the tree 2 times, for these intervals;
         [         ]    [          ]
          */
-        for (SSTableReader sstable : sortedByFirst)
+        for (CompactionSSTable sstable : sortedByFirst)
         {
             if (first == null)
             {
-                first = sstable.first;
-                last = sstable.last;
+                first = sstable.getFirst();
+                last = sstable.getLast();
             }
             else
             {
-                if (sstable.first.compareTo(last) <= 0) // we do overlap
+                if (sstable.getFirst().compareTo(last) <= 0) // we do overlap
                 {
-                    if (sstable.last.compareTo(last) > 0)
-                        last = sstable.last;
+                    if (sstable.getLast().compareTo(last) > 0)
+                        last = sstable.getLast();
                 }
                 else
                 {
                     bounds.add(AbstractBounds.bounds(first, true, last, true));
-                    first = sstable.first;
-                    last = sstable.last;
+                    first = sstable.getFirst();
+                    last = sstable.getLast();
                 }
             }
         }
         bounds.add(AbstractBounds.bounds(first, true, last, true));
-        Set<SSTableReader> results = new HashSet<>();
 
         for (AbstractBounds<PartitionPosition> bound : bounds)
-            Iterables.addAll(results, view.liveSSTablesInBounds(bound.left, bound.right));
+            Iterables.addAll(overlaps, view.liveSSTablesInBounds(bound.left, bound.right));
 
-        return Sets.difference(results, ImmutableSet.copyOf(sstables));
+        for (CompactionSSTable sstable : sstables)
+            overlaps.remove(sstable);
     }
 
     /**
@@ -1443,7 +1454,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     {
         while (true)
         {
-            Iterable<SSTableReader> overlapped = getOverlappingLiveSSTables(sstables);
+            Set<SSTableReader> overlapped = new HashSet<>();
+            addOverlappingLiveSSTables(overlapped, sstables);
             Refs<SSTableReader> refs = Refs.tryRef(overlapped);
             if (refs != null)
                 return refs;
@@ -1488,7 +1500,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     {
         if (operation != OperationType.CLEANUP || isIndex())
         {
-            return SSTableBasicStats.getTotalBytes(sstables);
+            return CompactionSSTable.getTotalBytes(sstables);
         }
 
         // cleanup size estimation only counts bytes for keys local to this node
@@ -2685,6 +2697,21 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return Boolean.parseBoolean(params.options().get(CompactionStrategyOptions.ONLY_PURGE_REPAIRED_TOMBSTONES));
     }
 
+    public void addLiveSSTables(Collection<? super SSTableReader> sstables)
+    {
+        sstables.addAll(data.getLiveSSTables());
+    }
+
+    public void addCompactingSSTables(Collection<? super SSTableReader> sstables)
+    {
+        sstables.addAll(data.getCompacting());
+    }
+
+    public void addNoncompactingSSTables(Collection<? super SSTableReader> sstables)
+    {
+        Iterables.addAll(sstables, data.getNoncompacting());
+    }
+
     public void setCrcCheckChance(double crcCheckChance)
     {
         try
@@ -3283,13 +3310,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return sstable -> !sstable.isMarkedSuspect() && !compacting.contains(sstable);
     }
 
-    public SSTableReader toSSTableReader(SSTableReader ssTableReader)
+    public LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> ssTableReaders, OperationType operationType)
     {
-        return ssTableReader;
-    }
-
-    public Iterable<SSTableReader> toSSTableReaders(Iterable<SSTableReader> ssTableReaders)
-    {
-        return ssTableReaders;
+        return data.tryModify(Iterables.transform(ssTableReaders, SSTableReader.class::cast), operationType);
     }
 }

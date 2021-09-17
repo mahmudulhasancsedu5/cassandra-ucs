@@ -16,30 +16,38 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.io.sstable.format;
+package org.apache.cassandra.db.compaction;
 
+import java.util.Comparator;
 import java.util.UUID;
 
-import javax.annotation.Nullable;
+import com.google.common.collect.Ordering;
+import com.google.common.primitives.Longs;
 
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.db.compaction.LeveledCompactionStrategy;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 
-public interface SSTableBasicStats
+public interface CompactionSSTable
 {
+    Comparator<CompactionSSTable> maxTimestampDescending = (o1, o2) -> Long.compare(o2.getMaxTimestamp(), o1.getMaxTimestamp());
+    Comparator<CompactionSSTable> maxTimestampAscending = (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp());
+    Comparator<CompactionSSTable> firstKeyComparator = (o1, o2) -> o1.getFirst().compareTo(o2.getFirst());
+    Ordering<CompactionSSTable> firstKeyOrdering = Ordering.from(firstKeyComparator);
+    Comparator<? super CompactionSSTable> sizeComparator = (o1, o2) -> Longs.compare(o1.onDiskLength(), o2.onDiskLength());
+
     /**
      * @return the position of the first partition in the sstable
      */
-    PartitionPosition getFirst();
+    DecoratedKey getFirst();
 
     /**
      * @return the position of the last partition in the sstable
      */
-    PartitionPosition getLast();
+    DecoratedKey getLast();
 
     /**
      * @return the bounds spanned by this sstable, from first to last keys.
@@ -58,18 +66,18 @@ public interface SSTableBasicStats
      */
     long uncompressedLength();
 
-    static long getTotalBytes(Iterable<? extends SSTableBasicStats> sstables)
+    static long getTotalBytes(Iterable<? extends CompactionSSTable> sstables)
     {
         long sum = 0;
-        for (SSTableBasicStats sstable : sstables)
+        for (CompactionSSTable sstable : sstables)
             sum += sstable.onDiskLength();
         return sum;
     }
 
-    static long getTotalUncompressedBytes(Iterable<? extends SSTableBasicStats> sstables)
+    static long getTotalUncompressedBytes(Iterable<? extends CompactionSSTable> sstables)
     {
         long sum = 0;
-        for (SSTableBasicStats sstable : sstables)
+        for (CompactionSSTable sstable : sstables)
             sum += sstable.uncompressedLength();
 
         return sum;
@@ -165,6 +173,11 @@ public interface SSTableBasicStats
      * @return true if it is possible that the given key is contained in this sstable.
      */
     boolean couldContain(DecoratedKey key);
+
+    /**
+     * @return the index of the disk storing this sstable, according to the boundaries passed in.
+     */
+    int getDiskIndex(DiskBoundaries diskBoundaries);
 
     /**
       * @return the exact position of the given key in this sstable, or null if this is not supported or available.
