@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.CompactionMetrics;
@@ -124,7 +125,7 @@ public class CostsCalculator
             bytesInsertedPerPeriod.update(env.bytesInserted());
 
             numSSTables.update(strategy.getSSTables().size());
-            spaceUsed.update(strategy.getSSTables().stream().map(SSTableReader::onDiskLength).reduce(0L, Long::sum));
+            spaceUsed.update(strategy.getSSTables().stream().map(CompactionSSTable::onDiskLength).reduce(0L, Long::sum));
         }
         catch (Throwable err)
         {

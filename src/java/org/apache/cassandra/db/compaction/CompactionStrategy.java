@@ -96,7 +96,7 @@ public interface CompactionStrategy extends CompactionObserver
      * Is responsible for marking its sstables as compaction-pending.
      */
     @SuppressWarnings("resource")
-    CompactionTasks getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore);
+    CompactionTasks getUserDefinedTasks(Collection<? extends CompactionSSTable> sstables, int gcBefore);
 
     /**
      * Get the estimated remaining compactions.
@@ -161,12 +161,13 @@ public interface CompactionStrategy extends CompactionObserver
     /**
      * Returns the sstables managed by the strategy
      */
-    Set<SSTableReader> getSSTables();
+    Set<CompactionSSTable> getSSTables();
 
     /**
      * Group sstables that can be anti-compacted togetehr.
      */
-    Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup);
+    <S extends CompactionSSTable>
+    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup);
 
     /**
      * Create an sstable writer that is suitable for the strategy.

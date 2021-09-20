@@ -217,7 +217,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public List<ISSTableScanner> getScanners(GroupedSSTableContainer sstables, Collection<Range<Token>> ranges)
+    public List<ISSTableScanner> getScanners(GroupedSSTableContainer<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
         List<ISSTableScanner> scanners = new ArrayList<>(managers.size());
         for (int i = 0; i < managers.size(); i++)

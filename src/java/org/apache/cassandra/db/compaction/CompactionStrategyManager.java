@@ -149,7 +149,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     {
         AbstractStrategyHolder.DestinationRouter router = new AbstractStrategyHolder.DestinationRouter()
         {
-            public int getIndexForSSTable(SSTableReader sstable)
+            public int getIndexForSSTable(CompactionSSTable sstable)
             {
                 return compactionStrategyIndexFor(sstable);
             }
@@ -352,7 +352,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      * @param sstable
      * @return
      */
-    int compactionStrategyIndexFor(SSTableReader sstable)
+    int compactionStrategyIndexFor(CompactionSSTable sstable)
     {
         // should not call maybeReloadDiskBoundaries because it may be called from within lock
         readLock.lock();
@@ -363,7 +363,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
             if (!partitionSSTablesByTokenRange)
                 return 0;
 
-            return currentBoundaries.getDiskIndexFromKey(sstable);
+            return sstable.getDiskIndex(currentBoundaries);
         }
         finally
         {
@@ -599,7 +599,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
             compactionStrategyFor(sstable).addSSTable(sstable);
     }
 
-    private int getHolderIndex(SSTableReader sstable)
+    private int getHolderIndex(CompactionSSTable sstable)
     {
         for (int i = 0; i < holders.size(); i++)
         {
@@ -652,15 +652,16 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      *
      * lives in matches the list index of the holder that's responsible for it
      */
-    public List<GroupedSSTableContainer> groupSSTables(Iterable<SSTableReader> sstables)
+    public <S extends CompactionSSTable>
+    List<GroupedSSTableContainer<S>> groupSSTables(Iterable<? extends S> sstables)
     {
-        List<GroupedSSTableContainer> classified = new ArrayList<>(holders.size());
+        List<GroupedSSTableContainer<S>> classified = new ArrayList<>(holders.size());
         for (AbstractStrategyHolder holder : holders)
         {
             classified.add(holder.createGroupedSSTableContainer());
         }
 
-        for (SSTableReader sstable : sstables)
+        for (S sstable : sstables)
         {
             classified.get(getHolderIndex(sstable)).add(sstable);
         }
@@ -673,8 +674,8 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      */
     private void handleListChangedNotification(Iterable<SSTableReader> added, Iterable<SSTableReader> removed)
     {
-        List<GroupedSSTableContainer> addedGroups = groupSSTables(added);
-        List<GroupedSSTableContainer> removedGroups = groupSSTables(removed);
+        List<GroupedSSTableContainer<SSTableReader>> addedGroups = groupSSTables(added);
+        List<GroupedSSTableContainer<SSTableReader>> removedGroups = groupSSTables(removed);
         for (int i=0; i<holders.size(); i++)
         {
             holders.get(i).replaceSSTables(removedGroups.get(i), addedGroups.get(i));
@@ -686,10 +687,10 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      */
     private void handleRepairStatusChangedNotification(Iterable<SSTableReader> sstables)
     {
-        List<GroupedSSTableContainer> groups = groupSSTables(sstables);
+        List<GroupedSSTableContainer<SSTableReader>> groups = groupSSTables(sstables);
         for (int i = 0; i < holders.size(); i++)
         {
-            GroupedSSTableContainer group = groups.get(i);
+            GroupedSSTableContainer<SSTableReader> group = groups.get(i);
 
             if (group.isEmpty())
                 continue;
@@ -808,12 +809,12 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
         readLock.lock();
         try
         {
-            List<GroupedSSTableContainer> sstableGroups = groupSSTables(sstables);
+            List<GroupedSSTableContainer<SSTableReader>> sstableGroups = groupSSTables(sstables);
 
             for (int i = 0; i < holders.size(); i++)
             {
                 AbstractStrategyHolder holder = holders.get(i);
-                GroupedSSTableContainer group = sstableGroups.get(i);
+                GroupedSSTableContainer<SSTableReader> group = sstableGroups.get(i);
                 scanners.addAll(holder.getScanners(group, ranges));
             }
         }
@@ -851,7 +852,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     }
 
     @Override
-    public Set<SSTableReader> getSSTables()
+    public Set<CompactionSSTable> getSSTables()
     {
         return getStrategies().stream()
                               .flatMap(strategy -> strategy.getSSTables().stream())
@@ -859,7 +860,8 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public <S extends CompactionSSTable>
+    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
     {
         maybeReloadDiskBoundaries();
         readLock.lock();
@@ -957,14 +959,14 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      * @return a list of compaction tasks corresponding to the sstables requested
      */
     @Override
-    public CompactionTasks getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public CompactionTasks getUserDefinedTasks(Collection<? extends CompactionSSTable> sstables, int gcBefore)
     {
         maybeReloadDiskBoundaries();
         List<AbstractCompactionTask> ret = new ArrayList<>();
         readLock.lock();
         try
         {
-            List<GroupedSSTableContainer> groupedSSTables = groupSSTables(sstables);
+            List<GroupedSSTableContainer<CompactionSSTable>> groupedSSTables = groupSSTables(sstables);
             for (int i = 0; i < holders.size(); i++)
             {
                 ret.addAll(holders.get(i).getUserDefinedTasks(groupedSSTables.get(i), gcBefore));

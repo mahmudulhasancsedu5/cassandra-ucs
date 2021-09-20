@@ -21,6 +21,7 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,12 +102,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public <S extends CompactionSSTable>
+    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
     {
-        Collection<Collection<SSTableReader>> groups = new ArrayList<>();
+        Collection<Collection<S>> groups = new ArrayList<>();
         for (Shard shard : getCompactionShards(sstablesToGroup))
         {
-            groups.addAll(super.groupSSTablesForAntiCompaction(Collections2.transform(shard.sstables, SSTableReader.class::cast)));
+            groups.addAll(super.groupSSTablesForAntiCompaction((Collection<S>) shard.sstables));
         }
 
         return groups;
@@ -625,9 +627,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public Set<SSTableReader> getSSTables()
+    public Set<CompactionSSTable> getSSTables()
     {
-        return realm.getLiveSSTables();
+        // Could we do without this copy?
+        return ImmutableSet.copyOf(realm.getLiveSSTables());
     }
 
     @VisibleForTesting

@@ -165,7 +165,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     @SuppressWarnings("resource")
     public synchronized CompactionTasks getMaximalTasks(int gcBefore, boolean splitOutput)
     {
-        Iterable<SSTableReader> filteredSSTables = Iterables.filter(getSSTables(), sstable -> !sstable.isMarkedSuspect());
+        Iterable<CompactionSSTable> filteredSSTables = Iterables.filter(getSSTables(), sstable -> !sstable.isMarkedSuspect());
         if (Iterables.isEmpty(filteredSSTables))
             return CompactionTasks.empty();
         LifecycleTransaction txn = realm.tryModify(filteredSSTables, OperationType.COMPACTION);
@@ -185,7 +185,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
      */
     @Override
     @SuppressWarnings("resource")
-    public synchronized CompactionTasks getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public synchronized CompactionTasks getUserDefinedTasks(Collection<? extends CompactionSSTable> sstables, int gcBefore)
     {
         assert !sstables.isEmpty(); // checked for by CM.submitUserDefined
 
@@ -320,16 +320,16 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
      * cannot be merged due to some constraint it must override this method.
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public <S extends CompactionSSTable> Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
     {
         int groupSize = 2;
-        List<SSTableReader> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
-        Collections.sort(sortedSSTablesToGroup, SSTableReader.firstKeyComparator);
+        List<S> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
+        Collections.sort(sortedSSTablesToGroup, CompactionSSTable.firstKeyComparator);
 
-        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
-        Collection<SSTableReader> currGroup = new ArrayList<>(groupSize);
+        Collection<Collection<S>> groupedSSTables = new ArrayList<>();
+        Collection<S> currGroup = new ArrayList<>(groupSize);
 
-        for (SSTableReader sstable : sortedSSTablesToGroup)
+        for (S sstable : sortedSSTablesToGroup)
         {
             currGroup.add(sstable);
             if (currGroup.size() == groupSize)

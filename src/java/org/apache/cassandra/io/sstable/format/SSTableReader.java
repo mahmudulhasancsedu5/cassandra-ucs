@@ -787,6 +787,11 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         return dfile.path();
     }
 
+    public Descriptor getDescriptor()
+    {
+        return descriptor;
+    }
+
     public void setupOnline()
     {
         final ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);

@@ -30,6 +30,7 @@ import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.Descriptor;
 
 public interface CompactionSSTable
 {
@@ -178,6 +179,10 @@ public interface CompactionSSTable
      * @return the index of the disk storing this sstable, according to the boundaries passed in.
      */
     int getDiskIndex(DiskBoundaries diskBoundaries);
+
+    Descriptor getDescriptor();
+
+    boolean isTransient();
 
     /**
       * @return the exact position of the given key in this sstable, or null if this is not supported or available.

@@ -226,9 +226,9 @@ class LeveledGenerations
         return counts;
     }
 
-    Set<SSTableReader> allSSTables()
+    Set<CompactionSSTable> allSSTables()
     {
-        ImmutableSet.Builder<SSTableReader> builder = ImmutableSet.builder();
+        ImmutableSet.Builder<CompactionSSTable> builder = ImmutableSet.builder();
         builder.addAll(l0);
         for (Set<SSTableReader> sstables : levels)
             builder.addAll(sstables);

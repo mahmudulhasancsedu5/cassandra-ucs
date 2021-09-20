@@ -72,17 +72,17 @@ public abstract class AbstractStrategyHolder
 
     public static interface DestinationRouter
     {
-        int getIndexForSSTable(SSTableReader sstable);
+        int getIndexForSSTable(CompactionSSTable sstable);
         int getIndexForSSTableDirectory(Descriptor descriptor);
     }
 
     /**
      * Maps sstables to their token partition bucket
      */
-    public static class GroupedSSTableContainer
+    public static class GroupedSSTableContainer<S extends CompactionSSTable>
     {
         private final AbstractStrategyHolder holder;
-        private final Set<SSTableReader>[] groups;
+        private final Set<S>[] groups;
 
         private GroupedSSTableContainer(AbstractStrategyHolder holder)
         {
@@ -91,7 +91,7 @@ public abstract class AbstractStrategyHolder
             groups = new Set[holder.numTokenPartitions];
         }
 
-        void add(SSTableReader sstable)
+        void add(S sstable)
         {
             Preconditions.checkArgument(holder.managesSSTable(sstable), "this strategy holder doesn't manage %s", sstable);
             int idx = holder.router.getIndexForSSTable(sstable);
@@ -106,10 +106,10 @@ public abstract class AbstractStrategyHolder
             return groups.length;
         }
 
-        public Set<SSTableReader> getGroup(int i)
+        public Set<S> getGroup(int i)
         {
             Preconditions.checkArgument(i >= 0 && i < groups.length);
-            Set<SSTableReader> group = groups[i];
+            Set<S> group = groups[i];
             return group != null ? group : Collections.emptySet();
         }
 
@@ -161,7 +161,7 @@ public abstract class AbstractStrategyHolder
      */
     public abstract boolean managesRepairedGroup(boolean isRepaired, boolean isPendingRepair, boolean isTransient);
 
-    public boolean managesSSTable(SSTableReader sstable)
+    public boolean managesSSTable(CompactionSSTable sstable)
     {
         return managesRepairedGroup(sstable.isRepaired(), sstable.isPendingRepair(), sstable.isTransient());
     }
@@ -174,20 +174,20 @@ public abstract class AbstractStrategyHolder
 
     public abstract Collection<AbstractCompactionTask> getMaximalTasks(int gcBefore, boolean splitOutput);
 
-    public abstract Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer sstables, int gcBefore);
+    public abstract Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer<?> sstables, int gcBefore);
 
-    public GroupedSSTableContainer createGroupedSSTableContainer()
+    public <S extends CompactionSSTable> GroupedSSTableContainer<S> createGroupedSSTableContainer()
     {
-        return new GroupedSSTableContainer(this);
+        return new GroupedSSTableContainer<>(this);
     }
 
-    public abstract void addSSTables(GroupedSSTableContainer sstables);
+    public abstract void addSSTables(GroupedSSTableContainer<SSTableReader> sstables);
 
-    public abstract void removeSSTables(GroupedSSTableContainer sstables);
+    public abstract void removeSSTables(GroupedSSTableContainer<SSTableReader> sstables);
 
-    public abstract void replaceSSTables(GroupedSSTableContainer removed, GroupedSSTableContainer added);
+    public abstract void replaceSSTables(GroupedSSTableContainer<SSTableReader> removed, GroupedSSTableContainer<SSTableReader> added);
 
-    public abstract List<ISSTableScanner> getScanners(GroupedSSTableContainer sstables, Collection<Range<Token>> ranges);
+    public abstract List<ISSTableScanner> getScanners(GroupedSSTableContainer<SSTableReader> sstables, Collection<Range<Token>> ranges);
 
 
     public abstract SSTableMultiWriter createSSTableMultiWriter(Descriptor descriptor,

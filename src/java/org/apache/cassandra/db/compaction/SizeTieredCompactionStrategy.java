@@ -389,7 +389,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public Set<SSTableReader> getSSTables()
+    public Set<CompactionSSTable> getSSTables()
     {
         synchronized (sstables)
         {

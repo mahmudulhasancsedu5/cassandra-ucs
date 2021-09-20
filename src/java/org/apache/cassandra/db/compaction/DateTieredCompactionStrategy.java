@@ -231,7 +231,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public Set<SSTableReader> getSSTables()
+    public Set<CompactionSSTable> getSSTables()
     {
         synchronized (sstables)
         {
@@ -434,10 +434,11 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
      * DTCS should not group sstables for anticompaction - this can mix new and old data
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public <S extends CompactionSSTable>
+    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
     {
-        Collection<Collection<SSTableReader>> groups = new ArrayList<>(sstablesToGroup.size());
-        for (SSTableReader sstable : sstablesToGroup)
+        Collection<Collection<S>> groups = new ArrayList<>(sstablesToGroup.size());
+        for (S sstable : sstablesToGroup)
         {
             groups.add(Collections.singleton(sstable));
         }

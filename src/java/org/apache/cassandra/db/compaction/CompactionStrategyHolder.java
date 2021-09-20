@@ -121,7 +121,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer sstables, int gcBefore)
+    public Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer<?> sstables, int gcBefore)
     {
         List<AbstractCompactionTask> tasks = new ArrayList<>(strategies.size());
         for (int i = 0; i < strategies.size(); i++)
@@ -135,7 +135,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public void addSSTables(GroupedSSTableContainer sstables)
+    public void addSSTables(GroupedSSTableContainer<SSTableReader> sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == strategies.size());
         for (int i = 0; i < strategies.size(); i++)
@@ -146,7 +146,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public void removeSSTables(GroupedSSTableContainer sstables)
+    public void removeSSTables(GroupedSSTableContainer<SSTableReader> sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == strategies.size());
         for (int i = 0; i < strategies.size(); i++)
@@ -157,7 +157,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public void replaceSSTables(GroupedSSTableContainer removed, GroupedSSTableContainer added)
+    public void replaceSSTables(GroupedSSTableContainer<SSTableReader> removed, GroupedSSTableContainer<SSTableReader> added)
     {
         Preconditions.checkArgument(removed.numGroups() == strategies.size());
         Preconditions.checkArgument(added.numGroups() == strategies.size());
@@ -180,7 +180,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
 
     @Override
     @SuppressWarnings("resource")
-    public List<ISSTableScanner> getScanners(GroupedSSTableContainer sstables, Collection<Range<Token>> ranges)
+    public List<ISSTableScanner> getScanners(GroupedSSTableContainer<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
         List<ISSTableScanner> scanners = new ArrayList<>(strategies.size());
         for (int i = 0; i < strategies.size(); i++)
@@ -193,13 +193,14 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
         return scanners;
     }
 
-    Collection<Collection<SSTableReader>> groupForAnticompaction(Iterable<SSTableReader> sstables)
+    <S extends CompactionSSTable>
+    Collection<Collection<S>> groupForAnticompaction(Iterable<S> sstables)
     {
         Preconditions.checkState(!isRepaired);
-        GroupedSSTableContainer group = createGroupedSSTableContainer();
+        GroupedSSTableContainer group = this.<S>createGroupedSSTableContainer();
         sstables.forEach(group::add);
 
-        Collection<Collection<SSTableReader>> anticompactionGroups = new ArrayList<>();
+        Collection<Collection<S>> anticompactionGroups = new ArrayList<>();
         for (int i = 0; i < strategies.size(); i++)
         {
             if (group.isGroupEmpty(i))

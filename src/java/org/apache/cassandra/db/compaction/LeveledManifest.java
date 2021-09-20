@@ -461,7 +461,7 @@ public class LeveledManifest
         return level;
     }
 
-    public synchronized Set<SSTableReader> getSSTables()
+    public synchronized Set<CompactionSSTable> getSSTables()
     {
         return generations.allSSTables();
     }

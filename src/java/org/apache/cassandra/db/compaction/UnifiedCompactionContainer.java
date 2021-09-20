@@ -235,7 +235,7 @@ public class UnifiedCompactionContainer implements CompactionStrategyContainer
     }
 
     @Override
-    public CompactionTasks getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public CompactionTasks getUserDefinedTasks(Collection<? extends CompactionSSTable> sstables, int gcBefore)
     {
         return strategy.getUserDefinedTasks(sstables, gcBefore);
     }
@@ -295,13 +295,14 @@ public class UnifiedCompactionContainer implements CompactionStrategyContainer
     }
 
     @Override
-    public Set<SSTableReader> getSSTables()
+    public Set<CompactionSSTable> getSSTables()
     {
         return strategy.getSSTables();
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public <S extends CompactionSSTable>
+    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
     {
         return strategy.groupSSTablesForAntiCompaction(sstablesToGroup);
     }
