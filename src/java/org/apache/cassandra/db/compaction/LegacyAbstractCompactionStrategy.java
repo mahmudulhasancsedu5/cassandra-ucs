@@ -183,34 +183,34 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      *
      * Note that implementations must be able to handle duplicate notifications here (that removed are already gone and
      * added have already been added)
-     * */
-    public abstract void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added);
+     */
+    public abstract void replaceSSTables(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added);
 
     /**
      * Adds sstable, note that implementations must handle duplicate notifications here (added already being in the compaction strategy)
      */
-    abstract void addSSTable(SSTableReader added);
+    abstract void addSSTable(CompactionSSTable added);
 
     /**
      * Adds sstables, note that implementations must handle duplicate notifications here (added already being in the compaction strategy)
      */
-    public synchronized void addSSTables(Iterable<SSTableReader> added)
+    public synchronized void addSSTables(Iterable<CompactionSSTable> added)
     {
-        for (SSTableReader sstable : added)
+        for (CompactionSSTable sstable : added)
             addSSTable(sstable);
     }
 
     /**
      * Removes sstable from the strategy, implementations must be able to handle the sstable having already been removed.
      */
-    abstract void removeSSTable(SSTableReader sstable);
+    abstract void removeSSTable(CompactionSSTable sstable);
 
     /**
      * Removes sstables from the strategy, implementations must be able to handle the sstables having already been removed.
      */
-    public void removeSSTables(Iterable<SSTableReader> removed)
+    public void removeSSTables(Iterable<CompactionSSTable> removed)
     {
-        for (SSTableReader sstable : removed)
+        for (CompactionSSTable sstable : removed)
             removeSSTable(sstable);
     }
 

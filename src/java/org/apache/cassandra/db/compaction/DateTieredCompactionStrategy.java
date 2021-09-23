@@ -37,7 +37,6 @@ import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CompactionParams;
@@ -196,18 +195,18 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         return sstableMinTimestampPairs;
     }
 
-    public void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    public void replaceSSTables(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added)
     {
         synchronized (sstables)
         {
-            for (SSTableReader remove : removed)
+            for (CompactionSSTable remove : removed)
                 removeSSTable(remove);
             addSSTables(added);
         }
     }
 
     @Override
-    public void addSSTable(SSTableReader sstable)
+    public void addSSTable(CompactionSSTable sstable)
     {
         synchronized (sstables)
         {
@@ -216,7 +215,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public void removeSSTable(SSTableReader sstable)
+    public void removeSSTable(CompactionSSTable sstable)
     {
         synchronized (sstables)
         {
@@ -434,11 +433,10 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
      * DTCS should not group sstables for anticompaction - this can mix new and old data
      */
     @Override
-    public <S extends CompactionSSTable>
-    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
     {
-        Collection<Collection<S>> groups = new ArrayList<>(sstablesToGroup.size());
-        for (S sstable : sstablesToGroup)
+        Collection<Collection<SSTableReader>> groups = new ArrayList<>(sstablesToGroup.size());
+        for (SSTableReader sstable : sstablesToGroup)
         {
             groups.add(Collections.singleton(sstable));
         }

@@ -86,12 +86,12 @@ public class LeveledManifest
         compactionCounter = new int[MAX_LEVEL_COUNT];
     }
 
-    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, List<SSTableReader> sstables)
+    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, List<CompactionSSTable> sstables)
     {
         return create(realm, maxSSTableSize, fanoutSize, sstables, new SizeTieredCompactionStrategyOptions());
     }
 
-    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, Iterable<SSTableReader> sstables, SizeTieredCompactionStrategyOptions options)
+    public static LeveledManifest create(CompactionRealm realm, int maxSSTableSize, int fanoutSize, Iterable<CompactionSSTable> sstables, SizeTieredCompactionStrategyOptions options)
     {
         LeveledManifest manifest = new LeveledManifest(realm, maxSSTableSize, fanoutSize, options);
 
@@ -135,7 +135,7 @@ public class LeveledManifest
         generations.addAll(readers);
     }
 
-    public synchronized void replace(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    public synchronized void replace(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added)
     {
         assert !removed.isEmpty(); // use add() instead of promote when adding new sstables
         if (logger.isTraceEnabled())
@@ -453,7 +453,7 @@ public class LeveledManifest
     }
 
     @VisibleForTesting
-    public synchronized int remove(SSTableReader reader)
+    public synchronized int remove(CompactionSSTable reader)
     {
         int level = reader.getSSTableLevel();
         assert level >= 0 : reader + " not present in manifest: "+level;

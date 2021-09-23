@@ -210,29 +210,28 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
      * @return Groups of sstables from the same level
      */
     @Override
-    public <S extends CompactionSSTable>
-    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> ssTablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> ssTablesToGroup)
     {
         int groupSize = 2;
-        Map<Integer, Collection<S>> sstablesByLevel = new HashMap<>();
-        for (S sstable : ssTablesToGroup)
+        Map<Integer, Collection<SSTableReader>> sstablesByLevel = new HashMap<>();
+        for (SSTableReader sstable : ssTablesToGroup)
         {
             Integer level = sstable.getSSTableLevel();
-            Collection<S> sstablesForLevel = sstablesByLevel.get(level);
+            Collection<SSTableReader> sstablesForLevel = sstablesByLevel.get(level);
             if (sstablesForLevel == null)
             {
-                sstablesForLevel = new ArrayList<S>();
+                sstablesForLevel = new ArrayList<SSTableReader>();
                 sstablesByLevel.put(level, sstablesForLevel);
             }
             sstablesForLevel.add(sstable);
         }
 
-        Collection<Collection<S>> groupedSSTables = new ArrayList<>();
+        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
 
-        for (Collection<S> levelOfSSTables : sstablesByLevel.values())
+        for (Collection<SSTableReader> levelOfSSTables : sstablesByLevel.values())
         {
-            Collection<S> currGroup = new ArrayList<>(groupSize);
-            for (S sstable : levelOfSSTables)
+            Collection<SSTableReader> currGroup = new ArrayList<>(groupSize);
+            for (SSTableReader sstable : levelOfSSTables)
             {
                 currGroup.add(sstable);
                 if (currGroup.size() == groupSize)
@@ -315,7 +314,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
     }
 
     @Override
-    public void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    public void replaceSSTables(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added)
     {
         manifest.replace(removed, added);
     }
@@ -328,7 +327,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
     }
 
     @Override
-    public void addSSTables(Iterable<SSTableReader> sstables)
+    public void addSSTables(Iterable<CompactionSSTable> sstables)
     {
         manifest.addSSTables(sstables);
     }
@@ -340,13 +339,13 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
     }
 
     @Override
-    public void addSSTable(SSTableReader added)
+    public void addSSTable(CompactionSSTable added)
     {
         manifest.addSSTables(Collections.singleton(added));
     }
 
     @Override
-    public void removeSSTable(SSTableReader sstable)
+    public void removeSSTable(CompactionSSTable sstable)
     {
         manifest.remove(sstable);
     }

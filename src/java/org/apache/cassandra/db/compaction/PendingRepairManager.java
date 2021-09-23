@@ -144,7 +144,7 @@ class PendingRepairManager
         strategies = ImmutableMap.copyOf(Maps.filterKeys(strategies, k -> !k.equals(sessionID)));
     }
 
-    synchronized void removeSSTable(SSTableReader sstable)
+    synchronized void removeSSTable(CompactionSSTable sstable)
     {
         for (Map.Entry<UUID, LegacyAbstractCompactionStrategy> entry : strategies.entrySet())
         {
@@ -153,32 +153,32 @@ class PendingRepairManager
         }
     }
 
-    void removeSSTables(Iterable<SSTableReader> removed)
+    void removeSSTables(Iterable<CompactionSSTable> removed)
     {
-        for (SSTableReader sstable : removed)
+        for (CompactionSSTable sstable : removed)
             removeSSTable(sstable);
     }
 
-    synchronized void addSSTable(SSTableReader sstable)
+    synchronized void addSSTable(CompactionSSTable sstable)
     {
         Preconditions.checkArgument(sstable.isTransient() == isTransient);
         getOrCreate(sstable).addSSTable(sstable);
     }
 
-    void addSSTables(Iterable<SSTableReader> added)
+    void addSSTables(Iterable<? extends CompactionSSTable> added)
     {
-        for (SSTableReader sstable : added)
+        for (CompactionSSTable sstable : added)
             addSSTable(sstable);
     }
 
-    synchronized void replaceSSTables(Set<SSTableReader> removed, Set<SSTableReader> added)
+    synchronized void replaceSSTables(Set<CompactionSSTable> removed, Set<CompactionSSTable> added)
     {
         if (removed.isEmpty() && added.isEmpty())
             return;
 
         // left=removed, right=added
-        Map<UUID, Pair<Set<SSTableReader>, Set<SSTableReader>>> groups = new HashMap<>();
-        for (SSTableReader sstable : removed)
+        Map<UUID, Pair<Set<CompactionSSTable>, Set<CompactionSSTable>>> groups = new HashMap<>();
+        for (CompactionSSTable sstable : removed)
         {
             UUID sessionID = sstable.getPendingRepair();
             if (!groups.containsKey(sessionID))
@@ -188,7 +188,7 @@ class PendingRepairManager
             groups.get(sessionID).left.add(sstable);
         }
 
-        for (SSTableReader sstable : added)
+        for (CompactionSSTable sstable : added)
         {
             UUID sessionID = sstable.getPendingRepair();
             if (!groups.containsKey(sessionID))
@@ -198,11 +198,11 @@ class PendingRepairManager
             groups.get(sessionID).right.add(sstable);
         }
 
-        for (Map.Entry<UUID, Pair<Set<SSTableReader>, Set<SSTableReader>>> entry : groups.entrySet())
+        for (Map.Entry<UUID, Pair<Set<CompactionSSTable>, Set<CompactionSSTable>>> entry : groups.entrySet())
         {
             LegacyAbstractCompactionStrategy strategy = getOrCreate(entry.getKey());
-            Set<SSTableReader> groupRemoved = entry.getValue().left;
-            Set<SSTableReader> groupAdded = entry.getValue().right;
+            Set<CompactionSSTable> groupRemoved = entry.getValue().left;
+            Set<CompactionSSTable> groupAdded = entry.getValue().right;
 
             if (!groupRemoved.isEmpty())
                 strategy.replaceSSTables(groupRemoved, groupAdded);
@@ -425,9 +425,9 @@ class PendingRepairManager
         return strategy != null && strategy.getSSTables().contains(sstable);
     }
 
-    public Collection<AbstractCompactionTask> createUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public Collection<AbstractCompactionTask> createUserDefinedTasks(Collection<CompactionSSTable> sstables, int gcBefore)
     {
-        Map<UUID, List<SSTableReader>> group = sstables.stream().collect(Collectors.groupingBy(s -> s.getSSTableMetadata().pendingRepair));
+        Map<UUID, List<CompactionSSTable>> group = sstables.stream().collect(Collectors.groupingBy(s -> s.getPendingRepair()));
         return group.entrySet().stream().map(g -> strategies.get(g.getKey()).getUserDefinedTasks(g.getValue(), gcBefore)).flatMap(Collection::stream).collect(Collectors.toList());
     }
 }

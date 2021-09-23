@@ -674,8 +674,8 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      */
     private void handleListChangedNotification(Iterable<SSTableReader> added, Iterable<SSTableReader> removed)
     {
-        List<GroupedSSTableContainer<SSTableReader>> addedGroups = groupSSTables(added);
-        List<GroupedSSTableContainer<SSTableReader>> removedGroups = groupSSTables(removed);
+        List<GroupedSSTableContainer<CompactionSSTable>> addedGroups = groupSSTables(added);
+        List<GroupedSSTableContainer<CompactionSSTable>> removedGroups = groupSSTables(removed);
         for (int i=0; i<holders.size(); i++)
         {
             holders.get(i).replaceSSTables(removedGroups.get(i), addedGroups.get(i));
@@ -687,10 +687,10 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
      */
     private void handleRepairStatusChangedNotification(Iterable<SSTableReader> sstables)
     {
-        List<GroupedSSTableContainer<SSTableReader>> groups = groupSSTables(sstables);
+        List<GroupedSSTableContainer<CompactionSSTable>> groups = groupSSTables(sstables);
         for (int i = 0; i < holders.size(); i++)
         {
-            GroupedSSTableContainer<SSTableReader> group = groups.get(i);
+            GroupedSSTableContainer<CompactionSSTable> group = groups.get(i);
 
             if (group.isEmpty())
                 continue;
@@ -860,8 +860,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     }
 
     @Override
-    public <S extends CompactionSSTable>
-    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
     {
         maybeReloadDiskBoundaries();
         readLock.lock();

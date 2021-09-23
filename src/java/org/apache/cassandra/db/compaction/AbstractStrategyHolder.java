@@ -174,18 +174,18 @@ public abstract class AbstractStrategyHolder
 
     public abstract Collection<AbstractCompactionTask> getMaximalTasks(int gcBefore, boolean splitOutput);
 
-    public abstract Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer<?> sstables, int gcBefore);
+    public abstract Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer<CompactionSSTable> sstables, int gcBefore);
 
     public <S extends CompactionSSTable> GroupedSSTableContainer<S> createGroupedSSTableContainer()
     {
         return new GroupedSSTableContainer<>(this);
     }
 
-    public abstract void addSSTables(GroupedSSTableContainer<SSTableReader> sstables);
+    public abstract void addSSTables(GroupedSSTableContainer<CompactionSSTable> sstables);
 
-    public abstract void removeSSTables(GroupedSSTableContainer<SSTableReader> sstables);
+    public abstract void removeSSTables(GroupedSSTableContainer<CompactionSSTable> sstables);
 
-    public abstract void replaceSSTables(GroupedSSTableContainer<SSTableReader> removed, GroupedSSTableContainer<SSTableReader> added);
+    public abstract void replaceSSTables(GroupedSSTableContainer<CompactionSSTable> removed, GroupedSSTableContainer<CompactionSSTable> added);
 
     public abstract List<ISSTableScanner> getScanners(GroupedSSTableContainer<SSTableReader> sstables, Collection<Range<Token>> ranges);
 

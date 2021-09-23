@@ -165,9 +165,10 @@ public interface CompactionStrategy extends CompactionObserver
 
     /**
      * Group sstables that can be anti-compacted togetehr.
+     * @param sstablesToGroup
+     * @return
      */
-    <S extends CompactionSSTable>
-    Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup);
+    Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup);
 
     /**
      * Create an sstable writer that is suitable for the strategy.

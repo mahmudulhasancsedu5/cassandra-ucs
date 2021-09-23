@@ -354,18 +354,18 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    public void replaceSSTables(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added)
     {
         synchronized (sstables)
         {
-            for (SSTableReader remove : removed)
+            for (CompactionSSTable remove : removed)
                 sstables.remove(remove);
             sstables.addAll(added);
         }
     }
 
     @Override
-    public void addSSTable(SSTableReader added)
+    public void addSSTable(CompactionSSTable added)
     {
         synchronized (sstables)
         {
@@ -380,7 +380,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public void removeSSTable(SSTableReader sstable)
+    public void removeSSTable(CompactionSSTable sstable)
     {
         synchronized (sstables)
         {

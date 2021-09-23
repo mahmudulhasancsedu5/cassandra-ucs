@@ -37,7 +37,6 @@ import com.google.common.collect.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -172,18 +171,18 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
 
 
     @Override
-    public void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    public void replaceSSTables(Collection<CompactionSSTable> removed, Collection<CompactionSSTable> added)
     {
         synchronized (sstables)
         {
-            for (SSTableReader remove : removed)
+            for (CompactionSSTable remove : removed)
                 sstables.remove(remove);
             sstables.addAll(added);
         }
     }
 
     @Override
-    public void addSSTable(SSTableReader sstable)
+    public void addSSTable(CompactionSSTable sstable)
     {
         synchronized (sstables)
         {
@@ -198,7 +197,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
     }
 
     @Override
-    public void removeSSTable(SSTableReader sstable)
+    public void removeSSTable(CompactionSSTable sstable)
     {
         synchronized (sstables)
         {

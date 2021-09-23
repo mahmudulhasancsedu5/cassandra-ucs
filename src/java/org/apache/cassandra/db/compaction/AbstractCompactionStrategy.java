@@ -318,18 +318,20 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
      * anti-compaction to determine which SSTables should be anitcompacted
      * as a group. If a given compaction strategy creates sstables which
      * cannot be merged due to some constraint it must override this method.
+     * @param sstablesToGroup
+     * @return
      */
     @Override
-    public <S extends CompactionSSTable> Collection<Collection<S>> groupSSTablesForAntiCompaction(Collection<S> sstablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
     {
         int groupSize = 2;
-        List<S> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
-        Collections.sort(sortedSSTablesToGroup, CompactionSSTable.firstKeyComparator);
+        List<SSTableReader> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
+        Collections.sort(sortedSSTablesToGroup, SSTableReader.firstKeyComparator);
 
-        Collection<Collection<S>> groupedSSTables = new ArrayList<>();
-        Collection<S> currGroup = new ArrayList<>(groupSize);
+        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
+        Collection<SSTableReader> currGroup = new ArrayList<>(groupSize);
 
-        for (S sstable : sortedSSTablesToGroup)
+        for (SSTableReader sstable : sortedSSTablesToGroup)
         {
             currGroup.add(sstable);
             if (currGroup.size() == groupSize)
