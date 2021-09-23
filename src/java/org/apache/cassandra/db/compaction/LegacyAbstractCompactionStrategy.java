@@ -229,7 +229,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         synchronized (sstables)
         {
             int removed = 0;
-            Set<SSTableReader> liveSet = realm.getLiveSSTables();
+            Set<? extends CompactionSSTable> liveSet = realm.getLiveSSTables();
             for (Iterator<CompactionSSTable> it = sstables.iterator(); it.hasNext(); )
             {
                 CompactionSSTable sstable = it.next();
@@ -259,7 +259,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      *
      * This is only needed by the LCS manifest from what I could see.
      */
-    void metadataChanged(StatsMetadata oldMetadata, SSTableReader sstable)
+    void metadataChanged(StatsMetadata oldMetadata, CompactionSSTable sstable)
     {
     }
 
@@ -315,8 +315,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (options.isUncheckedTombstoneCompaction())
             return true;
 
-        Set<CompactionSSTable> overlaps = new HashSet<>();
-        realm.addOverlappingLiveSSTables(overlaps, Collections.singleton(reader));
+        Set<CompactionSSTable> overlaps = realm.getOverlappingLiveSSTables(Collections.singleton(reader));
         if (overlaps.isEmpty())
         {
             // there is no overlap, tombstones are safely droppable

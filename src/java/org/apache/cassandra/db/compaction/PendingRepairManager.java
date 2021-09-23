@@ -94,7 +94,7 @@ class PendingRepairManager
         return strategies.get(id);
     }
 
-    LegacyAbstractCompactionStrategy get(SSTableReader sstable)
+    LegacyAbstractCompactionStrategy get(CompactionSSTable sstable)
     {
         assert sstable.isPendingRepair();
         return get(sstable.getPendingRepair());

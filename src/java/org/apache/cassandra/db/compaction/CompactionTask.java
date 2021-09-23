@@ -188,7 +188,7 @@ public class CompactionTask extends AbstractCompactionTask
             realm.snapshotWithoutMemtable(System.currentTimeMillis() + "-compact-" + realm.getTableName());
 
         try (CompactionController controller = getCompactionController(transaction.originals());
-             CompactionOperation operation = new CompactionOperation(controller))
+             CompactionOperation operation = new CompactionOperation(controller, strategy))
         {
             operation.execute();
         }
@@ -232,7 +232,7 @@ public class CompactionTask extends AbstractCompactionTask
          * <p/>
          * @param controller the compaction controller is needed by the scanners and compaction iterator to manage options
          */
-        private CompactionOperation(CompactionController controller)
+        private CompactionOperation(CompactionController controller, CompactionStrategy strategy)
         {
             this.controller = controller;
 
@@ -261,7 +261,7 @@ public class CompactionTask extends AbstractCompactionTask
             {
                 // resources that need closing, must be created last in case of exceptions and released if there is an exception in the c.tor
                 this.sstableRefs = Refs.ref(actuallyCompact);
-                this.scanners = realm.getScanners(actuallyCompact);
+                this.scanners = strategy.getScanners(actuallyCompact);
                 this.compactionIterator = new CompactionIterator(compactionType, scanners.scanners, controller, FBUtilities.nowInSeconds(), taskId);
                 this.op = compactionIterator.getOperation();
                 this.writer = getCompactionAwareWriter(realm, dirs, transaction, actuallyCompact);

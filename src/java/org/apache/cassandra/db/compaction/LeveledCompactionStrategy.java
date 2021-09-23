@@ -320,7 +320,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
     }
 
     @Override
-    public void metadataChanged(StatsMetadata oldMetadata, SSTableReader sstable)
+    public void metadataChanged(StatsMetadata oldMetadata, CompactionSSTable sstable)
     {
         if (sstable.getSSTableLevel() != oldMetadata.sstableLevel)
             manifest.newLevel(sstable, oldMetadata.sstableLevel);
@@ -504,7 +504,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
             return -1 * Doubles.compare(r1, r2);
         };
         Function<Collection<CompactionSSTable>, CompactionSSTable> selector = list -> Collections.max(list, comparator);
-        Set<SSTableReader> compacting = realm.getCompactingSSTables();
+        Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
 
         for (int i = manifest.getLevelCount(); i >= 0; i--)
         {

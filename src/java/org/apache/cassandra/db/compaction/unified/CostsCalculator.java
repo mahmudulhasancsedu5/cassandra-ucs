@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.CompactionMetrics;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;

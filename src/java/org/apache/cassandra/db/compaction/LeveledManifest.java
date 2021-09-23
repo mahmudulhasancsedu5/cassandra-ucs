@@ -28,7 +28,6 @@ import com.google.common.collect.Sets;
 
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,7 +163,7 @@ public class LeveledManifest
     public synchronized void removeDeadSSTables()
     {
         int removed = 0;
-        Set<SSTableReader> liveSet = realm.getLiveSSTables();
+        Set<? extends CompactionSSTable> liveSet = realm.getLiveSSTables();
 
         for (int i = 0; i < generations.levelCount(); i++)
         {
@@ -414,7 +413,7 @@ public class LeveledManifest
                     }
                     if (min == null || max == null || min.equals(max)) // single partition sstables - we cannot include a high level sstable.
                         return candidates;
-                    Set<SSTableReader> compacting = realm.getCompactingSSTables();
+                    Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
                     Range<PartitionPosition> boundaries = new Range<>(min, max);
                     for (CompactionSSTable sstable : generations.get(i))
                     {
@@ -548,7 +547,7 @@ public class LeveledManifest
         assert !generations.get(level).isEmpty();
         logger.trace("Choosing candidates for L{}", level);
 
-        final Set<SSTableReader> compacting = realm.getCompactingSSTables();
+        final Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
 
         if (level == 0)
         {
@@ -731,7 +730,7 @@ public class LeveledManifest
         if (sstables.isEmpty())
             return 0;
 
-        final Set<SSTableReader> compacting = realm.getCompactingSSTables();
+        final Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
         final Set<CompactionSSTable> remaining = Sets.difference(Sets.newHashSet(sstables), compacting);
 
         if (level == 0 && !DatabaseDescriptor.getDisableSTCSInL0() && remaining.size() > MAX_COMPACTING_L0)

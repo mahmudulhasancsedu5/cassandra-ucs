@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CompactionParams;
 
 import static com.google.common.collect.Iterables.filter;
@@ -92,7 +91,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
         if (Iterables.isEmpty(realm.getLiveSSTables()))
             return null;
 
-        Set<SSTableReader> compacting = realm.getCompactingSSTables();
+        Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
         Set<CompactionSSTable> uncompacting;
         synchronized (sstables)
         {

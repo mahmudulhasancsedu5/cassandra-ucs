@@ -40,7 +40,6 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.SimpleSSTableMultiWriter;
@@ -289,17 +288,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     @Override
     public ScannerList getScanners(Collection<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
-        ArrayList<ISSTableScanner> scanners = new ArrayList<ISSTableScanner>();
-        try
-        {
-            for (SSTableReader sstable : sstables)
-                scanners.add(sstable.getScanner(ranges));
-        }
-        catch (Throwable t)
-        {
-            ISSTableScanner.closeAllAndPropagate(scanners, t);
-        }
-        return new ScannerList(scanners);
+        return ScannerList.of(sstables, ranges);
     }
 
     @Override

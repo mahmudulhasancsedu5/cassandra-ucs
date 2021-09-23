@@ -125,7 +125,7 @@ public class CompactionController extends AbstractCompactionController
             close();
 
         if (compacting == null || ignoreOverlaps())
-            overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
+            overlappingSSTables = Refs.<SSTableReader>tryRef(Collections.emptyList());
         else
             overlappingSSTables = realm.getAndReferenceOverlappingLiveSSTables(compacting);
         this.overlapIterator = new OverlapIterator<>(buildIntervals(overlappingSSTables));

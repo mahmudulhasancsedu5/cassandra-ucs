@@ -124,18 +124,7 @@ public interface CompactionRealm
      */
     boolean onlyPurgeRepairedTombstones();
 
-    /**
-     * Inserts the live sstables that overlap with the given sstables into the collection in the first argument.
-     */
-    void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
-                                    Iterable<? extends CompactionSSTable> sstables);
-
-    default Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables)
-    {
-        Set<CompactionSSTable> overlaps = new HashSet<>();
-        addOverlappingLiveSSTables(overlaps, sstables);
-        return overlaps;
-    }
+    Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables);
 
     /**
      * Invalidate the given key from local caches.
@@ -143,9 +132,7 @@ public interface CompactionRealm
     void invalidateCachedPartition(DecoratedKey key);
 
     LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
-
     Refs<SSTableReader> getAndReferenceOverlappingLiveSSTables(Iterable<SSTableReader> sstables);
-    ScannerList getScanners(Set<SSTableReader> actuallyCompact);    // note: remains SSTableReader, they come from txn
 
     boolean isCompactionActive();
     CompactionParams getCompactionParams();
@@ -162,11 +149,11 @@ public interface CompactionRealm
      * @return all live memtables, or empty if no memtables are available.
      */
     Iterable<Memtable> getAllMemtables();
-    Set<SSTableReader> getCompactingSSTables();
-    Iterable<SSTableReader> getNoncompactingSSTables();
+    Set<? extends CompactionSSTable> getCompactingSSTables();
+    Iterable<? extends CompactionSSTable> getNoncompactingSSTables();
     <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> sstables);
-    Set<SSTableReader> getLiveSSTables();
-    Iterable<SSTableReader> getSSTables(SSTableSet set);
+    Set<? extends CompactionSSTable> getLiveSSTables();
+    Iterable<? extends CompactionSSTable> getSSTables(SSTableSet set);
 
     Descriptor newSSTableDescriptor(File locationForDisk);
 

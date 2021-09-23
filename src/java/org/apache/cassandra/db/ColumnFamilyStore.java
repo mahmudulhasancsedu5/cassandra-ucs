@@ -1394,13 +1394,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return shardBoundaries;
     }
 
-    /**
-     * @param sstables
-     * @return sstables whose key range overlaps with that of the given sstables, not including itself.
-     * (The given sstables may or may not overlap with each other.)
-     */
-    public void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
-                                           Iterable<? extends CompactionSSTable> sstables)
+    private void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
+                                            Iterable<? extends CompactionSSTable> sstables)
     {
         logger.trace("Checking for sstables overlapping {}", sstables);
 
@@ -1454,6 +1449,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         for (CompactionSSTable sstable : sstables)
             overlaps.remove(sstable);
+    }
+
+    /**
+     * @param sstables
+     * @return sstables whose key range overlaps with that of the given sstables, not including itself.
+     * (The given sstables may or may not overlap with each other.)
+     */
+    public Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables)
+    {
+        Set<CompactionSSTable> overlapping = new HashSet<>();
+        addOverlappingLiveSSTables(overlapping, sstables);
+        return overlapping;
     }
 
     /**
