@@ -1986,10 +1986,17 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
      */
     public void mutateLevelAndReload(int newLevel) throws IOException
     {
-        synchronized (tidy.global)
+        try
         {
-            descriptor.getMetadataSerializer().mutateLevel(descriptor, newLevel);
-            reloadSSTableMetadata();
+            synchronized (tidy.global)
+            {
+                descriptor.getMetadataSerializer().mutateLevel(descriptor, newLevel);
+                reloadSSTableMetadata();
+            }
+        }
+        catch (IOException e)
+        {
+            markSuspect();
         }
     }
 
@@ -2057,15 +2064,6 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     public FileHandle getIndexFile()
     {
         return ifile;
-    }
-
-    /**
-     * @param component component to get timestamp.
-     * @return last modified time for given component. 0 if given component does not exist or IO error occurs.
-     */
-    public long getCreationTimeFor(Component component)
-    {
-        return new File(descriptor.filenameFor(component)).lastModified();
     }
 
     /**

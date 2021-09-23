@@ -53,7 +53,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
     private static final Logger logger = LoggerFactory.getLogger(TimeWindowCompactionStrategy.class);
 
     private final TimeWindowCompactionStrategyOptions twcsOptions;
-    private final Set<SSTableReader> sstables = new HashSet<>();
+    private final Set<CompactionSSTable> sstables = new HashSet<>();
     private long lastExpiredCheck;
     private long highestWindowSeen;
 

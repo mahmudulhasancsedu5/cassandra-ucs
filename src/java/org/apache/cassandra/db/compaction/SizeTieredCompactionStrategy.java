@@ -56,7 +56,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
     protected SizeTieredCompactionStrategyOptions sizeTieredOptions;
     @VisibleForTesting
-    protected final Set<SSTableReader> sstables = new HashSet<>();
+    protected final Set<CompactionSSTable> sstables = new HashSet<>();
 
     public SizeTieredCompactionStrategy(CompactionStrategyFactory factory, Map<String, String> options)
     {
@@ -71,7 +71,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         int minThreshold = realm.getMinimumCompactionThreshold();
         int maxThreshold = realm.getMaximumCompactionThreshold();
 
-        List<SSTableReader> candidates = new ArrayList<>();
+        List<CompactionSSTable> candidates = new ArrayList<>();
         synchronized (sstables)
         {
             Iterables.addAll(candidates, nonSuspectAndNotIn(sstables, realm.getCompactingSSTables()));
@@ -87,7 +87,7 @@ public class SizeTieredCompactionStrategy extends LegacyAbstractCompactionStrate
         // if there is no sstable to compact in standard way, try compacting single sstable whose droppable tombstone
         // ratio is greater than threshold.
         if (ret == null || ret.isEmpty())
-            ret = makeTombstoneCompaction(gcBefore, candidates, list -> Collections.max(list, SSTableReader.sizeComparator));
+            ret = makeTombstoneCompaction(gcBefore, candidates, list -> Collections.max(list, CompactionSSTable.sizeComparator));
 
         return ret;
     }

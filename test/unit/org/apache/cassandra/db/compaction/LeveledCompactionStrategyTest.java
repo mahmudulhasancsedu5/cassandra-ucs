@@ -19,19 +19,10 @@ package org.apache.cassandra.db.compaction;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.Collections2;
 import org.junit.Assert;
 import org.junit.After;
 import org.junit.Before;
@@ -270,7 +261,7 @@ public class LeveledCompactionStrategyTest
         assert strategy.getLevelSize(1) > 0;
 
         // get LeveledScanner for level 1 sstables
-        Collection<SSTableReader> sstables = strategy.manifest.getLevel(1);
+        Collection<SSTableReader> sstables = Collections2.transform(strategy.manifest.getLevel(1), SSTableReader.class::cast);
         List<ISSTableScanner> scanners = strategy.getScanners(sstables).scanners;
         assertEquals(1, scanners.size()); // should be one per level
         ISSTableScanner scanner = scanners.get(0);
@@ -369,8 +360,8 @@ public class LeveledCompactionStrategyTest
         // we only have unrepaired sstables:
         assertEquals(sstableCount, cfs.getLiveSSTables().size());
 
-        SSTableReader sstable1 = unrepaired.manifest.getLevel(2).iterator().next();
-        SSTableReader sstable2 = unrepaired.manifest.getLevel(1).iterator().next();
+        SSTableReader sstable1 = (SSTableReader) unrepaired.manifest.getLevel(2).iterator().next();
+        SSTableReader sstable2 = (SSTableReader) unrepaired.manifest.getLevel(1).iterator().next();
 
         sstable1.descriptor.getMetadataSerializer().mutateRepairMetadata(sstable1.descriptor, System.currentTimeMillis(), null, false);
         sstable1.reloadSSTableMetadata();
@@ -539,11 +530,11 @@ public class LeveledCompactionStrategyTest
                                                                          .getStrategies(false, null)
                                                                          .get(0);
         // get readers for level 0 sstables
-        Collection<SSTableReader> sstables = strategy.manifest.getLevel(0);
-        Collection<SSTableReader> sortedCandidates = strategy.manifest.ageSortedSSTables(sstables);
+        Set<CompactionSSTable> sstables = strategy.manifest.getLevel(0);
+        List<CompactionSSTable> sortedCandidates = strategy.manifest.ageSortedSSTables(sstables);
         assertTrue(String.format("More than 1 sstable required for test, found: %d .", sortedCandidates.size()), sortedCandidates.size() > 1);
         long lastMaxTimeStamp = Long.MIN_VALUE;
-        for (SSTableReader sstable : sortedCandidates)
+        for (CompactionSSTable sstable : sortedCandidates)
         {
             assertTrue(String.format("SStables not sorted into oldest to newest by maxTimestamp. Current sstable: %d , last sstable: %d", sstable.getMaxTimestamp(), lastMaxTimeStamp),
                        sstable.getMaxTimestamp() > lastMaxTimeStamp);
@@ -733,19 +724,19 @@ public class LeveledCompactionStrategyTest
         for (int i = 0; i < levelCount; i++)
         {
             actualSSTableCount += lm.getLevelSize(i);
-            List<SSTableReader> level = new ArrayList<>(lm.getLevel(i));
+            List<CompactionSSTable> level = new ArrayList<>(lm.getLevel(i));
             int lvl = i;
             assertTrue(level.stream().allMatch(s -> s.getSSTableLevel() == lvl));
             if (i > 0)
             {
-                level.sort(SSTableReader.firstKeyComparator);
-                SSTableReader prev = null;
-                for (SSTableReader sstable : level)
+                level.sort(CompactionSSTable.firstKeyComparator);
+                CompactionSSTable prev = null;
+                for (CompactionSSTable sstable : level)
                 {
-                    if (prev != null && sstable.first.compareTo(prev.last) <= 0)
+                    if (prev != null && sstable.getFirst().compareTo(prev.getLast()) <= 0)
                     {
-                        String levelStr = level.stream().map(s -> String.format("[%s, %s]", s.first, s.last)).collect(Collectors.joining(", "));
-                        String overlap = String.format("sstable [%s, %s] overlaps with [%s, %s] in level %d (%s) ", sstable.first, sstable.last, prev.first, prev.last, i, levelStr);
+                        String levelStr = level.stream().map(s -> String.format("[%s, %s]", s.getFirst(), s.getLast())).collect(Collectors.joining(", "));
+                        String overlap = String.format("sstable [%s, %s] overlaps with [%s, %s] in level %d (%s) ", sstable.getFirst(), sstable.getLast(), prev.getFirst(), prev.getLast(), i, levelStr);
                         Assert.fail("[seed = "+seed+"] overlap in level "+lvl+": " + overlap);
                     }
                     prev = sstable;
@@ -797,17 +788,17 @@ public class LeveledCompactionStrategyTest
                 continue;
             }
 
-            List<SSTableReader> newLevel = new ArrayList<>(lm.getLevel(level));
-            for (SSTableReader sstable : lvlGroup.getValue())
+            List<CompactionSSTable> newLevel = new ArrayList<>(lm.getLevel(level));
+            for (CompactionSSTable sstable : lvlGroup.getValue())
             {
                 newLevel.add(sstable);
-                newLevel.sort(SSTableReader.firstKeyComparator);
+                newLevel.sort(CompactionSSTable.firstKeyComparator);
 
-                SSTableReader prev = null;
+                CompactionSSTable prev = null;
                 boolean kept = true;
-                for (SSTableReader sst : newLevel)
+                for (CompactionSSTable sst : newLevel)
                 {
-                    if (prev != null && prev.last.compareTo(sst.first) >= 0)
+                    if (prev != null && prev.getLast().compareTo(sst.getFirst()) >= 0)
                     {
                         newLevel.remove(sstable);
                         kept = false;
@@ -824,7 +815,7 @@ public class LeveledCompactionStrategyTest
         return canAdd;
     }
 
-    private static void assertLevelsEqual(Collection<SSTableReader> l1, Collection<SSTableReader> l2)
+    private static void assertLevelsEqual(Collection<? extends CompactionSSTable> l1, Collection<? extends CompactionSSTable> l2)
     {
         assertEquals(l1.size(), l2.size());
         assertEquals(new HashSet<>(l1), new HashSet<>(l2));

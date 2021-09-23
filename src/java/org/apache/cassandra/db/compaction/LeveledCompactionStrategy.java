@@ -261,7 +261,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
 
     public ScannerList getScanners(Collection<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
-        Set<SSTableReader>[] sstablesPerLevel = manifest.getSStablesPerLevelSnapshot();
+        Set<CompactionSSTable>[] sstablesPerLevel = manifest.getSStablesPerLevelSnapshot();
 
         Multimap<Integer, SSTableReader> byLevel = ArrayListMultimap.create();
         for (SSTableReader sstable : sstables)
@@ -499,12 +499,12 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
 
     private CompactionAggregate findDroppableSSTable(final int gcBefore)
     {
-        Comparator<SSTableReader> comparator = (o1, o2) -> {
+        Comparator<CompactionSSTable> comparator = (o1, o2) -> {
             double r1 = o1.getEstimatedDroppableTombstoneRatio(gcBefore);
             double r2 = o2.getEstimatedDroppableTombstoneRatio(gcBefore);
             return -1 * Doubles.compare(r1, r2);
         };
-        Function<Collection<SSTableReader>, SSTableReader> selector = list -> Collections.max(list, comparator);
+        Function<Collection<CompactionSSTable>, CompactionSSTable> selector = list -> Collections.max(list, comparator);
         Set<SSTableReader> compacting = realm.getCompactingSSTables();
 
         for (int i = manifest.getLevelCount(); i >= 0; i--)

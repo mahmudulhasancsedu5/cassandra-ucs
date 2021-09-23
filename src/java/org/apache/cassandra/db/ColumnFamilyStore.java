@@ -1659,7 +1659,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return data.getNoncompacting();
     }
 
-    public Iterable<SSTableReader> getNoncompactingSSTables(Iterable<SSTableReader> candidates)
+    public <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> candidates)
     {
         return data.getNoncompacting(candidates);
     }

@@ -81,7 +81,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public LegacyAbstractCompactionStrategy getStrategyFor(SSTableReader sstable)
+    public LegacyAbstractCompactionStrategy getStrategyFor(CompactionSSTable sstable)
     {
         Preconditions.checkArgument(managesSSTable(sstable), "Attempting to get compaction strategy from wrong holder");
         return managers.get(router.getIndexForSSTable(sstable)).getOrCreate(sstable);
@@ -264,7 +264,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     }
 
     @Override
-    public boolean containsSSTable(SSTableReader sstable)
+    public boolean containsSSTable(CompactionSSTable sstable)
     {
         return Iterables.any(managers, prm -> prm.containsSSTable(sstable));
     }

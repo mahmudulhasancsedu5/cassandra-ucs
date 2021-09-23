@@ -55,7 +55,7 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
     private final DateTieredCompactionStrategyOptions dtOptions;
     protected volatile int estimatedRemainingTasks;
-    private final Set<SSTableReader> sstables = new HashSet<>();
+    private final Set<CompactionSSTable> sstables = new HashSet<>();
     private long lastExpiredCheck;
     private final SizeTieredCompactionStrategyOptions stcsOptions;
 

@@ -224,15 +224,15 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      */
     abstract void removeDeadSSTables();
 
-    void removeDeadSSTables(Iterable<SSTableReader> sstables)
+    void removeDeadSSTables(Iterable<CompactionSSTable> sstables)
     {
         synchronized (sstables)
         {
             int removed = 0;
             Set<SSTableReader> liveSet = realm.getLiveSSTables();
-            for (Iterator<SSTableReader> it = sstables.iterator(); it.hasNext(); )
+            for (Iterator<CompactionSSTable> it = sstables.iterator(); it.hasNext(); )
             {
-                SSTableReader sstable = it.next();
+                CompactionSSTable sstable = it.next();
                 if (!liveSet.contains(sstable))
                 {
                     it.remove();

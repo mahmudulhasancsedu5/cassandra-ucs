@@ -164,7 +164,7 @@ public interface CompactionRealm
     Iterable<Memtable> getAllMemtables();
     Set<SSTableReader> getCompactingSSTables();
     Iterable<SSTableReader> getNoncompactingSSTables();
-    Iterable<SSTableReader> getNoncompactingSSTables(Iterable<SSTableReader> sstables);
+    <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> sstables);
     Set<SSTableReader> getLiveSSTables();
     Iterable<SSTableReader> getSSTables(SSTableSet set);
 

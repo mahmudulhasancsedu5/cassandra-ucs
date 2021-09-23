@@ -130,7 +130,7 @@ class PendingRepairManager
         }
     }
 
-    LegacyAbstractCompactionStrategy getOrCreate(SSTableReader sstable)
+    LegacyAbstractCompactionStrategy getOrCreate(CompactionSSTable sstable)
     {
         return getOrCreate(sstable.getPendingRepair());
     }
@@ -416,7 +416,7 @@ class PendingRepairManager
         return strategies.containsKey(sessionID);
     }
 
-    boolean containsSSTable(SSTableReader sstable)
+    boolean containsSSTable(CompactionSSTable sstable)
     {
         if (!sstable.isPendingRepair())
             return false;

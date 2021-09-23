@@ -262,7 +262,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
         return ImmutableList.of(backgroundCompactions.getStatistics(this));
     }
 
-    public static Iterable<SSTableReader> nonSuspectAndNotIn(Iterable<SSTableReader> sstables, Set<SSTableReader> compacting)
+    public static Iterable<CompactionSSTable> nonSuspectAndNotIn(Iterable<CompactionSSTable> sstables, Set<? extends CompactionSSTable> compacting)
     {
         return Iterables.filter(sstables, x -> !x.isMarkedSuspect() && !compacting.contains(x));
     }

@@ -166,7 +166,7 @@ public abstract class AbstractStrategyHolder
         return managesRepairedGroup(sstable.isRepaired(), sstable.isPendingRepair(), sstable.isTransient());
     }
 
-    public abstract LegacyAbstractCompactionStrategy getStrategyFor(SSTableReader sstable);
+    public abstract LegacyAbstractCompactionStrategy getStrategyFor(CompactionSSTable sstable);
 
     public abstract Iterable<LegacyAbstractCompactionStrategy> allStrategies();
 
@@ -200,5 +200,5 @@ public abstract class AbstractStrategyHolder
                                                                 Collection<Index.Group> indexGroups,
                                                                 LifecycleNewTracker lifecycleNewTracker);
 
-    public abstract boolean containsSSTable(SSTableReader sstable);
+    public abstract boolean containsSSTable(CompactionSSTable sstable);
 }

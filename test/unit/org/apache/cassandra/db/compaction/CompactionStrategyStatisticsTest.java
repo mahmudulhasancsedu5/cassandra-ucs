@@ -380,9 +380,9 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
      *
      * @return a set containing the sstable passed in and all the sstables that overlap from the candidates
      */
-    private static Set<SSTableReader> overlapping(SSTableReader sstable, List<SSTableReader> candidates)
+    private static <S extends CompactionSSTable> Set<S> overlapping(S sstable, List<? extends S> candidates)
     {
-        Map<SSTableReader, Bounds<Token>> candidatesWithBounds = LeveledManifest.genBounds(candidates);
+        Map<S, Bounds<Token>> candidatesWithBounds = LeveledManifest.genBounds(candidates);
         return Sets.union(Collections.singleton(sstable), LeveledManifest.overlappingWithBounds(sstable, candidatesWithBounds));
     }
 
@@ -551,13 +551,13 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
         // Add the tables to the strategy and the data tracker
         addSSTablesToStrategy(strategy, sstables);
 
-        List<SSTableReader> sstablesForCompaction = compactions.stream().flatMap(Collection::stream).collect(Collectors.toList());
+        List<CompactionSSTable> sstablesForCompaction = compactions.stream().flatMap(Collection::stream).collect(Collectors.toList());
 
         int numSSTables = sstablesForCompaction.size();
         long totLength = totUncompressedLength(sstablesForCompaction);
         double totHotness = totHotness(sstablesForCompaction);
 
-        Set<SSTableReader> compacting = new HashSet<>();
+        Set<CompactionSSTable> compacting = new HashSet<>();
         List<Pair<Set<SSTableReader>, UUID>> submittedCompactions = new ArrayList<>(compactions.size());
 
         long totRead = 0;

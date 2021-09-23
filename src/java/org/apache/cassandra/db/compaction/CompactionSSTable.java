@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.db.compaction;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.UUID;
 
@@ -29,6 +31,7 @@ import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 
@@ -183,6 +186,34 @@ public interface CompactionSSTable
     Descriptor getDescriptor();
 
     boolean isTransient();
+
+    default String getColumnFamilyName()
+    {
+        return getDescriptor().cfname;
+    }
+
+    default String getKeyspaceName()
+    {
+        return getDescriptor().ksname;
+    }
+
+    default int getGeneration()
+    {
+        return getDescriptor().generation;
+    }
+
+    /**
+     * @param component component to get timestamp.
+     * @return last modified time for given component. 0 if given component does not exist or IO error occurs.
+     */
+    default long getCreationTimeFor(Component component)
+    {
+        return new File(getDescriptor().filenameFor(component)).lastModified();
+    }
+
+    double getEstimatedDroppableTombstoneRatio(int gcBefore);
+
+    void mutateLevelAndReload(int newLevel) throws IOException;
 
     /**
       * @return the exact position of the given key in this sstable, or null if this is not supported or available.

@@ -84,9 +84,9 @@ public class BaseCompactionStrategyTest
     // Returned by diskBoundaries.getPositions() and modified by UnifiedCompactionStrategyTest
     protected List<PartitionPosition> diskBoundaryPositions = null;
 
-    SortedLocalRanges localRanges;
+    int diskIndexes = 0;
 
-    Map<SSTableReader, Integer> diskIndexes;
+    SortedLocalRanges localRanges;
 
     Tracker dataTracker;
 
@@ -128,7 +128,6 @@ public class BaseCompactionStrategyTest
         if (numShards > 1)
             assertNotNull("Splitter is required with multiple compaction shards", splitter);
 
-        diskIndexes = new HashMap<>();
         localRanges = SortedLocalRanges.forTesting(cfs, ImmutableList.of(new Splitter.WeightedRange(1.0, new Range<>(partitioner.getMinimumToken(), partitioner.getMaximumToken()))));
 
         when(cfs.metadata()).thenReturn(metadata);
@@ -149,8 +148,7 @@ public class BaseCompactionStrategyTest
         when(strategyFactory.getRealm()).thenReturn(cfs);
         when(strategyFactory.getCompactionLogger()).thenReturn(compactionLogger);
 
-        when(diskBoundaries.getNumBoundaries()).thenAnswer(invocation -> diskIndexes.size());
-        when(diskBoundaries.getDiskIndexFromKey(any(SSTableReader.class))).thenAnswer(invocation -> diskIndexes.getOrDefault(invocation.getArgument(0), 0));
+        when(diskBoundaries.getNumBoundaries()).thenAnswer(invocation -> diskIndexes);
         when(diskBoundaries.getPositions()).thenAnswer(invocationOnMock -> diskBoundaryPositions);
     }
 
@@ -196,18 +194,6 @@ public class BaseCompactionStrategyTest
         return mockSSTable(0, bytesOnDisk, timestamp, 0, first, last,  0, true, null, 0);
     }
 
-    SSTableReader mockSSTable(ICardinality cardinality, long timestamp, int valueSize)
-    {
-        long keyCount = cardinality.cardinality();
-        long bytesOnDisk = valueSize * keyCount;
-        DecoratedKey first = new BufferDecoratedKey(partitioner.getMinimumToken(), ByteBuffer.allocate(0));
-        DecoratedKey last = new BufferDecoratedKey(partitioner.getMinimumToken(), ByteBuffer.allocate(0));
-
-        SSTableReader ret = mockSSTable(0, bytesOnDisk, timestamp, 0, first, last, 0, true, null, 0);
-        when(ret.keyCardinalityEstimator()).thenReturn(cardinality);
-        return ret;
-    }
-
     SSTableReader mockSSTable(int level,
                               long bytesOnDisk,
                               long timestamp,
@@ -222,10 +208,10 @@ public class BaseCompactionStrategyTest
         // We create a ton of mock SSTables that mockito is going to keep until the end of the test suite without stubOnly.
         // Mockito keeps them alive to preserve the history of invocations which is not available for stubs. If we ever
         // need history of invocations and remove stubOnly, we should also manually reset mocked SSTables in tearDown.
+        // FIXME: This should eventually be CompactionSSTable
         SSTableReader ret = Mockito.mock(SSTableReader.class, withSettings().stubOnly());
 
         when(ret.getSSTableLevel()).thenReturn(level);
-        when(ret.bytesOnDisk()).thenReturn(bytesOnDisk);
         when(ret.onDiskLength()).thenReturn(bytesOnDisk);
         when(ret.uncompressedLength()).thenReturn(bytesOnDisk); // let's assume no compression
         when(ret.hotness()).thenReturn(hotness);
@@ -253,7 +239,9 @@ public class BaseCompactionStrategyTest
         when(ret.getMinTTL()).thenReturn(ttl);
         when(ret.getMaxTTL()).thenReturn(ttl);
 
-        diskIndexes.put(ret, diskIndex);
+        when(ret.getDiskIndex(diskBoundaries)).thenReturn(diskIndex);
+        if (diskIndex >= diskIndexes)
+            diskIndexes = diskIndex + 1;
         return ret;
     }
 
@@ -356,19 +344,19 @@ public class BaseCompactionStrategyTest
         options.put(LeveledCompactionStrategy.LEVEL_FANOUT_SIZE_OPTION, Integer.toString(fanout));
     }
 
-    long totUncompressedLength(Collection<SSTableReader> sstables)
+    long totUncompressedLength(Collection<? extends CompactionSSTable> sstables)
     {
         long ret = 0;
-        for (SSTableReader sstable : sstables)
+        for (CompactionSSTable sstable : sstables)
             ret += sstable.uncompressedLength();
 
         return ret;
     }
 
-    double totHotness(Collection<SSTableReader> sstables)
+    double totHotness(Collection<? extends CompactionSSTable> sstables)
     {
         double ret = 0;
-        for (SSTableReader sstable : sstables)
+        for (CompactionSSTable sstable : sstables)
             ret += sstable.hotness();
 
         return ret;
