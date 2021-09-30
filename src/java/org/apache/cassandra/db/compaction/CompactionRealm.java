@@ -21,12 +21,12 @@ package org.apache.cassandra.db.compaction;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.base.Function;
+import com.google.common.base.Predicate;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
@@ -37,14 +37,12 @@ import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.index.SecondaryIndexManager;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
-import org.apache.cassandra.utils.concurrent.Refs;
 
 
 /**
@@ -132,7 +130,17 @@ public interface CompactionRealm
     void invalidateCachedPartition(DecoratedKey key);
 
     LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
-    Refs<SSTableReader> getAndReferenceOverlappingLiveSSTables(Iterable<SSTableReader> sstables);
+    OverlapTracker getOverlapTracker(Iterable<SSTableReader> sources);
+
+    interface OverlapTracker extends AutoCloseable
+    {
+        Collection<? extends CompactionSSTable> overlaps();
+        Collection<? extends CompactionSSTable> overlaps(DecoratedKey key);
+        <V> Iterable<V> shadowSources(DecoratedKey key,
+                                      Predicate<CompactionSSTable> filter,
+                                      Function<SSTableReader, V> transformation);
+        boolean maybeRefresh();
+    }
 
     boolean isCompactionActive();
     CompactionParams getCompactionParams();

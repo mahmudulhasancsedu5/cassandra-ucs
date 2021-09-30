@@ -203,7 +203,7 @@ public class CompactionTask extends AbstractCompactionTask
     public final class CompactionOperation implements AutoCloseable
     {
         private final CompactionController controller;
-        private final Set<SSTableReader> fullyExpiredSSTables;
+        private final Set<CompactionSSTable> fullyExpiredSSTables;
         private final UUID taskId;
         private final RateLimiter limiter;
         private final long startNanos;
@@ -653,7 +653,7 @@ public class CompactionTask extends AbstractCompactionTask
      * there's enough space (in theory) to handle the compaction.  Does not take into account space that will be taken by
      * other compactions.
      */
-    protected void buildCompactionCandidatesForAvailableDiskSpace(final Set<SSTableReader> fullyExpiredSSTables)
+    protected void buildCompactionCandidatesForAvailableDiskSpace(final Set<CompactionSSTable> fullyExpiredSSTables)
     {
         if(!realm.isCompactionDiskSpaceCheckEnabled() && compactionType == OperationType.COMPACTION)
         {

@@ -3327,4 +3327,75 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     {
         return data.tryModify(Iterables.transform(ssTableReaders, SSTableReader.class::cast), operationType);
     }
+
+    public CompactionRealm.OverlapTracker getOverlapTracker(Iterable<SSTableReader> sources)
+    {
+        return new OverlapTracker(sources);
+    }
+
+    class OverlapTracker implements CompactionRealm.OverlapTracker
+    {
+        final Iterable<SSTableReader> compacting;
+        private Refs<SSTableReader> overlappingSSTables;
+        private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
+
+        OverlapTracker(Iterable<SSTableReader> compacting)
+        {
+            this.compacting = compacting;
+            collectOverlaps();
+        }
+
+        public Collection<? extends CompactionSSTable> overlaps()
+        {
+            return overlappingSSTables;
+        }
+
+        public Collection<? extends CompactionSSTable> overlaps(DecoratedKey key)
+        {
+            overlapIterator.update(key);
+            return overlapIterator.overlaps();
+        }
+
+        public <V> Iterable<V> shadowSources(DecoratedKey key,
+                                             Predicate<CompactionSSTable> filter,
+                                             Function<SSTableReader, V> transformation)
+        {
+            overlapIterator.update(key);
+
+            Iterable<SSTableReader> overlaps = overlapIterator.overlaps();
+            Iterable<V> transformed = Iterables.transform(overlaps, sstable -> filter.apply(sstable)
+                                                                               ? transformation.apply(sstable)
+                                                                               : null);
+            return Iterables.filter(transformed,
+                                    Predicates.notNull());
+        }
+
+        public void close()
+        {
+            overlappingSSTables.release();
+        }
+
+        public boolean maybeRefresh()
+        {
+            for (CompactionSSTable reader : overlappingSSTables)
+            {
+                if (reader.isMarkedCompacted())
+                {
+                    close();
+                    collectOverlaps();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void collectOverlaps()
+        {
+            if (compacting == null)
+                overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
+            else
+                overlappingSSTables = getAndReferenceOverlappingLiveSSTables(compacting);
+            this.overlapIterator = new OverlapIterator<>(SSTableIntervalTree.buildIntervals(overlappingSSTables));
+        }
+    }
 }
