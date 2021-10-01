@@ -428,6 +428,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         sampleReadLatencyNanos = DatabaseDescriptor.getReadRpcTimeout(NANOSECONDS) / 2;
         additionalWriteLatencyNanos = DatabaseDescriptor.getWriteRpcTimeout(NANOSECONDS) / 2;
         memtableFactory = metadata.get().params.memtable.factory;
+        metric = new TableMetrics(this, memtableFactory.createMemtableMetrics(metadata));
 
         logger.info("Initializing {}.{}", keyspace.getName(), name);
 
@@ -455,6 +456,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         this.strategyContainer = strategyFactory.reload(null,
                                                         metadata.get().params.compaction,
                                                         CompactionStrategyContainer.ReloadReason.FULL);
+        getTracker().subscribe(strategyContainer);
 
         // create the private ColumnFamilyStores for the secondary column indexes
         indexManager = new SecondaryIndexManager(this);
@@ -462,8 +464,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         {
             indexManager.addIndex(info, true);
         }
-
-        metric = new TableMetrics(this, memtableFactory.createMemtableMetrics(metadata));
 
         if (data.loadsstables)
         {

@@ -261,7 +261,8 @@ public class CompactionTask extends AbstractCompactionTask
             {
                 // resources that need closing, must be created last in case of exceptions and released if there is an exception in the c.tor
                 this.sstableRefs = Refs.ref(actuallyCompact);
-                this.scanners = strategy.getScanners(actuallyCompact);
+                this.scanners = strategy != null ? strategy.getScanners(actuallyCompact)
+                                                 : ScannerList.of(actuallyCompact, null);
                 this.compactionIterator = new CompactionIterator(compactionType, scanners.scanners, controller, FBUtilities.nowInSeconds(), taskId);
                 this.op = compactionIterator.getOperation();
                 this.writer = getCompactionAwareWriter(realm, dirs, transaction, actuallyCompact);
@@ -390,7 +391,11 @@ public class CompactionTask extends AbstractCompactionTask
                 {
                     traceLogCompactionSummaryInfo(totalKeysWritten, estimatedKeys, progress);
                 }
-                strategy.getCompactionLogger().compaction(startTime, transaction.originals(),  System.currentTimeMillis(), newSStables);
+                if (strategy != null)
+                    strategy.getCompactionLogger().compaction(startTime,
+                                                              transaction.originals(),
+                                                              System.currentTimeMillis(),
+                                                              newSStables);
 
                 // update the metrics
                 realm.metrics().incBytesCompacted(progress.adjustedInputDiskSize(),

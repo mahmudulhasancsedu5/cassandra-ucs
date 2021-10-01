@@ -208,21 +208,10 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     }
     private static final RateLimiter meterSyncThrottle = RateLimiter.create(100.0);
 
-    public static final Comparator<SSTableReader> maxTimestampAscending = Comparator.comparingLong(SSTableReader::getMaxTimestamp);
-    public static final Comparator<SSTableReader> maxTimestampDescending = maxTimestampAscending.reversed();
-
     public abstract boolean hasIndex();
 
     // it's just an object, which we use regular Object equality on; we introduce a special class just for easy recognition
     public static final class UniqueIdentifier {}
-
-    public static final Comparator<SSTableReader> firstKeyComparator = Comparator.comparing(SSTable::getFirst);
-
-    public static final Comparator<SSTableReader> generationReverseComparator = Comparator.<SSTableReader, SSTableUniqueIdentifier>comparing(o -> o.descriptor.generation).reversed();
-
-    public static final Ordering<SSTableReader> firstKeyOrdering = Ordering.from(firstKeyComparator);
-
-    public static final Comparator<? super SSTableReader> sizeComparator = (o1, o2) -> Longs.compare(o1.onDiskLength(), o2.onDiskLength());
 
     /**
      * maxDataAge is a timestamp in local server time (e.g. System.currentTimeMilli) which represents an upper bound

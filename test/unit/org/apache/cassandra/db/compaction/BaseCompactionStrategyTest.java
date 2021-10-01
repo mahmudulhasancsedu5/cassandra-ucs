@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,10 +30,8 @@ import org.apache.commons.math3.random.JDKRandomGenerator;
 
 import org.junit.Ignore;
 
-import com.clearspring.analytics.stream.cardinality.ICardinality;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.BufferDecoratedKey;
-import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
@@ -50,12 +47,15 @@ import org.apache.cassandra.io.sstable.SequenceBasedSSTableUniqueIdentifier;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.FBUtilities;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyIterable;
+import static org.mockito.Mockito.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
@@ -72,8 +72,8 @@ public class BaseCompactionStrategyTest
     final String keyspace = "ks";
     final String table = "tbl";
 
-    @Mock
-    ColumnFamilyStore cfs;
+    @Mock(answer = Answers.RETURNS_SMART_NULLS)
+    CompactionRealm realm;
 
     @Mock
     CompactionStrategyFactory strategyFactory;
@@ -128,24 +128,31 @@ public class BaseCompactionStrategyTest
         if (numShards > 1)
             assertNotNull("Splitter is required with multiple compaction shards", splitter);
 
-        localRanges = SortedLocalRanges.forTesting(cfs, ImmutableList.of(new Splitter.WeightedRange(1.0, new Range<>(partitioner.getMinimumToken(), partitioner.getMaximumToken()))));
+        localRanges = SortedLocalRanges.forTesting(realm, ImmutableList.of(new Splitter.WeightedRange(1.0, new Range<>(partitioner.getMinimumToken(), partitioner.getMaximumToken()))));
 
-        when(cfs.metadata()).thenReturn(metadata);
-        when(cfs.getKeyspaceName()).thenReturn(keyspace);
-        when(cfs.getTableName()).thenReturn(table);
-        when(cfs.getDiskBoundaries()).thenReturn(diskBoundaries);
-        when(cfs.getLocalRanges()).thenReturn(localRanges);
+        when(realm.metadata()).thenReturn(metadata);
+        when(realm.getKeyspaceName()).thenReturn(keyspace);
+        when(realm.getTableName()).thenReturn(table);
+        when(realm.getDiskBoundaries()).thenReturn(diskBoundaries);
+//        when(cfs.getLocalRanges()).thenReturn(localRanges);
         when(diskBoundaries.getLocalRanges()).thenReturn(localRanges);
-        when(cfs.getTracker()).thenReturn(dataTracker);
-        when(cfs.getPartitioner()).thenReturn(partitioner);
+//        when(cfs.getTracker()).thenReturn(dataTracker);
+        when(realm.getPartitioner()).thenReturn(partitioner);
+        when(realm.getLiveSSTables()).thenAnswer(request -> dataTracker.getLiveSSTables());
+        when(realm.getCompactingSSTables()).thenAnswer(request -> dataTracker.getCompacting());
+        when(realm.getNoncompactingSSTables()).thenAnswer(request -> dataTracker.getNoncompacting());
+        when(realm.getNoncompactingSSTables(anyIterable())).thenAnswer(request -> dataTracker.getNoncompacting(request.getArgument(0)));
+        when(realm.tryModify(anyIterable(), any())).thenAnswer(
+            request -> dataTracker.tryModify(request.getArgument(0, Iterable.class),
+                                             request.getArgument(1)));
 
         // use a real compaction logger to execute that code too, even though we don't really check
         // the content of the files, at least we cover the code. The files will be overwritten next
         // time the test is run or by a gradle clean task, so they will not grow indefinitely
-        compactionLogger = new CompactionLogger(cfs.metadata());
+        compactionLogger = new CompactionLogger(realm.metadata());
         compactionLogger.enable();
 
-        when(strategyFactory.getRealm()).thenReturn(cfs);
+        when(strategyFactory.getRealm()).thenReturn(realm);
         when(strategyFactory.getCompactionLogger()).thenReturn(compactionLogger);
 
         when(diskBoundaries.getNumBoundaries()).thenAnswer(invocation -> diskIndexes);
@@ -209,8 +216,10 @@ public class BaseCompactionStrategyTest
         // Mockito keeps them alive to preserve the history of invocations which is not available for stubs. If we ever
         // need history of invocations and remove stubOnly, we should also manually reset mocked SSTables in tearDown.
         // FIXME: This should eventually be CompactionSSTable
-        SSTableReader ret = Mockito.mock(SSTableReader.class, withSettings().stubOnly());
+        SSTableReader ret = Mockito.mock(SSTableReader.class, withSettings().stubOnly()
+                                                                            .defaultAnswer(RETURNS_SMART_NULLS));
 
+        when(ret.isSuitableForCompaction()).thenReturn(true);
         when(ret.getSSTableLevel()).thenReturn(level);
         when(ret.onDiskLength()).thenReturn(bytesOnDisk);
         when(ret.uncompressedLength()).thenReturn(bytesOnDisk); // let's assume no compression

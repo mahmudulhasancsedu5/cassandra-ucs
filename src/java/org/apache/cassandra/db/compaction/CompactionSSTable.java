@@ -28,20 +28,22 @@ import com.google.common.primitives.Longs;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTableUniqueIdentifier;
 
 public interface CompactionSSTable
 {
+    // Note: please do not replace with Comparator.comparing, this code can be on a hot path.
     Comparator<CompactionSSTable> maxTimestampDescending = (o1, o2) -> Long.compare(o2.getMaxTimestamp(), o1.getMaxTimestamp());
     Comparator<CompactionSSTable> maxTimestampAscending = (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp());
     Comparator<CompactionSSTable> firstKeyComparator = (o1, o2) -> o1.getFirst().compareTo(o2.getFirst());
     Ordering<CompactionSSTable> firstKeyOrdering = Ordering.from(firstKeyComparator);
-    Comparator<? super CompactionSSTable> sizeComparator = (o1, o2) -> Longs.compare(o1.onDiskLength(), o2.onDiskLength());
+    Comparator<CompactionSSTable> sizeComparator = (o1, o2) -> Longs.compare(o1.onDiskLength(), o2.onDiskLength());
+    Comparator<CompactionSSTable> generationReverseComparator = Comparator.comparing(CompactionSSTable::getGeneration).reversed();
 
     /**
      * @return the position of the first partition in the sstable
@@ -197,7 +199,7 @@ public interface CompactionSSTable
         return getDescriptor().ksname;
     }
 
-    default int getGeneration()
+    default SSTableUniqueIdentifier getGeneration()
     {
         return getDescriptor().generation;
     }
@@ -214,10 +216,4 @@ public interface CompactionSSTable
     double getEstimatedDroppableTombstoneRatio(int gcBefore);
 
     void mutateLevelAndReload(int newLevel) throws IOException;
-
-    /**
-      * @return the exact position of the given key in this sstable, or null if this is not supported or available.
-      */
-//    @Nullable
-//    RowIndexEntry getExactPosition(DecoratedKey key);
 }
