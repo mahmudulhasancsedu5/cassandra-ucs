@@ -661,8 +661,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     {
         final ArenaSelector arenaSelector = this.arenaSelector;
         Map<CompactionSSTable, Shard> tables = new TreeMap<>(arenaSelector);
+        Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
         for (CompactionSSTable table : sstables)
-            if (table.isSuitableForCompaction())
+            if (table.isSuitableForCompaction() && !compacting.contains(table))
                 tables.computeIfAbsent(table, t -> new Shard(arenaSelector, realm))
                       .add(table);
 
@@ -920,6 +921,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 // distribution among levels and should result in more compactions running in parallel in a big data
                 // dump.
                 assert !pending.isEmpty();  // we only enter this if count > F: layoutCompactions must have selected something to run
+                // FIXME: This will break time order. We may choose the target level randomly, but within that it should be the first.
                 int index = controller.random().nextInt(pending.size());
                 selected = pending.remove(index);
             }
