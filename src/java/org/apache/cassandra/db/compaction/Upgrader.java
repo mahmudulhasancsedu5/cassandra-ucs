@@ -44,7 +44,6 @@ public class Upgrader
     private final File directory;
 
     private final CompactionController controller;
-    private final long estimatedRows;
 
     private final OutputHandler outputHandler;
 
@@ -58,10 +57,6 @@ public class Upgrader
         this.directory = new File(sstable.getFilename()).getParentFile();
 
         this.controller = new UpgradeController(realm);
-
-        long estimatedTotalKeys = Math.max(realm.metadata().params.minIndexInterval, SSTableReader.getApproximateKeyCount(Arrays.asList(this.sstable)));
-        long estimatedSSTables = Math.max(1, CompactionSSTable.getTotalBytes(Arrays.asList(this.sstable)) / realm.getMaxSSTableBytes());
-        this.estimatedRows = (long) Math.ceil((double) estimatedTotalKeys / estimatedSSTables);
     }
 
     private SSTableWriter createCompactionWriter(StatsMetadata metadata)
@@ -69,7 +64,7 @@ public class Upgrader
         MetadataCollector sstableMetadataCollector = new MetadataCollector(realm.metadata().comparator);
         sstableMetadataCollector.sstableLevel(sstable.getSSTableLevel());
         return SSTableWriter.create(realm.newSSTableDescriptor(directory),
-                                    estimatedRows,
+                                    sstable.estimatedKeys(),
                                     metadata.repairedAt,
                                     metadata.pendingRepair,
                                     metadata.isTransient,

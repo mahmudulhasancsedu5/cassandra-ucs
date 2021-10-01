@@ -20,7 +20,6 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 import java.util.function.LongPredicate;
 
-import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.RateLimiter;
 import org.slf4j.Logger;
@@ -287,7 +286,7 @@ public class CompactionController extends AbstractCompactionController
         if (!provideTombstoneSources())
             return null;
 
-        return overlapTracker.shadowSources(key,
+        return overlapTracker.openSelectedOverlappingSSTables(key,
                                             tombstoneOnly ? this::isTombstoneShadowSource
                                                           : this::isCellDataShadowSource,
                                             sstable -> sstable.simpleIterator(openDataFiles.computeIfAbsent(sstable, this::openDataFile),

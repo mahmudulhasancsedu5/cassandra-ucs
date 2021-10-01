@@ -586,7 +586,7 @@ public class CompactionsCQLTest extends CQLTester
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
         {
             lcs.removeSSTable(sstable);
-            sstable.mutateLevelAndReload(2);
+            sstable.mutateSSTableLevelAndReload(2);
             lcs.addSSTable(sstable);
         }
 
@@ -602,7 +602,7 @@ public class CompactionsCQLTest extends CQLTester
             if (sstable.getSSTableLevel() == 0)
             {
                 lcs.removeSSTable(sstable);
-                sstable.mutateLevelAndReload(1);
+                sstable.mutateSSTableLevelAndReload(1);
                 lcs.addSSTable(sstable);
             }
         }

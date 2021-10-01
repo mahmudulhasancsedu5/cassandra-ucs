@@ -673,7 +673,8 @@ public class CompactionTask extends AbstractCompactionTask
         {
             // Only consider write size of non expired SSTables
             long expectedWriteSize = realm.getExpectedCompactedFileSize(nonExpiredSSTables, compactionType);
-            long estimatedSSTables = Math.max(1, expectedWriteSize / realm.getMaxSSTableBytes());
+            long estimatedSSTables = strategy != null ? Math.max(1, expectedWriteSize / strategy.getMaxSSTableBytes())
+                                                      : 1;
 
             if(realm.getDirectories().hasAvailableDiskSpace(estimatedSSTables, expectedWriteSize))
                 break;

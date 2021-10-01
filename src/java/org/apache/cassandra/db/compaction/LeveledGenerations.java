@@ -33,7 +33,6 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
-import com.google.common.primitives.Ints;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,7 +172,7 @@ class LeveledGenerations
     {
         try
         {
-            sstable.mutateLevelAndReload(0);
+            sstable.mutateSSTableLevelAndReload(0);
         }
         catch (IOException e)
         {

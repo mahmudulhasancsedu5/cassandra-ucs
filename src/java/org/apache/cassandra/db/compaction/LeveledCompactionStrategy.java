@@ -319,7 +319,6 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
         manifest.replace(removed, added);
     }
 
-    @Override
     public void metadataChanged(StatsMetadata oldMetadata, CompactionSSTable sstable)
     {
         if (sstable.getSSTableLevel() != oldMetadata.sstableLevel)

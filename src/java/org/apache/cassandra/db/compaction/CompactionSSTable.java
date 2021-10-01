@@ -35,6 +35,14 @@ import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableUniqueIdentifier;
 
+/**
+ * An SSTable abstraction used by compaction. Implemented by {@link SSTableReader} and provided by
+ * {@link CompactionRealm} instances.
+ *
+ * This abstraction is used to select the sstables to compact. When a compaction is initiated using
+ * {@link CompactionRealm#tryModify}, the compaction operation receives the SSTableReaders corresponding to the passed
+ * CompactionSSTables.
+ */
 public interface CompactionSSTable
 {
     // Note: please do not replace with Comparator.comparing, this code can be on a hot path.
@@ -46,32 +54,35 @@ public interface CompactionSSTable
     Comparator<CompactionSSTable> generationReverseComparator = Comparator.comparing(CompactionSSTable::getGeneration).reversed();
 
     /**
-     * @return the position of the first partition in the sstable
+     * Returns the position of the first partition in the sstable
      */
     DecoratedKey getFirst();
 
     /**
-     * @return the position of the last partition in the sstable
+     * Returns the position of the last partition in the sstable
      */
     DecoratedKey getLast();
 
     /**
-     * @return the bounds spanned by this sstable, from first to last keys.
+     * Returns the bounds spanned by this sstable, from first to last keys.
      */
     AbstractBounds<Token> getBounds();
 
     /**
-     * @return The length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
+     * Returns the length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
      * thing as the data length (see length())
      */
     long onDiskLength();
 
     /**
-     * @return The length in bytes of the data for this SSTable. For compressed files, this is not the same thing as the
+     * Returns the length in bytes of the data for this SSTable. For compressed files, this is not the same thing as the
      * on disk size (see onDiskLength())
      */
     long uncompressedLength();
 
+    /**
+     * Returns the sum of the on-disk size of the given sstables.
+     */
     static long getTotalBytes(Iterable<? extends CompactionSSTable> sstables)
     {
         long sum = 0;
@@ -80,6 +91,9 @@ public interface CompactionSSTable
         return sum;
     }
 
+    /**
+     * Returns the sum of the uncompressed size of the given sstables.
+     */
     static long getTotalUncompressedBytes(Iterable<? extends CompactionSSTable> sstables)
     {
         long sum = 0;
@@ -90,22 +104,22 @@ public interface CompactionSSTable
     }
 
     /**
-      * @return the smallest timestamp of all cells contained in this sstable.
+      * Returns the smallest timestamp of all cells contained in this sstable.
       */
     long getMinTimestamp();
 
     /**
-      * @return the largest timestamp of all cells contained in this sstable.
+      * Returns the largest timestamp of all cells contained in this sstable.
       */
     long getMaxTimestamp();
 
     /**
-      * @return the smallest deletion time of all deletions contained in this sstable.
+      * Returns the smallest deletion time of all deletions contained in this sstable.
       */
     int getMinLocalDeletionTime();
 
     /**
-      * @return the larget deletion time of all deletions contained in this sstable.
+      * Returns the larget deletion time of all deletions contained in this sstable.
       */
     int getMaxLocalDeletionTime();
 
@@ -116,52 +130,57 @@ public interface CompactionSSTable
      * <p/>
      * Note that some system tables do not have read meters, in which case this method will return zero.
      *
-     * @return the last two hours read rate per estimated key
+     * Returns the last two hours read rate per estimated key
      */
     double hotness();
 
     /**
-      * @return true if this sstable was repaired by a repair service, false otherwise.
+      * Returns true if this sstable was repaired by a repair service, false otherwise.
       */
     boolean isRepaired();
 
     /**
-     * @return the time of repair when isRepaired is true, otherwise UNREPAIRED_SSTABLE.
+     * Returns the time of repair when isRepaired is true, otherwise UNREPAIRED_SSTABLE.
      */
     long getRepairedAt();
 
     /**
-      * @return true if this sstable is pending repair, false otherwise.
+      * Returns true if this sstable is pending repair, false otherwise.
       */
     boolean isPendingRepair();
 
     /**
-     * @return the id of the repair session when isPendingRepair is true, otherwise null.
+     * Returns the id of the repair session when isPendingRepair is true, otherwise null.
      */
     UUID getPendingRepair();
 
     /**
-     * @return An estimate of the number of keys in this SSTable based on the index summary.
+     * Returns true if this sstable is transient.
+     */
+    boolean isTransient();
+
+    /**
+     * Returns an estimate of the number of keys in this SSTable based on the index summary.
      */
     long estimatedKeys();
 
     /**
-      * @return the level of this sstable according to {@link LeveledCompactionStrategy}, zero for other strategies.
+      * Returns the level of this sstable according to {@link LeveledCompactionStrategy}, zero for other strategies.
       */
     int getSSTableLevel();
 
     /**
-      * @return true if this sstable can take part into a compaction.
+      * Returns true if this sstable can take part into a compaction.
       */
     boolean isSuitableForCompaction();
 
     /**
-      * @return true if this sstable was marked for obsoletion by a compaction.
+      * Returns true if this sstable was marked for obsoletion by a compaction.
       */
     boolean isMarkedCompacted();
 
     /**
-      * @return true if this sstable is suspect, that is it was involved in an operation that failed, such
+      * Returns true if this sstable is suspect, that is it was involved in an operation that failed, such
       *         as a write or read that resulted in {@link CorruptSSTableException}.
       */
     boolean isMarkedSuspect();
@@ -176,29 +195,24 @@ public interface CompactionSSTable
     boolean mayHaveTombstones();
 
     /**
-     * @return true if it is possible that the given key is contained in this sstable.
+     * Returns true if it is possible that the given key is contained in this sstable.
      */
     boolean couldContain(DecoratedKey key);
 
     /**
-     * @return the index of the disk storing this sstable, according to the boundaries passed in.
+     * Returns the index of the disk storing this sstable, according to the boundaries passed in.
      */
     int getDiskIndex(DiskBoundaries diskBoundaries);
 
     Descriptor getDescriptor();
-
-    boolean isTransient();
-
     default String getColumnFamilyName()
     {
         return getDescriptor().cfname;
     }
-
     default String getKeyspaceName()
     {
         return getDescriptor().ksname;
     }
-
     default SSTableUniqueIdentifier getGeneration()
     {
         return getDescriptor().generation;
@@ -206,14 +220,22 @@ public interface CompactionSSTable
 
     /**
      * @param component component to get timestamp.
-     * @return last modified time for given component. 0 if given component does not exist or IO error occurs.
+     * Returns last modified time for given component. 0 if given component does not exist or IO error occurs.
      */
     default long getCreationTimeFor(Component component)
     {
         return new File(getDescriptor().filenameFor(component)).lastModified();
     }
 
+    /**
+     * Returns an estimate of the ratio of the tombstones present in the sstable that could be dropped for the given
+     * garbage collection threshold.
+     */
     double getEstimatedDroppableTombstoneRatio(int gcBefore);
 
-    void mutateLevelAndReload(int newLevel) throws IOException;
+    /**
+     * Changes the SSTable level as used by {@link LeveledCompactionStrategy}.
+     * @throws IOException
+     */
+    void mutateSSTableLevelAndReload(int newLevel) throws IOException;
 }

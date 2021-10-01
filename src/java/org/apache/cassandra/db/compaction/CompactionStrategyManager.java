@@ -61,7 +61,6 @@ import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableDeletingNotification;
 import org.apache.cassandra.notifications.SSTableListChangedNotification;
-import org.apache.cassandra.notifications.SSTableMetadataChanged;
 import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.ActiveRepairService;
@@ -711,15 +710,6 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     /**
      * Should only be called holding the readLock
      */
-    private void handleMetadataChangedNotification(CompactionSSTable sstable, StatsMetadata oldMetadata)
-    {
-        LegacyAbstractCompactionStrategy acs = getCompactionStrategyFor(sstable);
-        acs.metadataChanged(oldMetadata, sstable);
-    }
-
-    /**
-     * Should only be called holding the readLock
-     */
     private void handleDeletingNotification(CompactionSSTable deleted)
     {
         compactionStrategyFor(deleted).removeSSTable(deleted);
@@ -751,11 +741,6 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
             else if (notification instanceof SSTableDeletingNotification)
             {
                 handleDeletingNotification(((SSTableDeletingNotification) notification).deleting);
-            }
-            else if (notification instanceof SSTableMetadataChanged)
-            {
-                SSTableMetadataChanged lcNotification = (SSTableMetadataChanged) notification;
-                handleMetadataChangedNotification(lcNotification.sstable, lcNotification.oldMetadata);
             }
         }
         finally

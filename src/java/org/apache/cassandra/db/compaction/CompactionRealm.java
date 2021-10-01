@@ -44,35 +44,18 @@ import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 
-
 /**
- * An interface for supplying table data, or {@link CompactionSSTable}, to modules that only
- * need this information, and create instances of {@link SSTableReader} lazily via {@link CompactionRealm#tryModify}.
- * <p/>
- * It is currently only used by {@link UnifiedCompactionStrategy}, and {@link CompactionController}.
+ * An interface for supplying the CFS data relevant to compaction. This is implemented by {@link ColumnFamilyStore} and
+ * works together with the {@link CompactionSSTable} interface as an abstraction of the space where compaction
+ * strategies operate.
  *
- * The idea would be that this would eventually manage all input dependencies to a compaction module, and other modules,
- * reducing the scope of CFS and readers. However, at the moment {@link ColumnFamilyStore} is still used in some places
- * even in the compaction code.
+ * ColumnFamilyStore uses its SSTableReaders (which are already open to serve reads) as the CompactionSSTable instances,
+ * but alternate implementations can choose to maintain lighter representations (e.g. metadata-only local versions of
+ * remote sstables) which need only be switched to readers when the compaction is selected for execution and locks the
+ * sstable copies using {@link #tryModify}.
  */
 public interface CompactionRealm
 {
-    /**
-     * @return the {@link Directories} backing this table.
-     */
-    Directories getDirectories();
-
-    /**
-     * @return the {@DiskBoundaries} that are currently applied to the directories backing table.
-     */
-    DiskBoundaries getDiskBoundaries();
-
-    /**
-     * @return the schema metadata of this table as a reference, used for long-living objects to keep up-to-date with
-     *         changes.
-     */
-    TableMetadataRef metadataRef();
-
     /**
      * @return the schema metadata of this table.
      */
@@ -80,6 +63,12 @@ public interface CompactionRealm
     {
         return metadataRef().get();
     }
+
+    /**
+     * @return the schema metadata of this table as a reference, used for long-living objects to keep up-to-date with
+     *         changes.
+     */
+    TableMetadataRef metadataRef();
 
     default String getTableName()
     {
@@ -100,6 +89,16 @@ public interface CompactionRealm
     }
 
     /**
+     * @return the {@link Directories} backing this table.
+     */
+    Directories getDirectories();
+
+    /**
+     * @return the {@DiskBoundaries} that are currently applied to the directories backing table.
+     */
+    DiskBoundaries getDiskBoundaries();
+
+    /**
      * @return metrics object for the realm, if available.
      */
     TableMetrics metrics();
@@ -110,68 +109,156 @@ public interface CompactionRealm
     SecondaryIndexManager getIndexManager();
 
     /**
-     * @return true if this sstable is backed by remote storage.
-     */
-    default boolean isRemote()
-    {
-        return false;
-    }
-
-    /**
      * @return true if tombstones should be purged only from repaired sstables.
      */
     boolean onlyPurgeRepairedTombstones();
 
-    Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables);
+    /**
+     * @param sstables
+     * @return sstables whose key range overlaps with that of the given sstables, not including itself.
+     * (The given sstables may or may not overlap with each other.)
+     */
+    Set<? extends CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables);
+
+    /**
+     * @return true if compaction is operating and false if it has been stopped.
+     */
+    boolean isCompactionActive();
+
+    /**
+     * @return the compaction parameters associated with this table.
+     */
+    CompactionParams getCompactionParams();
+
+    /**
+     * @return true if the table is operating in a mode where no tombstones are allowed to be deleted.
+     */
+    boolean getNeverPurgeTombstones();
+
+    /**
+     * @return the minimum compaction threshold for size-tiered compaction (also when used as helper in leveled and
+     * time-window compaction strategies).
+     */
+    int getMinimumCompactionThreshold();
+    /**
+     * @return the maximum compaction threshold for size-tiered compaction (also when used as helper in leveled and
+     * time-window compaction strategies).
+     */
+    int getMaximumCompactionThreshold();
+    /**
+     * @return the level fanout factor for leveled compaction.
+     */
+    int getLevelFanoutSize();
+    /**
+     * @return true if the table and its compaction strategy support opening of incomplete compaction results early.
+     */
+    boolean supportsEarlyOpen();
+    /**
+     * @return the expected total size of the result of compacting the given sstables, taking into account ranges in
+     * the sstables that would be thrown away because they are no longer processed by this node.
+     */
+    long getExpectedCompactedFileSize(Iterable<SSTableReader> sstables, OperationType operationType);
+    /**
+     * @return true if compaction should check if the result of an operation fits in the disk space and reduce its scope
+     * when it does not.
+     */
+    boolean isCompactionDiskSpaceCheckEnabled();
+
+    /**
+     * @return all live memtables, or empty if no memtables are available.
+     */
+    Iterable<Memtable> getAllMemtables();
+
+    /**
+     * @return the set of all live sstables.
+     */
+    Set<? extends CompactionSSTable> getLiveSSTables();
+    /**
+     * @return the set of sstables which are currently compacting.
+     */
+    Set<? extends CompactionSSTable> getCompactingSSTables();
+    /**
+     * @return the set of live sstables which are not currently compacting, i.e live - compacting.
+     */
+    Iterable<? extends CompactionSSTable> getNoncompactingSSTables();
+    /**
+     * Return the subset of the given sstable set which is not currently compacting.
+     */
+    <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> sstables);
+
+    /**
+     * Return the list of sstables of the given type.
+     */
+    Iterable<? extends CompactionSSTable> getSSTables(SSTableSet set);
 
     /**
      * Invalidate the given key from local caches.
      */
     void invalidateCachedPartition(DecoratedKey key);
 
+    /**
+     * Construct a descriptor for a new sstable in the given location.
+     */
+    Descriptor newSSTableDescriptor(File locationForDisk);
+
+    /**
+     * Initiate a transaction to modify the given sstables and operation type, most often a compaction.
+     * The transaction will convert the given CompactionSSTable handles into open SSTableReaders.
+     */
     LifecycleTransaction tryModify(Iterable<? extends CompactionSSTable> sstables, OperationType operationType);
+
+    /**
+     * Create an overlap tracker for the given set of source sstables. The tracker is used to identify all sstables
+     * that overlap with the given sources, which is used to decide if tombstones or other data can be purged.
+     */
     OverlapTracker getOverlapTracker(Iterable<SSTableReader> sources);
 
     interface OverlapTracker extends AutoCloseable
     {
+        /**
+         * @return all sstables that overlap with the given source set.
+         */
         Collection<? extends CompactionSSTable> overlaps();
+
+        /**
+         * @return the sstables whose span covers the given key.
+         */
         Collection<? extends CompactionSSTable> overlaps(DecoratedKey key);
-        <V> Iterable<V> shadowSources(DecoratedKey key,
-                                      Predicate<CompactionSSTable> filter,
-                                      Function<SSTableReader, V> transformation);
+
+        /**
+         * Get all the sstables whose span covers the given key, open (i.e. convert to SSTableReader) the ones selected
+         * by the given filter, and collect the non-null results of applying the given transformation to the resulting
+         * SSTableReaders.
+         * Used to select shadow sources (i.e. sources of tombstones or data) for garbage-collecting compactions.
+         */
+        <V> Iterable<V> openSelectedOverlappingSSTables(DecoratedKey key,
+                                                        Predicate<CompactionSSTable> filter,
+                                                        Function<SSTableReader, V> transformation);
+
+        /**
+         * Refresh the overlapping sstables to reflect compactions applied to any of them.
+         * Done to avoid holding on to references of obsolete sstables, which will prevent them from being deleted.
+         */
         boolean maybeRefresh();
     }
 
-    boolean isCompactionActive();
-    CompactionParams getCompactionParams();
-    boolean getNeverPurgeTombstones();
-    int getMinimumCompactionThreshold();
-    int getMaximumCompactionThreshold();
-    int getLevelFanoutSize();
-    boolean supportsEarlyOpen();
-    long getExpectedCompactedFileSize(Iterable<SSTableReader> sstables, OperationType operationType);
-    boolean isCompactionDiskSpaceCheckEnabled();
-    long getMaxSSTableBytes();
-
     /**
-     * @return all live memtables, or empty if no memtables are available.
+     * Create a CFS snapshot with the given name.
      */
-    Iterable<Memtable> getAllMemtables();
-    Set<? extends CompactionSSTable> getCompactingSSTables();
-    Iterable<? extends CompactionSSTable> getNoncompactingSSTables();
-    <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> sstables);
-    Set<? extends CompactionSSTable> getLiveSSTables();
-    Iterable<? extends CompactionSSTable> getSSTables(SSTableSet set);
-
-    Descriptor newSSTableDescriptor(File locationForDisk);
-
-    void notifySSTableRepairedStatusChanged(Collection<SSTableReader> sstables);
-    void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore);
-
     void snapshotWithoutMemtable(String snapshotId);
 
+    /**
+     * Change the repaired status of a set of sstables, usually to reflect a completed repair operation.
+     */
     int mutateRepairedWithLock(Collection<SSTableReader> originals, long repairedAt, UUID pendingRepair, boolean isTransient) throws IOException;
+
+    /**
+     * Signal that a repair session has completed.
+     */
     void repairSessionCompleted(UUID sessionID);
 
+    /**
+     * Run an operation with concurrent compactions being stopped.
+     */
     <V> V runWithCompactionsDisabled(Callable<V> callable, boolean interruptValidation, boolean interruptViews);
 }

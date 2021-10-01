@@ -485,14 +485,6 @@ public class Tracker
             subscriber.handleNotification(notification, this);
     }
 
-    public void notifySSTableMetadataChanged(SSTableReader levelChanged, StatsMetadata oldMetadata)
-    {
-        INotification notification = new SSTableMetadataChanged(levelChanged, oldMetadata);
-        for (INotificationConsumer subscriber : subscribers)
-            subscriber.handleNotification(notification, this);
-
-    }
-
     public void notifyDeleting(SSTableReader deleting)
     {
         INotification notification = new SSTableDeletingNotification(deleting);

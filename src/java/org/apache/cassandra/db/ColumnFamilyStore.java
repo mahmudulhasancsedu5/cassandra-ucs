@@ -1394,15 +1394,19 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return shardBoundaries;
     }
 
-    private void addOverlappingLiveSSTables(Set<? super SSTableReader> overlaps,
-                                            Iterable<? extends CompactionSSTable> sstables)
+    /**
+     * @param sstables
+     * @return sstables whose key range overlaps with that of the given sstables, not including itself.
+     * (The given sstables may or may not overlap with each other.)
+     */
+    public Set<SSTableReader> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables)
     {
         logger.trace("Checking for sstables overlapping {}", sstables);
 
         // a normal compaction won't ever have an empty sstables list, but we create a skeleton
         // compaction controller for streaming, and that passes an empty list.
         if (!sstables.iterator().hasNext())
-            return;
+            return ImmutableSet.of();
 
         View view = data.getView();
 
@@ -1443,24 +1447,14 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             }
         }
         bounds.add(AbstractBounds.bounds(first, true, last, true));
+        Set<SSTableReader> overlaps = new HashSet<>();
 
         for (AbstractBounds<PartitionPosition> bound : bounds)
             Iterables.addAll(overlaps, view.liveSSTablesInBounds(bound.left, bound.right));
 
         for (CompactionSSTable sstable : sstables)
             overlaps.remove(sstable);
-    }
-
-    /**
-     * @param sstables
-     * @return sstables whose key range overlaps with that of the given sstables, not including itself.
-     * (The given sstables may or may not overlap with each other.)
-     */
-    public Set<CompactionSSTable> getOverlappingLiveSSTables(Iterable<? extends CompactionSSTable> sstables)
-    {
-        Set<CompactionSSTable> overlapping = new HashSet<>();
-        addOverlappingLiveSSTables(overlapping, sstables);
-        return overlapping;
+        return overlaps;
     }
 
     /**
@@ -1470,17 +1464,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     {
         while (true)
         {
-            Set<SSTableReader> overlapped = new HashSet<>();
-            addOverlappingLiveSSTables(overlapped, sstables);
+            Set<SSTableReader> overlapped = getOverlappingLiveSSTables(sstables);
             Refs<SSTableReader> refs = Refs.tryRef(overlapped);
             if (refs != null)
                 return refs;
         }
-    }
-
-    public ScannerList getScanners(Set<SSTableReader> toCompact)
-    {
-        return getCompactionStrategy().getScanners(toCompact);
     }
 
     /*
@@ -1626,16 +1614,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         data.replaceFlushed(memtable, sstables);
         if (sstables != null && !sstables.isEmpty())
             CompactionManager.instance.submitBackground(this);
-    }
-
-    public void notifySSTableMetadataChanged(SSTableReader sstable, StatsMetadata metadataBefore)
-    {
-        getTracker().notifySSTableMetadataChanged(sstable, metadataBefore);
-    }
-
-    public void notifySSTableRepairedStatusChanged(Collection<SSTableReader> sstables)
-    {
-        getTracker().notifySSTableRepairedStatusChanged(sstables);
     }
 
     public boolean isValid()
@@ -3356,9 +3334,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             return overlapIterator.overlaps();
         }
 
-        public <V> Iterable<V> shadowSources(DecoratedKey key,
-                                             Predicate<CompactionSSTable> filter,
-                                             Function<SSTableReader, V> transformation)
+        public <V> Iterable<V> openSelectedOverlappingSSTables(DecoratedKey key,
+                                                               Predicate<CompactionSSTable> filter,
+                                                               Function<SSTableReader, V> transformation)
         {
             overlapIterator.update(key);
 

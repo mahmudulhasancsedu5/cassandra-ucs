@@ -481,8 +481,7 @@ public class Verifier implements Closeable
         {
             try
             {
-                sstable.mutateRepairedAndReload(ActiveRepairService.UNREPAIRED_SSTABLE, sstable.getPendingRepair(), sstable.isTransient());
-                realm.notifySSTableRepairedStatusChanged(ImmutableList.of(sstable));
+                realm.mutateRepairedWithLock(ImmutableList.of(sstable), ActiveRepairService.UNREPAIRED_SSTABLE, sstable.getPendingRepair(), sstable.isTransient());
             }
             catch(IOException ioe)
             {

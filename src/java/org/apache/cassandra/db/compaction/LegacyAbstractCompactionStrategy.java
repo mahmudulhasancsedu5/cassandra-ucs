@@ -252,18 +252,6 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
     }
 
     /**
-     * Called when the metadata has changed for an sstable - for example if the level changed
-     *
-     * Not called when repair status changes (which is also metadata), because this results in the
-     * sstable getting removed from the compaction strategy instance.
-     *
-     * This is only needed by the LCS manifest from what I could see.
-     */
-    void metadataChanged(StatsMetadata oldMetadata, CompactionSSTable sstable)
-    {
-    }
-
-    /**
      * Select a table for tombstone-removing compaction from the given set. Returns null if no table is suitable.
      */
     @Nullable
@@ -315,7 +303,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (options.isUncheckedTombstoneCompaction())
             return true;
 
-        Set<CompactionSSTable> overlaps = realm.getOverlappingLiveSSTables(Collections.singleton(reader));
+        Set<? extends CompactionSSTable> overlaps = realm.getOverlappingLiveSSTables(Collections.singleton(reader));
         if (overlaps.isEmpty())
         {
             // there is no overlap, tombstones are safely droppable

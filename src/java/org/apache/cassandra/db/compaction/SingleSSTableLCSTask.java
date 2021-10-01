@@ -41,10 +41,12 @@ public class SingleSSTableLCSTask extends AbstractCompactionTask
     private static final Logger logger = LoggerFactory.getLogger(SingleSSTableLCSTask.class);
 
     private final int level;
+    private final LeveledCompactionStrategy strategy;
 
     public SingleSSTableLCSTask(LeveledCompactionStrategy strategy, LifecycleTransaction txn, int level)
     {
         super(strategy.realm, txn);
+        this.strategy = strategy;
         assert txn.originals().size() == 1;
         this.level = level;
         addObserver(strategy);
@@ -82,14 +84,14 @@ public class SingleSSTableLCSTask extends AbstractCompactionTask
             try
             {
                 logger.info("Changing level on {} from {} to {}", sstable, metadataBefore.sstableLevel, level);
-                sstable.mutateLevelAndReload(level);
+                sstable.mutateSSTableLevelAndReload(level);
             }
             catch (Throwable t)
             {
                 transaction.abort();
                 throw new CorruptSSTableException(t, sstable.descriptor.filenameFor(Component.DATA));
             }
-            realm.notifySSTableMetadataChanged(sstable, metadataBefore);
+            strategy.metadataChanged(metadataBefore, sstable);
         }
         finishTransaction(sstable);
     }

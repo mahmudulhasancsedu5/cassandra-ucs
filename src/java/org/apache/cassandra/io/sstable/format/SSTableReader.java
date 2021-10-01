@@ -1973,7 +1973,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     /**
      * Mutate sstable level with a lock to avoid racing with entire-sstable-streaming and then reload sstable metadata
      */
-    public void mutateLevelAndReload(int newLevel) throws IOException
+    public void mutateSSTableLevelAndReload(int newLevel) throws IOException
     {
         try
         {
