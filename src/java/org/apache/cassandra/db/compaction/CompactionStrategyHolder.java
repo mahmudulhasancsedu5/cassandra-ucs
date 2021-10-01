@@ -193,13 +193,13 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
         return scanners;
     }
 
-    Collection<Collection<SSTableReader>> groupForAnticompaction(Iterable<? extends SSTableReader> sstables)
+    Collection<Collection<CompactionSSTable>> groupForAnticompaction(Iterable<? extends CompactionSSTable> sstables)
     {
         Preconditions.checkState(!isRepaired);
-        GroupedSSTableContainer<SSTableReader> group = this.createGroupedSSTableContainer();
+        GroupedSSTableContainer<CompactionSSTable> group = this.createGroupedSSTableContainer();
         sstables.forEach(group::add);
 
-        Collection<Collection<SSTableReader>> anticompactionGroups = new ArrayList<>();
+        Collection<Collection<CompactionSSTable>> anticompactionGroups = new ArrayList<>();
         for (int i = 0; i < strategies.size(); i++)
         {
             if (group.isGroupEmpty(i))

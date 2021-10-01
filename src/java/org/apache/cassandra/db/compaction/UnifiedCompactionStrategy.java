@@ -102,12 +102,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
-        Collection<Collection<SSTableReader>> groups = new ArrayList<>();
+        Collection<Collection<CompactionSSTable>> groups = new ArrayList<>();
         for (Shard shard : getCompactionShards(sstablesToGroup))
         {
-            groups.addAll(super.groupSSTablesForAntiCompaction(Collections2.transform(shard.sstables, SSTableReader.class::cast)));
+            groups.addAll(super.groupSSTablesForAntiCompaction(shard.sstables));
         }
 
         return groups;

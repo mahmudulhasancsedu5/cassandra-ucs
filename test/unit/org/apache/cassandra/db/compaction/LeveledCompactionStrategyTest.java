@@ -142,15 +142,15 @@ public class LeveledCompactionStrategyTest
             Assert.fail();
         }
 
-        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategyContainer().groupSSTablesForAntiCompaction(cfs.getLiveSSTables());
-        for (Collection<SSTableReader> sstableGroup : groupedSSTables)
+        Collection<Collection<CompactionSSTable>> groupedSSTables = cfs.getCompactionStrategyContainer().groupSSTablesForAntiCompaction(cfs.getLiveSSTables());
+        for (Collection<CompactionSSTable> sstableGroup : groupedSSTables)
         {
             int groupLevel = -1;
-            Iterator<SSTableReader> it = sstableGroup.iterator();
+            Iterator<CompactionSSTable> it = sstableGroup.iterator();
             while (it.hasNext())
             {
 
-                SSTableReader sstable = it.next();
+                CompactionSSTable sstable = it.next();
                 int tableLevel = sstable.getSSTableLevel();
                 if (groupLevel == -1)
                     groupLevel = tableLevel;

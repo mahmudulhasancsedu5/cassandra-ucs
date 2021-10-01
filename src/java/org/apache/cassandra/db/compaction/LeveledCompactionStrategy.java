@@ -210,28 +210,28 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
      * @return Groups of sstables from the same level
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> ssTablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> ssTablesToGroup)
     {
         int groupSize = 2;
-        Map<Integer, Collection<SSTableReader>> sstablesByLevel = new HashMap<>();
-        for (SSTableReader sstable : ssTablesToGroup)
+        Map<Integer, Collection<CompactionSSTable>> sstablesByLevel = new HashMap<>();
+        for (CompactionSSTable sstable : ssTablesToGroup)
         {
             Integer level = sstable.getSSTableLevel();
-            Collection<SSTableReader> sstablesForLevel = sstablesByLevel.get(level);
+            Collection<CompactionSSTable> sstablesForLevel = sstablesByLevel.get(level);
             if (sstablesForLevel == null)
             {
-                sstablesForLevel = new ArrayList<SSTableReader>();
+                sstablesForLevel = new ArrayList<CompactionSSTable>();
                 sstablesByLevel.put(level, sstablesForLevel);
             }
             sstablesForLevel.add(sstable);
         }
 
-        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
+        Collection<Collection<CompactionSSTable>> groupedSSTables = new ArrayList<>();
 
-        for (Collection<SSTableReader> levelOfSSTables : sstablesByLevel.values())
+        for (Collection<CompactionSSTable> levelOfSSTables : sstablesByLevel.values())
         {
-            Collection<SSTableReader> currGroup = new ArrayList<>(groupSize);
-            for (SSTableReader sstable : levelOfSSTables)
+            Collection<CompactionSSTable> currGroup = new ArrayList<>(groupSize);
+            for (CompactionSSTable sstable : levelOfSSTables)
             {
                 currGroup.add(sstable);
                 if (currGroup.size() == groupSize)

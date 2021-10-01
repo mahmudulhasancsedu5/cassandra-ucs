@@ -431,12 +431,14 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
 
     /**
      * DTCS should not group sstables for anticompaction - this can mix new and old data
+     * @param sstablesToGroup
+     * @return
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
-        Collection<Collection<SSTableReader>> groups = new ArrayList<>(sstablesToGroup.size());
-        for (SSTableReader sstable : sstablesToGroup)
+        Collection<Collection<CompactionSSTable>> groups = new ArrayList<>(sstablesToGroup.size());
+        for (CompactionSSTable sstable : sstablesToGroup)
         {
             groups.add(Collections.singleton(sstable));
         }

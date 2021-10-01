@@ -860,7 +860,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
         maybeReloadDiskBoundaries();
         readLock.lock();

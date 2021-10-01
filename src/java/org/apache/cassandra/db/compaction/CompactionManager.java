@@ -1402,13 +1402,13 @@ public class CompactionManager implements CompactionManagerMBean
         // make use of any actual repairedAt value and splitting up sstables just for that is not worth it at this point.
         Set<SSTableReader> unrepairedSSTables = sstables.stream().filter((s) -> !s.isRepaired()).collect(Collectors.toSet());
         cfs.metric.bytesAnticompacted.inc(CompactionSSTable.getTotalBytes(unrepairedSSTables));
-        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(unrepairedSSTables);
+        Collection<Collection<CompactionSSTable>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(unrepairedSSTables);
 
         // iterate over sstables to check if the full / transient / unrepaired ranges intersect them.
         int antiCompactedSSTableCount = 0;
-        for (Collection<SSTableReader> sstableGroup : groupedSSTables)
+        for (Collection<CompactionSSTable> sstableGroup : groupedSSTables)
         {
-            try (LifecycleTransaction groupTxn = txn.split(sstableGroup))
+            try (LifecycleTransaction groupTxn = txn.split(Collections2.transform(sstableGroup, SSTableReader.class::cast)))
             {
                 int antiCompacted = antiCompactGroup(cfs, ranges, groupTxn, pendingRepair, isCancelled);
                 antiCompactedSSTableCount += antiCompacted;

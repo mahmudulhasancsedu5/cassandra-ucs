@@ -301,7 +301,7 @@ public class UnifiedCompactionContainer implements CompactionStrategyContainer
     }
 
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
         return strategy.groupSSTablesForAntiCompaction(sstablesToGroup);
     }

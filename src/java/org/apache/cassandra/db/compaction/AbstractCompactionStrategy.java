@@ -311,16 +311,16 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
      * @return
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
         int groupSize = 2;
-        List<SSTableReader> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
-        Collections.sort(sortedSSTablesToGroup, SSTableReader.firstKeyComparator);
+        List<CompactionSSTable> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
+        Collections.sort(sortedSSTablesToGroup, CompactionSSTable.firstKeyComparator);
 
-        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
-        Collection<SSTableReader> currGroup = new ArrayList<>(groupSize);
+        Collection<Collection<CompactionSSTable>> groupedSSTables = new ArrayList<>();
+        Collection<CompactionSSTable> currGroup = new ArrayList<>(groupSize);
 
-        for (SSTableReader sstable : sortedSSTablesToGroup)
+        for (CompactionSSTable sstable : sortedSSTablesToGroup)
         {
             currGroup.add(sstable);
             if (currGroup.size() == groupSize)
