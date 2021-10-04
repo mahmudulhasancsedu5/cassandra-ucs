@@ -277,8 +277,8 @@ public abstract class CompactionAggregate
      */
     public CompactionAggregate withAdditionalCompactions(Collection<CompactionPick> comps)
     {
-        List<CompactionSSTable> sstables = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
-        return clone(Iterables.concat(this.sstables, sstables), selected, Iterables.concat(compactions, comps));
+        List<CompactionSSTable> added = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
+        return clone(Iterables.concat(sstables, added), selected, Iterables.concat(compactions, comps));
     }
 
     /**
@@ -286,8 +286,8 @@ public abstract class CompactionAggregate
      */
     public CompactionAggregate withOnlyTheseCompactions(Collection<CompactionPick> comps)
     {
-        List<CompactionSSTable> sstables = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
-        return clone(sstables, CompactionPick.EMPTY, comps);
+        List<CompactionSSTable> selected = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
+        return clone(selected, CompactionPick.EMPTY, comps);
     }
 
     @Override

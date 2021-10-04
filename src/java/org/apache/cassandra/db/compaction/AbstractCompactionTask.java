@@ -50,7 +50,7 @@ public abstract class AbstractCompactionTask extends WrappedRunnable
      * @param realm
      * @param transaction the modifying managing the status of the sstables we're replacing
      */
-    public AbstractCompactionTask(CompactionRealm realm, LifecycleTransaction transaction)
+    protected AbstractCompactionTask(CompactionRealm realm, LifecycleTransaction transaction)
     {
         this.realm = realm;
         this.transaction = transaction;

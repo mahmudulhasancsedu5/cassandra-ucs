@@ -93,9 +93,8 @@ public class CompactionController extends AbstractCompactionController
 
     public void maybeRefreshOverlaps()
     {
-        if (overlapTracker != null)
-            if (overlapTracker.maybeRefresh())
-                closeDataFiles();
+        if (overlapTracker != null && overlapTracker.maybeRefresh())
+            closeDataFiles();
     }
 
     void closeDataFiles()
@@ -143,63 +142,57 @@ public class CompactionController extends AbstractCompactionController
         if (realm.onlyPurgeRepairedTombstones() && !Iterables.all(compacting, CompactionSSTable::isRepaired))
             return Collections.emptySet();
 
-        if (ignoreOverlaps)
+        long minTimestamp;
+        if (!ignoreOverlaps)
         {
-            Set<CompactionSSTable> fullyExpired = new HashSet<>();
-            for (CompactionSSTable candidate : compacting)
-            {
-                if (candidate.getMaxLocalDeletionTime() < gcBefore)
-                {
-                    fullyExpired.add(candidate);
-                    logger.trace("Dropping overlap ignored expired SSTable {} (maxLocalDeletionTime={}, gcBefore={})",
-                                 candidate, candidate.getMaxLocalDeletionTime(), gcBefore);
-                }
-            }
-            return fullyExpired;
+            minTimestamp = Math.min(Math.min(minSurvivingTimestamp(overlapping, gcBefore),
+                                             minSurvivingTimestamp(compacting, gcBefore)),
+                                    minTimestamp(realm.getAllMemtables()));
+        }
+        else
+        {
+            minTimestamp = Long.MAX_VALUE;
         }
 
-        List<CompactionSSTable> candidates = new ArrayList<>();
-        long minTimestamp = Long.MAX_VALUE;
+        // At this point, minTimestamp denotes the lowest timestamp of any relevant
+        // SSTable or Memtable that contains a constructive value. Any compacting sstable with only expired content that
+        // also has (getMaxTimestamp() < minTimestamp) serves no purpose anymore.
 
-        for (CompactionSSTable sstable : overlapping)
+        Set<CompactionSSTable> expired = new HashSet<>();
+        for (CompactionSSTable candidate : compacting)
+        {
+            if (candidate.getMaxLocalDeletionTime() < gcBefore &&
+                candidate.getMaxTimestamp() < minTimestamp)
+            {
+                logger.trace("Dropping {}expired SSTable {} (maxLocalDeletionTime={}, gcBefore={})",
+                             ignoreOverlaps ? "overlap ignored " : "",
+                             candidate, candidate.getMaxLocalDeletionTime(), gcBefore);
+                expired.add(candidate);
+            }
+        }
+        return expired;
+    }
+
+    private static long minTimestamp(Iterable<Memtable> memtables)
+    {
+        long minTimestamp = Long.MAX_VALUE;
+        for (Memtable memtable : memtables)
+            minTimestamp = Math.min(minTimestamp, memtable.getMinTimestamp());
+        return minTimestamp;
+    }
+
+    private static long minSurvivingTimestamp(Iterable<? extends CompactionSSTable> ssTables,
+                                              int gcBefore)
+    {
+        long minTimestamp = Long.MAX_VALUE;
+        for (CompactionSSTable sstable : ssTables)
         {
             // Overlapping might include fully expired sstables. What we care about here is
             // the min timestamp of the overlapping sstables that actually contain live data.
             if (sstable.getMaxLocalDeletionTime() >= gcBefore)
                 minTimestamp = Math.min(minTimestamp, sstable.getMinTimestamp());
         }
-
-        for (CompactionSSTable candidate : compacting)
-        {
-            if (candidate.getMaxLocalDeletionTime() < gcBefore)
-                candidates.add(candidate);
-            else
-                minTimestamp = Math.min(minTimestamp, candidate.getMinTimestamp());
-        }
-
-        for (Memtable memtable : realm.getAllMemtables())
-            minTimestamp = Math.min(minTimestamp, memtable.getMinTimestamp());
-
-        // At this point, minTimestamp denotes the lowest timestamp of any relevant
-        // SSTable or Memtable that contains a constructive value. candidates contains all the
-        // candidates with no constructive values. The ones out of these that have
-        // (getMaxTimestamp() < minTimestamp) serve no purpose anymore.
-
-        Iterator<CompactionSSTable> iterator = candidates.iterator();
-        while (iterator.hasNext())
-        {
-            CompactionSSTable candidate = iterator.next();
-            if (candidate.getMaxTimestamp() >= minTimestamp)
-            {
-                iterator.remove();
-            }
-            else
-            {
-               logger.trace("Dropping expired SSTable {} (maxLocalDeletionTime={}, gcBefore={})",
-                        candidate, candidate.getMaxLocalDeletionTime(), gcBefore);
-            }
-        }
-        return new HashSet<>(candidates);
+        return minTimestamp;
     }
 
     public static
@@ -229,7 +222,7 @@ public class CompactionController extends AbstractCompactionController
         long minTimestampSeen = Long.MAX_VALUE;
         boolean hasTimestamp = false;
 
-        // TODO: This should be done in sort order to minimize couldContain calls.
+        // TODO: Evaluate if doing this in sort order to minimize couldContain calls is a performance improvement.
         for (CompactionSSTable sstable: filteredSSTables)
         {
             long sstableMinTimestamp = sstable.getMinTimestamp();

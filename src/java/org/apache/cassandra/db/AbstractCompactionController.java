@@ -33,7 +33,7 @@ public abstract class AbstractCompactionController implements AutoCloseable
     public final int gcBefore;
     public final CompactionParams.TombstoneOption tombstoneOption;
 
-    public AbstractCompactionController(final CompactionRealm realm, final int gcBefore, CompactionParams.TombstoneOption tombstoneOption)
+    protected AbstractCompactionController(final CompactionRealm realm, final int gcBefore, CompactionParams.TombstoneOption tombstoneOption)
     {
         assert realm != null;
         this.realm = realm;

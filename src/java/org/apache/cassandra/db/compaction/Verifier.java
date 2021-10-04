@@ -270,7 +270,7 @@ public class Verifier implements Closeable
                     // check for null key below
                 }
 
-                if (options.checkOwnsTokens && ownedRanges.size() > 0 && !(realm.getPartitioner() instanceof LocalPartitioner))
+                if (options.checkOwnsTokens && !ownedRanges.isEmpty() && !(realm.getPartitioner() instanceof LocalPartitioner))
                 {
                     try
                     {

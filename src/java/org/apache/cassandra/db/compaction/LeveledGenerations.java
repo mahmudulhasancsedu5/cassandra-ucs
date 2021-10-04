@@ -115,22 +115,7 @@ class LeveledGenerations
         for (CompactionSSTable sstable : readers)
         {
             assert sstable.getSSTableLevel() < levelCount() : "Invalid level " + sstable.getSSTableLevel() + " out of " + (levelCount() - 1);
-            int existingLevel = getLevelIfExists(sstable);
-            if (existingLevel != -1)
-            {
-                if (sstable.getSSTableLevel() != existingLevel)
-                {
-                    logger.error("SSTable {} on the wrong level in the manifest - {} instead of {} as recorded in the sstable metadata, removing from level {}", sstable, existingLevel, sstable.getSSTableLevel(), existingLevel);
-                    if (strictLCSChecksTest)
-                        throw new AssertionError("SSTable not in matching level in manifest: "+sstable + ": "+existingLevel+" != " + sstable.getSSTableLevel());
-                }
-                else
-                {
-                    logger.info("Manifest already contains {} in level {} - replacing instance", sstable, existingLevel);
-                }
-                get(existingLevel).remove(sstable);
-                allSSTables.remove(sstable);
-            }
+            removeIfExists(sstable);
 
             allSSTables.put(sstable, sstable);
             if (sstable.getSSTableLevel() == 0)
@@ -184,18 +169,38 @@ class LeveledGenerations
     }
 
     /**
-     * Tries to find the sstable in the levels without using the sstable-recorded level
+     * Tries to find the sstable in the levels without using the sstable-recorded level, and removes it if it does find
+     * it.
      *
      * Used to make sure we don't try to re-add an existing sstable
      */
-    private int getLevelIfExists(CompactionSSTable sstable)
+    private void removeIfExists(CompactionSSTable sstable)
     {
-        for (int i = 0; i < levelCount(); i++)
+        for (int level = 0; level < levelCount(); level++)
         {
-            if (get(i).contains(sstable))
-                return i;
+            if (get(level).contains(sstable))
+            {
+                if (sstable.getSSTableLevel() != level)
+                {
+                    logger.error("SSTable {} on the wrong level in the manifest - {} instead of {} as recorded in the sstable metadata, removing from level {}",
+                                 sstable,
+                                 level,
+                                 sstable.getSSTableLevel(),
+                                 level);
+                    if (strictLCSChecksTest)
+                        throw new AssertionError("SSTable not in matching level in manifest: " + sstable + ": " + level + " != " +
+                                                 sstable.getSSTableLevel());
+                }
+                else
+                {
+                    logger.info("Manifest already contains {} in level {} - replacing instance",
+                                sstable,
+                                level);
+                }
+                get(level).remove(sstable);
+                allSSTables.remove(sstable);
+            }
         }
-        return -1;
     }
 
     int remove(Collection<? extends CompactionSSTable> readers)

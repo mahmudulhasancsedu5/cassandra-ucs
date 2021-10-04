@@ -81,7 +81,7 @@ public class ScannerList implements AutoCloseable
 
     public static ScannerList of(Collection<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
-        ArrayList<ISSTableScanner> scanners = new ArrayList<ISSTableScanner>();
+        ArrayList<ISSTableScanner> scanners = new ArrayList<>();
         try
         {
             for (SSTableReader sstable : sstables)
