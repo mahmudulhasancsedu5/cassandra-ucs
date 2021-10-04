@@ -19,6 +19,7 @@ package org.apache.cassandra.db.compaction.unified;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.schema.TableMetadataRef;
@@ -33,13 +34,18 @@ import org.apache.cassandra.utils.PageAware;
  */
 class RealEnvironment implements Environment
 {
-    private final TableMetrics metrics;
+    private final CompactionRealm realm;
     private final TableMetadataRef metadata;
 
-    RealEnvironment(TableMetadataRef metadata, TableMetrics metrics)
+    RealEnvironment(TableMetadataRef metadata, CompactionRealm realm)
     {
         this.metadata = metadata;
-        this.metrics = metrics;
+        this.realm = realm;
+    }
+
+    private TableMetrics metrics()
+    {
+        return realm.metrics();
     }
 
     @Override
@@ -61,7 +67,7 @@ class RealEnvironment implements Environment
     @Override
     public double bloomFilterFpRatio()
     {
-        return metrics.bloomFilterFalseRatio.getValue();
+        return metrics().bloomFilterFalseRatio.getValue();
     }
 
     @Override
@@ -77,45 +83,45 @@ class RealEnvironment implements Environment
     @Override
     public long partitionsRead()
     {
-        return metrics.readRequests.getCount();
+        return metrics().readRequests.getCount();
     }
 
     @Override
     public double sstablePartitionReadLatencyNanos()
     {
-        return metrics.sstablePartitionReadLatency.get();
+        return metrics().sstablePartitionReadLatency.get();
     }
 
     @Override
     public double compactionTimePerKbInNanos()
     {
-        return metrics.compactionTimePerKb.get();
+        return metrics().compactionTimePerKb.get();
     }
 
     @Override
     public double flushTimePerKbInNanos()
     {
-        return metrics.flushTimePerKb.get();
+        return metrics().flushTimePerKb.get();
     }
 
     @Override
     public long bytesInserted()
     {
-        return metrics.bytesInserted.getCount();
+        return metrics().bytesInserted.getCount();
     }
 
     @Override
     public double WA()
     {
-        double bytesCompacted = metrics.compactionBytesWritten.getCount();
-        double bytesFlushed = metrics.bytesFlushed.getCount();
+        double bytesCompacted = metrics().compactionBytesWritten.getCount();
+        double bytesFlushed = metrics().bytesFlushed.getCount();
         return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
     }
 
     @Override
     public double flushSize()
     {
-        return metrics.flushSizeOnDisk.get();
+        return metrics().flushSizeOnDisk.get();
     }
 
     @Override

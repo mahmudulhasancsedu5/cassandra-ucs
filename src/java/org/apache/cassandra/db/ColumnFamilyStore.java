@@ -87,10 +87,8 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SSTableUniqueIdentifier;
 import org.apache.cassandra.io.sstable.SSTableUniqueIdentifierFactory;
-import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.Sampler;
 import org.apache.cassandra.metrics.Sampler.Sample;
@@ -428,7 +426,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         sampleReadLatencyNanos = DatabaseDescriptor.getReadRpcTimeout(NANOSECONDS) / 2;
         additionalWriteLatencyNanos = DatabaseDescriptor.getWriteRpcTimeout(NANOSECONDS) / 2;
         memtableFactory = metadata.get().params.memtable.factory;
-        metric = new TableMetrics(this, memtableFactory.createMemtableMetrics(metadata));
 
         logger.info("Initializing {}.{}", keyspace.getName(), name);
 
@@ -464,6 +461,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         {
             indexManager.addIndex(info, true);
         }
+
+        metric = new TableMetrics(this, memtableFactory.createMemtableMetrics(metadata));
 
         if (data.loadsstables)
         {
