@@ -380,10 +380,16 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
      *
      * @return a set containing the sstable passed in and all the sstables that overlap from the candidates
      */
-    private static <S extends CompactionSSTable> Set<S> overlapping(S sstable, List<? extends S> candidates)
+    private static Set<SSTableReader> overlapping(SSTableReader sstable, List<SSTableReader> candidates)
     {
-        Map<S, Bounds<Token>> candidatesWithBounds = LeveledManifest.genBounds(candidates);
-        return Sets.union(Collections.singleton(sstable), LeveledManifest.overlappingWithBounds(sstable, candidatesWithBounds));
+        Map<CompactionSSTable, Bounds<Token>> candidatesWithBounds = LeveledManifest.genBounds(candidates);
+        Set<CompactionSSTable> overlapping = LeveledManifest.overlappingWithBounds(sstable,
+                                                                                   candidatesWithBounds);
+        Set<SSTableReader> overlappingReaders = new HashSet<>();
+        overlappingReaders.add(sstable);
+        for (CompactionSSTable s : overlapping)
+            overlappingReaders.add((SSTableReader) s);
+        return overlappingReaders;
     }
 
     /**

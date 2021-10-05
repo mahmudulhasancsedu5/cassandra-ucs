@@ -295,7 +295,7 @@ public class UnifiedCompactionContainer implements CompactionStrategyContainer
     }
 
     @Override
-    public Set<CompactionSSTable> getSSTables()
+    public Set<? extends CompactionSSTable> getSSTables()
     {
         return strategy.getSSTables();
     }

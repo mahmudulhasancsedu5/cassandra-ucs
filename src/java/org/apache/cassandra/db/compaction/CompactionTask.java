@@ -242,7 +242,7 @@ public class CompactionTask extends AbstractCompactionTask
             // select SSTables to compact based on available disk space.
             buildCompactionCandidatesForAvailableDiskSpace(fullyExpiredSSTables);
 
-            // sanity check: all sstables must belong to the same realm
+            // sanity check: all sstables must belong to the same table
             assert !Iterables.any(transaction.originals(), sstable -> !sstable.descriptor.cfname.equals(realm.getTableName()));
 
             this.limiter = CompactionManager.instance.getRateLimiter();

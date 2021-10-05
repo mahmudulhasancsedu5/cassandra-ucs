@@ -36,6 +36,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.Tracker;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.dht.IPartitioner;
@@ -134,13 +135,11 @@ public class BaseCompactionStrategyTest
         when(realm.getKeyspaceName()).thenReturn(keyspace);
         when(realm.getTableName()).thenReturn(table);
         when(realm.getDiskBoundaries()).thenReturn(diskBoundaries);
-//        when(cfs.getLocalRanges()).thenReturn(localRanges);
         when(diskBoundaries.getLocalRanges()).thenReturn(localRanges);
-//        when(cfs.getTracker()).thenReturn(dataTracker);
         when(realm.getPartitioner()).thenReturn(partitioner);
         when(realm.getLiveSSTables()).thenAnswer(request -> dataTracker.getLiveSSTables());
         when(realm.getCompactingSSTables()).thenAnswer(request -> dataTracker.getCompacting());
-        when(realm.getNoncompactingSSTables()).thenAnswer(request -> dataTracker.getNoncompacting());
+        when(realm.getSSTables(any())).thenAnswer(request -> dataTracker.getView().select(request.getArgument(0)));
         when(realm.getNoncompactingSSTables(anyIterable())).thenAnswer(request -> dataTracker.getNoncompacting(request.getArgument(0)));
         when(realm.tryModify(anyIterable(), any())).thenAnswer(
             request -> dataTracker.tryModify(request.getArgument(0, Iterable.class),
@@ -248,7 +247,7 @@ public class BaseCompactionStrategyTest
         when(ret.getMinTTL()).thenReturn(ttl);
         when(ret.getMaxTTL()).thenReturn(ttl);
 
-        when(ret.getDiskIndex(diskBoundaries)).thenReturn(diskIndex);
+        when(diskBoundaries.getDiskIndexFromKey(ret)).thenReturn(diskIndex);
         if (diskIndex >= diskIndexes)
             diskIndexes = diskIndex + 1;
         return ret;

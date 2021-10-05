@@ -214,7 +214,7 @@ public class CompactionController extends AbstractCompactionController
     @Override
     public LongPredicate getPurgeEvaluator(DecoratedKey key)
     {
-        if (NEVER_PURGE_TOMBSTONES || !compactingRepaired() || realm.getNeverPurgeTombstones())
+        if (overlapTracker == null || !compactingRepaired())
             return time -> false;
 
         Collection<? extends CompactionSSTable> filteredSSTables = overlapTracker.overlaps(key);
@@ -268,23 +268,24 @@ public class CompactionController extends AbstractCompactionController
         return !realm.onlyPurgeRepairedTombstones() || compactingRepaired;
     }
 
-    boolean provideTombstoneSources()
+    boolean shouldProvideTombstoneSources()
     {
-        return tombstoneOption != TombstoneOption.NONE && compactingRepaired() && !NEVER_PURGE_TOMBSTONES && !realm.getNeverPurgeTombstones();
+        return tombstoneOption != TombstoneOption.NONE && compactingRepaired() && overlapTracker != null;
     }
 
     // caller must close iterators
     public Iterable<UnfilteredRowIterator> shadowSources(DecoratedKey key, boolean tombstoneOnly)
     {
-        if (!provideTombstoneSources())
+        if (!shouldProvideTombstoneSources())
             return null;
 
         return overlapTracker.openSelectedOverlappingSSTables(key,
-                                            tombstoneOnly ? this::isTombstoneShadowSource
-                                                          : this::isCellDataShadowSource,
-                                            sstable -> sstable.simpleIterator(openDataFiles.computeIfAbsent(sstable, this::openDataFile),
-                                                                              key,
-                                                                              tombstoneOnly));
+                                                              tombstoneOnly ? this::isTombstoneShadowSource
+                                                                            : this::isCellDataShadowSource,
+                                                              sstable -> sstable.simpleIterator(openDataFiles.computeIfAbsent(sstable,
+                                                                                                                              this::openDataFile),
+                                                                                                key,
+                                                                                                tombstoneOnly));
     }
 
     private boolean isTombstoneShadowSource(CompactionSSTable ssTable)

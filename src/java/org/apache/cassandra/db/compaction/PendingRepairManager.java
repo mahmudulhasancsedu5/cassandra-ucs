@@ -265,7 +265,7 @@ class PendingRepairManager
         LegacyAbstractCompactionStrategy compactionStrategy = get(sessionID);
         if (compactionStrategy == null)
             return null;
-        Set<CompactionSSTable> sstables = compactionStrategy.getSSTables();
+        Set<? extends CompactionSSTable> sstables = compactionStrategy.getSSTables();
         long repairedAt = ActiveRepairService.instance.consistent.local.getFinalSessionRepairedAt(sessionID);
         LifecycleTransaction txn = realm.tryModify(sstables, OperationType.COMPACTION);
         return txn == null ? null : new RepairFinishedCompactionTask(realm, txn, sessionID, repairedAt, isTransient);

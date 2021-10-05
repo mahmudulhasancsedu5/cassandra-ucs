@@ -88,14 +88,14 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
     @Override
     protected synchronized CompactionAggregate getNextBackgroundAggregate(final int gcBefore)
     {
-        if (Iterables.isEmpty(realm.getLiveSSTables()))
+        if (realm.getLiveSSTables().isEmpty())
             return null;
 
         Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
-        Set<CompactionSSTable> uncompacting;
+        Set<CompactionSSTable> noncompacting;
         synchronized (sstables)
         {
-            uncompacting = ImmutableSet.copyOf(filter(sstables, sstable -> !compacting.contains(sstable)));
+            noncompacting = ImmutableSet.copyOf(filter(sstables, sstable -> !compacting.contains(sstable)));
         }
 
         // Find fully expired SSTables. Those will be included no matter what.
@@ -105,10 +105,10 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
         {
             logger.debug("TWCS expired check sufficiently far in the past, checking for fully expired SSTables");
             expired = CompactionController.getFullyExpiredSSTables(realm,
-                                                                   uncompacting,
+                                                                   noncompacting,
                                                                    twcsOptions.ignoreOverlaps
                                                                        ? Collections.emptySet()
-                                                                       : realm.getOverlappingLiveSSTables(uncompacting),
+                                                                       : realm.getOverlappingLiveSSTables(noncompacting),
                                                                    gcBefore,
                                                                    twcsOptions.ignoreOverlaps);
             lastExpiredCheck = System.currentTimeMillis();
@@ -118,7 +118,7 @@ public class TimeWindowCompactionStrategy extends LegacyAbstractCompactionStrate
             logger.debug("TWCS skipping check for fully expired SSTables");
         }
 
-        Set<CompactionSSTable> candidates = Sets.newHashSet(Iterables.filter(uncompacting, sstable -> !sstable.isMarkedSuspect()));
+        Set<CompactionSSTable> candidates = Sets.newHashSet(Iterables.filter(noncompacting, sstable -> !sstable.isMarkedSuspect()));
 
         CompactionAggregate compactionCandidate = getNextNonExpiredSSTables(Sets.difference(candidates, expired), gcBefore);
         if (expired.isEmpty())

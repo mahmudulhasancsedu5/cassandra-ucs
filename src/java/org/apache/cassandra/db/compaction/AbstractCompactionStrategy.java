@@ -164,7 +164,7 @@ abstract class AbstractCompactionStrategy implements CompactionStrategy
     @SuppressWarnings("resource")
     public synchronized CompactionTasks getMaximalTasks(int gcBefore, boolean splitOutput)
     {
-        Iterable<CompactionSSTable> filteredSSTables = Iterables.filter(getSSTables(), sstable -> !sstable.isMarkedSuspect());
+        Iterable<? extends CompactionSSTable> filteredSSTables = Iterables.filter(getSSTables(), sstable -> !sstable.isMarkedSuspect());
         if (Iterables.isEmpty(filteredSSTables))
             return CompactionTasks.empty();
         LifecycleTransaction txn = realm.tryModify(filteredSSTables, OperationType.COMPACTION);

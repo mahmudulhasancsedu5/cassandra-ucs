@@ -286,8 +286,8 @@ public abstract class CompactionAggregate
      */
     public CompactionAggregate withOnlyTheseCompactions(Collection<CompactionPick> comps)
     {
-        List<CompactionSSTable> selected = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
-        return clone(selected, CompactionPick.EMPTY, comps);
+        List<CompactionSSTable> retained = comps.stream().flatMap(comp -> comp.sstables.stream()).collect(Collectors.toList());
+        return clone(retained, CompactionPick.EMPTY, comps);
     }
 
     @Override

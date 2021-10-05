@@ -35,7 +35,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 
 /**
  * Pluggable compaction strategy determines how SSTables get merged.
@@ -255,13 +254,12 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      * Select a table for tombstone-removing compaction from the given set. Returns null if no table is suitable.
      */
     @Nullable
-    <SSTABLE extends CompactionSSTable>
     CompactionAggregate makeTombstoneCompaction(int gcBefore,
-                                                Iterable<SSTABLE> candidates,
-                                                Function<Collection<SSTABLE>, SSTABLE> selector)
+                                                Iterable<CompactionSSTable> candidates,
+                                                Function<Collection<CompactionSSTable>, CompactionSSTable> selector)
     {
-        List<SSTABLE> sstablesWithTombstones = new ArrayList<>();
-        for (SSTABLE sstable : candidates)
+        List<CompactionSSTable> sstablesWithTombstones = new ArrayList<>();
+        for (CompactionSSTable sstable : candidates)
         {
             if (worthDroppingTombstones(sstable, gcBefore))
                 sstablesWithTombstones.add(sstable);
@@ -269,7 +267,7 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (sstablesWithTombstones.isEmpty())
             return null;
 
-        final SSTABLE sstable = selector.apply(sstablesWithTombstones);
+        final CompactionSSTable sstable = selector.apply(sstablesWithTombstones);
         return CompactionAggregate.createForTombstones(sstable);
     }
 
@@ -283,19 +281,17 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
      */
     protected boolean worthDroppingTombstones(CompactionSSTable sstable, int gcBefore)
     {
-        if (!(sstable instanceof SSTableReader)
-            || options.isDisableTombstoneCompactions()
+        if (options.isDisableTombstoneCompactions()
             || CompactionController.NEVER_PURGE_TOMBSTONES
             || realm.getNeverPurgeTombstones())
             return false;
-        SSTableReader reader = (SSTableReader) sstable;
         // since we use estimations to calculate, there is a chance that compaction will not drop tombstones actually.
         // if that happens we will end up in infinite compaction loop, so first we check enough if enough time has
         // elapsed since SSTable created.
-        if (System.currentTimeMillis() < reader.getCreationTimeFor(Component.DATA) + options.getTombstoneCompactionInterval() * 1000)
+        if (System.currentTimeMillis() < sstable.getCreationTimeFor(Component.DATA) + options.getTombstoneCompactionInterval() * 1000)
             return false;
 
-        double droppableRatio = reader.getEstimatedDroppableTombstoneRatio(gcBefore);
+        double droppableRatio = sstable.getEstimatedDroppableTombstoneRatio(gcBefore);
         if (droppableRatio <= options.getTombstoneThreshold())
             return false;
 
@@ -303,18 +299,22 @@ abstract class LegacyAbstractCompactionStrategy extends AbstractCompactionStrate
         if (options.isUncheckedTombstoneCompaction())
             return true;
 
-        Set<? extends CompactionSSTable> overlaps = realm.getOverlappingLiveSSTables(Collections.singleton(reader));
+        Set<? extends CompactionSSTable> overlaps = realm.getOverlappingLiveSSTables(Collections.singleton(sstable));
         if (overlaps.isEmpty())
         {
             // there is no overlap, tombstones are safely droppable
             return true;
         }
-        else if (CompactionController.getFullyExpiredSSTables(realm, Collections.singleton(reader), overlaps, gcBefore).size() > 0)
+        else if (CompactionController.getFullyExpiredSSTables(realm, Collections.singleton(sstable), overlaps, gcBefore).size() > 0)
         {
             return true;
         }
         else
         {
+            if (!(sstable instanceof SSTableReader))
+                return false; // Correctly estimating percentage requires data that CompactionSSTable does not provide.
+
+            SSTableReader reader = (SSTableReader) sstable;
             // what percentage of columns do we expect to compact outside of overlap?
             if (reader.getIndexSummarySize() < 2)
             {

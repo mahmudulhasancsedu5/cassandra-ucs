@@ -38,7 +38,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.utils.Pair;
 
@@ -162,13 +161,11 @@ public class DateTieredCompactionStrategy extends LegacyAbstractCompactionStrate
      */
     private long getNow()
     {
-        // no need to convert to collection if had an Iterables.max(), but not present in standard toolkit, and not worth adding
-        List<CompactionSSTable> list = new ArrayList<>();
-        Iterables.addAll(list, realm.getLiveSSTables());
-        if (list.isEmpty())
-            return 0;
-        return Collections.max(list, (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp()))
-                          .getMaxTimestamp();
+        return realm.getLiveSSTables()
+                    .stream()
+                    .mapToLong(CompactionSSTable::getMaxTimestamp)
+                    .max()
+                    .orElse(0);
     }
 
     /**

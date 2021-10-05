@@ -21,7 +21,6 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +45,6 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.StorageService;
@@ -626,10 +624,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public Set<CompactionSSTable> getSSTables()
+    public Set<? extends CompactionSSTable> getSSTables()
     {
-        // Could we do without this copy?
-        return ImmutableSet.copyOf(realm.getLiveSSTables());
+        return realm.getLiveSSTables();
     }
 
     @VisibleForTesting

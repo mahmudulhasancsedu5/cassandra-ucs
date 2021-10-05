@@ -161,7 +161,7 @@ public interface CompactionStrategy extends CompactionObserver
     /**
      * Returns the sstables managed by the strategy
      */
-    Set<CompactionSSTable> getSSTables();
+    Set<? extends CompactionSSTable> getSSTables();
 
     /**
      * Group sstables that can be anti-compacted togetehr.

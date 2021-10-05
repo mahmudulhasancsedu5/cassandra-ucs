@@ -492,7 +492,7 @@ public class LeveledManifest
         return overlapping(first, last, others);
     }
 
-    static <S extends CompactionSSTable> Set<S> overlappingWithBounds(S sstable, Map<S, Bounds<Token>> others)
+    static Set<CompactionSSTable> overlappingWithBounds(CompactionSSTable sstable, Map<CompactionSSTable, Bounds<Token>> others)
     {
         return overlappingWithBounds(sstable.getFirst().getToken(), sstable.getLast().getToken(), others);
     }
@@ -501,18 +501,18 @@ public class LeveledManifest
      * @return sstables from @param sstables that contain keys between @param start and @param end, inclusive.
      */
     @VisibleForTesting
-    static <S extends CompactionSSTable> Set<S> overlapping(Token start, Token end, Iterable<S> sstables)
+    static Set<CompactionSSTable> overlapping(Token start, Token end, Iterable<CompactionSSTable> sstables)
     {
         return overlappingWithBounds(start, end, genBounds(sstables));
     }
 
-    private static <S extends CompactionSSTable> Set<S> overlappingWithBounds(Token start, Token end, Map<S, Bounds<Token>> sstables)
+    private static Set<CompactionSSTable> overlappingWithBounds(Token start, Token end, Map<CompactionSSTable, Bounds<Token>> sstables)
     {
         assert start.compareTo(end) <= 0;
-        Set<S> overlapped = new HashSet<>();
+        Set<CompactionSSTable> overlapped = new HashSet<>();
         Bounds<Token> promotedBounds = new Bounds<>(start, end);
 
-        for (Map.Entry<S, Bounds<Token>> pair : sstables.entrySet())
+        for (Map.Entry<CompactionSSTable, Bounds<Token>> pair : sstables.entrySet())
         {
             if (pair.getValue().intersects(promotedBounds))
                 overlapped.add(pair.getKey());
@@ -521,10 +521,10 @@ public class LeveledManifest
     }
 
     @VisibleForTesting
-    static <S extends CompactionSSTable> Map<S, Bounds<Token>> genBounds(Iterable<? extends S> ssTableReaders)
+    static Map<CompactionSSTable, Bounds<Token>> genBounds(Iterable<? extends CompactionSSTable> ssTableReaders)
     {
-        Map<S, Bounds<Token>> boundsMap = new HashMap<>();
-        for (S sstable : ssTableReaders)
+        Map<CompactionSSTable, Bounds<Token>> boundsMap = new HashMap<>();
+        for (CompactionSSTable sstable : ssTableReaders)
         {
             boundsMap.put(sstable, new Bounds<>(sstable.getFirst().getToken(), sstable.getLast().getToken()));
         }

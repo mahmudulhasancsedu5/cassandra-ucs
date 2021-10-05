@@ -2648,9 +2648,4 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
             return true;
         }
     }
-
-    public int getDiskIndex(DiskBoundaries diskBoundaries)
-    {
-        return diskBoundaries.getDiskIndexFromKey(this);
-    }
 }

@@ -127,11 +127,12 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
 
     public static Set<CompactionSSTable> sstablesFor(int boundaryIndex,
                                                      List<PartitionPosition> shardBoundaries,
-                                                     Set<? extends CompactionSSTable > sstables)
+                                                     Set<? extends CompactionSSTable> sstables)
     {
         assert boundaryIndex < shardBoundaries.size();
         return sstables.stream()
-                       .filter(sstable -> shardFor(sstable.getFirst(), shardBoundaries) <= boundaryIndex && shardFor(sstable.getLast(), shardBoundaries) >= boundaryIndex)
+                       .filter(sstable -> shardFor(sstable.getFirst(), shardBoundaries) <= boundaryIndex &&
+                                          shardFor(sstable.getLast(), shardBoundaries) >= boundaryIndex)
                        .collect(Collectors.toSet());
     }
 
@@ -214,13 +215,13 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
         @Override
         public int compare(CompactionSSTable a, CompactionSSTable b)
         {
-            return Integer.compare(a.getDiskIndex(diskBoundaries), b.getDiskIndex(diskBoundaries));
+            return Integer.compare(diskBoundaries.getDiskIndexFromKey(a), diskBoundaries.getDiskIndexFromKey(b));
         }
 
         @Override
         public String name(CompactionSSTable ssTableReader)
         {
-            return "disk_" + ssTableReader.getDiskIndex(diskBoundaries);
+            return "disk_" + diskBoundaries.getDiskIndexFromKey(ssTableReader);
         }
     }
 

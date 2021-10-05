@@ -2867,27 +2867,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return metric == null ? 0 : metric.bytesInserted.getCount();
     }
 
-    /**
-     * @return the write amplification (bytes flushed + bytes compacted / bytes flushed).
-     */
-    public double getWA()
-    {
-        if (metric == null)
-            return 0;
-
-        double bytesCompacted = metric.compactionBytesWritten.getCount();
-        double bytesFlushed = metric.bytesFlushed.getCount();
-        return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
-    }
-
-    public double getFlushSizeOnDisk()
-    {
-        if (metric == null)
-            return 0;
-
-        return metric.flushSizeOnDisk.get();
-    }
-
     /** true if this CFS contains secondary index data */
     public boolean isIndex()
     {
@@ -3343,12 +3322,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             Iterable<V> transformed = Iterables.transform(overlaps, sstable -> filter.apply(sstable)
                                                                                ? transformation.apply(sstable)
                                                                                : null);
-            return Iterables.filter(transformed,
-                                    Predicates.notNull());
+            return Iterables.filter(transformed, Predicates.notNull());
         }
 
         public void close()
         {
+            overlapIterator = null;
             overlappingSSTables.release();
         }
 

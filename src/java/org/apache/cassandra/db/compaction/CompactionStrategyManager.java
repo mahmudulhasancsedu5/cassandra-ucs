@@ -56,7 +56,6 @@ import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableDeletingNotification;
@@ -362,7 +361,7 @@ public class CompactionStrategyManager implements CompactionStrategyContainer
             if (!partitionSSTablesByTokenRange)
                 return 0;
 
-            return sstable.getDiskIndex(currentBoundaries);
+            return currentBoundaries.getDiskIndexFromKey(sstable);
         }
         finally
         {

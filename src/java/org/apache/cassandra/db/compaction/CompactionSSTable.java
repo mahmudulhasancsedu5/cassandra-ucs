@@ -70,13 +70,13 @@ public interface CompactionSSTable
 
     /**
      * Returns the length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
-     * thing as the data length (see length())
+     * thing as the data length (see {@link #uncompressedLength})
      */
     long onDiskLength();
 
     /**
      * Returns the length in bytes of the data for this SSTable. For compressed files, this is not the same thing as the
-     * on disk size (see onDiskLength())
+     * on disk size (see {@link #onDiskLength})
      */
     long uncompressedLength();
 
@@ -198,11 +198,6 @@ public interface CompactionSSTable
      * Returns true if it is possible that the given key is contained in this sstable.
      */
     boolean couldContain(DecoratedKey key);
-
-    /**
-     * Returns the index of the disk storing this sstable, according to the boundaries passed in.
-     */
-    int getDiskIndex(DiskBoundaries diskBoundaries);
 
     Descriptor getDescriptor();
     default String getColumnFamilyName()

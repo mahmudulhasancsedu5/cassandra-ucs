@@ -35,11 +35,9 @@ import org.apache.cassandra.utils.PageAware;
 class RealEnvironment implements Environment
 {
     private final CompactionRealm realm;
-    private final TableMetadataRef metadata;
 
-    RealEnvironment(TableMetadataRef metadata, CompactionRealm realm)
+    RealEnvironment(CompactionRealm realm)
     {
-        this.metadata = metadata;
         this.realm = realm;
     }
 
@@ -73,7 +71,7 @@ class RealEnvironment implements Environment
     @Override
     public int chunkSize()
     {
-        CompressionParams compressionParams = metadata.get().params.compression;
+        CompressionParams compressionParams = realm.metadata().params.compression;
         if (compressionParams.isEnabled())
             return compressionParams.chunkLength();
 
@@ -113,9 +111,7 @@ class RealEnvironment implements Environment
     @Override
     public double WA()
     {
-        double bytesCompacted = metrics().compactionBytesWritten.getCount();
-        double bytesFlushed = metrics().bytesFlushed.getCount();
-        return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
+        return realm.getWA();
     }
 
     @Override

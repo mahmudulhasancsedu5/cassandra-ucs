@@ -38,7 +38,6 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.index.SecondaryIndexManager;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
@@ -145,6 +144,21 @@ public interface CompactionRealm
      * time-window compaction strategies).
      */
     int getMaximumCompactionThreshold();
+
+    /**
+     * @return the write amplification (bytes flushed + bytes compacted / bytes flushed).
+     */
+    default double getWA()
+    {
+        TableMetrics metric = metrics();
+        if (metric == null)
+            return 0;
+
+        double bytesCompacted = metric.compactionBytesWritten.getCount();
+        double bytesFlushed = metric.bytesFlushed.getCount();
+        return bytesFlushed <= 0 ? 0 : (bytesFlushed + bytesCompacted) / bytesFlushed;
+    }
+
     /**
      * @return the level fanout factor for leveled compaction.
      */
@@ -177,17 +191,14 @@ public interface CompactionRealm
      * @return the set of sstables which are currently compacting.
      */
     Set<? extends CompactionSSTable> getCompactingSSTables();
-    /**
-     * @return the set of live sstables which are not currently compacting, i.e live - compacting.
-     */
-    Iterable<? extends CompactionSSTable> getNoncompactingSSTables();
+
     /**
      * Return the subset of the given sstable set which is not currently compacting.
      */
     <S extends CompactionSSTable> Iterable<S> getNoncompactingSSTables(Iterable<S> sstables);
 
     /**
-     * Return the list of sstables of the given type.
+     * Return the given subset of sstables, i.e. LIVE, NONCOMPACTING or CANONICAL.
      */
     Iterable<? extends CompactionSSTable> getSSTables(SSTableSet set);
 
