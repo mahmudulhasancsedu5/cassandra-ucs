@@ -101,32 +101,32 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     final void putInt(int pos, int value)
     {
-        getBuffer(pos).putInt(getOffset(pos), value);
+        getChunk(pos).putInt(inChunkPointer(pos), value);
     }
 
     final void putIntOrdered(int pos, int value)
     {
-        getBuffer(pos).putIntOrdered(getOffset(pos), value);
+        getChunk(pos).putIntOrdered(inChunkPointer(pos), value);
     }
 
     final void putIntVolatile(int pos, int value)
     {
-        getBuffer(pos).putIntVolatile(getOffset(pos), value);
+        getChunk(pos).putIntVolatile(inChunkPointer(pos), value);
     }
 
     final void putShort(int pos, short value)
     {
-        getBuffer(pos).putShort(getOffset(pos), value);
+        getChunk(pos).putShort(inChunkPointer(pos), value);
     }
 
     final void putShortVolatile(int pos, short value)
     {
-        getBuffer(pos).putShort(getOffset(pos), value);
+        getChunk(pos).putShort(inChunkPointer(pos), value);
     }
 
     final void putByte(int pos, byte value)
     {
-        getBuffer(pos).putByte(getOffset(pos), value);
+        getChunk(pos).putByte(inChunkPointer(pos), value);
     }
 
 
@@ -135,7 +135,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         // Note: If this method is modified, please run MemtableTrieTest.testOver1GSize to verify it acts correctly
         // close to the 2G limit.
         int v = allocatedPos;
-        if (getOffset(v) == 0)
+        if (inChunkPointer(v) == 0)
         {
             int leadBit = getChunkIdx(v, BUF_START_SHIFT, BUF_START_SIZE);
             if (leadBit == 31)
@@ -160,7 +160,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     {
         int index = contentCount++;
         int leadBit = getChunkIdx(index, CONTENTS_START_SHIFT, CONTENTS_START_SIZE);
-        int ofs = getChunkOffset(index, leadBit, CONTENTS_START_SIZE);
+        int ofs = inChunkPointer(index, leadBit, CONTENTS_START_SIZE);
         AtomicReferenceArray<T> array = contentArrays[leadBit];
         if (array == null)
         {
@@ -175,7 +175,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     private void setContent(int index, T value)
     {
         int leadBit = getChunkIdx(index, CONTENTS_START_SHIFT, CONTENTS_START_SIZE);
-        int ofs = getChunkOffset(index, leadBit, CONTENTS_START_SIZE);
+        int ofs = inChunkPointer(index, leadBit, CONTENTS_START_SIZE);
         AtomicReferenceArray<T> array = contentArrays[leadBit];
         array.set(ofs, value);
     }
