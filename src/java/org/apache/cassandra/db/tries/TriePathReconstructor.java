@@ -28,19 +28,19 @@ public class TriePathReconstructor implements Trie.ResettingTransitionsReceiver
     protected byte[] keyBytes = new byte[32];
     protected int keyPos = 0;
 
-    public void add(int t)
+    public void add(int nextByte)
     {
         if (keyPos >= keyBytes.length)
             keyBytes = Arrays.copyOf(keyBytes, keyPos * 2);
-        keyBytes[keyPos++] = (byte) t;
+        keyBytes[keyPos++] = (byte) nextByte;
     }
 
-    public void add(UnsafeBuffer b, int pos, int count)
+    public void add(UnsafeBuffer buffer, int pos, int count)
     {
         int newPos = keyPos + count;
         if (newPos > keyBytes.length)
             keyBytes = Arrays.copyOf(keyBytes, Math.max(newPos + 16, keyBytes.length * 2));
-        b.getBytes(pos, keyBytes, keyPos, count);
+        buffer.getBytes(pos, keyBytes, keyPos, count);
         keyPos = newPos;
     }
 

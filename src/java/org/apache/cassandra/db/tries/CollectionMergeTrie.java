@@ -132,12 +132,10 @@ class CollectionMergeTrie<T> extends Trie<T>
                 Cursor<T> cursor = trie.cursor();
                 assert cursor.depth() == 0;
                 if (i >= 0)
-                    heap[i++] = cursor;
+                    heap[i] = cursor;
                 else
-                {
                     head = cursor;
-                    ++i;
-                }
+                ++i;
             }
             // The cursors are all currently positioned on the root and thus in valid heap order.
         }

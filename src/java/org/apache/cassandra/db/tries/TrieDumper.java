@@ -54,18 +54,18 @@ class TrieDumper<T> implements Trie.Walker<T, String>
     }
 
     @Override
-    public void add(int incomingTransition)
+    public void add(int nextByte)
     {
         maybeIndent();
-        b.append(String.format("%02x", incomingTransition));
+        b.append(String.format("%02x", nextByte));
     }
 
     @Override
-    public void add(UnsafeBuffer buf, int pos, int count)
+    public void add(UnsafeBuffer buffer, int pos, int count)
     {
         maybeIndent();
         for (int i = 0; i < count; ++i)
-            b.append(String.format("%02x", buf.getByte(pos + i) & 0xFF));
+            b.append(String.format("%02x", buffer.getByte(pos + i) & 0xFF));
     }
 
     @Override

@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import net.nicoulaj.compilecommand.annotations.DontInline;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.FileUtils;
@@ -223,7 +222,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                 return node;
             case LAST_POINTER_OFFSET - 1:
                 // If this is the last character in a Chain block, we can modify the child in-place
-                if (trans == getByte(node))
+                if (trans == getUnsignedByte(node))
                 {
                     putIntVolatile(node + 1, newChild);
                     return node;
@@ -273,7 +272,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         {
             if (isNull(getInt(node + SPARSE_CHILDREN_OFFSET + i * 4)))
                 break;
-            if ((getByte(node + SPARSE_BYTES_OFFSET + i)) == trans)
+            if ((getUnsignedByte(node + SPARSE_BYTES_OFFSET + i)) == trans)
             {
                 putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
                 return node;
@@ -286,7 +285,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             int split = createEmptySplitNode();
             for (i = 0; i < SPARSE_CHILD_COUNT; ++i)
             {
-                int t = getByte(node + SPARSE_BYTES_OFFSET + i);
+                int t = getUnsignedByte(node + SPARSE_BYTES_OFFSET + i);
                 int p = getInt(node + SPARSE_CHILDREN_OFFSET + i * 4);
                 attachChildToSplitNonVolatile(split, t, p);
             }
@@ -298,7 +297,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         putByte(node + SPARSE_BYTES_OFFSET + i,  (byte) trans);
 
         // Update order word.
-        int order = getShort(node + SPARSE_ORDER_OFFSET) & 0xFFFF;
+        int order = getUnsignedShort(node + SPARSE_ORDER_OFFSET);
         int newOrder = insertInOrderWord(order, i, trans, node + SPARSE_BYTES_OFFSET);
 
         // Sparse nodes have two access modes: via the order word, when listing transitions, or directly to characters
@@ -333,7 +332,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         int r = 1;
         while (s != 0)
         {
-            int b = getByte(bytesPosition + s % SPARSE_CHILD_COUNT);
+            int b = getUnsignedByte(bytesPosition + s % SPARSE_CHILD_COUNT);
             if (b > transitionByte)
                 break;
 
@@ -382,7 +381,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private int attachChildToChain(int node, int transitionByte, int newChild) throws SpaceExhaustedException
     {
-        int existingByte = getByte(node);
+        int existingByte = getUnsignedByte(node);
         if (transitionByte == existingByte)
         {
             // This will only be called if new child is different from old, and the update is not on the final child
@@ -520,7 +519,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     private boolean isEmbeddedPrefixNode(int node)
     {
-        return getByte(node + PREFIX_FLAGS_OFFSET) < BLOCK_SIZE;
+        return getUnsignedByte(node + PREFIX_FLAGS_OFFSET) < BLOCK_SIZE;
     }
 
     /**

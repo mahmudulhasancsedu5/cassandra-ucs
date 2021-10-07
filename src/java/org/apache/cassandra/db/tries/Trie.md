@@ -32,8 +32,8 @@ For this the `Trie` interface provides the following public methods:
 - Constructing `singleton` tries representing a single key-to-value mapping.
 
 The internal representation of a trie is given by a `Cursor`, which provides a method of walking the nodes of the trie 
-in order and is easily and efficiently transformed. The sections below detail the motivation behind this design as well 
-as the implementations of the basic operations.
+in order, and to which various transformations like merges and intersections can be easily and efficiently applied.
+The sections below detail the motivation behind this design as well as the implementations of the basic operations.
 
 ## Walking a trie
 
@@ -79,13 +79,13 @@ position on every transition, and the current path being the `depth`-long sequen
 current path is the first 3 characters of the array.
 
 Cursors are stateful objects that store the backtracking state of the walk. That is, a list of all parent nodes in the
-chain to reach the current node that have further children, together with information which child backtracking should go
+path to reach the current node that have further children, together with information which child backtracking should go
 to. Cursors do not store paths as these are often not needed &mdash; for example, in a walk over a merged trie it makes 
 better sense for the consumer to construct the path instead of having them duplicated in every source cursor. Multiple 
 cursors can be constructed and operated in parallel over a trie.
 
 Cursor walks of this type are very efficient but still carry enough information to make it very easy and efficient to
-merge and intersect tries. If we are walking a single trie (or a single-source branch in a union trie), however, we can
+merge and intersect tries. If we are walking a single trie (or a single-source branch in a union trie), we can
 improve the efficiency even further by taking multiple steps down in `Chain` nodes, provided we have a suitable
 mechanism of passing additional transition characters:
 
@@ -104,11 +104,13 @@ The latter is not the case for us: we store tries in integer blobs or files on d
 tries. Thus every such `Node` object to give to consumers must be constructed. Also, we only do depth-first walks and it 
 does not make that much sense to provide the full flexibility of that kind of interface.
 
-When doing only depth-first walks, a cursor needs far fewer objects to represent its state:
+When doing only depth-first walks, a cursor needs far fewer objects to represent its state than a node representation.
+Consider the following for an approach presenting nodes:
 - In a process that requires single-step descends (i.e. in a merge or intersection) the iteration state must create an
-  object for every intermediate node even when they are known to have no further children and require no backtracking. 
+  object for every intermediate node even when they are known to require no backtracking because they have only one
+  child. 
 - Childless final states require a node.
-- A transformations such as a merge must present the result as a transformed node, but it also requires a node for each
+- A transformation such as a merge must present the result as a transformed node, but it also requires a node for each
   input. If the transformed node is retained, so must be the sources.
 
 Cursors can represent the first two in their internal state without additional backtracking state, and require only one
@@ -120,8 +122,11 @@ may be closely tied to the specific trie implementation, which also gives furthe
 
 A visitor or a push alternative is one where the trie drives the iteration and the caller provides a visitor or a 
 consumer. This can work well if the trie to walk is single-source, but requires some form of stop/restart or pull
-mechanism to implement ordered merges. Cursors work well enough using only the pull mechanism, and at this point we see
-no benefit from adding a push one. This will most probably change if asynchronous retrieval is needed at a later time.
+mechanism to implement ordered merges.
+
+Push-style walks are still a useful way to consume the final transformed/merged content, thus `Trie` provides 
+the `Walker` interface and `process` method. The implementations of `forEachEntry` and `dump` are straightforward
+applications of this.
 
 ### The `Cursor` interface
 
@@ -153,16 +158,16 @@ act just like `advance`.
 For convenience, the interface also provides an `advanceToContent` method for walking to the next node with non-null
 content. This is implemented via `advanceMultiple`.
 
-When it is created the cursor is placed on the root node with `depth() = 0`, `incomingTransition() = -1`. Since
-tries can have mappings for empty, `content()` can possibly be non-null. It is not allowed for a cursor to start
-in exhausted state (i.e. with `depth() = -1`).
+When the cursor is created it is placed on the root node with `depth() = 0`, `incomingTransition() = -1`. Since
+tries can have mappings for empty, `content()` can possibly be non-null in the starting position. It is not allowed
+for a cursor to start in exhausted state (i.e. with `depth() = -1`).
 
 ### Using cursors in parallel
 
 One important feature of cursors is the fact that we can easily walk them in parallel. More precisely, when we use a 
 procedure where we only advance the smaller, or both if they are equal, we can compare the cursors' state by:
 - the reverse order of their current depth (i.e. higher depth first),
-- if depths are equal, the order of their current incoming transition (smaller first).
+- if depths are equal, the order of their current incoming transition (lexicographically smaller first).
 
 We can prove this by induction, where for two cursors `a` and `b` we maintain that:
 1. for any depth `i < mindepth - 1`, `path(a)[i] == path(b)[i]`

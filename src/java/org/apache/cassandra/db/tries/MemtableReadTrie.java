@@ -256,12 +256,12 @@ public class MemtableReadTrie<T> extends Trie<T>
         return pos & (BLOCK_SIZE - 1);
     }
 
-    final int getByte(int pos)
+    final int getUnsignedByte(int pos)
     {
         return getChunk(pos).getByte(inChunkPointer(pos)) & 0xFF;
     }
 
-    final int getShort(int pos)
+    final int getUnsignedShort(int pos)
     {
         return getChunk(pos).getShort(inChunkPointer(pos)) & 0xFFFF;
     }
@@ -324,11 +324,11 @@ public class MemtableReadTrie<T> extends Trie<T>
             case SPLIT_OFFSET:
                 return getSplitChild(node, trans);
             case CHAIN_MAX_OFFSET:
-                if (trans != getByte(node))
+                if (trans != getUnsignedByte(node))
                     return NONE;
                 return getInt(node + 1);
             default:
-                if (trans != getByte(node))
+                if (trans != getUnsignedByte(node))
                     return NONE;
                 return node + 1;
         }
@@ -341,7 +341,7 @@ public class MemtableReadTrie<T> extends Trie<T>
 
         if (offset(node) == PREFIX_OFFSET)
         {
-            int b = getByte(node + PREFIX_FLAGS_OFFSET);
+            int b = getUnsignedByte(node + PREFIX_FLAGS_OFFSET);
             if (b < BLOCK_SIZE)
                 node = node - PREFIX_OFFSET + b;
             else
@@ -373,14 +373,14 @@ public class MemtableReadTrie<T> extends Trie<T>
                 return getSplitChild(node, first);
             default:
                 // Check the first byte matches the expected
-                if (getByte(node) != first)
+                if (getUnsignedByte(node) != first)
                     return NONE;
                 // Check the rest of the bytes provided by the chain node (limit - node - 1 many)
                 int limit = chainBlockChildPointer(node);
                 while (++node < limit)
                 {
                     first = rest.next();
-                    if (getByte(node) != first)
+                    if (getUnsignedByte(node) != first)
                         return NONE;
                 }
                 // All bytes matched, follow the pointer
@@ -395,7 +395,7 @@ public class MemtableReadTrie<T> extends Trie<T>
     {
         for (int i = 0; i < SPARSE_CHILD_COUNT; ++i)
         {
-            if (getByte(node + SPARSE_BYTES_OFFSET + i) == trans)
+            if (getUnsignedByte(node + SPARSE_BYTES_OFFSET + i) == trans)
             {
                 int child = getInt(node + SPARSE_CHILDREN_OFFSET + i * 4);
 
@@ -403,7 +403,7 @@ public class MemtableReadTrie<T> extends Trie<T>
                 // concurrent update happened, and the update may have managed to modify the pointer by now.
                 // However, if we read it now that we have accessed the volatile pointer, it must have the correct
                 // value as it is set before the pointer.
-                if (child != NONE && getByte(node + SPARSE_BYTES_OFFSET + i) == trans)
+                if (child != NONE && getUnsignedByte(node + SPARSE_BYTES_OFFSET + i) == trans)
                     return child;
             }
         }
@@ -473,44 +473,49 @@ public class MemtableReadTrie<T> extends Trie<T>
     }
 
     /**
-     * Backtracking data, stored as int array to improve GC efficiency.
+     * Backtracking state for a cursor.
+     *
+     * To avoid allocations and pointer-chasing, the backtracking data is stored in a simple int array with
+     * BACKTRACK_INTS_PER_ENTRY ints for each level.
      */
-    private static class BacktrackingState
+    private static class CursorBacktrackingState
     {
-        private int[] backtrack = new int[48];
+        static final int BACKTRACK_INTS_PER_ENTRY = 3;
+        static final int BACKTRACK_INITIAL_SIZE = 16;
+        private int[] backtrack = new int[BACKTRACK_INITIAL_SIZE * BACKTRACK_INTS_PER_ENTRY];
         int backtrackDepth = 0;
 
         void addBacktrack(int node, int data, int depth)
         {
-            if (backtrackDepth * 3 >= backtrack.length)
+            if (backtrackDepth * BACKTRACK_INTS_PER_ENTRY >= backtrack.length)
                 backtrack = Arrays.copyOf(backtrack, backtrack.length * 2);
-            backtrack[backtrackDepth * 3 + 0] = node;
-            backtrack[backtrackDepth * 3 + 1] = data;
-            backtrack[backtrackDepth * 3 + 2] = depth;
+            backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 0] = node;
+            backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 1] = data;
+            backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 2] = depth;
             ++backtrackDepth;
         }
 
         int node(int backtrackDepth)
         {
-            return backtrack[backtrackDepth * 3 + 0];
+            return backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 0];
         }
 
         int data(int backtrackDepth)
         {
-            return backtrack[backtrackDepth * 3 + 1];
+            return backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 1];
         }
 
         int depth(int backtrackDepth)
         {
-            return backtrack[backtrackDepth * 3 + 2];
+            return backtrack[backtrackDepth * BACKTRACK_INTS_PER_ENTRY + 2];
         }
     }
 
     /*
      * Cursor implementation.
      *
-     * MemtableTrie cursors maintain their backtracking state in BacktrackingState where they store information
-     * about the node to backtrack to and the transitions still left to take or attempt.
+     * MemtableTrie cursors maintain their backtracking state in CursorBacktrackingState where they store
+     * information about the node to backtrack to and the transitions still left to take or attempt.
      *
      * This information is different for the different types of node:
      * - for leaf and chain no backtracking is saved (because we know there are no further transitions)
@@ -521,10 +526,9 @@ public class MemtableReadTrie<T> extends Trie<T>
      * (i.e. it is positioned on a leaf node), it goes one level up the backtracking chain, where we are guaranteed to
      * have a remaining child to advance to. When there's nothing to backtrack to, the trie is exhausted.
      */
-    class MemtableCursor extends BacktrackingState implements Cursor<T>
+    class MemtableCursor extends CursorBacktrackingState implements Cursor<T>
     {
         private int currentNode;
-
         private int incomingTransition;
         private T content;
         private int depth = -1;
@@ -605,7 +609,7 @@ public class MemtableReadTrie<T> extends Trie<T>
                 case SPLIT_OFFSET:
                     return descendInSplitSublevel(node, 4, 0, 6);
                 case SPARSE_OFFSET:
-                    return nextValidSparseTransition(node, getShort(node + SPARSE_ORDER_OFFSET) & 0xFFFF);
+                    return nextValidSparseTransition(node, getUnsignedShort(node + SPARSE_ORDER_OFFSET));
                 default:
                     return getChainTransition(node);
             }
@@ -632,10 +636,10 @@ public class MemtableReadTrie<T> extends Trie<T>
          * entry refers to.
          *
          * @param node The node or block id, must have offset SPLIT_OFFSET.
-         * @param limit The transition limit for the current sub-level (4 for the top, 8 for the others).
+         * @param limit The transition limit for the current sub-level (4 for the start, 8 for the others).
          * @param collected The transition bits collected from the parent chain (e.g. 0x40 after following 1 on the top
          *                  sub-level).
-         * @param shift This level's bit shift (6 for top, 3 for mid and 0 for tail).
+         * @param shift This level's bit shift (6 for start, 3 for mid and 0 for tail).
          * @return the depth reached after descending.
          */
         private int descendInSplitSublevel(int node, int limit, int collected, int shift)

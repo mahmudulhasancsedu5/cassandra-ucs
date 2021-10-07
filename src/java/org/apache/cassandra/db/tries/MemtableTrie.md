@@ -446,7 +446,7 @@ interface implemented by `MemtableTrie` (see `Trie.md` for a description of curs
 
 ### Cursors over `MemtableTrie`
 
-`MemtableTrie` implements cursors using an array of integers to store the backtracking state (as the simplest
+`MemtableTrie` implements cursors using arrays of integers to store the backtracking state (as the simplest
 possible structure that can be easily walked and garbage collected). No backtracking state is added for `Chain` or 
 `Leaf` nodes and any prefix. For `Sparse` we store the node address, depth and the remainder of the sparse order word.
 That is, we read the sparse order word on entry, peel off the next index to descend and store the remainder. When we 

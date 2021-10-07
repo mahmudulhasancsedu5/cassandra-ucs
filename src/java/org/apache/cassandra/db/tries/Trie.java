@@ -164,10 +164,14 @@ public abstract class Trie<T>
         int advance();
 
         /**
-         * Advance, descending multiple levels if that does not require extra work (e.g. chain nodes).
-         * If the current node does not have children this is exactly the same as advance(), otherwise it may take
-         * multiple steps down (but will not necessarily, even if they exist). Note that none of the skipped positions
-         * can have non-null content.
+         * Advance, descending multiple levels if the cursor can do this for the current position without extra work
+         * (e.g. when positioned on a chain node in a memtable trie). If the current node does not have children this
+         * is exactly the same as advance(), otherwise it may take multiple steps down (but will not necessarily, even
+         * if they exist).
+         *
+         * Note that if any positions are skipped, their content must be null.
+         *
+         * This is an optional optimization; the default implementation falls back to calling advance.
          *
          * @param receiver object that will receive all transitions taken except the last;
          *                 on ascend, or if only one step down was taken, it will not receive any
@@ -222,9 +226,9 @@ public abstract class Trie<T>
     protected interface TransitionsReceiver
     {
         /** Add a single byte to the path. */
-        void add(int t);
+        void add(int nextByte);
         /** Add the count bytes from position pos in the given buffer. */
-        void add(UnsafeBuffer b, int pos, int count);
+        void add(UnsafeBuffer buffer, int pos, int count);
     }
 
     /**
