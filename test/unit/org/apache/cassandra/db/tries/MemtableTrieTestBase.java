@@ -41,10 +41,15 @@ import static org.junit.Assert.fail;
 
 public abstract class MemtableTrieTestBase
 {
+    // Set this to true (in combination with smaller count) to dump the tries while debugging a problem.
+    // Do not commit the code with VERBOSE = true.
+    private static final boolean VERBOSE = false;
+
     private static final int COUNT = 100000;
     private static final int KEY_CHOICE = 25;
     private static final int MIN_LENGTH = 10;
     private static final int MAX_LENGTH = 50;
+
     Random rand = new Random();
 
     static final ByteComparable.Version VERSION = MemtableTrie.BYTE_COMPARABLE_VERSION;
@@ -305,7 +310,8 @@ public abstract class MemtableTrieTestBase
                           trie.sizeOnHeap(), trie.sizeOffHeap(), onh, keysize, ts);
         System.out.format("per entry on heap %.2f off heap %.2f measured %.2f keys %.2f treemap %.2f\n",
                           trie.sizeOnHeap() * 1.0 / COUNT, trie.sizeOffHeap() * 1.0 / COUNT, onh * 1.0 / COUNT, keysize * 1.0 / COUNT, ts * 1.0 / COUNT);
-        // System.out.println("Trie " + trie.dump(ByteBufferUtil::bytesToHex));
+        if (VERBOSE)
+            System.out.println("Trie " + trie.dump(ByteBufferUtil::bytesToHex));
 
         assertSameContent(trie, content);
         checkGet(trie, content);
@@ -425,9 +431,11 @@ public abstract class MemtableTrieTestBase
             int payload = asString(b).hashCode();
             ByteBuffer v = ByteBufferUtil.bytes(payload);
             content.put(b, v);
-//             System.out.println("Adding " + asString(b) + ": " + ByteBufferUtil.bytesToHex(v));
+            if (VERBOSE)
+                System.out.println("Adding " + asString(b) + ": " + ByteBufferUtil.bytesToHex(v));
             putSimpleResolve(trie, b, v, (x, y) -> y, usePut);
-//             System.out.println(trie.dump(ByteBufferUtil::bytesToHex));
+            if (VERBOSE)
+                System.out.println(trie.dump(ByteBufferUtil::bytesToHex));
         }
     }
 

@@ -156,9 +156,13 @@ public abstract class Trie<T>
         /**
          * Advance one position to the node whose associated path is next lexicographically.
          * This can be either:
-         * - descending one level to the first child of the current node
+         * - descending one level to the first child of the current node,
          * - ascending to the closest parent that has remaining children, and then descending one level to its next
-         *   child
+         *   child.
+         *
+         * It is an error to call this after the trie has already been exhausted (i.e. when depth() == -1);
+         * for performance reasons we won't always check this.
+         *
          * @return depth (can be prev+1 or <=prev), -1 means that the trie is exhausted
          */
         int advance();
@@ -173,6 +177,9 @@ public abstract class Trie<T>
          *
          * This is an optional optimization; the default implementation falls back to calling advance.
          *
+         * It is an error to call this after the trie has already been exhausted (i.e. when depth() == -1);
+         * for performance reasons we won't always check this.
+         *
          * @param receiver object that will receive all transitions taken except the last;
          *                 on ascend, or if only one step down was taken, it will not receive any
          * @return the new depth, -1 if the trie is exhausted
@@ -184,6 +191,9 @@ public abstract class Trie<T>
 
         /**
          * Advance all the way to the next node with non-null content.
+         *
+         * It is an error to call this after the trie has already been exhausted (i.e. when depth() == -1);
+         * for performance reasons we won't always check this.
          *
          * @param receiver object that will receive all taken transitions
          * @return the content, null if the trie is exhausted
@@ -199,8 +209,8 @@ public abstract class Trie<T>
                 if (receiver != null)
                 {
                     if (currDepth <= prevDepth)
-                        receiver.reset(currDepth - 1);
-                    receiver.add(incomingTransition());
+                        receiver.resetPathLength(currDepth - 1);
+                    receiver.addPathByte(incomingTransition());
                 }
                 T content = content();
                 if (content != null)
@@ -212,6 +222,9 @@ public abstract class Trie<T>
         /**
          * Ignore the current node's children and advance to the next child of the closest node on the parent chain that
          * has any.
+         *
+         * It is an error to call this after the trie has already been exhausted (i.e. when depth() == -1);
+         * for performance reasons we won't always check this.
          *
          * @return the new depth, always <= previous depth; -1 if the trie is exhausted
          */
@@ -226,9 +239,9 @@ public abstract class Trie<T>
     protected interface TransitionsReceiver
     {
         /** Add a single byte to the path. */
-        void add(int nextByte);
+        void addPathByte(int nextByte);
         /** Add the count bytes from position pos in the given buffer. */
-        void add(UnsafeBuffer buffer, int pos, int count);
+        void addPathBytes(UnsafeBuffer buffer, int pos, int count);
     }
 
     /**
@@ -237,7 +250,7 @@ public abstract class Trie<T>
     interface ResettingTransitionsReceiver extends TransitionsReceiver
     {
         /** Delete all bytes beyond the given length. */
-        void reset(int newDepth);
+        void resetPathLength(int newLength);
     }
 
     /**
@@ -249,7 +262,7 @@ public abstract class Trie<T>
     interface Walker<T, R> extends ResettingTransitionsReceiver
     {
         /** Called when content is found. */
-        void content(int depth, T content);
+        void content(T content);
 
         /** Called at the completion of the walk. */
         R complete();
@@ -268,7 +281,7 @@ public abstract class Trie<T>
      */
     public interface ValueConsumer<T> extends Consumer<T>, Walker<T, Void>
     {
-        default void content(int depth, T content)
+        default void content(T content)
         {
             accept(content);
         }
@@ -278,17 +291,17 @@ public abstract class Trie<T>
             return null;
         }
 
-        default void reset(int newDepth)
+        default void resetPathLength(int newDepth)
         {
             // not tracking path
         }
 
-        default void add(int nextByte)
+        default void addPathByte(int nextByte)
         {
             // not tracking path
         }
 
-        default void add(UnsafeBuffer buffer, int pos, int count)
+        default void addPathBytes(UnsafeBuffer buffer, int pos, int count)
         {
             // not tracking path
         }
@@ -329,7 +342,7 @@ public abstract class Trie<T>
 
         while (content != null)
         {
-            walker.content(cursor.depth(), content);
+            walker.content(content);
             content = cursor.advanceToContent(walker);
         }
         return walker.complete();

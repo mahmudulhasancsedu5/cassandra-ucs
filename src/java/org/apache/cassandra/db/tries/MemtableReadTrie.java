@@ -571,7 +571,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             int inChunkNode = inChunkPointer(node);
             int bytesJumped = chainBlockLength(node) - 1;   // leave the last byte for incomingTransition
             if (receiver != null && bytesJumped > 0)
-                receiver.add(chunk, inChunkNode, bytesJumped);
+                receiver.addPathBytes(chunk, inChunkNode, bytesJumped);
             depth += bytesJumped;    // descendInto will add one
             inChunkNode += bytesJumped;
 

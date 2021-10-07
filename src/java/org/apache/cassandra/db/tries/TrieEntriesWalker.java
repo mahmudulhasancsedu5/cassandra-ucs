@@ -28,9 +28,8 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 public abstract class TrieEntriesWalker<T, V> extends TriePathReconstructor implements Trie.Walker<T, V>
 {
     @Override
-    public void content(int depth, T content)
+    public void content(T content)
     {
-        assert depth == keyPos;
         content(content, keyBytes, keyPos);
     }
 

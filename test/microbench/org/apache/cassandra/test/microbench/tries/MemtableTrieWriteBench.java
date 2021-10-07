@@ -47,6 +47,10 @@ public class MemtableTrieWriteBench
 
     final static MemtableTrie.UpsertTransformer<Byte, Byte> resolver = (x, y) -> y;
 
+    // Set this to true to print the trie sizes after insertions for sanity checking.
+    // This might affect the timings, do not commit with this set to true.
+    final static boolean PRINT_SIZES = false;
+
     @Benchmark
     public void putSequential(Blackhole bh) throws MemtableTrie.SpaceExhaustedException
     {
@@ -59,7 +63,8 @@ public class MemtableTrieWriteBench
             buf.putLong(keyLength - 8, l);
             trie.putRecursive(ByteComparable.fixedLength(buf), Byte.valueOf((byte) (l >> 56)), resolver);
         }
-//        System.out.println(trie.valuesCount());
+        if (PRINT_SIZES)
+            System.out.println(trie.valuesCount());
         bh.consume(trie);
     }
 
@@ -75,7 +80,8 @@ public class MemtableTrieWriteBench
             rand.nextBytes(buf);
             trie.putRecursive(ByteComparable.fixedLength(buf), Byte.valueOf(buf[0]), resolver);
         }
-//        System.out.println(trie.valuesCount());
+        if (PRINT_SIZES)
+            System.out.println(trie.valuesCount());
         bh.consume(trie);
     }
 
@@ -91,7 +97,8 @@ public class MemtableTrieWriteBench
             buf.putLong(keyLength - 8, l);
             trie.putSingleton(ByteComparable.fixedLength(buf), Byte.valueOf((byte) (l >> 56)), resolver);
         }
-//        System.out.println(trie.valuesCount());
+        if (PRINT_SIZES)
+            System.out.println(trie.valuesCount());
         bh.consume(trie);
     }
 
@@ -107,7 +114,8 @@ public class MemtableTrieWriteBench
             rand.nextBytes(buf);
             trie.putSingleton(ByteComparable.fixedLength(buf), Byte.valueOf(buf[0]), resolver);
         }
-//        System.out.println(trie.valuesCount());
+        if (PRINT_SIZES)
+            System.out.println(trie.valuesCount());
         bh.consume(trie);
     }
 }

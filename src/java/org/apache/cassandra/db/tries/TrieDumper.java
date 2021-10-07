@@ -29,6 +29,7 @@ class TrieDumper<T> implements Trie.Walker<T, String>
     private final StringBuilder b;
     private final Function<T, String> contentToString;
     int needsIndent = -1;
+    int currentLength = 0;
 
     public TrieDumper(Function<T, String> contentToString)
     {
@@ -36,10 +37,16 @@ class TrieDumper<T> implements Trie.Walker<T, String>
         this.b = new StringBuilder();
     }
 
-    @Override
-    public void reset(int newLength)
+    private void endLineAndSetIndent(int newIndent)
     {
-        needsIndent = newLength;
+        needsIndent = newIndent;
+    }
+
+    @Override
+    public void resetPathLength(int newLength)
+    {
+        currentLength = newLength;
+        endLineAndSetIndent(newLength);
     }
 
     private void maybeIndent()
@@ -54,26 +61,28 @@ class TrieDumper<T> implements Trie.Walker<T, String>
     }
 
     @Override
-    public void add(int nextByte)
+    public void addPathByte(int nextByte)
     {
         maybeIndent();
+        ++currentLength;
         b.append(String.format("%02x", nextByte));
     }
 
     @Override
-    public void add(UnsafeBuffer buffer, int pos, int count)
+    public void addPathBytes(UnsafeBuffer buffer, int pos, int count)
     {
         maybeIndent();
         for (int i = 0; i < count; ++i)
             b.append(String.format("%02x", buffer.getByte(pos + i) & 0xFF));
+        currentLength += count;
     }
 
     @Override
-    public void content(int depth, T content)
+    public void content(T content)
     {
         b.append(" -> ");
         b.append(contentToString.apply(content));
-        reset(depth);
+        endLineAndSetIndent(currentLength);
     }
 
     @Override

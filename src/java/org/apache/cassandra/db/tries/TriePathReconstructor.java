@@ -28,14 +28,14 @@ public class TriePathReconstructor implements Trie.ResettingTransitionsReceiver
     protected byte[] keyBytes = new byte[32];
     protected int keyPos = 0;
 
-    public void add(int nextByte)
+    public void addPathByte(int nextByte)
     {
         if (keyPos >= keyBytes.length)
             keyBytes = Arrays.copyOf(keyBytes, keyPos * 2);
         keyBytes[keyPos++] = (byte) nextByte;
     }
 
-    public void add(UnsafeBuffer buffer, int pos, int count)
+    public void addPathBytes(UnsafeBuffer buffer, int pos, int count)
     {
         int newPos = keyPos + count;
         if (newPos > keyBytes.length)
@@ -44,7 +44,7 @@ public class TriePathReconstructor implements Trie.ResettingTransitionsReceiver
         keyPos = newPos;
     }
 
-    public void reset(int newLength)
+    public void resetPathLength(int newLength)
     {
         keyPos = newLength;
     }

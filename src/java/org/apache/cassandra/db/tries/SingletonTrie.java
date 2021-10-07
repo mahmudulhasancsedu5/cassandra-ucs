@@ -69,7 +69,7 @@ class SingletonTrie<T> extends Trie<T>
             while (next != ByteSource.END_OF_STREAM)
             {
                 if (receiver != null)
-                    receiver.add(current);
+                    receiver.addPathByte(current);
                 current = next;
                 next = src.next();
                 ++depth;
