@@ -255,21 +255,47 @@ public abstract class Trie<T>
     static final ByteComparable.Version BYTE_COMPARABLE_VERSION = ByteComparable.Version.OSS41;
 
     /**
+     * Adapter interface providing the methods a {@link Walker} to a {@link Consumer}, so that the latter can be used
+     * with {@link #process}.
+     *
+     * This enables calls like
+     *     trie.forEachEntry(x -> System.out.println(x));
+     * to be mapped directly to a single call to {@link #process} without extra allocations.
+     */
+    public interface ValueConsumer<T> extends Consumer<T>, Walker<T, Void>
+    {
+        default void content(int depth, T content)
+        {
+            accept(content);
+        }
+
+        default Void complete()
+        {
+            return null;
+        }
+
+        default void reset(int newDepth)
+        {
+            // not tracking path
+        }
+
+        default void add(int nextByte)
+        {
+            // not tracking path
+        }
+
+        default void add(UnsafeBuffer buffer, int pos, int count)
+        {
+            // not tracking path
+        }
+    }
+
+    /**
      * Call the given consumer on all content values in the trie in order.
      */
-    public void forEachValue(Consumer<T> consumer)
+    public void forEachValue(ValueConsumer<T> consumer)
     {
-        Cursor<T> cursor = cursor();
-        assert cursor.depth() == 0;
-        T content = cursor.content();   // handle content on the root node
-        if (content == null)
-            content = cursor.advanceToContent(null);
-
-        while (content != null)
-        {
-            consumer.accept(content);
-            content = cursor.advanceToContent(null);
-        }
+        process(consumer);
     }
 
     /**
@@ -278,6 +304,8 @@ public abstract class Trie<T>
     public void forEachEntry(BiConsumer<ByteComparable, T> consumer)
     {
         process(new TrieEntriesWalker.WithConsumer<T>(consumer));
+        // Note: we can't do the ValueConsumer trick here, because the implementation requires state and cannot be
+        // implemented with default methods alone.
     }
 
     /**

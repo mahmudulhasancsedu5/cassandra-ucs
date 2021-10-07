@@ -21,9 +21,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 import org.apache.cassandra.db.tries.MemtableTrie;
+import org.apache.cassandra.db.tries.Trie;
 import org.apache.cassandra.db.tries.TrieEntriesWalker;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
@@ -92,7 +92,7 @@ public class MemtableTrieReadBench
     @Benchmark
     public int consumeValues()
     {
-        class Counter implements Consumer<Byte>
+        class Counter implements Trie.ValueConsumer<Byte>
         {
             int sum = 0;
 
