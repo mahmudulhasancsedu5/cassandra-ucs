@@ -154,8 +154,12 @@ public class MemtableReadTrie<T> extends Trie<T>
      (not the block start) and can be thus negative since node pointers points towards the end of blocks.
      */
 
-    // Offset to the first pointer (to "mid" blocks) of a split node.
-    static final int SPLIT_POINTER_OFFSET = 16 - SPLIT_OFFSET;
+    // Limit for the starting cell / sublevel (2 bits -> 4 pointers).
+    static final int SPLIT_START_LEVEL_LIMIT = 4;
+    // Limit for the other sublevels (3 bits -> 8 pointers).
+    static final int SPLIT_OTHER_LEVEL_LIMIT = 8;
+    // Bitshift between levels.
+    static final int SPLIT_LEVEL_SHIFT = 3;
 
     static final int SPARSE_CHILD_COUNT = 6;
     // Offset to the first child pointer of a spare node (laid out from the start of the block)
@@ -443,14 +447,14 @@ public class MemtableReadTrie<T> extends Trie<T>
      */
     int getSplitChild(int node, int trans)
     {
-        int mid = getInt(node + SPLIT_POINTER_OFFSET + splitNodeMidIndex(trans) * 4);
+        int mid = getSplitBlockPointer(node, splitNodeMidIndex(trans), SPLIT_START_LEVEL_LIMIT);
         if (isNull(mid))
             return NONE;
 
-        int tail = getInt(mid + splitNodeTailIndex(trans) * 4);
+        int tail = getSplitBlockPointer(mid, splitNodeTailIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         if (isNull(tail))
             return NONE;
-        return getInt(tail + splitNodeChildIndex(trans) * 4);
+        return getSplitBlockPointer(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
     }
 
     /**
@@ -468,6 +472,16 @@ public class MemtableReadTrie<T> extends Trie<T>
         return (index >= 0)
                ? getContent(index)
                : null;
+    }
+
+    int splitBlockPointerAddress(int node, int childIndex, int subLevelLimit)
+    {
+        return node - SPLIT_OFFSET + (8 - subLevelLimit + childIndex) * 4;
+    }
+
+    int getSplitBlockPointer(int node, int childIndex, int subLevelLimit)
+    {
+        return getInt(splitBlockPointerAddress(node, childIndex, subLevelLimit));
     }
 
     /**
@@ -609,7 +623,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             switch (offset(node))
             {
                 case SPLIT_OFFSET:
-                    return descendInSplitSublevel(node, 4, 0, 6);
+                    return descendInSplitSublevel(node, SPLIT_START_LEVEL_LIMIT, 0, SPLIT_LEVEL_SHIFT * 2);
                 case SPARSE_OFFSET:
                     return nextValidSparseTransition(node, getUnsignedShort(node + SPARSE_ORDER_OFFSET));
                 default:
@@ -648,12 +662,13 @@ public class MemtableReadTrie<T> extends Trie<T>
         {
             while (true)
             {
+                assert offset(node) == SPLIT_OFFSET;
                 int childIndex;
                 int child = NONE;
                 // find the first non-null child
                 for (childIndex = 0; childIndex < limit; ++childIndex)
                 {
-                    child = getInt(node - SPLIT_OFFSET + (8 - limit + childIndex) * 4);
+                    child = getSplitBlockPointer(node, childIndex, limit);
                     if (!isNull(child))
                         break;
                 }
@@ -670,9 +685,9 @@ public class MemtableReadTrie<T> extends Trie<T>
                     return descendInto(child, collected);
                 // continue with next sublevel; same as
                 // return descendInSplitSublevel(child + SPLIT_OFFSET, 8, collected, shift - 3)
-                node = child + SPLIT_OFFSET;
-                limit = 8;
-                shift -= 3;
+                node = child;
+                limit = SPLIT_OTHER_LEVEL_LIMIT;
+                shift -= SPLIT_LEVEL_SHIFT;
             }
         }
 
@@ -685,22 +700,40 @@ public class MemtableReadTrie<T> extends Trie<T>
             int childIndex = splitNodeChildIndex(trans);
             if (childIndex > 0)
             {
-                maybeAddSplitBacktrack(node, childIndex, 8, trans & -(1 << 3), 0);
-                int child = getInt(node - SPLIT_OFFSET + childIndex * 4);
+                maybeAddSplitBacktrack(node,
+                                       childIndex,
+                                       SPLIT_OTHER_LEVEL_LIMIT,
+                                       trans & -(1 << (SPLIT_LEVEL_SHIFT * 1)),
+                                       SPLIT_LEVEL_SHIFT * 0);
+                int child = getSplitBlockPointer(node, childIndex, SPLIT_OTHER_LEVEL_LIMIT);
                 return descendInto(child, trans);
             }
             int tailIndex = splitNodeTailIndex(trans);
             if (tailIndex > 0)
             {
-                maybeAddSplitBacktrack(node, tailIndex, 8, trans & -(1 << 6), 3);
-                int tail = getInt(node - SPLIT_OFFSET + tailIndex * 4);
-                return descendInSplitSublevel(tail + SPLIT_OFFSET, 8, trans, 0);
+                maybeAddSplitBacktrack(node,
+                                       tailIndex,
+                                       SPLIT_OTHER_LEVEL_LIMIT,
+                                       trans & -(1 << (SPLIT_LEVEL_SHIFT * 2)),
+                                       SPLIT_LEVEL_SHIFT * 1);
+                int tail = getSplitBlockPointer(node, tailIndex, SPLIT_OTHER_LEVEL_LIMIT);
+                return descendInSplitSublevel(tail,
+                                              SPLIT_OTHER_LEVEL_LIMIT,
+                                              trans,
+                                              SPLIT_LEVEL_SHIFT * 0);
             }
             int midIndex = splitNodeMidIndex(trans);
             assert midIndex > 0;
-            maybeAddSplitBacktrack(node, midIndex, 4, 0, 6);
-            int mid = getInt(node - SPLIT_OFFSET + (4 + midIndex) * 4);
-            return descendInSplitSublevel(mid + SPLIT_OFFSET, 8, trans, 3);
+            maybeAddSplitBacktrack(node,
+                                   midIndex,
+                                   SPLIT_START_LEVEL_LIMIT,
+                                   0,
+                                   SPLIT_LEVEL_SHIFT * 2);
+            int mid = getSplitBlockPointer(node, midIndex, SPLIT_START_LEVEL_LIMIT);
+            return descendInSplitSublevel(mid,
+                                          SPLIT_OTHER_LEVEL_LIMIT,
+                                          trans,
+                                          SPLIT_LEVEL_SHIFT * 1);
         }
 
         /**
@@ -711,7 +744,7 @@ public class MemtableReadTrie<T> extends Trie<T>
             int nextChildIndex;
             for (nextChildIndex = startAfter + 1; nextChildIndex < limit; ++nextChildIndex)
             {
-                if (!isNull(getInt(node - SPLIT_OFFSET + (8 - limit + nextChildIndex) * 4)))
+                if (!isNull(getSplitBlockPointer(node, nextChildIndex, limit)))
                     break;
             }
             if (nextChildIndex < limit)

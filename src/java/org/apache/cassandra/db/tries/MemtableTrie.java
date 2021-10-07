@@ -238,26 +238,26 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private void attachChildToSplit(int node, int trans, int newChild) throws SpaceExhaustedException
     {
-        int midPos = node + SPLIT_POINTER_OFFSET + splitNodeMidIndex(trans) * 4;
+        int midPos = splitBlockPointerAddress(node, splitNodeMidIndex(trans), SPLIT_START_LEVEL_LIMIT);
         int mid = getInt(midPos);
         if (isNull(mid))
         {
-            mid = allocateBlock();
+            mid = createEmptySplitNode();
             putIntOrdered(midPos, mid);  // ordered write to ensure no uncleaned state is visible to readers
             // i.e. if block is reused it may need to be set to all zero. if this is not ordered the writes clearing
             // it may execute after this link is created, and readers could see old content.
             // Not currently necessary (we don't reuse), but let's avoid the surprise when we start doing so.
         }
 
-        int tailPos = mid + splitNodeTailIndex(trans) * 4;
+        int tailPos = splitBlockPointerAddress(mid, splitNodeTailIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         int tail = getInt(tailPos);
         if (isNull(tail))
         {
-            tail = allocateBlock();
+            tail = createEmptySplitNode();
             putIntOrdered(tailPos, tail); // as above
         }
 
-        int childPos = tail + splitNodeChildIndex(trans) * 4;
+        int childPos = splitBlockPointerAddress(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         putIntVolatile(childPos, newChild);
     }
 
@@ -350,23 +350,26 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private void attachChildToSplitNonVolatile(int node, int trans, int newChild) throws SpaceExhaustedException
     {
-        int midPos = node + SPLIT_POINTER_OFFSET + splitNodeMidIndex(trans) * 4;
+        assert offset(node) == SPLIT_OFFSET;
+        int midPos = splitBlockPointerAddress(node, splitNodeMidIndex(trans), SPLIT_START_LEVEL_LIMIT);
         int mid = getInt(midPos);
         if (isNull(mid))
         {
-            mid = allocateBlock();
+            mid = createEmptySplitNode();
             putInt(midPos, mid);
         }
 
-        int tailPos = mid + splitNodeTailIndex(trans) * 4;
+        assert offset(mid) == SPLIT_OFFSET;
+        int tailPos = splitBlockPointerAddress(mid, splitNodeTailIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         int tail = getInt(tailPos);
         if (isNull(tail))
         {
-            tail = allocateBlock();
+            tail = createEmptySplitNode();
             putInt(tailPos, tail);
         }
 
-        int childPos = tail + splitNodeChildIndex(trans) * 4;
+        assert offset(tail) == SPLIT_OFFSET;
+        int childPos = splitBlockPointerAddress(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         putInt(childPos, newChild);
     }
 
@@ -463,8 +466,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     private int createEmptySplitNode() throws SpaceExhaustedException
     {
-        int pos = allocateBlock();
-        return pos + SPLIT_OFFSET;
+        return allocateBlock() + SPLIT_OFFSET;
     }
 
     private int createContentNode(int contentIndex, int child, boolean isSafeChain) throws SpaceExhaustedException

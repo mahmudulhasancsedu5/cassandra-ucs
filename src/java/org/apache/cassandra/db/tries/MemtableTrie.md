@@ -299,8 +299,8 @@ Leading cell (e.g. `0x500`-`0x51F` with pointer `0x51C`)
 offset|content|example
 ---|---|---
 00 - 0F|unused|
-10 - 13|mid-cell for leading 00|00000520
-14 - 17|mid-cell for leading 01|00000560
+10 - 13|mid-cell for leading 00|0000053C
+14 - 17|mid-cell for leading 01|0000057C
 18 - 1B|mid-cell for leading 10|00000000 NONE
 1C - 1F|mid-cell for leading 11|00000000 NONE
 
@@ -314,7 +314,7 @@ offset|content|example
 0C - 0F|end-cell for middle 011|00000000 NONE
 10 - 13|end-cell for middle 100|00000000 NONE
 14 - 17|end-cell for middle 101|00000000 NONE
-18 - 1B|end-cell for middle 110|00000540
+18 - 1B|end-cell for middle 110|0000055C
 1C - 1F|end-cell for middle 111|00000000 NONE
 
 End cell `00 110` at `0x540`-`0x55F`:
@@ -334,9 +334,9 @@ Mid cell `01` at `0x560`-`0x57F`:
 
 offset|content|example
 ---|---|---
-00 - 03|end-cell for middle 000|00000580
+00 - 03|end-cell for middle 000|0000059C
 04 - 07|end-cell for middle 001|00000000 NONE
-08 - 0B|end-cell for middle 010|000005A0
+08 - 0B|end-cell for middle 010|000005BC
 0C - 0F|end-cell for middle 011|00000000 NONE
 10 - 13|end-cell for middle 100|00000000 NONE
 14 - 17|end-cell for middle 101|00000000 NONE
@@ -370,7 +370,7 @@ offset|content|example
 1C - 1F|pointer to child for ending 111|00000000 NONE
 
 To find a child in this structure, we follow the transitions along the bits of the mini-trie. For example, for `0x42`
-`B` = `0b01000010` we start at `0x51C`, take the `01` pointer to `0x560`, then the `000` pointer to `0x580` and finally
+`B` = `0b01000010` we start at `0x51C`, take the `01` pointer to `0x57C`, then the `000` pointer to `0x59C` and finally
 the `010` index to retrieve the node pointer `0x35C`. Note that the intermediate cells (dashed in the diagram) are not
 reachable with pointers, they only make sense as substructure of the split node.
 
@@ -633,8 +633,8 @@ offset|content|before|after
 0C - 0F|end-cell for middle 011|00000000 NONE|00000000 NONE
 10 - 13|end-cell for middle 100|00000000 NONE|00000000 NONE
 14 - 17|end-cell for middle 101|00000000 NONE|00000000 NONE
-18 - 1B|end-cell for middle 110|00000540|00000540
-1C - 1F|end-cell for middle 111|00000000 NONE|_**00000720**_
+18 - 1B|end-cell for middle 110|0000055C|0000055C
+1C - 1F|end-cell for middle 111|00000000 NONE|_**0000073C**_
 
 The start cell, and the other mid and end cells remain unchanged.
 
