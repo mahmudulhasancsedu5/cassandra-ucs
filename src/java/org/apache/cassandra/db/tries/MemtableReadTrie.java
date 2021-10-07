@@ -299,12 +299,11 @@ public class MemtableReadTrie<T> extends Trie<T>
     }
 
     /**
-     * Returns the child pointer of a chain-block (that is, the point to the child of the last node of said
-     * chain-block).
+     * Returns the number of transitions in a chain block entered with the given pointer.
      */
-    private int chainBlockChildPointer(int node)
+    private int chainBlockLength(int node)
     {
-        return (node & -BLOCK_SIZE) | LAST_POINTER_OFFSET;
+        return LAST_POINTER_OFFSET - offset(node);
     }
 
     /**
@@ -373,18 +372,17 @@ public class MemtableReadTrie<T> extends Trie<T>
                 return getSplitChild(node, first);
             default:
                 // Check the first byte matches the expected
-                if (getUnsignedByte(node) != first)
+                if (getUnsignedByte(node++) != first)
                     return NONE;
-                // Check the rest of the bytes provided by the chain node (limit - node - 1 many)
-                int limit = chainBlockChildPointer(node);
-                while (++node < limit)
+                // Check the rest of the bytes provided by the chain node
+                for (int length = chainBlockLength(node); length > 0; --length)
                 {
                     first = rest.next();
-                    if (getUnsignedByte(node) != first)
+                    if (getUnsignedByte(node++) != first)
                         return NONE;
                 }
-                // All bytes matched, follow the pointer
-                return getInt(limit);
+                // All bytes matched, node is now positioned on the child pointer. Follow it.
+                return getInt(node);
         }
     }
 
@@ -556,15 +554,19 @@ public class MemtableReadTrie<T> extends Trie<T>
 
             // Jump directly to the chain's child.
             UnsafeBuffer chunk = getChunk(node);
-            int nodeInChunk = inChunkPointer(node);
-            int pointer = chainBlockChildPointer(nodeInChunk);
-            int child = chunk.getInt(pointer);
-            int length = pointer - nodeInChunk - 1;   // leave the last byte for incomingTransition
-            if (receiver != null && length > 0)
-                receiver.add(chunk, nodeInChunk, length);
-            depth += length;    // descendInto will add one
+            int inChunkNode = inChunkPointer(node);
+            int bytesJumped = chainBlockLength(node) - 1;   // leave the last byte for incomingTransition
+            if (receiver != null && bytesJumped > 0)
+                receiver.add(chunk, inChunkNode, bytesJumped);
+            depth += bytesJumped;    // descendInto will add one
+            inChunkNode += bytesJumped;
 
-            return descendInto(child, chunk.getByte(pointer - 1) & 0xFF);
+            // inChunkNode is now positioned on the last byte of the chain.
+            // Consume it to be the new state's incomingTransition.
+            int transition = chunk.getByte(inChunkNode++) & 0xFF;
+            // inChunkNode is now positioned on the child pointer.
+            int child = chunk.getInt(inChunkNode);
+            return descendInto(child, transition);
         }
 
         @Override
@@ -719,7 +721,7 @@ public class MemtableReadTrie<T> extends Trie<T>
         private int nextValidSparseTransition(int node, int data)
         {
             UnsafeBuffer chunk = getChunk(node);
-            int nodeInChunk = inChunkPointer(node);
+            int inChunkNode = inChunkPointer(node);
 
             // Peel off the next index.
             int index = data % SPARSE_CHILD_COUNT;
@@ -730,8 +732,8 @@ public class MemtableReadTrie<T> extends Trie<T>
                 addBacktrack(node, data, depth);
 
             // Follow the transition.
-            int child = chunk.getInt(nodeInChunk + SPARSE_CHILDREN_OFFSET + index * 4);
-            int transition = chunk.getByte(nodeInChunk + SPARSE_BYTES_OFFSET + index) & 0xFF;
+            int child = chunk.getInt(inChunkNode + SPARSE_CHILDREN_OFFSET + index * 4);
+            int transition = chunk.getByte(inChunkNode + SPARSE_BYTES_OFFSET + index) & 0xFF;
             return descendInto(child, transition);
         }
 
@@ -739,13 +741,13 @@ public class MemtableReadTrie<T> extends Trie<T>
         {
             // No backtracking needed.
             UnsafeBuffer chunk = getChunk(node);
-            int nodeInChunk = inChunkPointer(node);
-            int transition = chunk.getByte(nodeInChunk) & 0xFF;
+            int inChunkNode = inChunkPointer(node);
+            int transition = chunk.getByte(inChunkNode) & 0xFF;
             int next = node + 1;
             if (offset(next) <= CHAIN_MAX_OFFSET)
                 return descendIntoChain(next, transition);
             else
-                return descendInto(chunk.getInt(nodeInChunk + 1), transition);
+                return descendInto(chunk.getInt(inChunkNode + 1), transition);
         }
 
         private int descendInto(int child, int transition)
