@@ -115,8 +115,22 @@ class CollectionMergeTrie<T> extends Trie<T>
     static class CollectionMergeCursor<T> implements Cursor<T>
     {
         private final CollectionMergeResolver<T> resolver;
-        private final Cursor<T>[] heap;
+
+        /**
+         * The smallest cursor, tracked separately to improve performance in single-source sections of the trie.
+         */
         private Cursor<T> head;
+
+        /**
+         * Binary heap of the remaining cursors. The smallest element is at position 0.
+         * Every element i is smaller than or equal to its two children, i.e.
+         *     heap[i] <= heap[i*2 + 1] && heap[i] <= heap[i*2 + 2]
+         */
+        private final Cursor<T>[] heap;
+
+        /**
+         * A list used to collect contents during content() calls.
+         */
         private final List<T> contents;
 
         public CollectionMergeCursor(CollectionMergeResolver<T> resolver, Collection<? extends Trie<T>> inputs)
