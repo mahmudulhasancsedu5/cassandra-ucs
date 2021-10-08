@@ -23,11 +23,11 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 import com.google.common.collect.Ordering;
-import com.google.common.primitives.Longs;
 
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
@@ -50,38 +50,38 @@ public interface CompactionSSTable
     Comparator<CompactionSSTable> maxTimestampAscending = (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp());
     Comparator<CompactionSSTable> firstKeyComparator = (o1, o2) -> o1.getFirst().compareTo(o2.getFirst());
     Ordering<CompactionSSTable> firstKeyOrdering = Ordering.from(firstKeyComparator);
-    Comparator<CompactionSSTable> sizeComparator = (o1, o2) -> Longs.compare(o1.onDiskLength(), o2.onDiskLength());
-    Comparator<CompactionSSTable> generationReverseComparator = Comparator.comparing(CompactionSSTable::getGeneration).reversed();
+    Comparator<CompactionSSTable> sizeComparator = (o1, o2) -> Long.compare(o1.onDiskLength(), o2.onDiskLength());
+    Comparator<CompactionSSTable> generationReverseComparator = (o1, o2) -> o2.getGeneration().compareTo(o1.getGeneration());
 
     /**
-     * Returns the position of the first partition in the sstable
+     * @return the position of the first partition in the sstable
      */
     DecoratedKey getFirst();
 
     /**
-     * Returns the position of the last partition in the sstable
+     * @return the position of the last partition in the sstable
      */
     DecoratedKey getLast();
 
     /**
-     * Returns the bounds spanned by this sstable, from first to last keys.
+     * @return the bounds spanned by this sstable, from first to last keys.
      */
     AbstractBounds<Token> getBounds();
 
     /**
-     * Returns the length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
+     * @return the length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
      * thing as the data length (see {@link #uncompressedLength})
      */
     long onDiskLength();
 
     /**
-     * Returns the length in bytes of the data for this SSTable. For compressed files, this is not the same thing as the
+     * @return the length in bytes of the data for this SSTable. For compressed files, this is not the same thing as the
      * on disk size (see {@link #onDiskLength})
      */
     long uncompressedLength();
 
     /**
-     * Returns the sum of the on-disk size of the given sstables.
+     * @return the sum of the on-disk size of the given sstables.
      */
     static long getTotalBytes(Iterable<? extends CompactionSSTable> sstables)
     {
@@ -92,7 +92,7 @@ public interface CompactionSSTable
     }
 
     /**
-     * Returns the sum of the uncompressed size of the given sstables.
+     * @return the sum of the uncompressed size of the given sstables.
      */
     static long getTotalUncompressedBytes(Iterable<? extends CompactionSSTable> sstables)
     {
@@ -104,22 +104,22 @@ public interface CompactionSSTable
     }
 
     /**
-      * Returns the smallest timestamp of all cells contained in this sstable.
+      * @return the smallest timestamp of all cells contained in this sstable.
       */
     long getMinTimestamp();
 
     /**
-      * Returns the largest timestamp of all cells contained in this sstable.
+      * @return the largest timestamp of all cells contained in this sstable.
       */
     long getMaxTimestamp();
 
     /**
-      * Returns the smallest deletion time of all deletions contained in this sstable.
+      * @return the smallest deletion time of all deletions contained in this sstable.
       */
     int getMinLocalDeletionTime();
 
     /**
-      * Returns the larget deletion time of all deletions contained in this sstable.
+      * @return the larget deletion time of all deletions contained in this sstable.
       */
     int getMaxLocalDeletionTime();
 
@@ -130,57 +130,58 @@ public interface CompactionSSTable
      * <p/>
      * Note that some system tables do not have read meters, in which case this method will return zero.
      *
-     * Returns the last two hours read rate per estimated key
+     * @return the last two hours read rate per estimated key
      */
     double hotness();
 
     /**
-      * Returns true if this sstable was repaired by a repair service, false otherwise.
+      * @return true if this sstable was repaired by a repair service, false otherwise.
       */
     boolean isRepaired();
 
     /**
-     * Returns the time of repair when isRepaired is true, otherwise UNREPAIRED_SSTABLE.
+     * @return the time of repair when isRepaired is true, otherwise UNREPAIRED_SSTABLE.
      */
     long getRepairedAt();
 
     /**
-      * Returns true if this sstable is pending repair, false otherwise.
+      * @return true if this sstable is pending repair, false otherwise.
       */
     boolean isPendingRepair();
 
     /**
-     * Returns the id of the repair session when isPendingRepair is true, otherwise null.
+     * @return the id of the repair session when isPendingRepair is true, otherwise null.
      */
+    @Nullable
     UUID getPendingRepair();
 
     /**
-     * Returns true if this sstable is transient.
+     * @return true if this sstable belongs to a transient range.
      */
     boolean isTransient();
 
     /**
-     * Returns an estimate of the number of keys in this SSTable based on the index summary.
+     * @return an estimate of the number of keys in this SSTable based on the index summary.
      */
     long estimatedKeys();
 
     /**
-      * Returns the level of this sstable according to {@link LeveledCompactionStrategy}, zero for other strategies.
+      * @return the level of this sstable according to {@link LeveledCompactionStrategy}, zero for other strategies.
       */
     int getSSTableLevel();
 
     /**
-      * Returns true if this sstable can take part into a compaction.
+      * @return true if this sstable can take part into a compaction.
       */
     boolean isSuitableForCompaction();
 
     /**
-      * Returns true if this sstable was marked for obsoletion by a compaction.
+      * @return true if this sstable was marked for obsoletion by a compaction.
       */
     boolean isMarkedCompacted();
 
     /**
-      * Returns true if this sstable is suspect, that is it was involved in an operation that failed, such
+      * @return true if this sstable is suspect, that is it was involved in an operation that failed, such
       *         as a write or read that resulted in {@link CorruptSSTableException}.
       */
     boolean isMarkedSuspect();
@@ -195,7 +196,7 @@ public interface CompactionSSTable
     boolean mayHaveTombstones();
 
     /**
-     * Returns true if it is possible that the given key is contained in this sstable.
+     * @return true if it is possible that the given key is contained in this sstable.
      */
     boolean couldContain(DecoratedKey key);
 
@@ -215,7 +216,7 @@ public interface CompactionSSTable
 
     /**
      * @param component component to get timestamp.
-     * Returns last modified time for given component. 0 if given component does not exist or IO error occurs.
+     * @return last modified time for given component. 0 if given component does not exist or IO error occurs.
      */
     default long getCreationTimeFor(Component component)
     {
@@ -223,7 +224,7 @@ public interface CompactionSSTable
     }
 
     /**
-     * Returns an estimate of the ratio of the tombstones present in the sstable that could be dropped for the given
+     * @return an estimate of the ratio of the tombstones present in the sstable that could be dropped for the given
      * garbage collection threshold.
      */
     double getEstimatedDroppableTombstoneRatio(int gcBefore);

@@ -20,6 +20,8 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 import java.util.function.LongPredicate;
 
+import javax.annotation.Nullable;
+
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.RateLimiter;
 import org.slf4j.Logger;
@@ -48,11 +50,14 @@ public class CompactionController extends AbstractCompactionController
     // note that overlapTracker will be null if NEVER_PURGE_TOMBSTONES is set - this is a
     // good thing so that noone starts using them and thinks that if overlappingSSTables is empty, there
     // is no overlap.
-    CompactionRealm.OverlapTracker overlapTracker;
+    @Nullable
+    private final CompactionRealm.OverlapTracker overlapTracker;
+    @Nullable
     private final Iterable<SSTableReader> compacting;
+    @Nullable
     private final RateLimiter limiter;
     private final long minTimestamp;
-    final Map<SSTableReader, FileDataInput> openDataFiles = new HashMap<>();
+    private final Map<SSTableReader, FileDataInput> openDataFiles = new HashMap<>();
 
     protected CompactionController(CompactionRealm realm, int maxValue)
     {
@@ -230,7 +235,7 @@ public class CompactionController extends AbstractCompactionController
             // we check index file instead.
             if (sstableMinTimestamp < minTimestampSeen && sstable.couldContain(key))
             {
-                minTimestampSeen = sstable.getMinTimestamp();
+                minTimestampSeen = sstableMinTimestamp;
                 hasTimestamp = true;
             }
         }

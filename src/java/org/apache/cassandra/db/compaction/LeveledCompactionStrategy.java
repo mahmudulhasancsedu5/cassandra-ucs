@@ -220,7 +220,7 @@ public class LeveledCompactionStrategy extends LegacyAbstractCompactionStrategy.
             Collection<CompactionSSTable> sstablesForLevel = sstablesByLevel.get(level);
             if (sstablesForLevel == null)
             {
-                sstablesForLevel = new ArrayList<CompactionSSTable>();
+                sstablesForLevel = new ArrayList<>();
                 sstablesByLevel.put(level, sstablesForLevel);
             }
             sstablesForLevel.add(sstable);

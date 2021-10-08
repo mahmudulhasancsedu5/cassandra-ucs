@@ -98,7 +98,8 @@ public interface CompactionRealm
     DiskBoundaries getDiskBoundaries();
 
     /**
-     * @return metrics object for the realm, if available.
+     * @return metrics object for the realm. This can be null during the initial construction of a compaction strategy,
+     * but should be set when the strategy is asked to select or run compactions.
      */
     TableMetrics metrics();
 
