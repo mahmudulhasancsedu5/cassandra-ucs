@@ -436,6 +436,11 @@ public class SlicedTrieTest
 
         Trie<Integer> intersection = trie.subtrie(null, true, null, true);
         assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(intersection));
+
+        // The two boolean flags don't have a meaning when the bound does not exist. For completeness, also test
+        // with them set to false.
+        intersection = trie.subtrie(null, false, null, false);
+        assertEquals(asList(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9), toList(intersection));
     }
 
     @Test
