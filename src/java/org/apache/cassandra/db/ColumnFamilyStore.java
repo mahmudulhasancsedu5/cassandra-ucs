@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import javax.management.*;
 import javax.management.openmbean.*;
@@ -44,7 +45,6 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
 
-import org.apache.cassandra.utils.concurrent.AsyncPromise;
 import org.apache.cassandra.utils.concurrent.CountDownLatch;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileOutputStreamPlus;
@@ -105,17 +105,14 @@ import org.apache.cassandra.service.snapshot.TableSnapshot;
 import org.apache.cassandra.streaming.TableStreamManager;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.concurrent.Promise;
 import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.cassandra.utils.concurrent.UncheckedInterruptedException;
-import org.apache.cassandra.utils.memory.MemtableAllocator;
 
 import static com.google.common.base.Throwables.propagate;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
 import static org.apache.cassandra.config.DatabaseDescriptor.getFlushWriters;
-import static org.apache.cassandra.db.commitlog.CommitLog.instance;
 import static org.apache.cassandra.db.commitlog.CommitLogPosition.NONE;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
@@ -296,11 +293,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         indexManager.reload();
 
         memtableFactory = metadata().params.memtable.factory;
-        Memtable currentMemtable = data.getView().getCurrentMemtable();
-        if (currentMemtable.shouldSwitch(FlushReason.SCHEMA_CHANGE))
-            switchMemtableIfCurrent(currentMemtable, FlushReason.SCHEMA_CHANGE);
-        else
-            currentMemtable.metadataUpdated();
+        switchMemtableOrNotify(FlushReason.SCHEMA_CHANGE, Memtable::metadataUpdated);
     }
 
     public static Runnable getBackgroundCompactionTaskSubmitter()
@@ -857,6 +850,19 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                               name,
                               fileIndexGenerator.incrementAndGet(),
                               format);
+    }
+
+    /**
+     * Checks with the memtable if it should be switched for the given reason, and if not, calls the specified
+     * notification method.
+     */
+    private void switchMemtableOrNotify(FlushReason reason, Consumer<Memtable> elseNotify)
+    {
+        Memtable currentMemtable = data.getView().getCurrentMemtable();
+        if (currentMemtable.shouldSwitch(reason))
+            switchMemtableIfCurrent(currentMemtable, reason);
+        else
+            elseNotify.accept(currentMemtable);
     }
 
     /**
@@ -2999,9 +3005,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return diskBoundaryManager.getDiskBoundaries(this);
     }
 
-    public void invalidateDiskBoundaries()
+    public void invalidateLocalRanges()
     {
         diskBoundaryManager.invalidate();
+
+        switchMemtableOrNotify(FlushReason.OWNED_RANGES_CHANGE, Memtable::localRangesUpdated);
     }
 
     @Override
