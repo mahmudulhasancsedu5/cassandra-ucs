@@ -130,6 +130,7 @@ public class Config
     public Integer memtable_heap_space_in_mb;
     public Integer memtable_offheap_space_in_mb;
     public Float memtable_cleanup_threshold = null;
+    public Map<String, Map<String, String>> memtable_templates;
     public Map<String, String> memtable = null;
 
     // Limit the maximum depth of repair session merkle trees

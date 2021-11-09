@@ -64,3 +64,8 @@ track_warnings:
     row_index_size:
         warn_threshold_kb: 4096
         abort_threshold_kb: 8192
+memtable_templates:
+    skiplist:
+        class: SkipListMemtable
+memtable:
+    template: skiplist
