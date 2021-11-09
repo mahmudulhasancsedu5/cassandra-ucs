@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.memtable;
 
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
@@ -55,7 +56,6 @@ import org.apache.cassandra.index.transactions.UpdateTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.MemtableAllocator;
@@ -125,12 +125,6 @@ public class SkipListMemtable extends AbstractAllocatorMemtable
     protected Factory factory()
     {
         return FACTORY;
-    }
-
-    @Override
-    public void addMemoryUsageTo(MemoryUsage stats)
-    {
-        super.addMemoryUsageTo(stats);
     }
 
     public boolean isClean()
@@ -257,13 +251,16 @@ public class SkipListMemtable extends AbstractAllocatorMemtable
             MemtableAllocator allocator = MEMORY_POOL.newAllocator("");
             ConcurrentNavigableMap<PartitionPosition, Object> partitions = new ConcurrentSkipListMap<>();
             final Object val = new Object();
+            final int testBufferSize = 8;
             for (int i = 0 ; i < count ; i++)
-                partitions.put(allocator.clone(new BufferDecoratedKey(new LongToken(i), ByteBufferUtil.EMPTY_BYTE_BUFFER), group), val);
-            double avgSize = ObjectSizes.measureDeep(partitions) / (double) count;
+                partitions.put(allocator.clone(new BufferDecoratedKey(new LongToken(i), ByteBuffer.allocate(testBufferSize)), group), val);
+            double avgSize = ObjectSizes.measureDeepOmitShared(partitions) / (double) count;
             rowOverhead = (int) ((avgSize - Math.floor(avgSize)) < 0.05 ? Math.floor(avgSize) : Math.ceil(avgSize));
-            rowOverhead -= ObjectSizes.measureDeep(new LongToken(0));
+            rowOverhead -= new LongToken(0).getHeapSize();
             rowOverhead += AtomicBTreePartition.EMPTY_SIZE;
             rowOverhead += AbstractBTreePartition.HOLDER_UNSHARED_HEAP_SIZE;
+            rowOverhead -= testBufferSize;
+            // Decorated key overhead with byte buffer (if needed) is included
             allocator.setDiscarding();
             allocator.setDiscarded();
             return rowOverhead;

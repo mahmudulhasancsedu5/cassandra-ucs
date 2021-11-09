@@ -34,8 +34,10 @@ public class ObjectSizes
     private static final MemoryMeter meter = new MemoryMeter()
                                              .withGuessing(MemoryMeter.Guess.FALLBACK_UNSAFE)
                                              .ignoreKnownSingletons();
+    private static final MemoryMeter omitSharedMeter = meter.omitSharedBufferOverhead();
 
     private static final long BUFFER_EMPTY_SIZE = measure(ByteBufferUtil.EMPTY_BYTE_BUFFER);
+    private static final long DIRECT_BUFFER_EMPTY_SIZE = measure(ByteBuffer.allocateDirect(0));
     private static final long BYTE_ARRAY_EMPTY_SIZE = measure(new byte[0]);
     private static final long STRING_EMPTY_SIZE = measure("");
 
@@ -109,7 +111,10 @@ public class ObjectSizes
 
     public static long sizeOnHeapExcludingData(ByteBuffer[] array)
     {
-        return BUFFER_EMPTY_SIZE * array.length + sizeOfArray(array);
+        long sum = sizeOfArray(array);
+        for (ByteBuffer b : array)
+            sum += sizeOnHeapExcludingData(b);
+        return sum;
     }
 
     /**
@@ -120,12 +125,13 @@ public class ObjectSizes
     public static long sizeOnHeapOf(ByteBuffer buffer)
     {
         if (buffer.isDirect())
-            return BUFFER_EMPTY_SIZE;
+            return DIRECT_BUFFER_EMPTY_SIZE;
         // if we're only referencing a sub-portion of the ByteBuffer, don't count the array overhead (assume it's slab
         // allocated, so amortized over all the allocations the overhead is negligible and better to undercount than over)
-        if (buffer.capacity() > buffer.remaining())
+        int capacity = buffer.capacity();
+        if (capacity > buffer.remaining())
             return BUFFER_EMPTY_SIZE + buffer.remaining();
-        return BUFFER_EMPTY_SIZE + sizeOfArray(buffer.capacity(), 1);
+        return BUFFER_EMPTY_SIZE + sizeOfArray(capacity, 1);
     }
 
     public static long sizeOfEmptyHeapByteBuffer()
@@ -136,6 +142,19 @@ public class ObjectSizes
     public static long sizeOfEmptyByteArray()
     {
         return BYTE_ARRAY_EMPTY_SIZE;
+    }
+
+    public static long sizeOnHeapExcludingData(ByteBuffer buffer)
+    {
+        if (buffer.isDirect())
+            return DIRECT_BUFFER_EMPTY_SIZE;
+        int capacity = buffer.capacity();
+        // if we're only referencing a sub-portion of the ByteBuffer, don't count the array overhead (assume it's slab
+        // allocated, so amortized over all the allocations the overhead is negligible and better to undercount than over)
+        if (capacity > buffer.remaining())
+            return BUFFER_EMPTY_SIZE;
+        // If buffers are dedicated, account for byte array size and any padding overhead
+        return BUFFER_EMPTY_SIZE + sizeOfArray(capacity, 1) - capacity;
     }
 
     /**
@@ -151,13 +170,24 @@ public class ObjectSizes
 
     /**
      * @param pojo the object to measure
-     * @return the size on the heap of the instance and all retained heap referenced by it, excluding portions of
-     * ByteBuffer that are not directly referenced by it but including any other referenced that may also be retained
-     * by other objects.
+     * @return The size on the heap of the instance and all retained heap referenced by it. Where memory is distributed
+     * to heap byte buffers from a slab, this will include the size of the whole slab.
      */
     public static long measureDeep(Object pojo)
     {
         return meter.measureDeep(pojo);
+    }
+
+    /**
+     * @param pojo the object to measure
+     * @return The size on the heap of the instance and all retained heap referenced by it, excluding portions of
+     * ByteBuffer that are not directly referenced by it but including any other referenced that may also be retained
+     * by other objects. This also includes bytes referenced in direct byte buffers, and may double-count memory if
+     * it is referenced by multiple ByteBuffer copies.
+     */
+    public static long measureDeepOmitShared(Object pojo)
+    {
+        return omitSharedMeter.measureDeep(pojo);
     }
 
     /**

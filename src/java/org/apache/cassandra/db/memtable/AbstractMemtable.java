@@ -34,6 +34,7 @@ import org.apache.cassandra.db.rows.EncodingStats;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
+import org.github.jamm.Unmetered;
 
 public abstract class AbstractMemtable implements Memtable
 {
@@ -47,6 +48,8 @@ public abstract class AbstractMemtable implements Memtable
     // TODO: understand why statsCollector's value cannot be used instead of these
 
     private final AtomicReference<LifecycleTransaction> flushTransaction = new AtomicReference<>(null);
+
+    @Unmetered
     protected TableMetadataRef metadata;
 
     public AbstractMemtable(TableMetadataRef metadataRef)
