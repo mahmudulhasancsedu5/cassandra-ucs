@@ -38,6 +38,7 @@ import org.apache.cassandra.utils.btree.UpdateFunction;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.HeapAllocator;
 import org.apache.cassandra.utils.memory.MemtableAllocator;
+import org.github.jamm.Unmetered;
 
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 
@@ -81,9 +82,12 @@ public final class AtomicBTreePartition extends AbstractBTreePartition
      */
     private volatile int wasteTracker = TRACKER_NEVER_WASTED;
 
+    @Unmetered
     private final MemtableAllocator allocator;
+
     private volatile Holder ref;
 
+    @Unmetered
     private final TableMetadataRef metadata;
 
     public AtomicBTreePartition(TableMetadataRef metadata, DecoratedKey partitionKey, MemtableAllocator allocator)
