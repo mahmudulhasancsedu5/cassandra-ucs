@@ -123,11 +123,6 @@ public class SkipListMemtable extends AbstractAllocatorMemtable
         });
     }
 
-    protected Factory factory()
-    {
-        return FACTORY;
-    }
-
     public boolean isClean()
     {
         return partitions.isEmpty();

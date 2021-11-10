@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.cql3.validation.operations;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.BeforeClass;
@@ -604,7 +606,7 @@ public class AlterTest extends CQLTester
 
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = { 'class' : 'org.apache.cassandra.db.memtable.TrieMemtable' };");
-        assertSame(TrieMemtable.FACTORY, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertEquals(TrieMemtable.factory(new HashMap<>()), getCurrentColumnFamilyStore().metadata().params.memtable.factory);
         assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
@@ -613,6 +615,21 @@ public class AlterTest extends CQLTester
                            KEYSPACE,
                            currentTable()),
                    row(map("class", "org.apache.cassandra.db.memtable.TrieMemtable")));
+
+        alterTable("ALTER TABLE %s"
+                   + " WITH memtable = { 'class' : 'TrieMemtable', 'shards' : 8 };");
+        Map<String, String> map = new HashMap<>();
+        map.put("shards", "8");
+        assertEquals(TrieMemtable.factory(map), getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+
+        assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaConstants.SCHEMA_KEYSPACE_NAME,
+                                  SchemaKeyspaceTables.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("class", "TrieMemtable",
+                           "shards", "8")));
 
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = { 'class' : '" + CreateTest.TestMemtableFactory.class.getName() + "', 'skiplist' : 'true' };");
@@ -628,7 +645,7 @@ public class AlterTest extends CQLTester
 
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = {  };");
-        assertSame(MemtableParams.DEFAULT.factory, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertSame(MemtableParams.DEFAULT, getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
@@ -641,6 +658,7 @@ public class AlterTest extends CQLTester
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = {'template' : 'trie'};");
         assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+        assertSame(MemtableParams.templates.get("trie"), getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
@@ -652,6 +670,7 @@ public class AlterTest extends CQLTester
         alterTable("ALTER TABLE %s"
                     + " WITH memtable = {'template' : 'skiplist'};");
         assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof SkipListMemtable);
+        assertSame(MemtableParams.templates.get("skiplist"), getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
