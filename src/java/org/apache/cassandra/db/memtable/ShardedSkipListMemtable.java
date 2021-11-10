@@ -99,20 +99,16 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
     // default shard count, used when a specific number of shards is not specified in the parameters
     private static final int SHARD_COUNT = Integer.getInteger(SHARD_COUNT_PROPERTY, FBUtilities.getAvailableProcessors());
 
-    private final Factory factory;
-
     // only to be used by init(), to setup the very first memtable for the cfs
     ShardedSkipListMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound,
                             TableMetadataRef metadataRef,
                             Owner owner,
-                            Integer shardCountOption,
-                            Factory factory)
+                            Integer shardCountOption)
     {
         super(commitLogLowerBound, metadataRef, owner);
         int shardCount = shardCountOption != null ? shardCountOption : SHARD_COUNT;
         this.boundaries = owner.localRangeSplits(shardCount);
         this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef);
-        this.factory = factory;
     }
 
     private static MemtableShard[] generatePartitionShards(int splits,
@@ -132,12 +128,6 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
             if (!shard.isEmpty())
                 return false;
         return true;
-    }
-
-    @Override
-    protected Memtable.Factory factory()
-    {
-        return factory;
     }
 
     /**
@@ -494,9 +484,9 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
 
     static class Locking extends ShardedSkipListMemtable
     {
-        Locking(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption, Factory factory)
+        Locking(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption)
         {
-            super(commitLogLowerBound, metadataRef, owner, shardCountOption, factory);
+            super(commitLogLowerBound, metadataRef, owner, shardCountOption);
         }
 
         /**
@@ -541,8 +531,8 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
                                Owner owner)
         {
             return isLocking
-                   ? new Locking(commitLogLowerBound, metadataRef, owner, shardCount, this)
-                   : new ShardedSkipListMemtable(commitLogLowerBound, metadataRef, owner, shardCount, this);
+                   ? new Locking(commitLogLowerBound, metadataRef, owner, shardCount)
+                   : new ShardedSkipListMemtable(commitLogLowerBound, metadataRef, owner, shardCount);
         }
 
         public boolean equals(Object o)

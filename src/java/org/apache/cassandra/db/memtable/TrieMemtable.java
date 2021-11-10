@@ -22,6 +22,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -83,10 +84,10 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     private static final Logger logger = LoggerFactory.getLogger(TrieMemtable.class);
     public static final String TRIE_MEMTABLE_CONFIG_OBJECT_NAME = "org.apache.cassandra.db:type=TrieMemtableConfig";
 
-    public static final Factory FACTORY = new TrieMemtable.Factory();
-
     /** Buffer type to use for memtable tries (on- vs off-heap) */
     public static final BufferType BUFFER_TYPE;
+
+    public static final String SHARDS_OPTION = "shards";
 
     static
     {
@@ -144,13 +145,15 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     @VisibleForTesting
     public static final String SHARD_COUNT_PROPERTY = "cassandra.trie.memtable.shard.count";
 
+    // default shard count, used when a specific number of shards is not specified in the options
     private static volatile int SHARD_COUNT = Integer.getInteger(SHARD_COUNT_PROPERTY, FBUtilities.getAvailableProcessors());
 
     // only to be used by init(), to setup the very first memtable for the cfs
-    TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner)
+    TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption)
     {
         super(commitLogLowerBound, metadataRef, owner);
-        this.boundaries = owner.localRangeSplits(getShardCount());
+        int shardCount = shardCountOption != null ? shardCountOption : getShardCount();
+        this.boundaries = owner.localRangeSplits(shardCount);
         this.metrics = new TrieMemtableMetricsView(metadataRef.keyspace, metadataRef.name);
         this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef, metrics);
         this.mergedTrie = makeMergedTrie(shards);
@@ -174,12 +177,6 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         for (MemtableShard shard : shards)
             tries.add(shard.data);
         return Trie.mergeDistinct(tries);
-    }
-
-    @Override
-    protected Factory factory()
-    {
-        return FACTORY;
     }
 
     @Override
@@ -708,13 +705,27 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         }
     }
 
+    public static Factory factory(Map<String, String> optionsCopy)
+    {
+        String shardsString = optionsCopy.remove(SHARDS_OPTION);
+        Integer shardCount = shardsString != null ? Integer.parseInt(shardsString) : null;
+        return new Factory(shardCount);
+    }
+
     static class Factory implements Memtable.Factory
     {
+        final Integer shardCount;
+
+        Factory(Integer shardCount)
+        {
+            this.shardCount = shardCount;
+        }
+
         public Memtable create(AtomicReference<CommitLogPosition> commitLogLowerBound,
                                TableMetadataRef metadaRef,
                                Owner owner)
         {
-            return new TrieMemtable(commitLogLowerBound, metadaRef, owner);
+            return new TrieMemtable(commitLogLowerBound, metadaRef, owner, shardCount);
         }
 
         @Override
@@ -722,6 +733,21 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         {
             TrieMemtableMetricsView metrics = new TrieMemtableMetricsView(metadataRef.keyspace, metadataRef.name);
             return metrics::release;
+        }
+
+        public boolean equals(Object o)
+        {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+            Factory factory = (Factory) o;
+            return Objects.equals(shardCount, factory.shardCount);
+        }
+
+        public int hashCode()
+        {
+            return Objects.hash(shardCount);
         }
     }
 

@@ -20,5 +20,9 @@ package org.apache.cassandra.db.memtable;
 
 public interface TrieMemtableConfigMXBean
 {
+    /**
+     * Adjust the shard count for trie memtables that do not specify it explicitly in the memtable options.
+     * Changes will apply on the next memtable flush.
+     */
     public void setShardCount(String numShards);
 }

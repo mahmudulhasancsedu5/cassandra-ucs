@@ -91,12 +91,6 @@ public class SkipListMemtable extends AbstractAllocatorMemtable
     }
 
     @Override
-    protected Factory factory()
-    {
-        return FACTORY;
-    }
-
-    @Override
     public boolean isClean()
     {
         return partitions.isEmpty();
