@@ -67,6 +67,7 @@ track_warnings:
 memtable_templates:
     trie:
         class: TrieMemtable
+        shards: 4
     skiplist:
         class: SkipListMemtable
 memtable:

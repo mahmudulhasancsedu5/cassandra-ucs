@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -586,7 +587,7 @@ public class CreateTest extends CQLTester
             if (Boolean.parseBoolean(skiplist))
                 return SkipListMemtable.FACTORY;
             else
-                return TrieMemtable.FACTORY;
+                return TrieMemtable.factory(new HashMap());
         }
     }
 
@@ -629,9 +630,9 @@ public class CreateTest extends CQLTester
                    row(map("class", "SkipListMemtable")));
 
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
-                    + " WITH memtable = { 'class' : 'org.apache.cassandra.db.memtable.TrieMemtable' };");
-        assertSame(TrieMemtable.FACTORY, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
-        Assert.assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+                   + " WITH memtable = { 'class' : 'org.apache.cassandra.db.memtable.TrieMemtable' };");
+        assertEquals(TrieMemtable.factory(new HashMap<>()), getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
@@ -639,6 +640,21 @@ public class CreateTest extends CQLTester
                            KEYSPACE,
                            currentTable()),
                    row(map("class", "org.apache.cassandra.db.memtable.TrieMemtable")));
+
+        createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
+                   + " WITH memtable = { 'class' : 'TrieMemtable', 'shards' : 8 };");
+        Map<String, String> map = new HashMap<>();
+        map.put("shards", "8");
+        assertEquals(TrieMemtable.factory(map), getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+
+        assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
+                                  SchemaConstants.SCHEMA_KEYSPACE_NAME,
+                                  SchemaKeyspaceTables.TABLES),
+                           KEYSPACE,
+                           currentTable()),
+                   row(map("class", "TrieMemtable",
+                           "shards", "8")));
 
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
                     + " WITH memtable = { 'class' : '" + TestMemtableFactory.class.getName() + "' };");
@@ -665,7 +681,7 @@ public class CreateTest extends CQLTester
 
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
                     + " WITH memtable = {  };");
-        assertSame(MemtableParams.DEFAULT.factory, getCurrentColumnFamilyStore().metadata().params.memtable.factory);
+        assertSame(MemtableParams.DEFAULT, getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
@@ -678,6 +694,7 @@ public class CreateTest extends CQLTester
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
                     + " WITH memtable = {'template' : 'trie'};");
         Assert.assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof TrieMemtable);
+        assertSame(MemtableParams.templates.get("trie"), getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
@@ -689,6 +706,7 @@ public class CreateTest extends CQLTester
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))"
                     + " WITH memtable = {'template' : 'skiplist'};");
         Assert.assertTrue(getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable() instanceof SkipListMemtable);
+        assertSame(MemtableParams.templates.get("skiplist"), getCurrentColumnFamilyStore().metadata().params.memtable);
 
         assertRows(execute(format("SELECT memtable FROM %s.%s WHERE keyspace_name = ? and table_name = ?;",
                                   SchemaConstants.SCHEMA_KEYSPACE_NAME,
