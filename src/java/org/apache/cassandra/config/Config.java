@@ -130,7 +130,8 @@ public class Config
     public Integer memtable_heap_space_in_mb;
     public Integer memtable_offheap_space_in_mb;
     public Float memtable_cleanup_threshold = null;
-    public Map<String, Map<String, String>> memtable_templates;
+    // The template values are Object because the parser does not seem to honour the type unlike in single-level maps.
+    public Map<String, Map<String, Object>> memtable_templates;
     public Map<String, String> memtable = null;
 
     // Limit the maximum depth of repair session merkle trees

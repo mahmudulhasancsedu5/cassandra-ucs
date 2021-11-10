@@ -2908,7 +2908,7 @@ public class DatabaseDescriptor
         return conf.memtable_cleanup_threshold;
     }
 
-    public static Map<String, Map<String, String>> getMemtableTemplates()
+    public static Map<String, Map<String, Object>> getMemtableTemplates()
     {
         if (conf == null)
             return null;

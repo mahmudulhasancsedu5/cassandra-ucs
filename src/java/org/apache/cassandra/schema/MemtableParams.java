@@ -25,6 +25,7 @@ import java.util.Map;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.memtable.SkipListMemtableFactory;
@@ -166,19 +167,24 @@ public final class MemtableParams
         DEFAULT = new MemtableParams(getDefaultFactory(DatabaseDescriptor.getMemtableDefault()), ImmutableMap.of());
     }
 
-    private static Map<String, MemtableParams> parseTemplates(Map<String, Map<String, String>> templateDefinition)
+    private static Map<String, MemtableParams> parseTemplates(Map<String, Map<String, Object>> templateDefinition)
     {
         if (templateDefinition == null)
             return ImmutableMap.of();
 
         Map<String, MemtableParams> templates = new HashMap<>(templateDefinition.size());
-        for (Map.Entry<String, Map<String, String>> definition : templateDefinition.entrySet())
+        for (Map.Entry<String, Map<String, Object>> definition : templateDefinition.entrySet())
         {
             String template = definition.getKey();
-            templates.put(template, new MemtableParams(getMemtableFactory(definition.getValue()),
+            templates.put(template, new MemtableParams(getMemtableFactory(toStringMap(definition.getValue())),
                                                        ImmutableMap.of(TEMPLATE_OPTION, template)));
         }
         return templates;
+    }
+
+    private static Map<String, String> toStringMap(Map<String, Object> objectMap)
+    {
+        return Maps.transformValues(objectMap, Object::toString);
     }
 
     private static Memtable.Factory getDefaultFactory(Map<String, String> defaultOptions)
