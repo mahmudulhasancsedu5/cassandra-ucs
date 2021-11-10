@@ -601,7 +601,7 @@ public class CreateTest extends CQLTester
         assertSchemaOption("memtable", null);
 
         testMemtableConfig("skiplist", SkipListMemtable.FACTORY, SkipListMemtable.class);
-        testMemtableConfig("trie", TrieMemtable.FACTORY, TrieMemtable.class);
+        testMemtableConfig("trie", MemtableParams.get("trie").factory(), TrieMemtable.class);
         testMemtableConfig("skiplist_remapped", SkipListMemtable.FACTORY, SkipListMemtable.class);
         testMemtableConfig("test_fullname", TestMemtable.FACTORY, SkipListMemtable.class);
         testMemtableConfig("test_shortname", SkipListMemtable.FACTORY, SkipListMemtable.class);

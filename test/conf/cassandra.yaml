@@ -69,6 +69,8 @@ memtable:
             class_name: SkipListMemtable
         trie:
             class_name: TrieMemtable
+            parameters:
+                shards: 4
         skiplist_sharded:
             class_name: ShardedSkipListMemtable
             parameters:
