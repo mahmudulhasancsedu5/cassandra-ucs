@@ -25,13 +25,11 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.LoggerFactory;
-
 import org.agrona.concurrent.UnsafeBuffer;
 import org.apache.cassandra.io.compress.BufferType;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.github.jamm.MemoryLayoutSpecification;
 
@@ -70,24 +68,24 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     private final BufferType bufferType;    // on or off heap
 
-    private static final long EMPTY_SIZE_ON_HEAP; // for space calculations
-    private static final long EMPTY_SIZE_OFF_HEAP; // for space calculations
+    // constants for space calculations
+    private static final long EMPTY_SIZE_ON_HEAP;
+    private static final long EMPTY_SIZE_OFF_HEAP;
+    private static final long REFERENCE_ARRAY_ON_HEAP_SIZE = ObjectSizes.measureDeep(new AtomicReferenceArray(0));
 
     static
     {
         MemtableTrie<Object> empty = new MemtableTrie<>(BufferType.ON_HEAP);
-        EMPTY_SIZE_ON_HEAP = ObjectSizes.measureDeep(empty)
-                             - empty.contentArray.length() * MemoryLayoutSpecification.SPEC.getReferenceSize()
-                             - empty.buffer.capacity();
+        EMPTY_SIZE_ON_HEAP = ObjectSizes.measureDeep(empty);
         empty = new MemtableTrie<>(BufferType.OFF_HEAP);
-        EMPTY_SIZE_OFF_HEAP = ObjectSizes.measureDeep(empty)
-                              - empty.contentArray.length() * MemoryLayoutSpecification.SPEC.getReferenceSize()
-                              - empty.buffer.capacity();
+        EMPTY_SIZE_OFF_HEAP = ObjectSizes.measureDeep(empty);
     }
 
     public MemtableTrie(BufferType bufferType)
     {
-        super(new UnsafeBuffer(bufferType.allocate(INITIAL_BUFFER_CAPACITY)), new AtomicReferenceArray<>(16), NONE);
+        super(new UnsafeBuffer[31 - BUF_START_SHIFT],  // last one is 1G for a total of ~2G bytes
+              new AtomicReferenceArray[29 - CONTENTS_START_SHIFT],  // takes at least 4 bytes to write pointer to one content -> 4 times smaller than buffers
+              NONE);
         this.bufferType = bufferType;
         assert INITIAL_BUFFER_CAPACITY % BLOCK_SIZE == 0;
     }
@@ -102,40 +100,51 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         }
     }
 
+    final void putInt(int pos, int value)
+    {
+        getChunk(pos).putInt(inChunkPointer(pos), value);
+    }
+
+    final void putIntOrdered(int pos, int value)
+    {
+        getChunk(pos).putIntOrdered(inChunkPointer(pos), value);
+    }
+
+    final void putIntVolatile(int pos, int value)
+    {
+        getChunk(pos).putIntVolatile(inChunkPointer(pos), value);
+    }
+
+    final void putShort(int pos, short value)
+    {
+        getChunk(pos).putShort(inChunkPointer(pos), value);
+    }
+
+    final void putShortVolatile(int pos, short value)
+    {
+        getChunk(pos).putShort(inChunkPointer(pos), value);
+    }
+
+    final void putByte(int pos, byte value)
+    {
+        getChunk(pos).putByte(inChunkPointer(pos), value);
+    }
+
+
     private int allocateBlock() throws SpaceExhaustedException
     {
         // Note: If this method is modified, please run MemtableTrieTest.testOver1GSize to verify it acts correctly
         // close to the 2G limit.
         int v = allocatedPos;
-        if (buffer.capacity() == v)
-        {
-            int newSize;
-            if (v >= ALLOCATED_SIZE_THRESHOLD)
+        if (inChunkPointer(v) == 0)
             {
-                // we don't expect to write much after the threshold has been reached
-                // to avoid allocating too much space which will be left unused,
-                // grow by 10% of the limit, rounding up to BLOCK_SIZE
-                newSize = (v + ALLOCATED_SIZE_THRESHOLD / 10 + BLOCK_SIZE - 1) & -BLOCK_SIZE;
-                // If we do this repeatedly and the calculated size grows over 2G, it will overflow and result in a
-                // negative integer. In that case, cap it to a size that can be allocated.
-                if (newSize < 0)
-                {
-                    newSize = 0x7FFFFF00;   // 2G - 256 bytes
-                    if (newSize == allocatedPos)    // already at limit
+            int leadBit = getChunkIdx(v, BUF_START_SHIFT, BUF_START_SIZE);
+            if (leadBit == 31)
                         throw new SpaceExhaustedException();
-                    LoggerFactory.getLogger(getClass()).debug("Growing memtable trie to maximum size {}",
-                                                              FBUtilities.prettyPrintMemory(newSize));
-                }
-                else
-                    LoggerFactory.getLogger(getClass()).debug("Growing memtable trie by 10% over the {} limit to {}",
-                                                              FBUtilities.prettyPrintMemory(ALLOCATED_SIZE_THRESHOLD),
-                                                              FBUtilities.prettyPrintMemory(newSize));
-            } else
-                newSize = v * 2;
 
-            ByteBuffer newBuffer = bufferType.allocate(newSize);
-            buffer.getBytes(0, newBuffer, v);
-            buffer.wrap(newBuffer);
+            assert buffers[leadBit] == null;
+            ByteBuffer newBuffer = bufferType.allocate(BUF_START_SIZE << leadBit);
+            buffers[leadBit] = new UnsafeBuffer(newBuffer);
             // The above does not contain any happens-before enforcing writes, thus at this point the new buffer may be
             // invisible to any concurrent readers. Touching the volatile root pointer (which any new read must go
             // through) enforces a happens-before that makes it visible to all new reads (note: when the write completes
@@ -151,21 +160,37 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     private int addContent(T value)
     {
         int index = contentCount++;
-        if (index == contentArray.length())
+        int leadBit = getChunkIdx(index, CONTENTS_START_SHIFT, CONTENTS_START_SIZE);
+        int ofs = inChunkPointer(index, leadBit, CONTENTS_START_SIZE);
+        AtomicReferenceArray<T> array = contentArrays[leadBit];
+        if (array == null)
         {
-            AtomicReferenceArray<T> newContent = new AtomicReferenceArray<>(index * 2);
-            for (int i = 0; i < contentArray.length(); ++i)
-                newContent.lazySet(i, contentArray.get(i));
-            contentArray = newContent;  // This is a volatile set, hence all previous stores must become visible
+            assert ofs == 0;
+            contentArrays[leadBit] = array = new AtomicReferenceArray<>(CONTENTS_START_SIZE << leadBit);
         }
-        contentArray.lazySet(index, value); // no need for a volatile set here; at this point the item is not referenced
+        array.lazySet(ofs, value); // no need for a volatile set here; at this point the item is not referenced
                                             // by any node in the trie, and a volatile set will be made to reference it.
         return index;
     }
 
     private void setContent(int index, T value)
     {
-        contentArray.set(index, value);
+        int leadBit = getChunkIdx(index, CONTENTS_START_SHIFT, CONTENTS_START_SIZE);
+        int ofs = inChunkPointer(index, leadBit, CONTENTS_START_SIZE);
+        AtomicReferenceArray<T> array = contentArrays[leadBit];
+        array.set(ofs, value);
+    }
+
+    public void discardBuffers()
+    {
+        if (bufferType == BufferType.ON_HEAP)
+            return; // no cleaning needed
+
+        for (UnsafeBuffer b : buffers)
+        {
+            if (b != null)
+                FileUtils.clean(b.byteBuffer());
+        }
     }
 
     // Write methods
@@ -201,7 +226,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                 // If this is the last character in a Chain block, we can modify the child in-place
                 if (trans == getUnsignedByte(node))
                 {
-                    buffer.putIntVolatile(node + 1, newChild);
+                    putIntVolatile(node + 1, newChild);
                     return node;
                 }
                 // else pass through
@@ -220,7 +245,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (isNull(mid))
         {
             mid = createEmptySplitNode();
-            buffer.putIntOrdered(midPos, mid);  // ordered write to ensure no uncleaned state is visible to readers
+            putIntOrdered(midPos, mid);  // ordered write to ensure no uncleaned state is visible to readers
             // i.e. if block is reused it may need to be set to all zero. if this is not ordered the writes clearing
             // it may execute after this link is created, and readers could see old content.
             // Not currently necessary (we don't reuse), but let's avoid the surprise when we start doing so.
@@ -231,11 +256,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (isNull(tail))
         {
             tail = createEmptySplitNode();
-            buffer.putIntOrdered(tailPos, tail); // as above
+            putIntOrdered(tailPos, tail); // as above
         }
 
         int childPos = splitBlockPointerAddress(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
-        buffer.putIntVolatile(childPos, newChild);
+        putIntVolatile(childPos, newChild);
     }
 
     /**
@@ -251,7 +276,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                 break;
             if ((getUnsignedByte(node + SPARSE_BYTES_OFFSET + i)) == trans)
             {
-                buffer.putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
+                putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
                 return node;
             }
         }
@@ -271,7 +296,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         }
 
         // Add a new transition. They are not kept in order, so append it at the first free position.
-        buffer.putByte(node + SPARSE_BYTES_OFFSET + i,  (byte) trans);
+        putByte(node + SPARSE_BYTES_OFFSET + i,  (byte) trans);
 
         // Update order word.
         int order = getUnsignedShort(node + SPARSE_ORDER_OFFSET);
@@ -286,11 +311,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         // correct value (see getSparseChild).
 
         // setting child enables reads to start seeing the new branch
-        buffer.putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
+        putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
 
         // some readers will decide whether to check the pointer based on the order word
         // write that volatile to make sure they see the new change too
-        buffer.putShortVolatile(node + SPARSE_ORDER_OFFSET,  (short) newOrder);
+        putShortVolatile(node + SPARSE_ORDER_OFFSET,  (short) newOrder);
         return node;
     }
 
@@ -333,7 +358,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (isNull(mid))
         {
             mid = createEmptySplitNode();
-            buffer.putInt(midPos, mid);
+            putInt(midPos, mid);
         }
 
         assert offset(mid) == SPLIT_OFFSET;
@@ -342,12 +367,12 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (isNull(tail))
         {
             tail = createEmptySplitNode();
-            buffer.putInt(tailPos, tail);
+            putInt(tailPos, tail);
         }
 
         assert offset(tail) == SPLIT_OFFSET;
         int childPos = splitBlockPointerAddress(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
-        buffer.putInt(childPos, newChild);
+        putInt(childPos, newChild);
     }
 
     /**
@@ -401,11 +426,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         }
 
         int node = allocateBlock() + SPARSE_OFFSET;
-        buffer.putByte(node + SPARSE_BYTES_OFFSET + 0,  (byte) byte1);
-        buffer.putByte(node + SPARSE_BYTES_OFFSET + 1,  (byte) byte2);
-        buffer.putInt(node + SPARSE_CHILDREN_OFFSET + 0 * 4, child1);
-        buffer.putInt(node + SPARSE_CHILDREN_OFFSET + 1 * 4, child2);
-        buffer.putShort(node + SPARSE_ORDER_OFFSET,  (short) (1 * 6 + 0));
+        putByte(node + SPARSE_BYTES_OFFSET + 0,  (byte) byte1);
+        putByte(node + SPARSE_BYTES_OFFSET + 1,  (byte) byte2);
+        putInt(node + SPARSE_CHILDREN_OFFSET + 0 * 4, child1);
+        putInt(node + SPARSE_CHILDREN_OFFSET + 1 * 4, child2);
+        putShort(node + SPARSE_ORDER_OFFSET,  (short) (1 * 6 + 0));
         // Note: this does not need a volatile write as it is a new node, returning a new pointer, which needs to be
         // put in an existing node or the root. That action ends in a happens-before enforcing write.
         return node;
@@ -419,8 +444,8 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     private int createNewChainNode(int transitionByte, int newChild) throws SpaceExhaustedException
     {
         int newNode = allocateBlock() + LAST_POINTER_OFFSET - 1;
-        buffer.putByte(newNode, (byte) transitionByte);
-        buffer.putInt(newNode + 1, newChild);
+        putByte(newNode, (byte) transitionByte);
+        putInt(newNode + 1, newChild);
         // Note: this does not need a volatile write as it is a new node, returning a new pointer, which needs to be
         // put in an existing node or the root. That action ends in a happens-before enforcing write.
         return newNode;
@@ -434,7 +459,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         {
             // attach as a new character in child node
             int newNode = newChild - 1;
-            buffer.putByte(newNode, (byte) transitionByte);
+            putByte(newNode, (byte) transitionByte);
             return newNode;
         }
 
@@ -461,17 +486,17 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             // creating the embedded node may overwrite information that is still needed by concurrent readers or the
             // mutation process itself.
             node = (child & -BLOCK_SIZE) | PREFIX_OFFSET;
-            buffer.putByte(node + PREFIX_FLAGS_OFFSET, (byte) offset);
+            putByte(node + PREFIX_FLAGS_OFFSET, (byte) offset);
         }
         else
         {
             // Full prefix node
             node = allocateBlock() + PREFIX_OFFSET;
-            buffer.putByte(node + PREFIX_FLAGS_OFFSET, (byte) 0xFF);
-            buffer.putInt(node + PREFIX_POINTER_OFFSET, child);
+            putByte(node + PREFIX_FLAGS_OFFSET, (byte) 0xFF);
+            putInt(node + PREFIX_POINTER_OFFSET, child);
         }
 
-        buffer.putInt(node + PREFIX_CONTENT_OFFSET, contentIndex);
+        putInt(node + PREFIX_CONTENT_OFFSET, contentIndex);
         return node;
     }
 
@@ -486,7 +511,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (!isEmbeddedPrefixNode(node))
         {
             // This attaches the child branch and makes it reachable -- the write must be volatile.
-            buffer.putIntVolatile(node + PREFIX_POINTER_OFFSET, child);
+            putIntVolatile(node + PREFIX_POINTER_OFFSET, child);
             return node;
         }
         else
@@ -676,7 +701,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             {
                 if (existingContentIndex != -1)
                 {
-                    final T existingContent = contentArray.get(existingContentIndex);
+                    final T existingContent = getContent(existingContentIndex);
                     T combinedContent = transformer.apply(existingContent, mutationContent);
                     setContent(existingContentIndex, combinedContent);
                     if (combinedContent != null)
@@ -737,7 +762,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
             // Otherwise modify in place
             if (updatedPostContentNode != existingPostContentNode) // to use volatile write but also ensure we don't corrupt embedded nodes
-                buffer.putIntVolatile(existingPreContentNode + PREFIX_POINTER_OFFSET, updatedPostContentNode);
+                putIntVolatile(existingPreContentNode + PREFIX_POINTER_OFFSET, updatedPostContentNode);
             assert contentIndex == getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET);
             return existingPreContentNode;
         }
@@ -954,7 +979,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     public long sizeOnHeap()
     {
         return contentCount * MemoryLayoutSpecification.SPEC.getReferenceSize() +
-               (bufferType == BufferType.ON_HEAP ? allocatedPos + EMPTY_SIZE_ON_HEAP : EMPTY_SIZE_OFF_HEAP);
+               REFERENCE_ARRAY_ON_HEAP_SIZE * getChunkIdx(contentCount, CONTENTS_START_SHIFT, CONTENTS_START_SIZE) +
+               (bufferType == BufferType.ON_HEAP ? allocatedPos + EMPTY_SIZE_ON_HEAP : EMPTY_SIZE_OFF_HEAP) +
+               REFERENCE_ARRAY_ON_HEAP_SIZE * getChunkIdx(allocatedPos, BUF_START_SHIFT, BUF_START_SIZE);
     }
 
     @Override
@@ -988,9 +1015,18 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     {
         int bufferOverhead = 0;
         if (bufferType == BufferType.ON_HEAP)
-            bufferOverhead = buffer.capacity() - this.allocatedPos;
+        {
+            int pos = this.allocatedPos;
+            UnsafeBuffer buffer = getChunk(pos);
+            if (buffer != null)
+                bufferOverhead = buffer.capacity() - inChunkPointer(pos);
+        }
 
-        int contentOverhead = (contentArray.length() - contentCount) * MemoryLayoutSpecification.SPEC.getReferenceSize();
+        int index = contentCount;
+        int leadBit = getChunkIdx(index, CONTENTS_START_SHIFT, CONTENTS_START_SIZE);
+        int ofs = inChunkPointer(index, leadBit, CONTENTS_START_SIZE);
+        AtomicReferenceArray<T> contentArray = contentArrays[leadBit];
+        int contentOverhead = ((contentArray != null ? contentArray.length() : 0) - ofs) * MemoryLayoutSpecification.SPEC.getReferenceSize();
 
         return bufferOverhead + contentOverhead;
     }
