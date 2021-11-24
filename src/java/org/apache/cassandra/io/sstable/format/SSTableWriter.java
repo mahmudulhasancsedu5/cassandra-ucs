@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.io.sstable.format;
 
+import java.io.IOException;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.function.Consumer;
@@ -32,9 +34,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionPurger;
+import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.ComplexColumnData;
+import org.apache.cassandra.db.rows.PartitionSerializationException;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
@@ -238,13 +242,55 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     /**
      * Appends partition data to this writer.
      *
-     * @param iterator the partition to write
+     * @param partition the partition to write
      * @return the created index entry if something was written, that is if {@code iterator}
      * wasn't empty, {@code null} otherwise.
      *
      * @throws FSWriteError if a write to the dataFile fails
      */
-    public abstract RowIndexEntry append(UnfilteredRowIterator iterator);
+    public RowIndexEntry append(UnfilteredRowIterator partition)
+    {
+        if (partition.isEmpty())
+            return null;
+
+        try
+        {
+            if (!startPartition(partition.partitionKey(), partition.partitionLevelDeletion()))
+                return null;
+
+            if (!partition.staticRow().isEmpty())
+                addUnfiltered(partition.staticRow());
+
+            while (partition.hasNext())
+                addUnfiltered(partition.next());
+
+            return endPartition();
+        }
+        catch (BufferOverflowException boe)
+        {
+            throw new PartitionSerializationException(partition, boe);
+        }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, getFilename());
+        }
+    }
+
+    /**
+     * Start a partition. Will be followed by a sequence of addUnfiltered(), and finished with endPartition().
+     * The static row may be given in the first addUnfiltered() (by cursors), or via addStaticRow() called before any
+     * other addUnfiltered() (by append(UnfilteredRowIterator) above).
+     *
+     * @param key
+     * @param partitionLevelDeletion
+     * @return true if the partition was successfully started, false if there is a problem (e.g. key not in order).
+     * @throws IOException
+     */
+    public abstract boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException;
+
+    public abstract void addUnfiltered(Unfiltered unfiltered) throws IOException;
+
+    public abstract RowIndexEntry endPartition() throws IOException;
 
     public abstract long getFilePointer();
 
@@ -432,9 +478,9 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         long dataSize();
     }
 
-    public static void guardCollectionSize(UnfilteredRowIterator partition, Unfiltered unfiltered)
+    public static void guardCollectionSize(TableMetadata metadata, DecoratedKey partitionKey, Unfiltered unfiltered)
     {
-        if (!unfiltered.isRow() || SchemaConstants.isInternalKeyspace(partition.metadata().keyspace))
+        if (!unfiltered.isRow() || SchemaConstants.isInternalKeyspace(metadata.keyspace))
             return;
 
         if (!Guardrails.collectionSize.enabled(null) && !Guardrails.itemsPerCollection.enabled(null))
@@ -461,8 +507,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
                 !Guardrails.itemsPerCollection.triggersOn(cellsCount, null))
                 continue;
 
-            TableMetadata metadata = partition.metadata();
-            ByteBuffer key = partition.partitionKey().getKey();
+            ByteBuffer key = partitionKey.getKey();
             String keyString = metadata.primaryKeyAsCQLLiteral(key, row.clustering());
             String msg = String.format("%s in row %s in table %s",
                                        column.name.toString(),

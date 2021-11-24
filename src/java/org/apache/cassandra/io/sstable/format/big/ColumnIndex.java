@@ -22,19 +22,18 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ClusteringPrefix;
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.ISerializer;
-import org.apache.cassandra.io.sstable.format.big.IndexInfo;
-import org.apache.cassandra.io.sstable.format.big.BigTableRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
-import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.SequentialWriter;
@@ -80,6 +79,15 @@ public class ColumnIndex
 
     private final Collection<SSTableFlushObserver> observers;
 
+    // Sequence control, also used to add empty static row if `addStaticRow` is not called.
+    private enum State
+    {
+        AWAITING_PARTITION_HEADER,
+        AWAITING_STATIC_ROW,
+        AWAITING_ROWS
+    }
+    State state;
+
     public ColumnIndex(SerializationHeader header,
                         SequentialWriter writer,
                         Version version,
@@ -113,42 +121,46 @@ public class ColumnIndex
             this.reusableBuffer = this.buffer;
         this.buffer = null;
         this.cacheSizeThreshold = newCacheSizeThreshold;
+        this.state = State.AWAITING_PARTITION_HEADER;
     }
 
+    @VisibleForTesting
     public void buildRowIndex(UnfilteredRowIterator iterator) throws IOException
     {
-        writePartitionHeader(iterator);
-        this.headerLength = writer.position() - initialPosition;
+        writePartitionHeader(iterator.partitionKey(), iterator.partitionLevelDeletion());
+        if (!iterator.staticRow().isEmpty())
+            addUnfiltered(iterator.staticRow());
 
         while (iterator.hasNext())
-        {
-            Unfiltered unfiltered = iterator.next();
-            SSTableWriter.guardCollectionSize(iterator, unfiltered);
-            add(unfiltered);
-        }
+            addUnfiltered(iterator.next());
 
-        finish();
+        endPartition();
     }
 
-    private void writePartitionHeader(UnfilteredRowIterator iterator) throws IOException
+    void writePartitionHeader(DecoratedKey partitionKey, DeletionTime partitionLevelDeletion) throws IOException
     {
-        ByteBufferUtil.writeWithShortLength(iterator.partitionKey().getKey(), writer);
+        assert state == State.AWAITING_PARTITION_HEADER;
+        ByteBufferUtil.writeWithShortLength(partitionKey.getKey(), writer);
 
         long partitionDeletionPosition = writer.position();
-        DeletionTime.serializer.serialize(iterator.partitionLevelDeletion(), writer);
+        DeletionTime.serializer.serialize(partitionLevelDeletion, writer);
         if (!observers.isEmpty())
-            observers.forEach((o) -> o.partitionLevelDeletion(iterator.partitionLevelDeletion(), partitionDeletionPosition));
-
-        if (header.hasStatic())
-        {
-            Row staticRow = iterator.staticRow();
-            long staticRowPosition = writer.position();
-
-            UnfilteredSerializer.serializer.serializeStaticRow(staticRow, helper, writer, version);
-            if (!observers.isEmpty())
-                observers.forEach((o) -> o.staticRow(staticRow, staticRowPosition));
-        }
+            observers.forEach((o) -> o.partitionLevelDeletion(partitionLevelDeletion, partitionDeletionPosition));
+        state = header.hasStatic() ? State.AWAITING_STATIC_ROW : State.AWAITING_ROWS;
+        this.headerLength = writer.position() - initialPosition;    // this may be updated after the static row is written
     }
+
+    private void doWriteStaticRow(Row staticRow) throws IOException
+    {
+        assert state == State.AWAITING_STATIC_ROW;
+        long staticRowPosition = writer.position();
+        UnfilteredSerializer.serializer.serializeStaticRow(staticRow, helper, writer, version);
+        if (!observers.isEmpty())
+            observers.forEach(o -> o.staticRow(staticRow, staticRowPosition));
+        state = State.AWAITING_ROWS;
+        this.headerLength = writer.position() - initialPosition;
+    }
+
 
     private long currentPosition()
     {
@@ -255,8 +267,21 @@ public class ColumnIndex
         return new DataOutputBuffer(cacheSizeThreshold * 2);
     }
 
-    private void add(Unfiltered unfiltered) throws IOException
+    void addUnfiltered(Unfiltered unfiltered) throws IOException
     {
+        if (state == State.AWAITING_STATIC_ROW)
+        {
+            if (unfiltered.isRow() && ((Row) unfiltered).isStatic())
+            {
+                doWriteStaticRow((Row) unfiltered);
+                return;
+            }
+
+            doWriteStaticRow(Rows.EMPTY_STATIC_ROW);
+        }
+
+        assert state == State.AWAITING_ROWS;
+
         long pos = currentPosition();
 
         if (firstClustering == null)
@@ -288,7 +313,7 @@ public class ColumnIndex
             addIndexBlock();
     }
 
-    private void finish() throws IOException
+    protected void endPartition() throws IOException
     {
         UnfilteredSerializer.serializer.writeEndOfPartition(writer);
 
