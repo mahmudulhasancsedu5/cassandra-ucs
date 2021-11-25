@@ -70,10 +70,13 @@ public class ColumnIndex extends SortedTablePartitionWriter
         this.idxSerializer = indexInfoSerializer;
     }
 
+    @Override
     public void close()
     {
+        // nothing to close
     }
 
+    @Override
     public void reset()
     {
         super.reset();
@@ -89,12 +92,14 @@ public class ColumnIndex extends SortedTablePartitionWriter
         this.cacheSizeThreshold = newCacheSizeThreshold;
     }
 
+    @Override
     public void writePartitionHeader(DecoratedKey partitionKey, DeletionTime partitionLevelDeletion) throws IOException
     {
         super.writePartitionHeader(partitionKey, partitionLevelDeletion);
         this.headerLength = currentPosition();    // this may be updated after the static row is written
     }
 
+    @Override
     protected void doWriteStaticRow(Row staticRow) throws IOException
     {
         super.doWriteStaticRow(staticRow);
@@ -201,6 +206,7 @@ public class ColumnIndex extends SortedTablePartitionWriter
         return new DataOutputBuffer(cacheSizeThreshold * 2);
     }
 
+    @Override
     public long endPartition() throws IOException
     {
         long endPosition = super.endPartition();

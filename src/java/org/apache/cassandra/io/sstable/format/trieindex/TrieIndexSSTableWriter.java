@@ -129,12 +129,14 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
         return components;
     }
 
+    @Override
     public void mark()
     {
         super.mark();
         iwriter.mark();
     }
 
+    @Override
     public void resetAndTruncate()
     {
         super.resetAndTruncate();
@@ -149,6 +151,8 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
         // Reuse the writer for each row
         partitionWriter.reset();
 
+        if (!observers.isEmpty())
+            observers.forEach(o -> o.startPartition(key, currentStartPosition));
         partitionWriter.writePartitionHeader(key, partitionLevelDeletion);
         return true;
     }
@@ -163,7 +167,8 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
     {
         endPartitionMetadata();
         long trieRoot = partitionWriter.finish();
-        RowIndexEntry entry = TrieIndexEntry.create(currentStartPosition, trieRoot,
+        RowIndexEntry entry = TrieIndexEntry.create(currentStartPosition,
+                                                    trieRoot,
                                                     currentPartitionLevelDeletion,
                                                     partitionWriter.rowIndexCount);
         iwriter.append(currentKey, entry);
@@ -249,12 +254,14 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
     class TransactionalProxy extends SortedTableWriter.TransactionalProxy
     {
         // finalise our state on disk, including renaming
+        @Override
         protected void doPrepare()
         {
             iwriter.prepareToCommit();
             super.doPrepare();
         }
 
+        @Override
         protected Throwable doCommit(Throwable accumulate)
         {
             accumulate = super.doCommit(accumulate);
@@ -270,6 +277,7 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
             return accumulate;
         }
 
+        @Override
         protected Throwable doAbort(Throwable accumulate)
         {
             accumulate = iwriter.abort(accumulate);
@@ -295,7 +303,8 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
         public final PartitionIndexBuilder partitionIndex;
         public final IFilter bf;
         boolean partitionIndexCompleted = false;
-        private DataPosition riMark, piMark;
+        private DataPosition riMark;
+        private DataPosition piMark;
 
         IndexWriter(TableMetadata table)
         {

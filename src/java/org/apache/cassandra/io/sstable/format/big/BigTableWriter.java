@@ -123,12 +123,14 @@ public class BigTableWriter extends SortedTableWriter
         return components;
     }
 
+    @Override
     public void mark()
     {
         super.mark();
         iwriter.mark();
     }
 
+    @Override
     public void resetAndTruncate()
     {
         super.resetAndTruncate();
@@ -143,6 +145,8 @@ public class BigTableWriter extends SortedTableWriter
         // Reuse the writer for each row
         columnIndexWriter.reset();
 
+        if (!observers.isEmpty())
+            observers.forEach(o -> o.startPartition(key, iwriter.indexFile.position()));
         columnIndexWriter.writePartitionHeader(key, partitionLevelDeletion);
         return true;
     }

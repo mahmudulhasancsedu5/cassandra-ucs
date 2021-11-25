@@ -118,9 +118,7 @@ public class Merger<In, Source, Out> implements AutoCloseable
         this.onClose = onClose;
         this.reducer = reducer;
 
-        @SuppressWarnings("unchecked")
-        Candidate<In, Source>[] heap = new Candidate[sources.size()];
-        this.heap = heap;
+        heap = new Candidate[sources.size()];
         size = 0;
 
         for (int i = 0; i < sources.size(); i++)

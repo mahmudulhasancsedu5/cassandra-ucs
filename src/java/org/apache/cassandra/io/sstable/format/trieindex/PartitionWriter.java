@@ -52,6 +52,7 @@ class PartitionWriter extends SortedTablePartitionWriter
         this.rowTrie = new RowIndexWriter(comparator, indexWriter);
     }
 
+    @Override
     public void reset()
     {
         super.reset();
