@@ -57,6 +57,7 @@ public class CorruptedSSTablesCompactionsTest
     private static final String KEYSPACE1 = "CorruptedSSTablesCompactionsTest";
     private static final String STANDARD_STCS = "Standard_STCS";
     private static final String STANDARD_LCS = "Standard_LCS";
+    private static final String STANDARD_UCS = "Standard_UCS";
     private static int maxValueSize;
 
     @After
@@ -84,7 +85,8 @@ public class CorruptedSSTablesCompactionsTest
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),
                                     makeTable(STANDARD_STCS).compaction(CompactionParams.DEFAULT),
-                                    makeTable(STANDARD_LCS).compaction(CompactionParams.lcs(Collections.emptyMap())));
+                                    makeTable(STANDARD_LCS).compaction(CompactionParams.lcs(Collections.emptyMap())),
+                                    makeTable(STANDARD_UCS).compaction(CompactionParams.ucs(Collections.emptyMap())));
 
         maxValueSize = DatabaseDescriptor.getMaxValueSize();
         DatabaseDescriptor.setMaxValueSize(1024 * 1024);
@@ -125,6 +127,12 @@ public class CorruptedSSTablesCompactionsTest
     public void testCorruptedSSTablesWithLeveledCompactionStrategy() throws Exception
     {
         testCorruptedSSTables(STANDARD_LCS);
+    }
+
+    @Test
+    public void testCorruptedSSTablesWithUnifiedCompactionStrategy() throws Exception
+    {
+        testCorruptedSSTables(STANDARD_UCS);
     }
 
 

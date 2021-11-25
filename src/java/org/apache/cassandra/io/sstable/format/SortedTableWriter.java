@@ -70,7 +70,18 @@ public abstract class SortedTableWriter extends SSTableWriter
     protected long currentStartPosition;
     private long lastEarlyOpenLength = 0;
 
-    public SortedTableWriter(Descriptor descriptor, Set<Component> components, LifecycleNewTracker lifecycleNewTracker, SequentialWriterOption writerOption, long keyCount, long repairedAt, UUID pendingRepair, boolean isTransient, TableMetadataRef metadata, MetadataCollector metadataCollector, SerializationHeader header, Collection<SSTableFlushObserver> observers)
+    protected SortedTableWriter(Descriptor descriptor,
+                                Set<Component> components,
+                                LifecycleNewTracker lifecycleNewTracker,
+                                SequentialWriterOption writerOption,
+                                long keyCount,
+                                long repairedAt,
+                                UUID pendingRepair,
+                                boolean isTransient,
+                                TableMetadataRef metadata,
+                                MetadataCollector metadataCollector,
+                                SerializationHeader header,
+                                Collection<SSTableFlushObserver> observers)
     {
         super(descriptor, components, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers);
         lifecycleNewTracker.trackNew(this); // must track before any files are created
@@ -137,8 +148,10 @@ public abstract class SortedTableWriter extends SSTableWriter
                         compressionParams = CompressionParams.DEFAULT;
                         break;
                     }
+                    // else fall through
                 case table:
                 default:
+                    break;
             }
         }
         return compressionParams;
@@ -166,14 +179,12 @@ public abstract class SortedTableWriter extends SSTableWriter
         currentKey = key;
         currentPartitionLevelDeletion = partitionLevelDeletion;
         currentStartPosition = dataFile.position();
-        if (!observers.isEmpty())
-            observers.forEach(o -> o.startPartition(key, currentStartPosition));
 
         metadataCollector.updatePartitionDeletion(partitionLevelDeletion);
         return true;
     }
 
-    protected void addUnfilteredMetadata(Unfiltered unfiltered) throws IOException
+    protected void addUnfilteredMetadata(Unfiltered unfiltered)
     {
         SSTableWriter.guardCollectionSize(metadata(), currentKey, unfiltered);
 
