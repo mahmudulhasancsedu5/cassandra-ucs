@@ -27,7 +27,6 @@ import java.util.function.Consumer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,8 +53,8 @@ import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.ColumnMetadata;
-import org.apache.cassandra.schema.SchemaManager;
 import org.apache.cassandra.schema.SchemaConstants;
+import org.apache.cassandra.schema.SchemaManager;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.FBUtilities;
@@ -182,37 +181,6 @@ public abstract class SSTableWriter extends SSTable implements Transactional
                                        LifecycleNewTracker lifecycleNewTracker)
     {
         return create(descriptor, keyCount, repairedAt, pendingRepair, isTransient, 0, header, indexGroups, lifecycleNewTracker);
-    }
-
-    /**
-     * BigTable SSTable components. Should be moved to BigTableWriter but is left here for painless upstream merges.
-     */
-    public static Set<Component> bigTableComponents(TableMetadata metadata, Collection<Component> indexComponents)
-    {
-        Set<Component> components = new HashSet<Component>(Arrays.asList(Component.DATA,
-                Component.PRIMARY_INDEX,
-                Component.STATS,
-                Component.SUMMARY,
-                Component.TOC,
-                Component.DIGEST));
-
-        if (metadata.params.bloomFilterFpChance < 1.0)
-            components.add(Component.FILTER);
-
-        if (metadata.params.compression.isEnabled())
-        {
-            components.add(Component.COMPRESSION_INFO);
-        }
-        else
-        {
-            // it would feel safer to actually add this component later in maybeWriteDigest(),
-            // but the components are unmodifiable after construction
-            components.add(Component.CRC);
-        }
-
-        components.addAll(indexComponents);
-
-        return components;
     }
 
     private static Collection<SSTableFlushObserver> observers(Descriptor descriptor,

@@ -23,7 +23,6 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -33,17 +32,11 @@ import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
-import org.apache.cassandra.db.rows.RangeTombstoneBoundMarker;
-import org.apache.cassandra.db.rows.RangeTombstoneBoundaryMarker;
-import org.apache.cassandra.db.rows.RangeTombstoneMarker;
-import org.apache.cassandra.db.rows.Row;
-import org.apache.cassandra.db.rows.Rows;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.FSWriteError;
@@ -51,53 +44,38 @@ import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.RowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
+import org.apache.cassandra.io.sstable.format.SortedTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
-import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.BufferedDataOutputStreamPlus;
-import org.apache.cassandra.io.util.ChecksummedSequentialWriter;
 import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.io.util.SequentialWriterOption;
-import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.BloomFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.SyncUtil;
 import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
-import static org.apache.cassandra.io.sstable.format.big.BigTableWriter.compressionFor;
-
 @VisibleForTesting
-public class TrieIndexSSTableWriter extends SSTableWriter
+public class TrieIndexSSTableWriter extends SortedTableWriter
 {
     private static final Logger logger = LoggerFactory.getLogger(TrieIndexSSTableWriter.class);
 
     private final PartitionWriter partitionWriter;
     private final IndexWriter iwriter;
-    private final FileHandle.Builder dbuilder;
-    protected final SequentialWriter dataFile;
-    private DataPosition dataMark;
-    private long lastEarlyOpenLength = 0;
-
-    private DecoratedKey currentKey;
-    private DeletionTime currentPartitionLevelDeletion;
-    private long currentStartPosition;
 
     private static final SequentialWriterOption WRITER_OPTION = SequentialWriterOption.newBuilder()
                                                                                       .trickleFsync(DatabaseDescriptor.getTrickleFsync())
@@ -117,34 +95,13 @@ public class TrieIndexSSTableWriter extends SSTableWriter
                                   LifecycleNewTracker lifecycleNewTracker,
                                   Set<Component> indexComponents)
     {
-        super(descriptor, components(metadata.getLocal(), indexComponents),keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers);
-        lifecycleNewTracker.trackNew(this); // must track before any files are created
-
-        if (compression)
-        {
-            final CompressionParams compressionParams = compressionFor(lifecycleNewTracker.opType(), metadata);
-
-            dataFile = new CompressedSequentialWriter(getDataFile(),
-                                                      descriptor.fileFor(Component.COMPRESSION_INFO),
-                                                      descriptor.fileFor(Component.DIGEST),
-                                                      WRITER_OPTION,
-                                                      compressionParams,
-                                                      metadataCollector);
-        }
-        else
-        {
-            dataFile = new ChecksummedSequentialWriter(getDataFile(),
-                                                       descriptor.fileFor(Component.CRC),
-                                                       descriptor.fileFor(Component.DIGEST),
-                                                       WRITER_OPTION);
-        }
-        dbuilder = SSTableReaderBuilder.defaultDataHandleBuilder(descriptor).compressed(compression);
+        super(descriptor, components(metadata.getLocal(), indexComponents), lifecycleNewTracker, WRITER_OPTION, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers);
 
         iwriter = new IndexWriter(metadata.get());
         partitionWriter = new PartitionWriter(this.header, metadata().comparator, dataFile, iwriter.rowIndexFile, descriptor.version, this.observers);
     }
 
-    private static Set<Component> components(TableMetadata metadata, Set<Component> indexComponents)
+    private static Set<Component> components(TableMetadata metadata, Collection<Component> indexComponents)
     {
         Set<Component> components = Sets.newHashSet(Component.DATA,
                                                     Component.PARTITION_INDEX,
@@ -174,99 +131,41 @@ public class TrieIndexSSTableWriter extends SSTableWriter
 
     public void mark()
     {
-        dataMark = dataFile.mark();
+        super.mark();
         iwriter.mark();
     }
 
     public void resetAndTruncate()
     {
-        dataFile.resetAndTruncate(dataMark);
+        super.resetAndTruncate();
         iwriter.resetAndTruncate();
-    }
-
-    /**
-     * Perform sanity checks on @param decoratedKey and @return the position in the data file before any data is written
-     */
-    protected void checkKeyOrder(DecoratedKey decoratedKey)
-    {
-        assert decoratedKey != null : "Keys must not be null"; // empty keys ARE allowed b/c of indexed row values
-        if (currentKey != null && currentKey.compareTo(decoratedKey) >= 0)
-            throw new RuntimeException("Last written key " + currentKey + " >= current key " + decoratedKey + " writing into " + getDataFile());
     }
 
     public boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
     {
-        if (key.getKeyLength() > FBUtilities.MAX_UNSIGNED_SHORT)
-        {
-            logger.error("Key size {} exceeds maximum of {}, skipping row", key.getKeyLength(), FBUtilities.MAX_UNSIGNED_SHORT);
+        if (!startPartitionMetadata(key, partitionLevelDeletion))
             return false;
-        }
-
-        checkKeyOrder(key);
-        currentKey = key;
-        currentPartitionLevelDeletion = partitionLevelDeletion;
-        currentStartPosition = dataFile.position();
-        if (!observers.isEmpty())
-            observers.forEach(o -> o.startPartition(key, currentStartPosition));
 
         // Reuse the writer for each row
         partitionWriter.reset();
 
         partitionWriter.writePartitionHeader(key, partitionLevelDeletion);
-
-        metadataCollector.updatePartitionDeletion(partitionLevelDeletion);
         return true;
     }
 
     public void addUnfiltered(Unfiltered unfiltered) throws IOException
     {
-        SSTableWriter.guardCollectionSize(metadata(), currentKey, unfiltered);
-
-        if (unfiltered.isRow())
-        {
-            Row row = (Row) unfiltered;
-            metadataCollector.updateClusteringValues(row.clustering());
-            Rows.collectStats(row, metadataCollector);
-        }
-        else
-        {
-            RangeTombstoneMarker marker = (RangeTombstoneMarker) unfiltered;
-            metadataCollector.updateClusteringValuesByBoundOrBoundary(marker.clustering());
-            if (marker.isBoundary())
-            {
-                RangeTombstoneBoundaryMarker bm = (RangeTombstoneBoundaryMarker) marker;
-                metadataCollector.update(bm.endDeletionTime());
-                metadataCollector.update(bm.startDeletionTime());
-            }
-            else
-            {
-                metadataCollector.update(((RangeTombstoneBoundMarker) marker).deletionTime());
-            }
-        }
-
+        addUnfilteredMetadata(unfiltered);
         partitionWriter.addUnfiltered(unfiltered);
     }
 
     public RowIndexEntry endPartition() throws IOException
     {
-        metadataCollector.addCellPerPartitionCount();
-
+        endPartitionMetadata();
         long trieRoot = partitionWriter.finish();
         RowIndexEntry entry = TrieIndexEntry.create(currentStartPosition, trieRoot,
                                                     currentPartitionLevelDeletion,
                                                     partitionWriter.rowIndexCount);
-
-        long endPosition = dataFile.position();
-        long partitionSize = endPosition - currentStartPosition;
-        maybeLogLargePartitionWarning(currentKey, partitionSize);
-        metadataCollector.addPartitionSizeInBytes(partitionSize);
-        metadataCollector.addKey(currentKey.getKey());
-        last = currentKey;
-        if (first == null)
-            first = currentKey;
-
-        if (logger.isTraceEnabled())
-            logger.trace("wrote {} at {}", currentKey, entry.position);
         iwriter.append(currentKey, entry);
         return entry;
     }
@@ -297,14 +196,6 @@ public class TrieIndexSSTableWriter extends SSTableWriter
         });
     }
 
-    void invalidateCacheAtBoundary(FileHandle dfile)
-    {
-        if (lastEarlyOpenLength != 0 && dfile.dataLength() > lastEarlyOpenLength)
-            dfile.invalidateIfCached(lastEarlyOpenLength);
-
-        lastEarlyOpenLength = dfile.dataLength();
-    }
-
     public SSTableReader openFinalEarly()
     {
         // we must ensure the data is completely flushed to disk
@@ -319,7 +210,7 @@ public class TrieIndexSSTableWriter extends SSTableWriter
     }
 
     @SuppressWarnings("resource")
-    private SSTableReader openFinal(SSTableReader.OpenReason openReason)
+    protected SSTableReader openFinal(SSTableReader.OpenReason openReason)
     {
         if (maxDataAge < 0)
             maxDataAge = System.currentTimeMillis();
@@ -355,27 +246,18 @@ public class TrieIndexSSTableWriter extends SSTableWriter
         return new TransactionalProxy();
     }
 
-    class TransactionalProxy extends SSTableWriter.TransactionalProxy
+    class TransactionalProxy extends SortedTableWriter.TransactionalProxy
     {
         // finalise our state on disk, including renaming
         protected void doPrepare()
         {
             iwriter.prepareToCommit();
-
-            // write sstable statistics
-            dataFile.prepareToCommit();
-            writeMetadata(descriptor, finalizeMetadata());
-
-            // save the table of components
-            SSTable.appendTOC(descriptor, components);
-
-            if (openResult)
-                finalReader = openFinal(SSTableReader.OpenReason.NORMAL);
+            super.doPrepare();
         }
 
         protected Throwable doCommit(Throwable accumulate)
         {
-            accumulate = dataFile.commit(accumulate);
+            accumulate = super.doCommit(accumulate);
             accumulate = iwriter.commit(accumulate);
             return accumulate;
         }
@@ -383,46 +265,22 @@ public class TrieIndexSSTableWriter extends SSTableWriter
         @Override
         protected Throwable doPostCleanup(Throwable accumulate)
         {
-            partitionWriter.close();
-            accumulate = dbuilder.close(accumulate);
+            accumulate = Throwables.close(accumulate, partitionWriter);
+            accumulate = super.doPostCleanup(accumulate);
             return accumulate;
         }
 
         protected Throwable doAbort(Throwable accumulate)
         {
             accumulate = iwriter.abort(accumulate);
-            accumulate = dataFile.abort(accumulate);
+            accumulate = super.doAbort(accumulate);
             return accumulate;
         }
     }
 
-    private void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
+    protected SequentialWriterOption writerOption()
     {
-        File file = desc.fileFor(Component.STATS);
-        try (SequentialWriter out = new SequentialWriter(file, WRITER_OPTION))
-        {
-            desc.getMetadataSerializer().serialize(components, out, desc.version);
-            out.finish();
-        }
-        catch (IOException e)
-        {
-            throw new FSWriteError(e, file.path());
-        }
-    }
-
-    public long getFilePointer()
-    {
-        return dataFile.position();
-    }
-
-    public long getOnDiskFilePointer()
-    {
-        return dataFile.getOnDiskFilePointer();
-    }
-
-    public long getEstimatedOnDiskBytesWritten()
-    {
-        return dataFile.getEstimatedOnDiskBytesWritten();
+        return WRITER_OPTION;
     }
 
     /**
