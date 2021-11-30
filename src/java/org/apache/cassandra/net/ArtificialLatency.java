@@ -28,12 +28,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
+import org.apache.cassandra.concurrent.InfiniteLoopExecutor;
 import org.apache.cassandra.concurrent.Interruptible;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.utils.concurrent.UncheckedInterruptedException;
 
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
+import static org.apache.cassandra.concurrent.InfiniteLoopExecutor.Daemon.DAEMON;
+import static org.apache.cassandra.concurrent.InfiniteLoopExecutor.Interrupts.UNSYNCHRONIZED;
+import static org.apache.cassandra.concurrent.InfiniteLoopExecutor.SimulatorSafe.SAFE;
 import static org.apache.cassandra.net.MessagingService.instance;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 import static org.apache.cassandra.utils.concurrent.BlockingQueues.newBlockingQueue;
@@ -97,7 +101,7 @@ public class ArtificialLatency
 
     static class Sink implements OutboundSink.Filter, Interruptible.Task
     {
-        final Interruptible executor = executorFactory().infiniteLoop("ArtificialLatency", this, true);
+        final Interruptible executor = executorFactory().infiniteLoop("ArtificialLatency", this, SAFE, DAEMON, UNSYNCHRONIZED);
 
         static Sink start()
         {

@@ -33,9 +33,10 @@ import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.TimestampType;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.UUIDGen;
+import org.apache.cassandra.utils.TimeUUID;
 
 import static org.apache.cassandra.cql3.functions.TimeFcts.*;
+import static org.apache.cassandra.utils.TimeUUID.Generator.atUnixMillisAsBytes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
@@ -57,7 +58,7 @@ public class TimeFctsTest
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
         ByteBuffer input = TimestampType.instance.fromString(DATE_TIME_STRING + "+00");
         ByteBuffer output = executeFunction(TimeFcts.minTimeuuidFct, input);
-        assertEquals(UUIDGen.minTimeUUID(timeInMillis), TimeUUIDType.instance.compose(output));
+        assertEquals(TimeUUID.minAtUnixMillis(timeInMillis), TimeUUIDType.instance.compose(output));
     }
 
     @Test
@@ -66,7 +67,7 @@ public class TimeFctsTest
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
         ByteBuffer input = LongType.instance.decompose(timeInMillis);
         ByteBuffer output = executeFunction(TimeFcts.minTimeuuidFct(LongType.instance), input);
-        assertEquals(UUIDGen.minTimeUUID(timeInMillis), TimeUUIDType.instance.compose(output));
+        assertEquals(TimeUUID.minAtUnixMillis(timeInMillis), TimeUUIDType.instance.compose(output));
     }
 
     @Test
@@ -75,7 +76,7 @@ public class TimeFctsTest
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
         ByteBuffer input = TimestampType.instance.fromString(DATE_TIME_STRING + "+00");
         ByteBuffer output = executeFunction(TimeFcts.maxTimeuuidFct, input);
-        assertEquals(UUIDGen.maxTimeUUID(timeInMillis), TimeUUIDType.instance.compose(output));
+        assertEquals(TimeUUID.maxAtUnixMillis(timeInMillis), TimeUUIDType.instance.compose(output));
     }
 
     @Test
@@ -84,7 +85,7 @@ public class TimeFctsTest
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
         ByteBuffer input = LongType.instance.decompose(timeInMillis);
         ByteBuffer output = executeFunction(TimeFcts.maxTimeuuidFct(LongType.instance), input);
-        assertEquals(UUIDGen.maxTimeUUID(timeInMillis), TimeUUIDType.instance.compose(output));
+        assertEquals(TimeUUID.maxAtUnixMillis(timeInMillis), TimeUUIDType.instance.compose(output));
     }
 
     @Test
@@ -92,7 +93,7 @@ public class TimeFctsTest
     {
 
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
-        ByteBuffer input = ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timeInMillis, 0));
+        ByteBuffer input = ByteBuffer.wrap(atUnixMillisAsBytes(timeInMillis, 0));
         ByteBuffer output = executeFunction(TimeFcts.dateOfFct, input);
         assertEquals(Date.from(DATE_TIME.toInstant()), TimestampType.instance.compose(output));
     }
@@ -101,7 +102,7 @@ public class TimeFctsTest
     public void testTimeUuidToTimestamp()
     {
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
-        ByteBuffer input = ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timeInMillis, 0));
+        ByteBuffer input = ByteBuffer.wrap(atUnixMillisAsBytes(timeInMillis, 0));
         ByteBuffer output = executeFunction(toTimestamp(TimeUUIDType.instance), input);
         assertEquals(Date.from(DATE_TIME.toInstant()), TimestampType.instance.compose(output));
     }
@@ -110,7 +111,7 @@ public class TimeFctsTest
     public void testUnixTimestampOfFct()
     {
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
-        ByteBuffer input = ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timeInMillis, 0));
+        ByteBuffer input = ByteBuffer.wrap(atUnixMillisAsBytes(timeInMillis, 0));
         ByteBuffer output = executeFunction(TimeFcts.unixTimestampOfFct, input);
         assertEquals(timeInMillis, LongType.instance.compose(output).longValue());
     }
@@ -119,7 +120,7 @@ public class TimeFctsTest
     public void testTimeUuidToUnixTimestamp()
     {
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
-        ByteBuffer input = ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timeInMillis, 0));
+        ByteBuffer input = ByteBuffer.wrap(atUnixMillisAsBytes(timeInMillis, 0));
         ByteBuffer output = executeFunction(toUnixTimestamp(TimeUUIDType.instance), input);
         assertEquals(timeInMillis, LongType.instance.compose(output).longValue());
     }
@@ -128,7 +129,7 @@ public class TimeFctsTest
     public void testTimeUuidToDate()
     {
         long timeInMillis = DATE_TIME.toInstant().toEpochMilli();
-        ByteBuffer input = ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes(timeInMillis, 0));
+        ByteBuffer input = ByteBuffer.wrap(atUnixMillisAsBytes(timeInMillis, 0));
         ByteBuffer output = executeFunction(toDate(TimeUUIDType.instance), input);
 
         long expectedTime = DATE.toInstant().toEpochMilli();

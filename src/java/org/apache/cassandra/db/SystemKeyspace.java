@@ -75,6 +75,8 @@ import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
+import static org.apache.cassandra.utils.TimeUUID.Generator.nextTimeAsUUID;
+import static org.apache.cassandra.utils.TimeUUID.Generator.nextTimeUUID;
 
 public final class SystemKeyspace
 {
@@ -223,7 +225,7 @@ public final class SystemKeyspace
                 "CREATE TABLE %s ("
                 + "peer inet,"
                 + "peer_port int,"
-                + "hints_dropped map<uuid, int>,"
+                + "hints_dropped map<timeuuid, int>,"
                 + "PRIMARY KEY ((peer), peer_port))")
                 .build();
 
@@ -231,7 +233,7 @@ public final class SystemKeyspace
         parse(COMPACTION_HISTORY,
                 "week-long compaction history",
                 "CREATE TABLE %s ("
-                + "id uuid,"
+                + "id timeuuid,"
                 + "bytes_in bigint,"
                 + "bytes_out bigint,"
                 + "columnfamily_name text,"
@@ -377,7 +379,7 @@ public final class SystemKeyspace
             "events related to peers",
             "CREATE TABLE %s ("
             + "peer inet,"
-            + "hints_dropped map<uuid, int>,"
+            + "hints_dropped map<timeuuid, int>,"
             + "PRIMARY KEY ((peer)))")
             .build();
 
@@ -516,7 +518,7 @@ public final class SystemKeyspace
             return;
         String req = "INSERT INTO system.%s (id, keyspace_name, columnfamily_name, compacted_at, bytes_in, bytes_out, rows_merged) VALUES (?, ?, ?, ?, ?, ?, ?)";
         executeInternal(format(req, COMPACTION_HISTORY),
-                        UUIDGen.getTimeUUID(),
+                        nextTimeUUID(),
                         ksname,
                         cfname,
                         ByteBufferUtil.bytes(compactedAt),
@@ -762,7 +764,7 @@ public final class SystemKeyspace
     }
 
 
-    public static synchronized void updateHintsDropped(InetAddressAndPort ep, UUID timePeriod, int value)
+    public static synchronized void updateHintsDropped(InetAddressAndPort ep, TimeUUID timePeriod, int value)
     {
         // with 30 day TTL
         String req = "UPDATE system.%s USING TTL 2592000 SET hints_dropped[ ? ] = ? WHERE peer = ?";
@@ -1185,16 +1187,16 @@ public final class SystemKeyspace
         UntypedResultSet.Row row = results.one();
 
         Commit promised = row.has("in_progress_ballot")
-                        ? new Commit(row.getUUID("in_progress_ballot"), new PartitionUpdate.Builder(metadata, key, metadata.regularAndStaticColumns(), 1).build())
+                        ? new Commit(row.getTimeUUID("in_progress_ballot"), new PartitionUpdate.Builder(metadata, key, metadata.regularAndStaticColumns(), 1).build())
                         : Commit.emptyCommit(key, metadata);
         // either we have both a recently accepted ballot and update or we have neither
         Commit accepted = row.has("proposal_version") && row.has("proposal")
-                        ? new Commit(row.getUUID("proposal_ballot"),
+                        ? new Commit(row.getTimeUUID("proposal_ballot"),
                                      PartitionUpdate.fromBytes(row.getBytes("proposal"), row.getInt("proposal_version")))
                         : Commit.emptyCommit(key, metadata);
         // either most_recent_commit and most_recent_commit_at will both be set, or neither
         Commit mostRecent = row.has("most_recent_commit_version") && row.has("most_recent_commit")
-                          ? new Commit(row.getUUID("most_recent_commit_at"),
+                          ? new Commit(row.getTimeUUID("most_recent_commit_at"),
                                        PartitionUpdate.fromBytes(row.getBytes("most_recent_commit"), row.getInt("most_recent_commit_version")))
                           : Commit.emptyCommit(key, metadata);
         return new PaxosState(promised, accepted, mostRecent);
@@ -1204,7 +1206,7 @@ public final class SystemKeyspace
     {
         String req = "UPDATE system.%s USING TIMESTAMP ? AND TTL ? SET in_progress_ballot = ? WHERE row_key = ? AND cf_id = ?";
         executeInternal(format(req, PAXOS),
-                        UUIDGen.microsTimestamp(promise.ballot),
+                        promise.ballot.unixMicros(),
                         paxosTtlSec(promise.update.metadata()),
                         promise.ballot,
                         promise.update.partitionKey().getKey(),
@@ -1214,7 +1216,7 @@ public final class SystemKeyspace
     public static void savePaxosProposal(Commit proposal)
     {
         executeInternal(format("UPDATE system.%s USING TIMESTAMP ? AND TTL ? SET proposal_ballot = ?, proposal = ?, proposal_version = ? WHERE row_key = ? AND cf_id = ?", PAXOS),
-                        UUIDGen.microsTimestamp(proposal.ballot),
+                        proposal.ballot.unixMicros(),
                         paxosTtlSec(proposal.update.metadata()),
                         proposal.ballot,
                         PartitionUpdate.toBytes(proposal.update, MessagingService.current_version),
@@ -1235,7 +1237,7 @@ public final class SystemKeyspace
         // even though that's really just an optimization  since SP.beginAndRepairPaxos will exclude accepted proposal older than the mrc.
         String cql = "UPDATE system.%s USING TIMESTAMP ? AND TTL ? SET proposal_ballot = null, proposal = null, most_recent_commit_at = ?, most_recent_commit = ?, most_recent_commit_version = ? WHERE row_key = ? AND cf_id = ?";
         executeInternal(format(cql, PAXOS),
-                        UUIDGen.microsTimestamp(commit.ballot),
+                        commit.ballot.unixMicros(),
                         paxosTtlSec(commit.update.metadata()),
                         commit.ballot,
                         PartitionUpdate.toBytes(commit.update, MessagingService.current_version),

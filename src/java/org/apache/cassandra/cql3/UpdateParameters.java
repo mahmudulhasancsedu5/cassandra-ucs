@@ -27,6 +27,7 @@ import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.partitions.Partition;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.utils.TimeUUID;
 
 /**
  * Groups the parameters of an update query, and make building updates easier.
@@ -203,6 +204,11 @@ public class UpdateParameters
     public RangeTombstone makeRangeTombstone(Slice slice)
     {
         return new RangeTombstone(slice, deletionTime);
+    }
+
+    public byte[] nextTimeUUIDAsBytes()
+    {
+        return TimeUUID.Generator.nextTimeUUIDAsBytes();
     }
 
     /**

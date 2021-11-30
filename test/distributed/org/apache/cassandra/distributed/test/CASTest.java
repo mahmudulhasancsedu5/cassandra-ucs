@@ -19,7 +19,6 @@
 package org.apache.cassandra.distributed.test;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.function.BiConsumer;
 
 
@@ -27,10 +26,6 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
@@ -41,9 +36,6 @@ import org.apache.cassandra.distributed.api.IInstance;
 import org.apache.cassandra.distributed.api.IMessageFilters;
 import org.apache.cassandra.distributed.impl.UnsafeGossipHelper;
 import org.apache.cassandra.net.ArtificialLatency;
-import org.apache.cassandra.schema.TableId;
-import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.UUIDGen;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static org.apache.cassandra.distributed.api.ConsistencyLevel.UNSAFE_DELAY_QUORUM;
@@ -60,8 +52,6 @@ import static org.junit.Assert.assertTrue;
 
 public class CASTest extends TestBaseImpl
 {
-    private static final Logger logger = LoggerFactory.getLogger(CASTest.class);
-
     /**
      * The {@code cas_contention_timeout_in_ms} used during the tests
      */
@@ -724,20 +714,4 @@ public class CASTest extends TestBaseImpl
             ++pk;
         return pk;
     }
-
-    private static void debugOwnership(Cluster cluster, int pk)
-    {
-        for (int i = 1 ; i <= cluster.size() ; ++i)
-            System.out.println(i + ": " + cluster.get(i).appliesOnInstance((Integer v) -> StorageService.instance.getNaturalEndpointsWithPort(KEYSPACE, Int32Type.instance.decompose(v)))
-                    .apply(pk));
-    }
-
-    private static void debugPaxosState(Cluster cluster, int pk)
-    {
-        TableId tableId = cluster.get(1).callOnInstance(() -> Keyspace.open(KEYSPACE).getColumnFamilyStore("tbl").metadata.id);
-        for (int i = 1 ; i <= cluster.size() ; ++i)
-            for (Object[] row : cluster.get(i).executeInternal("select in_progress_ballot, proposal_ballot, most_recent_commit_at from system.paxos where row_key = ? and cf_id = ?", Int32Type.instance.decompose(pk), tableId))
-                System.out.println(i + ": " + (row[0] == null ? 0L : UUIDGen.microsTimestamp((UUID)row[0])) + ", " + (row[1] == null ? 0L : UUIDGen.microsTimestamp((UUID)row[1])) + ", " + (row[2] == null ? 0L : UUIDGen.microsTimestamp((UUID)row[2])));
-    }
-
 }

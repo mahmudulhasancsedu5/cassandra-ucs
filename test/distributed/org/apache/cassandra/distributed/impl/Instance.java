@@ -135,7 +135,6 @@ import org.apache.cassandra.utils.ExecutorUtils;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
-import org.apache.cassandra.utils.UUIDSerializer;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.progress.jmx.JMXBroadcastExecutor;
 import org.apache.cassandra.utils.memory.BufferPools;
@@ -423,7 +422,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     {
         assert !batch.isLocal() : "attempted to reserialize a 'local' batch";
 
-        UUIDSerializer.serializer.serialize(batch.id, out, version);
+        batch.id.serialize(out);
         out.writeLong(batch.creationTime);
 
         out.writeUnsignedVInt(batch.getEncodedMutations().size());

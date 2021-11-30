@@ -15,15 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.cassandra.db.marshal;
 
-package org.apache.cassandra.repair;
+import java.util.UUID;
 
-import org.apache.cassandra.utils.TimeUUID;
+import org.apache.cassandra.serializers.TypeSerializer;
+import org.apache.cassandra.serializers.UUIDSerializer;
 
-public class NoSuchRepairSessionException extends Exception
+// Fully compatible with UUID, and indeed is interpreted as UUID for UDF
+public class LegacyTimeUUIDType extends AbstractTimeUUIDType<UUID>
 {
-    public NoSuchRepairSessionException(TimeUUID parentSessionId)
+    public static final LegacyTimeUUIDType instance = new LegacyTimeUUIDType();
+
+    public TypeSerializer<UUID> getSerializer()
     {
-        super(String.format("Parent repair session with id = %s has failed.", parentSessionId));
+        return UUIDSerializer.instance;
     }
 }

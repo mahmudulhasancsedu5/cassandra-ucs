@@ -35,6 +35,7 @@ import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 
+import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.utils.concurrent.FutureCombiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +56,6 @@ import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.NoSpamLogger;
 
 import static com.google.common.collect.Iterables.all;
-import static org.apache.cassandra.net.MessagingService.current_version;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 import static org.apache.cassandra.locator.InetAddressAndPort.hostAddressAndPort;
 import static org.apache.cassandra.utils.FBUtilities.getBroadcastAddressAndPort;
@@ -179,7 +179,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     private boolean maybeCompleted = false;
     private Future<?> closeFuture;
 
-    private final UUID pendingRepair;
+    private final TimeUUID pendingRepair;
     private final PreviewKind previewKind;
 
     /**
@@ -233,7 +233,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
      * Create new streaming session with the peer.
      */
     public StreamSession(StreamOperation streamOperation, InetAddressAndPort peer, StreamingChannel.Factory factory, @Nullable StreamingChannel controlChannel, int messagingVersion,
-                         boolean isFollower, int index, UUID pendingRepair, PreviewKind previewKind)
+                         boolean isFollower, int index, TimeUUID pendingRepair, PreviewKind previewKind)
     {
         this.streamOperation = streamOperation;
         this.peer = peer;
@@ -251,7 +251,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
         return isFollower;
     }
 
-    public UUID planId()
+    public TimeUUID planId()
     {
         return streamResult == null ? null : streamResult.planId;
     }
@@ -271,7 +271,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
         return streamOperation;
     }
 
-    public UUID getPendingRepair()
+    public TimeUUID getPendingRepair()
     {
         return pendingRepair;
     }
@@ -447,7 +447,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     }
 
     @VisibleForTesting
-    public List<OutgoingStream> getOutgoingStreamsForRanges(RangesAtEndpoint replicas, Collection<ColumnFamilyStore> stores, UUID pendingRepair, PreviewKind previewKind)
+    public List<OutgoingStream> getOutgoingStreamsForRanges(RangesAtEndpoint replicas, Collection<ColumnFamilyStore> stores, TimeUUID pendingRepair, PreviewKind previewKind)
     {
         List<OutgoingStream> streams = new ArrayList<>();
         try
