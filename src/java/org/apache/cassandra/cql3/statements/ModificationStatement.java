@@ -667,7 +667,7 @@ public abstract class ModificationStatement implements CQLStatement.SingleKeyspa
         if (!request.appliesTo(current))
             return current.rowIterator();
 
-        PartitionUpdate updates = request.makeUpdates(current);
+        PartitionUpdate updates = request.makeUpdates(current, ballot);
         updates = TriggerExecutor.instance.execute(updates);
 
         Commit proposal = Commit.newProposal(ballot, updates);

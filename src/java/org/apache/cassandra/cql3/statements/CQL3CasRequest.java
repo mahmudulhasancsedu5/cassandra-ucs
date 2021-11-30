@@ -231,11 +231,12 @@ public class CQL3CasRequest implements CASRequest
         return builder.build();
     }
 
-    public PartitionUpdate makeUpdates(FilteredPartition current) throws InvalidRequestException
+    public PartitionUpdate makeUpdates(FilteredPartition current, TimeUUID ballot) throws InvalidRequestException
     {
         PartitionUpdate.Builder updateBuilder = new PartitionUpdate.Builder(metadata, key, updatedColumns(), conditions.size());
+        long timeUuidNanos = 0;
         for (RowUpdate upd : updates)
-            upd.applyUpdates(current, updateBuilder);
+            timeUuidNanos = upd.applyUpdates(current, updateBuilder, ballot.msb(), timeUuidNanos);
         for (RangeDeletion upd : rangeDeletions)
             upd.applyUpdates(current, updateBuilder);
 
@@ -243,6 +244,24 @@ public class CQL3CasRequest implements CASRequest
         IndexRegistry.obtain(metadata).validate(partitionUpdate);
 
         return partitionUpdate;
+    }
+
+    private static class CASUpdateParameters extends UpdateParameters
+    {
+        final long timeUuidMsb;
+        long timeUuidNanos;
+
+        public CASUpdateParameters(TableMetadata metadata, RegularAndStaticColumns updatedColumns, QueryOptions options, long timestamp, int nowInSec, int ttl, Map<DecoratedKey, Partition> prefetchedRows, long timeUuidMsb, long timeUuidNanos) throws InvalidRequestException
+        {
+            super(metadata, updatedColumns, options, timestamp, nowInSec, ttl, prefetchedRows);
+            this.timeUuidMsb = timeUuidMsb;
+            this.timeUuidNanos = timeUuidNanos;
+        }
+
+        public byte[] nextTimeUUIDAsBytes()
+        {
+            return TimeUUID.toBytes(timeUuidMsb, TimeUUIDType.signedBytesToNativeLong(timeUuidNanos++));
+        }
     }
 
     /**
@@ -268,18 +287,15 @@ public class CQL3CasRequest implements CASRequest
             this.nowInSeconds = nowInSeconds;
         }
 
-        void applyUpdates(FilteredPartition current, PartitionUpdate.Builder updateBuilder)
+        long applyUpdates(FilteredPartition current, PartitionUpdate.Builder updateBuilder, long timeUuidMsb, long timeUuidNanos)
         {
             Map<DecoratedKey, Partition> map = stmt.requiresRead() ? Collections.singletonMap(key, current) : null;
-            UpdateParameters params =
-                new UpdateParameters(metadata,
-                                     updateBuilder.columns(),
-                                     options,
-                                     timestamp,
-                                     nowInSeconds,
-                                     stmt.getTimeToLive(options),
-                                     map);
+            CASUpdateParameters params =
+                new CASUpdateParameters(metadata,
+                                     updateBuilder.columns(), options, timestamp, nowInSeconds,
+                                     stmt.getTimeToLive(options), map, timeUuidMsb, timeUuidNanos);
             stmt.addUpdateForKey(updateBuilder, clustering, params);
+            return params.timeUuidNanos;
         }
     }
 
