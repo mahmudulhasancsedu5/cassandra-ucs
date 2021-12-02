@@ -25,8 +25,8 @@ import java.util.Iterator;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.CloseableIterator;
-import org.apache.cassandra.utils.IMergeIterator;
 import org.apache.cassandra.utils.MergeIterator;
+import org.apache.cassandra.utils.Reducer;
 import org.apache.cassandra.utils.Throwables;
 
 /**
@@ -35,7 +35,7 @@ import org.apache.cassandra.utils.Throwables;
 public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
 {
     private final ArrayList<KeyIterator> iters;
-    private volatile IMergeIterator<DecoratedKey, DecoratedKey> mi;
+    private volatile CloseableIterator<DecoratedKey> mi;
     private final long totalLength;
 
     public ReducingKeyIterator(Collection<SSTableReader> sstables)
@@ -68,7 +68,7 @@ public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
         {
             if (mi == null)
             {
-                mi = MergeIterator.get(iters, DecoratedKey.comparator, new MergeIterator.Reducer<DecoratedKey, DecoratedKey>()
+                mi = MergeIterator.getCloseable(iters, DecoratedKey.comparator, new Reducer<DecoratedKey, DecoratedKey>()
                 {
                     DecoratedKey reduced = null;
 
@@ -83,7 +83,7 @@ public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
                         reduced = current;
                     }
 
-                    protected DecoratedKey getReduced()
+                    public DecoratedKey getReduced()
                     {
                         return reduced;
                     }
@@ -108,9 +108,9 @@ public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
         maybeInit();
 
         long m = 0;
-        for (Iterator<DecoratedKey> iter : mi.iterators())
+        for (KeyIterator iter : iters)
         {
-            m += ((KeyIterator) iter).getBytesRead();
+            m += iter.getBytesRead();
         }
         return m;
     }
