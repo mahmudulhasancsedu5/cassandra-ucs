@@ -709,6 +709,20 @@ public class SinglePartitionSliceCommandTest
         return view.sstables.get(0);
     }
 
+    // extend the class to access lowerBound
+    private static class TestIteratorWithLowerBound extends UnfilteredRowIteratorWithLowerBound
+    {
+        public TestIteratorWithLowerBound(DecoratedKey partitionKey, SSTableReader sstable, Slices slices, boolean isReverseOrder, ColumnFilter selectedColumns, SSTableReadsListener listener)
+        {
+            super(partitionKey, sstable, slices, isReverseOrder, selectedColumns, listener);
+        }
+
+        boolean lowerBoundApplicable()
+        {
+            return lowerBound() != null;
+        }
+    }
+
     private boolean lowerBoundApplicable(TableMetadata metadata, DecoratedKey key, Slice slice, SSTableReader sstable, boolean isReversed)
     {
         Slices.Builder slicesBuilder = new Slices.Builder(metadata.comparator);
@@ -724,14 +738,14 @@ public class SinglePartitionSliceCommandTest
                                                                            key,
                                                                            filter);
 
-        try (UnfilteredRowIteratorWithLowerBound iter = new UnfilteredRowIteratorWithLowerBound(key,
-                                                                                                sstable,
-                                                                                                slices,
-                                                                                                isReversed,
-                                                                                                ColumnFilter.all(metadata),
-                                                                                                Mockito.mock(SSTableReadsListener.class)))
+        try (TestIteratorWithLowerBound iter = new TestIteratorWithLowerBound(key,
+                                                                              sstable,
+                                                                              slices,
+                                                                              isReversed,
+                                                                              ColumnFilter.all(metadata),
+                                                                              Mockito.mock(SSTableReadsListener.class)))
         {
-            return iter.lowerBound() != null;
+            return iter.lowerBoundApplicable();
         }
     }
 
