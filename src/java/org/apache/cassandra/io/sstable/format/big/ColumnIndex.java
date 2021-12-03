@@ -22,11 +22,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ClusteringPrefix;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.SerializationHeader;
@@ -34,17 +32,17 @@ import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
+import org.apache.cassandra.io.sstable.format.SortedTablePartitionWriter;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.SequentialWriter;
-import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
  * Column index builder used by {@link org.apache.cassandra.io.sstable.format.big.BigTableWriter}.
  * For index entries that exceed {@link org.apache.cassandra.config.Config#column_index_cache_size_in_kb},
  * this uses the serialization logic as in {@link BigTableRowIndexEntry}.
  */
-public class ColumnIndex
+public class ColumnIndex extends SortedTablePartitionWriter
 {
     // used, if the row-index-entry reaches config column_index_cache_size_in_kb
     private DataOutputBuffer buffer;
@@ -58,35 +56,9 @@ public class ColumnIndex
     public int columnIndexCount;
     private int[] indexOffsets;
 
-    private final SerializationHelper helper;
-    private final SerializationHeader header;
-    private final int version;
-    private final SequentialWriter writer;
-    private long initialPosition;
     private final  ISerializer<IndexInfo> idxSerializer;
     public long headerLength;
-    private long startPosition;
-
-    private int written;
-    private long previousRowStart;
-
-    private ClusteringPrefix<?> firstClustering;
-    private ClusteringPrefix<?> lastClustering;
-
-    private DeletionTime openMarker;
-
     private int cacheSizeThreshold;
-
-    private final Collection<SSTableFlushObserver> observers;
-
-    // Sequence control, also used to add empty static row if `addStaticRow` is not called.
-    private enum State
-    {
-        AWAITING_PARTITION_HEADER,
-        AWAITING_STATIC_ROW,
-        AWAITING_ROWS
-    }
-    State state;
 
     public ColumnIndex(SerializationHeader header,
                         SequentialWriter writer,
@@ -94,77 +66,39 @@ public class ColumnIndex
                         Collection<SSTableFlushObserver> observers,
                         ISerializer<IndexInfo> indexInfoSerializer)
     {
-        this.helper = new SerializationHelper(header);
-        this.header = header;
-        this.writer = writer;
-        this.version = version.correspondingMessagingVersion();
-        this.observers = observers;
+        super(header, writer, version, observers);
         this.idxSerializer = indexInfoSerializer;
+    }
+
+    public void close()
+    {
     }
 
     public void reset()
     {
-        this.initialPosition = writer.position();
+        super.reset();
         this.headerLength = -1;
-        this.startPosition = -1;
-        this.previousRowStart = 0;
-        this.columnIndexCount = 0;
-        this.written = 0;
-        this.indexSamplesSerializedSize = 0;
         this.indexSamples.clear();
-        this.firstClustering = null;
-        this.lastClustering = null;
-        this.openMarker = null;
+        this.indexSamplesSerializedSize = 0;
+        this.columnIndexCount = 0;
 
         int newCacheSizeThreshold = DatabaseDescriptor.getColumnIndexCacheSize();
         if (this.buffer != null && this.cacheSizeThreshold == newCacheSizeThreshold)
             this.reusableBuffer = this.buffer;
         this.buffer = null;
         this.cacheSizeThreshold = newCacheSizeThreshold;
-        this.state = State.AWAITING_PARTITION_HEADER;
     }
 
-    @VisibleForTesting
-    public void buildRowIndex(UnfilteredRowIterator iterator) throws IOException
+    public void writePartitionHeader(DecoratedKey partitionKey, DeletionTime partitionLevelDeletion) throws IOException
     {
-        writePartitionHeader(iterator.partitionKey(), iterator.partitionLevelDeletion());
-        if (!iterator.staticRow().isEmpty())
-            addUnfiltered(iterator.staticRow());
-
-        while (iterator.hasNext())
-            addUnfiltered(iterator.next());
-
-        endPartition();
+        super.writePartitionHeader(partitionKey, partitionLevelDeletion);
+        this.headerLength = currentPosition();    // this may be updated after the static row is written
     }
 
-    void writePartitionHeader(DecoratedKey partitionKey, DeletionTime partitionLevelDeletion) throws IOException
+    protected void doWriteStaticRow(Row staticRow) throws IOException
     {
-        assert state == State.AWAITING_PARTITION_HEADER;
-        ByteBufferUtil.writeWithShortLength(partitionKey.getKey(), writer);
-
-        long partitionDeletionPosition = writer.position();
-        DeletionTime.serializer.serialize(partitionLevelDeletion, writer);
-        if (!observers.isEmpty())
-            observers.forEach((o) -> o.partitionLevelDeletion(partitionLevelDeletion, partitionDeletionPosition));
-        state = header.hasStatic() ? State.AWAITING_STATIC_ROW : State.AWAITING_ROWS;
-        this.headerLength = writer.position() - initialPosition;    // this may be updated after the static row is written
-    }
-
-    private void doWriteStaticRow(Row staticRow) throws IOException
-    {
-        assert state == State.AWAITING_STATIC_ROW;
-        long staticRowPosition = writer.position();
-        UnfilteredSerializer.serializer.serializeStaticRow(staticRow, helper, writer, version);
-        if (!observers.isEmpty())
-            observers.forEach(o -> o.staticRow(staticRow, staticRowPosition));
-        state = State.AWAITING_ROWS;
-        this.headerLength = writer.position() - initialPosition;
-    }
-
-
-    private long currentPosition()
-    {
-        return writer.position() - initialPosition;
+        super.doWriteStaticRow(staticRow);
+        this.headerLength = currentPosition();
     }
 
     public ByteBuffer buffer()
@@ -189,13 +123,13 @@ public class ColumnIndex
                : null;
     }
 
-    private void addIndexBlock() throws IOException
+    protected void addIndexBlock() throws IOException
     {
         IndexInfo cIndexInfo = new IndexInfo(firstClustering,
                                              lastClustering,
                                              startPosition,
                                              currentPosition() - startPosition,
-                                             openMarker);
+                                             !openMarker.isLive() ? openMarker : null);
 
         // indexOffsets is used for both shallow (ShallowIndexedEntry) and non-shallow IndexedEntry.
         // For shallow ones, we need it to serialize the offsts in finish().
@@ -267,59 +201,13 @@ public class ColumnIndex
         return new DataOutputBuffer(cacheSizeThreshold * 2);
     }
 
-    void addUnfiltered(Unfiltered unfiltered) throws IOException
+    public long endPartition() throws IOException
     {
-        if (state == State.AWAITING_STATIC_ROW)
-        {
-            if (unfiltered.isRow() && ((Row) unfiltered).isStatic())
-            {
-                doWriteStaticRow((Row) unfiltered);
-                return;
-            }
-
-            doWriteStaticRow(Rows.EMPTY_STATIC_ROW);
-        }
-
-        assert state == State.AWAITING_ROWS;
-
-        long pos = currentPosition();
-
-        if (firstClustering == null)
-        {
-            // Beginning of an index block. Remember the start and position
-            firstClustering = unfiltered.clustering();
-            startPosition = pos;
-        }
-
-        long unfilteredPosition = writer.position();
-        UnfilteredSerializer.serializer.serialize(unfiltered, helper, writer, pos - previousRowStart, version);
-
-        // notify observers about each new row
-        if (!observers.isEmpty())
-            observers.forEach((o) -> o.nextUnfilteredCluster(unfiltered, unfilteredPosition));
-
-        lastClustering = unfiltered.clustering();
-        previousRowStart = pos;
-        ++written;
-
-        if (unfiltered.kind() == Unfiltered.Kind.RANGE_TOMBSTONE_MARKER)
-        {
-            RangeTombstoneMarker marker = (RangeTombstoneMarker) unfiltered;
-            openMarker = marker.isOpen(false) ? marker.openDeletionTime(false) : null;
-        }
-
-        // if we hit the column index size that we have to index after, go ahead and index it.
-        if (currentPosition() - startPosition >= DatabaseDescriptor.getColumnIndexSize())
-            addIndexBlock();
-    }
-
-    protected void endPartition() throws IOException
-    {
-        UnfilteredSerializer.serializer.writeEndOfPartition(writer);
+        long endPosition = super.endPartition();
 
         // It's possible we add no rows, just a top level deletion
         if (written == 0)
-            return;
+            return endPosition;
 
         // the last column may have fallen on an index boundary already.  if not, index it explicitly.
         if (firstClustering != null)
@@ -334,6 +222,7 @@ public class ColumnIndex
 
         // we should always have at least one computed index block, but we only write it out if there is more than that.
         assert columnIndexCount > 0 && headerLength >= 0;
+        return endPosition;
     }
 
     public int indexInfoSerializedSize()
