@@ -156,8 +156,6 @@ public abstract class SortedTableWriter extends SSTableWriter
 
     protected boolean startPartitionMetadata(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
     {
-        // TODO: Move all observer handling (including the pieces in ColumnWriter) to SSTableWriter
-        // TODO: Move all guardrails calls to SSTableWriter
         if (key.getKeyLength() > FBUtilities.MAX_UNSIGNED_SHORT)
         {
             logger.error("Key size {} exceeds maximum of {}, skipping row", key.getKeyLength(), FBUtilities.MAX_UNSIGNED_SHORT);
