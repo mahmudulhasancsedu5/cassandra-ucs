@@ -555,33 +555,47 @@ public class Columns extends AbstractCollection<ColumnMetadata> implements Colle
             }
         }
 
-        public List<ColumnMetadata> deserializeSubset(List<ColumnMetadata> superset,
-                                                      RandomAccessReader in,
-                                                      List<ColumnMetadata> reusableList)
+        /**
+         * Deserialize a columns subset, placing the selected columns in the given array and returning the number of
+         * columns.
+         *
+         * @param superset the full list of columns
+         * @param in file from which the subset should be read
+         * @param placeInto An array where the selected columns will be placed, in the same order as superset. Must
+         *                  be at least superset.length long.
+         * @return the number of items placed in the target array, <= superset.length.
+         * @throws IOException
+         */
+        public int deserializeSubset(ColumnMetadata[] superset,
+                                     DataInputPlus in,
+                                     ColumnMetadata[] placeInto)
         throws IOException
         {
             long encoded = in.readUnsignedVInt();
             if (encoded == 0L)
             {
-                return superset;
+                // this is wasteful, but we don't expect to be called in this case (rows will have a flag set that
+                // bypasses this path).
+                System.arraycopy(superset, 0, placeInto, 0, superset.length);
+                return superset.length;
             }
-            else if (superset.size() >= 64)
+            else if (superset.length >= 64)
             {
-                return deserializeLargeSubset(in, superset, (int) encoded, reusableList);
+                return deserializeLargeSubset(in, superset, (int) encoded, placeInto);
             }
             else
             {
-                reusableList.clear();
+                int count = 0;
                 for (ColumnMetadata column : superset)
                 {
                     if ((encoded & 1) == 0)
-                        reusableList.add(column);
+                        placeInto[count++] = column;
 
                     encoded >>>= 1;
                 }
                 if (encoded != 0)
                     throw new IOException("Invalid Columns subset bytes; too many bits set:" + Long.toBinaryString(encoded));
-                return reusableList;
+                return count;
             }
         }
 
@@ -684,46 +698,41 @@ public class Columns extends AbstractCollection<ColumnMetadata> implements Colle
         }
 
         @DontInline
-        private List<ColumnMetadata> deserializeLargeSubset(DataInputPlus in,
-                                                            List<ColumnMetadata> superset,
-                                                            int delta,
-                                                            List<ColumnMetadata> reusableList)
+        private int deserializeLargeSubset(DataInputPlus in,
+                                           ColumnMetadata[] superset,
+                                           int delta,
+                                           ColumnMetadata[] placeInto)
         throws IOException
         {
-            int supersetCount = superset.size();
+            int supersetCount = superset.length;
             int columnCount = supersetCount - delta;
 
-            reusableList.clear();
+            int count = 0;
             if (columnCount < supersetCount / 2)
             {
                 for (int i = 0 ; i < columnCount ; i++)
                 {
                     int idx = (int) in.readUnsignedVInt();
-                    reusableList.add(superset.get(idx));
+                    placeInto[count++] = superset[idx];
                 }
             }
             else
             {
-                Iterator<ColumnMetadata> iter = superset.iterator();
                 int idx = 0;
                 int skipped = 0;
                 while (true)
                 {
                     int nextMissingIndex = skipped < delta ? (int)in.readUnsignedVInt() : supersetCount;
                     while (idx < nextMissingIndex)
-                    {
-                        ColumnMetadata def = iter.next();
-                        reusableList.add(def);
-                        idx++;
-                    }
+                        placeInto[count++] = superset[idx++];
+
                     if (idx == supersetCount)
                         break;
-                    iter.next();
                     idx++;
                     skipped++;
                 }
             }
-            return reusableList;
+            return count;
         }
 
         @DontInline
