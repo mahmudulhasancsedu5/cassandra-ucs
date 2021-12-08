@@ -40,9 +40,6 @@ import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 
 /**
  * Cursor over sstable data files.
@@ -59,10 +56,12 @@ public class BigTableCursor implements SSTableCursor
     private ClusteringPrefix<?> clusteringKey;
 
     private int rowFlags;
-    private Iterator<ColumnMetadata> columnsToRead;
-    private final List<ColumnMetadata> columnsReusableList;
-    private final List<ColumnMetadata> allColumns;
-    private final List<ColumnMetadata> allStaticColumns;
+    private int currentColumnIndex;
+    private int columnsToRead;
+    private ColumnMetadata[] columns;
+    private final ColumnMetadata[] columnsReusableArray;
+    private final ColumnMetadata[] regularColumns;
+    private final ColumnMetadata[] staticColumns;
     private ColumnMetadata columnMetadata;
     private int cellsLeftInColumn;
     private Cell<byte[]> currentCell;
@@ -92,10 +91,19 @@ public class BigTableCursor implements SSTableCursor
         this.helper = new DeserializationHelper(sstable.metadata(), sstable.descriptor.version.correspondingMessagingVersion(), DeserializationHelper.Flag.LOCAL);
         this.sstable = sstable;
         this.activeRangeDeletion = DeletionTime.LIVE;
-        this.allColumns = new ArrayList<>(header.columns(false));
-        this.allStaticColumns = header.hasStatic() ? new ArrayList<>(header.columns(true)) : null;
-        this.columnsReusableList = new ArrayList<>(allColumns.size());
-        this.columnsToRead = null;
+        this.regularColumns = toArray(header.columns(false));
+        this.staticColumns = toArray(header.columns(true));
+        this.columnsReusableArray = new ColumnMetadata[Math.max(regularColumns.length, staticColumns.length)];
+    }
+
+    private static ColumnMetadata[] toArray(Columns columns)
+    {
+        ColumnMetadata[] array = new ColumnMetadata[columns.size()];
+        int index = 0;
+        for (ColumnMetadata cm : columns)
+            array[index++] = cm;
+        assert index == array.length;
+        return array;
     }
 
     private boolean consumePartitionHeader() throws IOException
@@ -218,7 +226,7 @@ public class BigTableCursor implements SSTableCursor
         boolean hasDeletion = (rowFlags & UnfilteredSerializer.HAS_DELETION) != 0;
         // shadowable deletions are obsolete
         boolean hasAllColumns = (rowFlags & UnfilteredSerializer.HAS_ALL_COLUMNS) != 0;
-        List<ColumnMetadata> headerColumns = isStatic ? allStaticColumns : allColumns;
+        ColumnMetadata[] headerColumns = isStatic ? staticColumns : regularColumns;
 
         if (hasTimestamp)
         {
@@ -242,14 +250,21 @@ public class BigTableCursor implements SSTableCursor
             rowLevelDeletion = DeletionTime.LIVE;
 
         if (hasAllColumns)
-            columnsToRead = headerColumns.iterator();
+        {
+            columns = headerColumns;
+            columnsToRead = headerColumns.length;
+        }
         else
-            columnsToRead = Columns.serializer.deserializeSubset(headerColumns, dataFile, columnsReusableList).iterator();
+        {
+            columns = columnsReusableArray;
+            columnsToRead = Columns.serializer.deserializeSubset(headerColumns, dataFile, columns);
+        }
 
-        if (!hasTimestamp && !hasDeletion && !columnsToRead.hasNext())
+        if (!hasTimestamp && !hasDeletion && columnsToRead == 0)
             return false;
 
         this.cellsLeftInColumn = 0;
+        this.currentColumnIndex = 0;
         return true;
     }
 
@@ -259,10 +274,10 @@ public class BigTableCursor implements SSTableCursor
         {
             if (cellsLeftInColumn == 0)
             {
-                if (!columnsToRead.hasNext())
+                if (currentColumnIndex == columnsToRead)
                     return false;
 
-                columnMetadata = columnsToRead.next();
+                columnMetadata = columns[currentColumnIndex++];
                 assert helper.includes(columnMetadata);  // we are fetching all columns
                 if (columnMetadata.isComplex())
                 {
