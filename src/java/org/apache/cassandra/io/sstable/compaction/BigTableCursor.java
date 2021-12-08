@@ -40,6 +40,9 @@ import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Cursor over sstable data files.
@@ -56,8 +59,10 @@ public class BigTableCursor implements SSTableCursor
     private ClusteringPrefix<?> clusteringKey;
 
     private int rowFlags;
-    private Columns columns;
-    private int currentColumnIndex;
+    private Iterator<ColumnMetadata> columnsToRead;
+    private final List<ColumnMetadata> columnsReusableList;
+    private final List<ColumnMetadata> allColumns;
+    private final List<ColumnMetadata> allStaticColumns;
     private ColumnMetadata columnMetadata;
     private int cellsLeftInColumn;
     private Cell<byte[]> currentCell;
@@ -87,6 +92,10 @@ public class BigTableCursor implements SSTableCursor
         this.helper = new DeserializationHelper(sstable.metadata(), sstable.descriptor.version.correspondingMessagingVersion(), DeserializationHelper.Flag.LOCAL);
         this.sstable = sstable;
         this.activeRangeDeletion = DeletionTime.LIVE;
+        this.allColumns = new ArrayList<>(header.columns(false));
+        this.allStaticColumns = header.hasStatic() ? new ArrayList<>(header.columns(true)) : null;
+        this.columnsReusableList = new ArrayList<>(allColumns.size());
+        this.columnsToRead = null;
     }
 
     private boolean consumePartitionHeader() throws IOException
@@ -209,7 +218,7 @@ public class BigTableCursor implements SSTableCursor
         boolean hasDeletion = (rowFlags & UnfilteredSerializer.HAS_DELETION) != 0;
         // shadowable deletions are obsolete
         boolean hasAllColumns = (rowFlags & UnfilteredSerializer.HAS_ALL_COLUMNS) != 0;
-        Columns headerColumns = header.columns(isStatic);
+        List<ColumnMetadata> headerColumns = isStatic ? allStaticColumns : allColumns;
 
         if (hasTimestamp)
         {
@@ -232,13 +241,14 @@ public class BigTableCursor implements SSTableCursor
         else
             rowLevelDeletion = DeletionTime.LIVE;
 
-        // TODO: Improve column presence decoding, there should be no need for an array here
-        columns = hasAllColumns ? headerColumns : Columns.serializer.deserializeSubset(headerColumns, dataFile);
+        if (hasAllColumns)
+            columnsToRead = headerColumns.iterator();
+        else
+            columnsToRead = Columns.serializer.deserializeSubset(headerColumns, dataFile, columnsReusableList).iterator();
 
-        if (!hasTimestamp && !hasDeletion && columns.isEmpty())
+        if (!hasTimestamp && !hasDeletion && !columnsToRead.hasNext())
             return false;
 
-        this.currentColumnIndex = -1;
         this.cellsLeftInColumn = 0;
         return true;
     }
@@ -249,10 +259,10 @@ public class BigTableCursor implements SSTableCursor
         {
             if (cellsLeftInColumn == 0)
             {
-                if (++currentColumnIndex == columns.size())
+                if (!columnsToRead.hasNext())
                     return false;
 
-                columnMetadata = this.columns.getSimple(currentColumnIndex);
+                columnMetadata = columnsToRead.next();
                 assert helper.includes(columnMetadata);  // we are fetching all columns
                 if (columnMetadata.isComplex())
                 {

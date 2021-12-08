@@ -28,6 +28,8 @@ import com.google.common.collect.Iterators;
 
 import net.nicoulaj.compilecommand.annotations.DontInline;
 import org.apache.cassandra.exceptions.UnknownColumnException;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -553,6 +555,36 @@ public class Columns extends AbstractCollection<ColumnMetadata> implements Colle
             }
         }
 
+        public List<ColumnMetadata> deserializeSubset(List<ColumnMetadata> superset,
+                                                      RandomAccessReader in,
+                                                      List<ColumnMetadata> reusableList)
+        throws IOException
+        {
+            long encoded = in.readUnsignedVInt();
+            if (encoded == 0L)
+            {
+                return superset;
+            }
+            else if (superset.size() >= 64)
+            {
+                return deserializeLargeSubset(in, superset, (int) encoded, reusableList);
+            }
+            else
+            {
+                reusableList.clear();
+                for (ColumnMetadata column : superset)
+                {
+                    if ((encoded & 1) == 0)
+                        reusableList.add(column);
+
+                    encoded >>>= 1;
+                }
+                if (encoded != 0)
+                    throw new IOException("Invalid Columns subset bytes; too many bits set:" + Long.toBinaryString(encoded));
+                return reusableList;
+            }
+        }
+
         // encodes a 1 bit for every *missing* column, on the assumption presence is more common,
         // and because this is consistent with encoding 0 to represent all present
         private static long encodeBitmap(Collection<ColumnMetadata> columns, Columns superset, int supersetCount)
@@ -652,6 +684,49 @@ public class Columns extends AbstractCollection<ColumnMetadata> implements Colle
         }
 
         @DontInline
+        private List<ColumnMetadata> deserializeLargeSubset(DataInputPlus in,
+                                                            List<ColumnMetadata> superset,
+                                                            int delta,
+                                                            List<ColumnMetadata> reusableList)
+        throws IOException
+        {
+            int supersetCount = superset.size();
+            int columnCount = supersetCount - delta;
+
+            reusableList.clear();
+            if (columnCount < supersetCount / 2)
+            {
+                for (int i = 0 ; i < columnCount ; i++)
+                {
+                    int idx = (int) in.readUnsignedVInt();
+                    reusableList.add(superset.get(idx));
+                }
+            }
+            else
+            {
+                Iterator<ColumnMetadata> iter = superset.iterator();
+                int idx = 0;
+                int skipped = 0;
+                while (true)
+                {
+                    int nextMissingIndex = skipped < delta ? (int)in.readUnsignedVInt() : supersetCount;
+                    while (idx < nextMissingIndex)
+                    {
+                        ColumnMetadata def = iter.next();
+                        reusableList.add(def);
+                        idx++;
+                    }
+                    if (idx == supersetCount)
+                        break;
+                    iter.next();
+                    idx++;
+                    skipped++;
+                }
+            }
+            return reusableList;
+        }
+
+        @DontInline
         private int serializeLargeSubsetSize(Collection<ColumnMetadata> columns, int columnCount, Columns superset, int supersetCount)
         {
             // write flag indicating we're in lengthy mode
@@ -684,6 +759,5 @@ public class Columns extends AbstractCollection<ColumnMetadata> implements Colle
             }
             return size;
         }
-
     }
 }
