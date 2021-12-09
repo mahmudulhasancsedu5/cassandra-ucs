@@ -47,6 +47,8 @@ import org.apache.cassandra.schema.TableMetadata;
  */
 public class CompactionCursor implements SSTableCursorMerger.MergeListener, AutoCloseable
 {
+    private static final long MILLISECONDS_TO_UPDATE_PROGRESS = 1000;
+
     private final OperationType type;
     private final CompactionController controller;
     private final ImmutableSet<SSTableReader> sstables;
@@ -55,6 +57,8 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
     private final Row.Builder rowBuilder;
 
     private final long totalBytes;
+    private volatile long currentBytes;
+    private long currentProgressMillisSinceStartup;
 
     /**
      * Merged frequency counters for partitions and rows (AKA histograms).
@@ -80,6 +84,8 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
         this.sstables = ImmutableSet.copyOf(readers);
         this.cursor = makeMergedAndPurgedCursor(readers, controller, limiter, nowInSec);
         this.totalBytes = cursor.bytesTotal();
+        this.currentBytes = 0;
+        this.currentProgressMillisSinceStartup = System.currentTimeMillis();
     }
 
     private SSTableCursor makeMergedAndPurgedCursor(Collection<SSTableReader> readers,
@@ -126,6 +132,7 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
             case PARTITION:
                 if (wasInitialized)
                     writer.endPartition();
+                maybeUpdateProgress();
                 // The writer can reject a partition (e.g. due to long key). Loop until it accepts one.
                 while (!writer.startPartition(cursor.partitionKey(), cursor.partitionLevelDeletion()))
                 {
@@ -137,10 +144,24 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
             case EXHAUSTED:
                 if (wasInitialized)
                     writer.endPartition();
+                updateProgress(Long.MAX_VALUE);
                 return SSTableCursor.Type.EXHAUSTED;
             default:
                 throw new AssertionError();
         }
+    }
+
+    private void maybeUpdateProgress()
+    {
+        long now = System.currentTimeMillis();
+        if (now - currentProgressMillisSinceStartup > MILLISECONDS_TO_UPDATE_PROGRESS)
+            updateProgress(now);
+    }
+
+    private void updateProgress(long now)
+    {
+        currentBytes = cursor.bytesProcessed();
+        currentProgressMillisSinceStartup = now;
     }
 
     private Row collectRow()
@@ -205,7 +226,10 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
 
     long bytesRead()
     {
-        return cursor.bytesProcessed();
+        // Note: This may be called from other threads. Reading the current positions in the sources is not safe as
+        // random access readers aren't thread-safe. To avoid problems we track the progress in the processing thread
+        // and store it in a volatile field.
+        return currentBytes;
     }
 
     long totalBytes()
