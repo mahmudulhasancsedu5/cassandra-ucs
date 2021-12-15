@@ -18,11 +18,17 @@
 package org.apache.cassandra.io.sstable;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.cache.InstrumentingCache;
+import org.apache.cassandra.cache.KeyCacheKey;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
@@ -33,6 +39,7 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.format.RowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
+import org.apache.cassandra.io.sstable.format.big.BigTableRowIndexEntry;
 import org.apache.cassandra.utils.INativeLibrary;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
@@ -71,6 +78,8 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
     private final boolean eagerWriterMetaRelease; // true if the writer metadata should be released when switch is called
 
     private SSTableWriter writer;
+    Map<DecoratedKey, RowIndexEntry> migratedCacheKeys;
+    DecoratedKey currentKey;
 
     // for testing (TODO: remove when have byteman setup)
     private boolean throwEarly, throwLate;
@@ -129,18 +138,38 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
         DecoratedKey key = partition.partitionKey();
         maybeReopenEarly(key);
         RowIndexEntry indexEntry = writer.append(partition);
+        maybeMigrateCache(key, indexEntry);
         return indexEntry != null;
     }
 
     public boolean startPartition(DecoratedKey key, DeletionTime deletionTime) throws IOException
     {
+        currentKey = key;
         maybeReopenEarly(key);
         return writer.startPartition(key, deletionTime);
     }
 
     public void endPartition() throws IOException
     {
-        writer.endPartition();
+        RowIndexEntry indexEntry = writer.endPartition();
+        maybeMigrateCache(currentKey, indexEntry);
+    }
+
+    private void maybeMigrateCache(DecoratedKey key, RowIndexEntry indexEntry)
+    {
+        if (!DatabaseDescriptor.shouldMigrateKeycacheOnCompaction() || transaction.isOffline())
+            return;
+
+        for (SSTableReader reader : transaction.originals())
+        {
+            if (reader.getCachedPosition(key, false) != null)
+            {
+                if (migratedCacheKeys == null)
+                    migratedCacheKeys = new HashMap<>();
+                migratedCacheKeys.put(key, indexEntry);
+                break;
+            }
+        }
     }
 
     public void addUnfiltered(Unfiltered unfiltered) throws IOException
@@ -225,6 +254,17 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
             return;
 
         newReader.setupOnline();
+        List<DecoratedKey> invalidateKeys = null;
+        if (migratedCacheKeys != null && !migratedCacheKeys.isEmpty())
+        {
+            invalidateKeys = new ArrayList<>(migratedCacheKeys.size());
+            for (Map.Entry<DecoratedKey, RowIndexEntry> cacheKey : migratedCacheKeys.entrySet())
+            {
+                invalidateKeys.add(cacheKey.getKey());
+                newReader.cacheKey(cacheKey.getKey(), (BigTableRowIndexEntry) cacheKey.getValue());
+            }
+            migratedCacheKeys.clear();
+        }
 
         for (SSTableReader sstable : transaction.originals())
         {
@@ -236,11 +276,17 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
             if (latest.first.compareTo(lowerbound) > 0)
                 continue;
 
+            Runnable runOnClose = invalidateKeys != null ? new InvalidateKeys(latest, invalidateKeys) : null;
             if (lowerbound.compareTo(latest.last) >= 0)
             {
                 if (!transaction.isObsolete(latest))
+                {
+                    if (runOnClose != null)
+                    {
+                        latest.runOnClose(runOnClose);
+                    }
                     transaction.obsolete(latest);
-
+                }
                 continue;
             }
 
@@ -248,8 +294,34 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
             {
                 DecoratedKey newStart = latest.firstKeyBeyond(lowerbound);
                 assert newStart != null;
-                SSTableReader replacement = latest.cloneWithNewStart(newStart, null);
+                SSTableReader replacement = latest.cloneWithNewStart(newStart, runOnClose);
                 transaction.update(replacement, true);
+            }
+        }
+    }
+
+    private static final class InvalidateKeys implements Runnable
+    {
+        final List<KeyCacheKey> cacheKeys = new ArrayList<>();
+        final WeakReference<InstrumentingCache<KeyCacheKey, ?>> cacheRef;
+
+        private InvalidateKeys(SSTableReader reader, Collection<DecoratedKey> invalidate)
+        {
+            this.cacheRef = new WeakReference<>(reader.getKeyCache());
+            if (cacheRef.get() != null)
+            {
+                for (DecoratedKey key : invalidate)
+                    cacheKeys.add(reader.getCacheKey(key));
+            }
+        }
+
+        public void run()
+        {
+            for (KeyCacheKey key : cacheKeys)
+            {
+                InstrumentingCache<KeyCacheKey, ?> cache = cacheRef.get();
+                if (cache != null)
+                    cache.remove(key);
             }
         }
     }
