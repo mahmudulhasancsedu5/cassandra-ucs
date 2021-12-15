@@ -53,7 +53,7 @@ public interface SSTableFormat
 
         public static Type current()
         {
-            return Type.valueOf(System.getProperty(FORMAT_DEFAULT_PROP, BTI.name()).toUpperCase());
+            return Type.valueOf(System.getProperty(FORMAT_DEFAULT_PROP, BIG.name()).toUpperCase());
         }
 
         Type(String name, SSTableFormat info)
