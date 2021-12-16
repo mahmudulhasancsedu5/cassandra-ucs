@@ -65,6 +65,10 @@ public class CompactionTask extends AbstractCompactionTask
 {
     protected static final Logger logger = LoggerFactory.getLogger(CompactionTask.class);
 
+    // Allows one to turn off cursors in compaction.
+    private static final boolean CURSORS_ENABLED =
+        Boolean.parseBoolean(System.getProperty("cassandra.allow_cursor_compaction", "true"));
+
     protected final int gcBefore;
     protected final boolean keepOriginals;
     /** for trace logging purposes only */
@@ -207,14 +211,16 @@ public class CompactionTask extends AbstractCompactionTask
         Set<SSTableReader> actuallyCompact = Sets.difference(transaction.originals(), fullyExpiredSSTables);
 
         // Cursors currently don't support:
-        boolean compactByIterators = strategy != null && !strategy.supportsCursorCompaction()  // strategy does not support it
+        boolean compactByIterators = !CURSORS_ENABLED
+                                     ||strategy != null && !strategy.supportsCursorCompaction()  // strategy does not support it
                                      || controller.shouldProvideTombstoneSources()  // garbagecollect
                                      || realm.getIndexManager().hasIndexes()
                                      || realm.metadata().enforceStrictLiveness();   // indexes
 
-        logger.debug("Compacting in {} by {}: {} {} {} {}",
+        logger.debug("Compacting in {} by {}: {} {} {} {} {}",
                      realm.toString(),
                      compactByIterators ? "iterators" : "cursors",
+                     CURSORS_ENABLED ? "" : "cursors disabled",
                      strategy == null ? "no table compaction strategy"
                                       : !strategy.supportsCursorCompaction() ? "no cursor support"
                                                                              : "",
