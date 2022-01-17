@@ -419,6 +419,29 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
         testBuffers(tt, tests);
     }
 
+    @Test
+    public void testTupleNewField()
+    {
+        TupleType t1 = new TupleType(ImmutableList.of(UTF8Type.instance));
+        TupleType t2 = new TupleType(ImmutableList.of(UTF8Type.instance, Int32Type.instance));
+
+        ByteBuffer vOne = TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {decomposeAndRandomPad(UTF8Type.instance, "str")});
+        ByteBuffer vOneAndNull = TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {decomposeAndRandomPad(UTF8Type.instance, "str"),
+                                                                                                     null});
+
+        ByteComparable bOne1 = typeToComparable(t1, vOne);
+        ByteComparable bOne2 = typeToComparable(t2, vOne);
+        ByteComparable bOneAndNull2 = typeToComparable(t2, vOneAndNull);
+
+        assertEquals("The byte-comparable version of a one-field tuple must be the same as a two-field tuple with non-present second component.",
+                     bOne1.byteComparableAsString(Version.OSS41),
+                     bOne2.byteComparableAsString(Version.OSS41));
+        assertEquals("The byte-comparable version of a one-field tuple must be the same as a two-field tuple with null as second component.",
+                     bOne1.byteComparableAsString(Version.OSS41),
+                     bOneAndNull2.byteComparableAsString(Version.OSS41));
+    }
+
+
     void assertTupleComparesSame(AbstractType t1, AbstractType t2, Object o1, Object o2, Object o3, Object o4)
     {
         TupleType tt = new TupleType(ImmutableList.of(t1, t2));
