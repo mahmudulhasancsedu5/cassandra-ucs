@@ -78,7 +78,7 @@ public abstract class AbstractMemtable implements Memtable
         return minLocalDeletionTime.get();
     }
 
-    protected void updateMin(AtomicLong minTracker, long newValue)
+    protected static void updateMin(AtomicLong minTracker, long newValue)
     {
         while (true)
         {
@@ -90,7 +90,7 @@ public abstract class AbstractMemtable implements Memtable
         }
     }
 
-    protected void updateMin(AtomicInteger minTracker, int newValue)
+    protected static void updateMin(AtomicInteger minTracker, int newValue)
     {
         while (true)
         {

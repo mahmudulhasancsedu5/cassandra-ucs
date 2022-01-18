@@ -70,5 +70,8 @@ memtable_templates:
         shards: 4
     skiplist:
         class: SkipListMemtable
+    sharded:
+        class: ShardedSkipListMemtable
+        shards: 4
 memtable:
-    template: skiplist
+    template: sharded
