@@ -264,6 +264,15 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     }
 
     @Override
+    public int getMinLocalDeletionTime()
+    {
+        int min = Integer.MAX_VALUE;
+        for (MemtableShard shard : shards)
+            min =  Integer.min(min, shard.minLocalDeletionTime());
+        return min;
+    }
+
+    @Override
     RegularAndStaticColumns columns()
     {
         for (MemtableShard shard : shards)
@@ -411,6 +420,8 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         // The smallest timestamp for all partitions stored in this shard
         private volatile long minTimestamp = Long.MAX_VALUE;
 
+        private volatile int minLocalDeletionTime = Integer.MAX_VALUE;
+
         private volatile long liveDataSize = 0;
 
         private volatile long currentOperations = 0;
@@ -494,6 +505,7 @@ public class TrieMemtable extends AbstractAllocatorMemtable
                 finally
                 {
                     updateMinTimestamp(update.stats().minTimestamp);
+                    updateMinLocalDeletionTime(update.stats().minLocalDeletionTime);
                     updateLiveDataSize(updater.dataSize);
                     updateCurrentOperations(update.operationCount());
 
@@ -518,6 +530,12 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         {
             if (timestamp < minTimestamp)
                 minTimestamp = timestamp;
+        }
+
+        private void updateMinLocalDeletionTime(int delTime)
+        {
+            if (delTime < minLocalDeletionTime)
+                minLocalDeletionTime = delTime;
         }
 
         void updateLiveDataSize(long size)
@@ -548,6 +566,11 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         long currentOperations()
         {
             return currentOperations;
+        }
+
+        int minLocalDeletionTime()
+        {
+            return minLocalDeletionTime;
         }
     }
 
