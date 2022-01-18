@@ -107,6 +107,7 @@ public abstract class AbstractAllocatorMemtable extends AbstractMemtableWithComm
     public AbstractAllocatorMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner)
     {
         super(metadataRef, commitLogLowerBound);
+        logger.info("Creating memtable, class {} config {}", getClass().getSimpleName(), metadataRef.get().params.memtable);
         this.allocator = MEMORY_POOL.newAllocator(metadataRef.toString());
         this.initialComparator = metadata.get().comparator;
         this.initialFactory = metadata().params.memtable.factory;
