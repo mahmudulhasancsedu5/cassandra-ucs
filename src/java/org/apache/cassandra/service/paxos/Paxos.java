@@ -118,6 +118,86 @@ import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 import static org.apache.cassandra.utils.CollectionSerializer.newHashSet;
 import static org.apache.cassandra.utils.FBUtilities.getBroadcastAddressAndPort;
 
+/**
+ * <p>This class serves as an entry-point to Cassandra's implementation of Paxos Consensus.
+ * Note that Cassandra does not utilise the distinguished proposer (Multi Paxos) optimisation;
+ * each operation executes its own instance of Paxos Consensus. Instead Cassandra employs
+ * various optimisations to reduce the overhead of operations. This may lead to higher throughput
+ * and lower overhead read operations, at the expense of contention during mixed or write-heavy workloads.
+ *
+ * Firstly, note that we do not follow Lamport's formulation, instead following the more common approach in
+ * literature (see e.g. Dr. Heidi Howard's dissertation) of permitting any acceptor to vote on a proposal,
+ * not only those who issued a promise.
+ *
+ * <h2>Read Commutativity Optimisation</h2>
+ * <p>We separate read and write promises into distinct registers. Since reads are commutative they do not need to be
+ * ordered with respect to each other, so read promises consult only the write promise register to find competing
+ * operations, whereas writes consult both read and write registers.
+ *
+ * <p>A read will use its promise to finish any in progress write it encounters, but note that this is safe for multiple
+ * reads to attempt simultaneously. If a write operation has not reached a quorum of promises then it has no effect,
+ * so while some read operations may attempt to complete it and others may not, the operation will only be invalidated
+ * and these actions will be equivalent. If the write had reached a quorum of promises then every reads will attempt
+ * to complete the write. At the accept phase, only the most recent read promise will be accepted so whether the write
+ * proposal had reached a quorum or not, a consistent outcome will result.
+ *
+ * <h2>No Commit of Empty Proposals</h2>
+ * <p>If a proposal is empty, there can be no effect to the state, so once this empty proposal has poisoned any earlier
+ * proposal it is safe to stop processing. An empty proposal effectively scrubs the instance of consensus being
+ * performed once it has reached a quorum, as no earlier incomplete proposal (that may perhaps have reached a minority)
+ * may now be completed.
+ *
+ *
+ * <h2>Fast Read / Failed Write</h2>
+ * <p>This optimisation relies on every voter having no incomplete promises, i.e. their commit register must be greater
+ * than or equal to their promise and proposal registers (or there must be such an empty proposal).
+ * Since the operation we are performing must invalidate any nascent operation that has reached a minority, and will
+ * itself be invalidated by any newer write it might race with, we are only concerned about operations that might be
+ * in-flight and incomplete. If we reach a quorum without any incomplete proposal, we prevent any incomplete proposal
+ * that might have come before us from being committed, and so are correctly ordered.
+ *
+ * <p>NOTE: we could likely weaken this further, permitting a fast operation if we witness a stale incomplete operation
+ * on one or more of the replicas, so long as we witness _some_ response that had knowledge of that operation's decision,
+ * however we might waste more time performing optimistic reads (which we skip if we witness any in progress promise)
+ *
+ * <h2>Reproposal Avoidance</h2>
+ * <p>It can occur that two (or more) commands begin competing to re-propose the same incomplete command even after it
+ * has already committed - this can occur when an in progress command that has reached the commit condition (but not yet
+ * committed) is encountered by a promise, so that it is re-proposed. If the original coordinator does not fail this
+ * original command will be committed normally, but the re-proposal can take on a life of its own, and become contended
+ * and re-proposed indefinitely. By having reproposals use the original proposal ballot's timestamp we spot this situation
+ * and consider re-proposals of a command we have seen committed to be (in effect) empty proposals.
+ *
+ * <h2>Durability of Asynchronous Commit</h2>
+ * To permit asynchronous commit (and also because we should) we ensure commits are durable once a proposal has been
+ * accepted by a majority.
+ *
+ * Replicas track commands that have *locally* been witnessed but not committed. They may clear this log by performing
+ * a round of Paxos Repair for each key in the log (which is simply a round of Paxos that tries not to interfere with
+ * future rounds of Paxos, while aiming to complete any earlier incomplete round).
+ *
+ * By selecting some quorum of replicas for a range to perform this operation on, once successful we guarantee that
+ * any transaction that had previously been accepted by a majority has been committed, and any transaction that had been
+ * previously witnessed by a majority has been either committed or invalidated.
+ *
+ * To ensure durability across range movements, once a joining node becomes pending such a coordinated paxos repair
+ * is performed prior to performing bootstrap, so that commands initiated before joining will either be bootstrapped
+ * or completed by paxos repair to be committed to a majority that includes the new node in its calculations, and
+ * commands initiated after will anyway do so due to being pending.
+ *
+ * Finally, for greater guarantees across range movements despite the uncertainty of gossip, paxos operations validate
+ * ring information with each other while seeking a quorum of promises. Any inconsistency is resolved by synchronising
+ * gossip state between the coordinator and the peers in question.
+ *
+ * <h2>Clearing of Paxos State</h2>
+ * Coordinated paxos repairs as described above are preceded by an preparation step that determines a ballot below
+ * which we agree to reject new promises. By deciding and disseminating this point prior to performing a coordinated
+ * paxos repair, once complete we have ensured that all commands with a lower ballot are either committed or invalidated,
+ * and so we are then able to disseminate this ballot as a bound below which may expunge all data for the range.
+ *
+ * For consistency of execution coordinators seek this latter ballot bound from each replica and, using the maximum of
+ * these, ignore all data received associated with ballots lower than this bound.
+ */
 public class Paxos
 {
     private static volatile Config.PaxosVariant PAXOS_VARIANT = DatabaseDescriptor.getPaxosVariant();
