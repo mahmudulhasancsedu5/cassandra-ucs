@@ -309,7 +309,8 @@ public class ClusteringComparator implements Comparator<Clusterable>
                     if (srcnum == sz)
                         return src.kind().asByteComparableValue(version);
 
-                    current = subtype(srcnum).asComparableBytes(src.accessor(), src.get(srcnum), version);
+                    V component = src.get(srcnum);
+                    current = component != null ? subtype(srcnum).asComparableBytes(src.accessor(), component, version) : null;
                     if (current == null)
                         return subtype(srcnum).isReversed() ? NEXT_COMPONENT_NULL_REVERSED : NEXT_COMPONENT_NULL;
 
@@ -364,7 +365,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
             {
             case NEXT_COMPONENT_NULL:
             case NEXT_COMPONENT_NULL_REVERSED:
-                components[cc] = accessor.empty();
+                components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
@@ -416,7 +417,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
             {
             case NEXT_COMPONENT_NULL:
             case NEXT_COMPONENT_NULL_REVERSED:
-                components[cc] = accessor.empty();
+                components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
@@ -470,7 +471,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
             {
             case NEXT_COMPONENT_NULL:
             case NEXT_COMPONENT_NULL_REVERSED:
-                components[cc] = accessor.empty();
+                components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
