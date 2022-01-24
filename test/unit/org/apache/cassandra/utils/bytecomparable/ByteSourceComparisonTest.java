@@ -830,6 +830,8 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
         for (ByteBuffer i : values)
             for (ByteBuffer j : values)
                 assertComparesSameDecoratedKeys(type, i, j);
+        for (ByteBuffer i : values)
+            assertDecoratedKeyBounds(type, i);
     }
 
     void assertComparesSameDecoratedKeys(IPartitioner type, ByteBuffer b1, ByteBuffer b2)
@@ -854,6 +856,51 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                          actual);
             maybeAssertNotPrefix(k1, k2, version);
         }
+    }
+
+    void assertDecoratedKeyBounds(IPartitioner type, ByteBuffer b)
+    {
+        Version version = Version.OSS41;
+        DecoratedKey k = type.decorateKey(b);
+        final ByteComparable after = k.asComparableBound(false);
+        final ByteComparable before = k.asComparableBound(true);
+
+        int actual = Integer.signum(ByteComparable.compare(k, before, version));
+        assertEquals(String.format("Failed comparing bound before (%s) for %s[%s](%s)\npartitioner %s version %s",
+                                   before.byteComparableAsString(version),
+                                   ByteBufferUtil.bytesToHex(b),
+                                   k,
+                                   k.byteComparableAsString(version),
+                                   type,
+                                   version),
+                     1,
+                     actual);
+        maybeAssertNotPrefix(k, before, version);
+
+        actual = Integer.signum(ByteComparable.compare(k, after, version));
+        assertEquals(String.format("Failed comparing bound after (%s) for %s[%s](%s)\npartitioner %s version %s",
+                                   after.byteComparableAsString(version),
+                                   ByteBufferUtil.bytesToHex(b),
+                                   k,
+                                   k.byteComparableAsString(version),
+                                   type,
+                                   version),
+                     -1,
+                     actual);
+        maybeAssertNotPrefix(k, after, version);
+
+        actual = Integer.signum(ByteComparable.compare(before, after, version));
+        assertEquals(String.format("Failed comparing bound before (%s) to after (%s) for %s[%s](%s)\npartitioner %s version %s",
+                                   before.byteComparableAsString(version),
+                                   after.byteComparableAsString(version),
+                                   ByteBufferUtil.bytesToHex(b),
+                                   k,
+                                   k.byteComparableAsString(version),
+                                   type,
+                                   version),
+                     -1,
+                     actual);
+        maybeAssertNotPrefix(after, before, version);
     }
 
     static Object safeStr(Object i)
