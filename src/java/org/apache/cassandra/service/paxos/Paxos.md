@@ -8,6 +8,11 @@ Below we will describe the basic process (used by both V1 and V2 implementations
 takes and sketch a proof why the approach is safe, and then talk about various later improvements that do not change the
 correctness of the basic scheme.
 
+A key consideration in the design was the fact that we apply LWTs independently to the partitions of a table, and the amount of data we would have to maintain to keep track of elected leaders per partition (for e.g. multi-paxos) would be prohibitively large. Instead of solving this by lumping together partitions with a shared leader, we prefer to better support independent writes by a leaderless scheme, where each coordinator attempts to direct its operations to completion. On congestion this runs the chance of repeated clashes between coordinators attempting to perform writes to the same partition, in which case we use randomized exponential backoff to achieve progress.
+
+The descriptions and proofs below assume no non-LWT modifications to the partition. Any other write (regardless of the
+requested consistency level) may reach a minority of replicas and leave the partition in an inconsistent state where the following operations can go different ways depending on which set of replicas respond to a quorum read. In particular, if two CAS operations with the same condition are executed with no intervening operations, such a state would make it possible for the first to fail and the second to succeed.
+
 
 ## Basic scheme
 
@@ -29,7 +34,7 @@ The basic scheme includes the following stages:
 4. On receipt of "promise"s from a quorum of nodes, the coordinator compiles the "most recently accepted" (MRA) value as the greatest among the accepted values in the promises and then:
    1. If the MRA is not null and its committed flag is not true, there is an in-progress Paxos session that needs to be completed and committed. Controller reproposes the value with the new ballot (i.e. follow the steps below with a proposed value equal to the MRA's) and then restart the process.
    2. If the MRA is not null, its committed flag is true and it is not a match for the "accepted" value of a quorum of promises, controller sends a "commit" message to all replicas whose value did not match and awaits responses until they form a quorum of replicas with a matching "accepted" value.
-   3. The coordinator then creates a proposal, a partition update which is the result of applying the operation, using a read result from one of the responses that originally matched the MRA (note that this response's "accepted" value must have its committed flag true); the partition update is empty if the operation was a read or the CAS failed.
+   3. The coordinator then creates a proposal, a partition update which is the result of applying the operation, using a read result obtained by resolving the quorum of read responses; the partition update has a timestamp that corresponds to the proposal's ballot number, and is empty if the operation was a read or the CAS failed.
    4. It then sends the proposal as a "propose" message with the value and the current ballot number to all replicas.
 5. A replica accepts the proposal if it has not promised that it will not do so:
    1. If its "promised" ballot number is not higher than the proposal's, it sets its "accepted" register to the proposal with its ballot number and a false "committed" flag, updates its "promised" register to the proposal's ballot and sends back an "accepted" message.
@@ -37,7 +42,7 @@ The basic scheme includes the following stages:
 6. On receipt of "accepted" messages from a quorum of nodes, the Paxos session has reached a decision. The coordinator completes it by sending "commit" messages to all replicas, attaching the proposal value and its ballot number.
    1. It can return completion without waiting for receipt of any commit messages.
 7. A replica accepts a commit unconditionally, by applying the attached partition update. If the commit's ballot number is greater than the replica's "accepted" ballot number, it sets its "accepted" register to the message's value and ballot with true "committed" flag, and the "promised" register to its ballot number.
-8. If at any stage of the process that requires a quorum the quorum is not reached, the process restarts from the beginning using a fresh ballot that is greater than the ballot contained in any "rejected" message received.
+8. If at any stage of the process that requires a quorum the quorum is not reached, the coordinator backs off and then restarts the process from the beginning using a fresh ballot that is greater than the ballot contained in any "rejected" message received.
 
 We can't directly map multi-instance classic Paxos onto this, but we can follow its correctness proofs to ensure the following propositions:
 1. Once a value (possibly empty) has been decided (i.e. accepted by a majority), no earlier proposal can be reproposed.
@@ -65,7 +70,11 @@ Suppose the invariant is true for some round E and examine the behaviour of the 
   - If the MRA's committed flag is true but it is not matched in all responses, a "commit" with this MRA is sent to all replicas. By the reasoning above, 2. is still true regardless how many of them (if any) are received and processed.
   - If the committed MRA matches in all responses (initially or because of commits issued in the last step), then 1. is true for G <= E < F regardless of any further action taken by the coordinator.
 
-Proposition 1 ensures that we can only commit one value in any concurrent operation. Proposition 2 means that any accepted proposal must have started its promise after the previous value was committed to at least one replica in any quorum, and hence must be able to see its effects in its read responses. As writes are only done in the "commit" stage after a value has been decided, no undecided writes can be reflected in read responses.
+Proposition 1 ensures that we can only commit one value in any concurrent operation. Proposition 2 means that any accepted proposal must have started its promise after the previous value was committed to at least one replica in any quorum, and hence must be able to see its effects in its read responses. This is also true for every other value that was accepted in any previous ballot.
+
+Note that each commit may modify separate parts of the partition or overwrite previous values. Each of these updates may be witnessed by a different replica, but they must all be witnessed in the responses the coordinator receives prior to making a proposal or completing a read. By virtue of having their timestamps reflect ballot order, the read resolution process can correctly restore the combined state. 
+
+As writes are only done in the "commit" stage after a value has been accepted, no undecided writes can be reflected in read responses.
 
 ## Insubstantial differences with the actual code
 
@@ -81,7 +90,7 @@ Version 2 of the Paxos implementation performs reads as described here, by combi
 
 These differences do not materially change the logic, but make correctness a little harder to prove directly.
 
-## Skipping commit for empty proposals
+## Skipping commit for empty proposals (Versions 1 and 2)
 
 Since empty proposals make no modifications to the database state, it is not necessary to commit them.
 
@@ -91,7 +100,7 @@ More precisely, in the basic scheme above we can treat the case of an empty part
 
 With this modified step Proposition 1 is still true, as is Proposition 2 restricted to committing and witnessing non-empty proposals. Their combination still ensures that no update made concurrently with any operation (including a read or a failing CAS) can resurface after that operation is decided, and that any operation will see the results of applying any previous.
 
-## Skipping proposal for reads
+## Skipping proposal for reads (Version 2 only)
 
 To ensure correct ordering of reads and unsuccessful CAS operations, the algorithm above forces invalidation of any concurrent operation by issuing an empty update. It is possible, however, to recognize if a concurrent operation may have started at the time a "promise" is given. If no such operation is present, the read may proceed without issuing an empty update.
 
@@ -105,7 +114,7 @@ and a new step is inserted before 4(iv) (which becomes 4(v)):
 
 Since we do not change issued proposals or make new ones, Proposition 1 is still in force. For Proposition 2 we must consider the possibility of a no-propose read missing an update with an earlier ballot number that was decided on concurrently. The difference in the new scheme is that this read will not invalidate an incomplete concurrent write, and thus an undecided entry could be decided after the read executes. However, to propose a new entry, a coordinator must first obtain a quorum of promises using a ballot number greater than the last committed or empty value's. Given such a promise and a read executing with higher ballot, at least one of the reader's quorum replicas must return its ballot number or higher in the "promised" field (otherwise the read's promise will have executed before the write's and the preparation would have been rejected). As a result, the coordinator will see a concurrent operation (either in a non-committed MRA, or a "promised" value higher than a committed or empty MRA) and will proceed to issue an invalidating empty proposal.
 
-## Concurrent reads
+## Concurrent reads (Version 2 only)
 
 As stated, the above optimization is only useful once per successful proposal, because a read executed in this way does not complete and will be treated as concurrent with any operation started after it. To improve this, we can use the fact that reads do not affect other reads, i.e. they are commutative operations and the order of execution of a set of reads with no concurrent writes is not significant, and separately store and issue read-only and write promises.
 
@@ -126,7 +135,7 @@ Steps 2, 3, 4 and 8 are changed to accommodate this. The modified algorithm beco
 4. On receipt of "promise"s from a quorum of nodes, the coordinator compiles the "most recently accepted" (MRA) value as the greatest among the accepted values in the promises and then:
     1. If the MRA is not null or empty, and its committed flag is not true, there is an in-progress Paxos session that needs to be completed and committed. The coordinator prepares a reproposal of the value with the new ballot, continuing with step v below, and then restarts the process.
     2. If the MRA is not null, its committed flag is true and it is not a match for the "accepted" value of a quorum of promises, controller sends a "commit" message to all replicas whose value did not match and awaits responses until they form a quorum of replicas with a matching "accepted" value.
-    3. The coordinator then creates a proposal, a partition update which is the result of applying the operation, using a read result from one of the responses that originally matched the MRA (note that this response's "accepted" value must have its committed flag true); the partition update is empty if the operation was a read or the CAS failed.
+    3. The coordinator then creates a proposal, a partition update which is the result of applying the operation, using a read result obtained by resolving the quorum of read responses; the partition update is empty if the operation was a read or the CAS failed.
     4. If the proposal is empty (i.e. the operation was a read or the CAS failed), the coordinator checks the maximum of the quorum's "promisedWrite" values agains the MRA's ballot number. If that maximum isn't higher, the operation completes.
     5. If there was no quorum of promises with false "read-only" flag, the coordinator restarts the process (step 8).
     6. Otherwise, it sends the proposal as a "propose" message with the value and the current ballot number to all replicas.
@@ -136,7 +145,23 @@ Steps 2, 3, 4 and 8 are changed to accommodate this. The modified algorithm beco
 6. On receipt of "accepted" messages from a quorum of nodes, the Paxos session has reached a decision. The coordinator completes it by sending "commit" messages to all replicas, attaching the proposal value and its ballot number.
     1. It can return completion without waiting for receipt of any commit messages.
 7. A replica accepts a commit unconditionally, by applying the attached partition update. If the commit's ballot number is greater than the replica's "accepted" ballot number, it sets its "accepted" register to the message's value and ballot with true "committed" flag, and the "promised" register to its ballot number.
-8. If at any stage of the process that requires a quorum the quorum is not reached, the process restarts from the beginning using a fresh ballot that is greater than the "promised" ballot contained in any "rejected" and "promise" message received.
+8. If at any stage of the process that requires a quorum the quorum is not reached, the coordinator backs off and then restarts the process from the beginning using a fresh ballot that is greater than the "promised" ballot contained in any "rejected" and "promise" message received.
 
 With respect to any operation that issues a proposal, this algorithm fully matches the earlier version. For operations that do not (including all operations executing with a read-only promise), it allows for multiple to execute concurrently as long as no write promise quorum has been reached after the last commit. The reasoning of the previous paragraph is still valid and proves that no older proposal can be agreed on after a no-proposal read.
+
+## Paxos system table expiration (Version 1 only)
+
+The Paxos state registers used by the algorithm are persisted in the Paxos system table. For every partition with LWTs, this table will contain an entry specifying the current values of all registers (promised, promisedWrite, accepted, committed). Because this information is per-partition, there is a high chance that this table will quickly become very large if LWTs are used with many independent partitions.
+
+To make sure the overhead of the Paxos system table remains limited, Version 1 of the Cassandra Paxos implementation specifies a time-to-live (TTL) for all writes. That is, after a certain period of time with no LWT to a partition, the replica will forget the partition's Paxos state.
+
+If this data expires, any in-progress operations may fail to be brought to completion. With the algorithm as described above, one of the effects of this is that some writes that are reported complete may fail to ever be committed on a majority of replicas, or even on any replica (if e.g. connection with the replicas is lost before commits are sent, and the TTL expires before any new LWT operation on the permition is initiated).
+
+To avoid this problem, Version 1 of the implementation only reports success on writes after the commit stage has reached a requested consistency level. This solves the problem of reporting success, but in the presence of TTL expiration behaves like a non-LWT write and may leave the partition in an inconsistent state.
+
+## Paxos repair (Version 2 only)
+
+In the second version of the implementation the Paxos system table does not expire. Instead, clearing up state is performed by a "Paxos repair" process which actively processes unfinished Paxos sessions and only deletes state that is known to have been brought to completion (i.e. successful majority commit).
+
+The repair process starts with the identification of a global lower bound for ballot numbers such that upon repair completion it can guarantee that all proposals with a lower bound have been completed, i.e. either accepted and committed or superseded in a majority of nodes. This lower bound is distributed to all nodes and used as a lower bound on all promises, i.e. replicas stop accepting messages with earlier ballots. The process then proceeds to perform the equivalent of an empty read on all partitions for which the Paxos system table has data with earlier ballots. At the completion of this process all earlier state can be deleted.
 
