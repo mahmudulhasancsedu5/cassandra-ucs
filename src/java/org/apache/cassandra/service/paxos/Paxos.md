@@ -18,8 +18,8 @@ the same partition, in which case we use randomized exponential backoff to achie
 The descriptions and proofs below assume no non-LWT modifications to the partition. Any other write (regardless of the
 requested consistency level) may reach a minority of replicas and leave the partition in an inconsistent state where the
 following operations can go different ways depending on which set of replicas respond to a quorum read. In particular,
-if two CAS operations with the same condition are executed with no intervening operations, such a state would make it
-possible for the first to fail and the second to succeed.
+if two compare-and-set (CAS) operations with the same condition are executed with no intervening operations, such a
+state would make it possible for the first to fail and the second to succeed.
 
 ## Basic scheme
 
