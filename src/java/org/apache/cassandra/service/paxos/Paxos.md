@@ -157,7 +157,7 @@ To make sure the overhead of the Paxos system table remains limited, Version 1 o
 
 If this data expires, any in-progress operations may fail to be brought to completion. With the algorithm as described above, one of the effects of this is that some writes that are reported complete may fail to ever be committed on a majority of replicas, or even on any replica (if e.g. connection with the replicas is lost before commits are sent, and the TTL expires before any new LWT operation on the permition is initiated).
 
-To avoid this problem, Version 1 of the implementation only reports success on writes after the commit stage has reached a requested consistency level. This solves the problem of reporting success, but in the presence of TTL expiration behaves like a non-LWT write and may leave the partition in an inconsistent state.
+To avoid this problem, Version 1 of the implementation only reports success on writes after the commit stage has reached a requested consistency level. This solves the problem of reporting success, but only guarantees LWT writes to behave like non-LWT ones: a write may still reach a minority of nodes and leave the partition in an inconsistent state, which permits linearity guarantees to be violated.
 
 ## Paxos repair (Version 2 only)
 
@@ -165,3 +165,12 @@ In the second version of the implementation the Paxos system table does not expi
 
 The repair process starts with the identification of a global lower bound for ballot numbers such that upon repair completion it can guarantee that all proposals with a lower bound have been completed, i.e. either accepted and committed or superseded in a majority of nodes. This lower bound is distributed to all nodes and used as a lower bound on all promises, i.e. replicas stop accepting messages with earlier ballots. The process then proceeds to perform the equivalent of an empty read on all partitions for which the Paxos system table has data with earlier ballots. At the completion of this process all earlier state can be deleted.
 
+## Correctness in the presence of range movements (Version 2 only)
+
+The crucial requirements for any Paxos-like scheme to work is to only make progress when we are guaranteed that all earlier decision points have at least one representative among the replicas that reply to a message (in other words, that all quorums intersect). When the node set is fixed this is achieved by requesting that a quorum contains more than half the replicas for the given partition.
+
+Range movements (i.e. joining or leaving nodes), however, can change the set of replicas that are responsible for a partition. In the exteme case, after multiple range movements it is possible to have a completely different set of replicas responsible for the partition (i.e. no quorum can exist that contains a replica for all earlier transactions). To deal with this problem, we must ensure that:
+- While operations in an incomplete state are ongoing, a quorum is formed in such a way that it contains a majority for the current replica set _as well as_ for the replica set before the operation was started (as well as any intermediate set, if it possible to perform multiple range movements in parallel).
+- By the time we transition fully to a new set of replicas responsible for a partition, we have completed moving all committed mutations from any source replica to its replacement.
+
+The Paxos repair process above gives us a way to complete ongoing operations and a point in time when we can assume that all earlier LWT operations are complete. In combination with streaming, which moves all committed data to the new replica, this means that from the point when both complete forward we can safely use the new replica in quorums in place of the source.
