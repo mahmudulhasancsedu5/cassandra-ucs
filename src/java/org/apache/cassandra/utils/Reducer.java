@@ -23,7 +23,7 @@ public abstract class Reducer<In,Out>
     /**
      * @return true if Out is the same as In for the case of a single source iterator
      */
-    public boolean trivialReduceIsTrivial()
+    public boolean singleSourceReduceIsTrivial()
     {
         return false;
     }
@@ -86,7 +86,7 @@ public abstract class Reducer<In,Out>
         }
 
         @Override
-        public boolean trivialReduceIsTrivial()
+        public boolean singleSourceReduceIsTrivial()
         {
             return true;
         }

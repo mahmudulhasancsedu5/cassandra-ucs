@@ -151,17 +151,20 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         return sstableWriter.append(partition);
     }
 
+    @Override
     public boolean startPartition(DecoratedKey partitionKey, DeletionTime deletionTime) throws IOException
     {
         maybeSwitchWriter(partitionKey);
         return sstableWriter.startPartition(partitionKey, deletionTime);
     }
 
+    @Override
     public void endPartition() throws IOException
     {
         sstableWriter.endPartition();
     }
 
+    @Override
     public void addUnfiltered(Unfiltered unfiltered) throws IOException
     {
         sstableWriter.addUnfiltered(unfiltered);

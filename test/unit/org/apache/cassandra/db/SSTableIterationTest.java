@@ -29,7 +29,7 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
-import org.apache.cassandra.io.sstable.compaction.BigTableCursor;
+import org.apache.cassandra.io.sstable.compaction.SortedStringTableCursor;
 import org.apache.cassandra.io.sstable.compaction.IteratorFromCursor;
 import org.apache.cassandra.io.sstable.compaction.SSTableCursor;
 import org.apache.cassandra.io.sstable.compaction.SSTableCursorMerger;
@@ -208,7 +208,7 @@ public class SSTableIterationTest extends CQLTester
         }
 
         SSTableCursor mergedCursor = new SSTableCursorMerger(sstables.stream()
-                                                                     .map(BigTableCursor::new)
+                                                                     .map(SortedStringTableCursor::new)
                                                                      .collect(Collectors.toList()),
                                                              cfs.metadata());
         mergedCursor = new SkipEmptyDataCursor(mergedCursor); // make sure we drop rows that end up empty
@@ -257,7 +257,7 @@ public class SSTableIterationTest extends CQLTester
     {
         dumpSSTableCursor(reader);
         try (UnfilteredPartitionIterator scanner = reader.getScanner();
-             UnfilteredPartitionIterator cursor = new IteratorFromCursor(reader.metadata(), new BigTableCursor(reader)))
+             UnfilteredPartitionIterator cursor = new IteratorFromCursor(reader.metadata(), new SortedStringTableCursor(reader)))
         {
             assertIteratorsEqual(scanner, cursor, false);
         }
@@ -265,7 +265,7 @@ public class SSTableIterationTest extends CQLTester
 
     private void dumpSSTableCursor(SSTableReader reader) throws IOException
     {
-        try (SSTableCursor cursor = new BigTableCursor(reader))
+        try (SSTableCursor cursor = new SortedStringTableCursor(reader))
         {
             dumpCursor(cursor, reader.metadata());
         }

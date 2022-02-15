@@ -19,11 +19,13 @@
 # Compaction process optimization
 
 This is a refactoring of the sstable content iteration mechanisms to strip much of the avoidable overhead. The main idea
-is the restructuring of the iteration into one stream of cells mixed with column, row and partition headers, which avoids
-having to recreate the `Row`s and `UnfilteredRowIterator`s together with all the infrastructure needed to merge them.
+is the restructuring of the iteration into one stream of cells mixed with column, row and partition headers, which
+avoids having to recreate the `Row`s and `UnfilteredRowIterator`s together with all the infrastructure needed to merge
+them.
 
-The data are exposed via a stateful `SSTableCursor` object, which starts uninitialized and can be `advance()`-d to obtain
-items of the stream. The cursor exposes the state of iteration, including:
+The data are exposed via a stateful `SSTableCursor` object, which starts uninitialized and can be `advance()`-d to
+obtain items of the stream. The cursor exposes the state of iteration, including:
+
 - the current partition key
 - the current clustering key
 - the current column
@@ -32,8 +34,8 @@ items of the stream. The cursor exposes the state of iteration, including:
 together with an indication of the "level" in the sstable hierarchy that the current position is at. On a valid
 position, the latter can be `PARTITION`, `ROW`/`RANGE_TOMBSTONE`, `SIMPLE/COMPLEX_COLUMN` or `COMPLEX_COLUMN_CELL`,
 indicating that advancing has ended up, respectively, at the start of a new partition, new row, new range tombstone
-marker, new simple column cell, the start of a complex column, or a cell in the complex column. If on an upper level
-of the hierarchy, the details about features of the lower levels (e.g. clustering key on `PARTITION`, cell on `ROW`
+marker, new simple column cell, the start of a complex column, or a cell in the complex column. If on an upper level of
+the hierarchy, the details about features of the lower levels (e.g. clustering key on `PARTITION`, cell on `ROW`
 or `PARTITION`) are invalid, but the information for all higher levels (e.g. partition key on `ROW`) is present.
 
 Cursors' state (i.e. position in the stream) can be compared by comparing the keys in order. More importantly, when we
@@ -43,54 +45,59 @@ comparisons can be done by only comparing the level and then (if levels match), 
 crucial for the efficiency of merging.
 
 Note: we also considered using a "level change" flag instead of stopping on headers (i.e. instead of advancing through
-`PARTITION(pk1), ROW(ck1), SIMPLE_COLUMN(c1), ROW(ck2), SIMPLE_COLUMN(c2)` to list `PARTITION(pk1, ck1, c1), ROW(ck2, c2)`).
-While it does look like with this we can still efficiently compare via the level, we need to somehow consume the level
-advance on matching comparison, which is non-trivial and error-prone. For example, consider merging:
- - `PARTITION(pk1, ck1, c1)`, `ROW(ck3, c2)`
- - `PARTITION(pk1, ck2, c3)`
+`PARTITION(pk1), ROW(ck1), SIMPLE_COLUMN(c1), ROW(ck2), SIMPLE_COLUMN(c2)` to
+list `PARTITION(pk1, ck1, c1), ROW(ck2, c2)`). While it does look like with this we can still efficiently compare via
+the level, we need to somehow consume the level advance on matching comparison, which is non-trivial and error-prone.
+For example, consider merging:
 
-Cell, row and partition deletions are directly reported by methods that return the relevant deletion times. Range tombstone
-markers are reported on the rows level with the deletion time they switch to by the `rowLevelDeletion()` method (i.e. the open
-time if it's an open bound or a boundary, or LIVE if it's a close bound). The currently active deletion time is also tracked
-and reported through the `activeRangeDeletion()` method; note that if the stream is positioned or a range tombstone marker, it
-reports the deletion active _before_ it, so that both deletions are available (useful both for reconstructing range tombstone
-markers on write, and for merging, where we need to know the active range deletion before the position on the sources that
-are positioned later in the stream). The merge cursor takes care of applying the active deletion (the newest of complex-column,
-range, row- and partition-level deletion) to the data it processes to remove any deleted data and tombstones.
+- `PARTITION(pk1, ck1, c1)`, `ROW(ck3, c2)`
+- `PARTITION(pk1, ck2, c3)`
+
+Cell, row and partition deletions are directly reported by methods that return the relevant deletion times. Range
+tombstone markers are reported on the rows level with the deletion time they switch to by the `rowLevelDeletion()`
+method (i.e. the open time if it's an open bound or a boundary, or LIVE if it's a close bound). The currently active
+deletion time is also tracked and reported through the `activeRangeDeletion()` method; note that if the stream is
+positioned or a range tombstone marker, it reports the deletion active _before_ it, so that both deletions are
+available (useful both for reconstructing range tombstone markers on write, and for merging, where we need to know the
+active range deletion before the position on the sources that are positioned later in the stream). The merge cursor
+takes care of applying the active deletion (the newest of complex-column, range, row- and partition-level deletion) to
+the data it processes to remove any deleted data and tombstones.
 
 There are a couple of further differences with iterators:
-- Static rows are listed as the first row in a partition, only if they are not empty &mdash; separating them is only useful for
-reverse iteration which cursors don't aim to support.
+
+- Static rows are listed as the first row in a partition, only if they are not empty &mdash; separating them is only
+  useful for reverse iteration which cursors don't aim to support.
 - Cursors only iterate on data files, which avoids walking the partition index. This means less resilience to error, but
-in compactions this is not a problem as we abort on error.
+  in compactions this is not a problem as we abort on error.
 - "Shadowable row deletions" (a deprecated feature which is no longer in use) are not reported as such.
 
 Cursors don't currently support all of the functionality of merging over sstable iterators. For details of the
 limitations, see the TODO list below.
 
 Beyond the above, the implementation is straight-forward:
+
 - `SSTableCursor` is the main abstraction, a cursor over sstables.
-- `BigTableCursor` is the main implementation of `SSTableCursor` which walks over an sstable data file and extracts its
-data stream. To do this it reimplements the functionality of the deserializers for parsing partition, row and column
-headers and relies on an instance of the deserializer to read cells. Supports both BIG and BTI formats (which differ
-only in index and whose data file formats are identical).
+- `SortedStringTableCursor` is the main implementation of `SSTableCursor` which walks over an sstable data file and
+  extracts its data stream. To do this it reimplements the functionality of the deserializers for parsing partition, row
+  and column headers and relies on an instance of the deserializer to read cells. Supports both BIG and BTI formats
+  (which differ only in index and whose data file formats are identical).
 - `SSTableCursorMerger` implements merging several `SSTableCursor`s into one. This is implemented via an extracted merge
-core from `MergeIterator` configured to work on cursors.
+  core from `MergeIterator` configured to work on cursors.
 - `PurgeCursor` implements removal of collectable tombstones.
 - `SkipEmptyDataCursor` delays the reporting of headers until content is found, in order to avoid creating empty complex
-columns, rows or partitions in the compacted view.
+  columns, rows or partitions in the compacted view.
 - `CompactionCursor` sets up a merger over multiple sstable cursors for compaction and implements writing a cursor into
-a new sstable. Note: we currently still create an in-memory row to be able to send it to the serializer for writing.
+  a new sstable. Note: we currently still create an in-memory row to be able to send it to the serializer for writing.
 - `CompactionTask.CompactionOperationCursor` is a cursor counterpart of `CompactionTask.CompactionOperationIterator`.
-The former is chosen if cursors can support the compaction, i.e. if it is known that a secondary index is not in use, that
-the compaction strategy supports cursors (initially we only intend to release this for `UnifiedCompactionStrategy`; even
-afterwards, `TieredCompactionStrategy` would need special support), and that a garbage collection compaction is not requested.
-
+  The former is chosen if cursors can support the compaction, i.e. if it is known that a secondary index is not in use,
+  that the compaction strategy supports cursors (initially we only intend to release this
+  for `UnifiedCompactionStrategy`; even afterwards, `TieredCompactionStrategy` would need special support), and that a
+  garbage collection compaction is not requested.
 
 Additionally,
-- `IteratorFromCursor` converts a cursor into an unfiltered partition iterator for testing and can also be used as a
-reference of the differences.
 
+- `IteratorFromCursor` converts a cursor into an unfiltered partition iterator for testing and can also be used as a
+  reference of the differences.
 
 ### Further work
 
@@ -101,8 +108,8 @@ reference of the differences.
 - Secondary indexes currently can't use cursors, because we do not construct the right input for their listeners. Doing
   this may require reconstructing rows for the merge, which is something we definitely do not want to do in the normal
   case. It would probably be better to find the specific needs of SAI and support only them, and leave legacy / custom
-  indexes to use iterators (note: since TPC is not going to be developed further, we no longer plan to fully replace
-  the iterators with this).
+  indexes to use iterators (note: since TPC is not going to be developed further, we no longer plan to fully replace the
+  iterators with this).
 
 - Garbage collection compaction, i.e. compaction using tombstones from newer non-participating sstables to delete as
   much as possible from the compacted sstables, could be implemented for cursors too.
@@ -110,12 +117,11 @@ reference of the differences.
 - If we are going to support all compaction strategies, it may be beneficial to restore levelled compaction's sstable
   concatenation scanner. However, this will only save one comparison per partition, so I doubt it's really worth doing.
 
-
 ## Benchmark results collected during development (most recent results first)
 
 Perhaps most relevant at this time are the differences between `iterateThroughCompactionCursor` vs
-`iterateThroughCompactionIterator` (sending the compaction of two sstables to a null writer). Other
-meaninful comparisons are `iterateThroughCursor` vs `iterateThroughTableScanner`
+`iterateThroughCompactionIterator` (sending the compaction of two sstables to a null writer). Other meaninful
+comparisons are `iterateThroughCursor` vs `iterateThroughTableScanner`
 (iterating the content of a single sstable without merging) and `iterateThroughMergeCursor` vs
 `iterateThroughMergeIterator` (iterating the merge of two sstables, similar to `iterateThroughCompactionCursor`
 but without constructing in-memory rows).
@@ -166,6 +172,7 @@ CompactionBenchmark.compactSSTables     UnifiedCompactionStrategy               
 ```
 
 With tombstone and purging support, no row reconstructing in `iterateThroughCompactionCursor`.
+
 ```
 Benchmark                                                               (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score    Error  Units
 CompactionBenchmark.compactSSTables                                                             0             1          false        DEFAULT             0.3      10               2  avgt   10  3275.471 ± 99.962  ms/op
@@ -182,6 +189,7 @@ CompactionBreakdownBenchmark.scannerToCompactionWriter                          
 ```
 
 With tombstone and purging support
+
 ```
 Benchmark                                                               (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score    Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionCursor                                     0             1          false        DEFAULT             0.3      10               2  avgt   10   701.806 ± 42.179  ms/op
@@ -198,6 +206,7 @@ CompactionBenchmark.compactSSTables                                             
 ```
 
 Cell-level stream, deserialized cells, recombined rows on write
+
 ```
 Benchmark                                                               (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score     Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionCursor                                     0             1          false        DEFAULT             0.3      10               2  avgt   10   799.025 ±  26.943  ms/op
@@ -209,7 +218,9 @@ CompactionBreakdownBenchmark.iterateThroughMergeIterator                        
 CompactionBreakdownBenchmark.iterateThroughPartitionIndexIterator                               0             1          false        DEFAULT             0.3      10               2  avgt   10   394.046 ±  11.057  ms/op
 CompactionBreakdownBenchmark.iterateThroughTableScanner                                         0             1          false        DEFAULT             0.3      10               2  avgt   10  1250.365 ±  45.029  ms/op
 ```
+
 With direct write, row stream
+
 ```
 Benchmark                                                               (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score    Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionCursor                                     0             1          false        DEFAULT             0.3      10               2  avgt   10   960.035 ± 21.594  ms/op
@@ -217,7 +228,9 @@ CompactionBreakdownBenchmark.iterateThroughCompactionCursorWithLimiter          
 CompactionBreakdownBenchmark.iterateThroughCompactionIterator                                   0             1          false        DEFAULT             0.3      10               2  avgt   10  2062.935 ± 30.653  ms/op
 CompactionBenchmark.compactSSTables                                                             0             1          false        DEFAULT             0.3      10               2  avgt   10  3294.247 ± 101.186  ms/op
 ```
+
 With progress indication and rate limiting, row stream, converted to iterator
+
 ```
 Benchmark                                                               (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score    Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionCursor                                     0             1          false        DEFAULT             0.3      10               2  avgt   10   964.176 ± 19.588  ms/op
@@ -225,14 +238,18 @@ CompactionBreakdownBenchmark.iterateThroughCompactionCursorWithLimiter          
 CompactionBreakdownBenchmark.iterateThroughCompactionIterator                                   0             1          false        DEFAULT             0.3      10               2  avgt   10  2043.687 ± 35.059  ms/op
 CompactionBenchmark.compactSSTables                          									0             1          false        DEFAULT             0.3      10               2  avgt   10  3575.346 ± 94.917  ms/op
 ```
+
 With CompactionCursor, merge through cursor, deserialized rows, no progress/deletions/indexes
+
 ```
 Benchmark                                                      (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score    Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionCursor                            0             1          false        DEFAULT             0.3      10               2  avgt   10   944.843 ± 13.718  ms/op
 CompactionBreakdownBenchmark.iterateThroughCompactionIterator                          0             1          false        DEFAULT             0.3      10               2  avgt   10  2070.773 ± 43.277  ms/op
 CompactionBenchmark.compactSSTables               							           0             1          false        DEFAULT             0.3      10               2  avgt    9  3329.419 ± 81.107  ms/op
 ```
+
 Initial implementation, row stream, converted to iterator
+
 ```
 Benchmark                                                          (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt     Score     Error  Units
 CompactionBreakdownBenchmark.iterateThroughCompactionIterator                              0             1          false        DEFAULT             0.3      10               2  avgt   10  2064.699 ±  27.296  ms/op
@@ -246,6 +263,7 @@ CompactionBenchmark.compactSSTables                                             
 ```
 
 For information only -- skipping row body
+
 ```
 Benchmark                                                          (compactionMbSecThrottle)  (compactors)  (compression)  (dataBuilder)  (overlapRatio)  (size)  (sstableCount)  Mode  Cnt    Score    Error  Units
 CompactionBreakdownBenchmark.iterateThroughCursor                                          0             1          false        DEFAULT             0.3      10               2  avgt   10  402.963 ± 11.514  ms/op   - 200

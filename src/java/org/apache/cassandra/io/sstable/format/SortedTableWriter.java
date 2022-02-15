@@ -46,6 +46,7 @@ import org.apache.cassandra.io.compress.ICompressor;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
+import org.apache.cassandra.io.sstable.format.big.BigTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -273,11 +274,28 @@ public abstract class SortedTableWriter extends SSTableWriter
         }
     }
 
+    public SSTableWriter setOpenResult(boolean openResult)
+    {
+        txnProxy().openResult = openResult;
+        return this;
+    }
+
+    public SSTableReader finished()
+    {
+        return txnProxy().finalReader;
+    }
+
     abstract protected SSTableReader openFinal(SSTableReader.OpenReason reason);
     abstract protected SequentialWriterOption writerOption();
 
-    protected class TransactionalProxy extends SSTableWriter.TransactionalProxy
+    abstract protected TransactionalProxy txnProxy();
+
+    protected class TransactionalProxy extends AbstractTransactional
     {
+        // should be set during doPrepare()
+        private SSTableReader finalReader;
+        private boolean openResult;
+
         // finalise our state on disk, including renaming
         protected void doPrepare()
         {

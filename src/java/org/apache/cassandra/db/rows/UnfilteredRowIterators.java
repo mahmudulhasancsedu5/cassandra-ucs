@@ -18,9 +18,7 @@
 package org.apache.cassandra.db.rows;
 
 import java.util.*;
-import java.util.function.Consumer;
 
-import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +35,6 @@ import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.CloseableIterator;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MergeIterator;
-import org.apache.cassandra.utils.Merger;
 import org.apache.cassandra.utils.Reducer;
 
 /**
@@ -417,9 +414,13 @@ public abstract class UnfilteredRowIterators
             // opening sstables until they are needed. The tomsbtone processing will throw these ineffective bounds away
             // (they are in the form of range tombstone markers with DeletionTime.LIVE).
             if (iterators.size() > 1)
+            {
                 for (UnfilteredRowIterator iter : iterators)
+                {
                     if (iter instanceof UnfilteredRowIteratorWithLowerBound)
-                        ((UnfilteredRowIteratorWithLowerBound) iter).produceLowerBound();
+                        ((UnfilteredRowIteratorWithLowerBound) iter).requestLowerBound();
+                }
+            }
 
             this.mergeIterator = MergeIterator.getCloseable(iterators,
                                                             reversed ? metadata.comparator.reversed() : metadata.comparator,
@@ -568,7 +569,7 @@ public abstract class UnfilteredRowIterators
             }
 
             @Override
-            public boolean trivialReduceIsTrivial()
+            public boolean singleSourceReduceIsTrivial()
             {
                 // If we have a listener, we must signal it even when we have a single version
                 return listener == null;

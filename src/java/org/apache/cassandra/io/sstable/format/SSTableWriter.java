@@ -77,18 +77,9 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final long keyCount;
     protected final MetadataCollector metadataCollector;
     protected final SerializationHeader header;
-    protected final TransactionalProxy txnProxy = txnProxy();
     protected final Collection<SSTableFlushObserver> observers;
 
-    protected abstract TransactionalProxy txnProxy();
-
-    // due to lack of multiple inheritance, we use an inner class to proxy our Transactional implementation details
-    protected abstract class TransactionalProxy extends AbstractTransactional
-    {
-        // should be set during doPrepare()
-        protected SSTableReader finalReader;
-        protected boolean openResult;
-    }
+    protected abstract AbstractTransactional txnProxy();
 
     protected SSTableWriter(Descriptor descriptor,
                             Set<Component> components,
@@ -284,11 +275,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         return this;
     }
 
-    public SSTableWriter setOpenResult(boolean openResult)
-    {
-        txnProxy.openResult = openResult;
-        return this;
-    }
+    public abstract SSTableWriter setOpenResult(boolean openResult);
 
     /**
      * Open the resultant SSTableReader before it has been fully written
@@ -312,7 +299,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     public SSTableReader finish(boolean openResult)
     {
         setOpenResult(openResult);
-        txnProxy.finish();
+        txnProxy().finish();
         observers.forEach(SSTableFlushObserver::complete);
         return finished();
     }
@@ -321,22 +308,19 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      * Open the resultant SSTableReader once it has been fully written, and all related state
      * is ready to be finalised including other sstables being written involved in the same operation
      */
-    public SSTableReader finished()
-    {
-        return txnProxy.finalReader;
-    }
+    public abstract SSTableReader finished();
 
     // finalise our state on disk, including renaming
     public final void prepareToCommit()
     {
-        txnProxy.prepareToCommit();
+        txnProxy().prepareToCommit();
     }
 
     public final Throwable commit(Throwable accumulate)
     {
         try
         {
-            return txnProxy.commit(accumulate);
+            return txnProxy().commit(accumulate);
         }
         finally
         {
@@ -348,7 +332,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     {
         try
         {
-            return txnProxy.abort(accumulate);
+            return txnProxy().abort(accumulate);
         }
         finally
         {
@@ -358,14 +342,14 @@ public abstract class SSTableWriter extends SSTable implements Transactional
 
     public final void close()
     {
-        txnProxy.close();
+        txnProxy().close();
     }
 
     public final void abort()
     {
         try
         {
-            txnProxy.abort();
+            txnProxy().abort();
         }
         finally
         {

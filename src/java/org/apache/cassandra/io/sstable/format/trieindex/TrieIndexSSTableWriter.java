@@ -48,7 +48,6 @@ import org.apache.cassandra.io.sstable.format.RowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
-import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.SortedTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
@@ -76,6 +75,7 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
 
     private final PartitionWriter partitionWriter;
     private final IndexWriter iwriter;
+    private final TransactionalProxy txnProxy;
 
     private static final SequentialWriterOption WRITER_OPTION = SequentialWriterOption.newBuilder()
                                                                                       .trickleFsync(DatabaseDescriptor.getTrickleFsync())
@@ -99,6 +99,7 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
 
         iwriter = new IndexWriter(metadata.get());
         partitionWriter = new PartitionWriter(this.header, metadata().comparator, dataFile, iwriter.rowIndexFile, descriptor.version, this.observers);
+        txnProxy = new TransactionalProxy();
     }
 
     private static Set<Component> components(TableMetadata metadata, Collection<Component> indexComponents)
@@ -246,9 +247,9 @@ public class TrieIndexSSTableWriter extends SortedTableWriter
         return sstable;
     }
 
-    protected SSTableWriter.TransactionalProxy txnProxy()
+    protected SortedTableWriter.TransactionalProxy txnProxy()
     {
-        return new TransactionalProxy();
+        return txnProxy;
     }
 
     class TransactionalProxy extends SortedTableWriter.TransactionalProxy

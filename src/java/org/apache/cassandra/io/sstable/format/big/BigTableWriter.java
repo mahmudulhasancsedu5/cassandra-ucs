@@ -44,7 +44,6 @@ import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
-import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.SortedTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
@@ -70,6 +69,7 @@ public class BigTableWriter extends SortedTableWriter
     protected final BigTableRowIndexEntry.IndexSerializer<IndexInfo> rowIndexEntrySerializer;
     private final ColumnIndex columnIndexWriter;
     private final IndexWriter iwriter;
+    private final TransactionalProxy txnProxy;
 
     private static final SequentialWriterOption WRITER_OPTION = SequentialWriterOption.newBuilder()
                                                                                       .trickleFsync(DatabaseDescriptor.getTrickleFsync())
@@ -93,6 +93,7 @@ public class BigTableWriter extends SortedTableWriter
 
         this.rowIndexEntrySerializer = new BigTableRowIndexEntry.Serializer(descriptor.version, header);
         columnIndexWriter = new ColumnIndex(this.header, dataFile, descriptor.version, this.observers, rowIndexEntrySerializer.indexInfoSerializer());
+        txnProxy = new TransactionalProxy();
     }
 
     private static Set<Component> components(TableMetadata metadata, Collection<Component> indexComponents)
@@ -259,9 +260,9 @@ public class BigTableWriter extends SortedTableWriter
         return sstable;
     }
 
-    protected SSTableWriter.TransactionalProxy txnProxy()
+    protected SortedTableWriter.TransactionalProxy txnProxy()
     {
-        return new TransactionalProxy();
+        return txnProxy;
     }
 
     class TransactionalProxy extends SortedTableWriter.TransactionalProxy

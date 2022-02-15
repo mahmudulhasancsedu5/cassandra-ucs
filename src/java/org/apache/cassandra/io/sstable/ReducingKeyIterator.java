@@ -72,7 +72,7 @@ public class ReducingKeyIterator implements CloseableIterator<DecoratedKey>
                     DecoratedKey reduced = null;
 
                     @Override
-                    public boolean trivialReduceIsTrivial()
+                    public boolean singleSourceReduceIsTrivial()
                     {
                         return true;
                     }

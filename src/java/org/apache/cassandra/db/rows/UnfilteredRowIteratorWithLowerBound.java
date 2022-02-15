@@ -87,7 +87,11 @@ public class UnfilteredRowIteratorWithLowerBound extends LazilyInitializedUnfilt
         state = State.LOWER_BOUND_NOT_REQUESTED;
     }
 
-    public void produceLowerBound()
+    /**
+     * Request that the iterator produce an artificial lower bound (i.e. an ineffective range tombstone that is used to
+     * delay opening the sstable until the iteration reaches the clustering range that the sstable covers).
+     */
+    public void requestLowerBound()
     {
         assert state == State.LOWER_BOUND_NOT_REQUESTED || state == State.LOWER_BOUND_REQUESTED;
         state = State.LOWER_BOUND_REQUESTED;

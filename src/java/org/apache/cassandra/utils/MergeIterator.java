@@ -31,7 +31,7 @@ public abstract class MergeIterator
     {
         if (sources.size() == 1)
         {
-            return reducer.trivialReduceIsTrivial()
+            return reducer.singleSourceReduceIsTrivial()
                  ? (CloseableIterator<Out>) sources.get(0)
                  : new OneToOneCloseable<>(sources.get(0), reducer);
         }
@@ -44,7 +44,7 @@ public abstract class MergeIterator
     {
         if (sources.size() == 1)
         {
-            return reducer.trivialReduceIsTrivial()
+            return reducer.singleSourceReduceIsTrivial()
                    ? (Iterator<Out>) sources.get(0)
                    : new OneToOne<>(sources.get(0), reducer);
         }
