@@ -32,7 +32,7 @@ import org.apache.cassandra.db.compaction.writers.SSTableDataSink;
 import org.apache.cassandra.db.rows.BTreeRow;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
-import org.apache.cassandra.io.sstable.compaction.BigTableCursor;
+import org.apache.cassandra.io.sstable.compaction.SortedStringTableCursor;
 import org.apache.cassandra.io.sstable.compaction.IteratorFromCursor;
 import org.apache.cassandra.io.sstable.compaction.PurgeCursor;
 import org.apache.cassandra.io.sstable.compaction.SSTableCursor;
@@ -97,7 +97,7 @@ public class CompactionCursor implements SSTableCursorMerger.MergeListener, Auto
             return SSTableCursor.empty();
 
         SSTableCursor merged = new SSTableCursorMerger(readers.stream()
-                                                              .map(r -> new BigTableCursor(r, limiter))
+                                                              .map(r -> new SortedStringTableCursor(r, limiter))
                                                               .collect(Collectors.toList()),
                                                        metadata(),
                                                        this);

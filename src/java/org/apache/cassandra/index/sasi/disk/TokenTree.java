@@ -393,7 +393,7 @@ public class TokenTree
             {
                 DecoratedKey reduced = null;
 
-                public boolean trivialReduceIsTrivial()
+                public boolean singleSourceReduceIsTrivial()
                 {
                     return true;
                 }

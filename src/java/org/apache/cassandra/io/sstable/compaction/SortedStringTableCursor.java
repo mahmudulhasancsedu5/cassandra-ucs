@@ -45,7 +45,7 @@ import java.io.IOException;
  * Cursor over sstable data files.
  * Supports both BIG and BTI formats (which differ only in index and whose data file formats are identical).
  */
-public class BigTableCursor implements SSTableCursor
+public class SortedStringTableCursor implements SSTableCursor
 {
     private final RandomAccessReader dataFile;
     private final SSTableReader sstable;
@@ -74,17 +74,17 @@ public class BigTableCursor implements SSTableCursor
 
     private Type currentType = Type.UNINITIALIZED;
 
-    public BigTableCursor(SSTableReader sstable)
+    public SortedStringTableCursor(SSTableReader sstable)
     {
         this(sstable, sstable.openDataReader());
     }
 
-    public BigTableCursor(SSTableReader sstable, RateLimiter limiter)
+    public SortedStringTableCursor(SSTableReader sstable, RateLimiter limiter)
     {
         this(sstable, sstable.openDataReader(limiter));
     }
 
-    public BigTableCursor(SSTableReader sstable, RandomAccessReader dataFile)
+    public SortedStringTableCursor(SSTableReader sstable, RandomAccessReader dataFile)
     {
         this.dataFile = dataFile;
         this.header = sstable.header;

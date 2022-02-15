@@ -30,11 +30,25 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
  */
 public interface SSTableDataSink
 {
+    /**
+     * Append the given partition.
+     * This is equivalent to a sequence of startPartition, addUnfiltered for each item in the partition, and endPartition.
+     */
     boolean append(UnfilteredRowIterator partition);
 
+    /**
+     * Start a partition with the given key and deletion time.
+     * Returns false if the partition could not be added (e.g. if the key is too long).
+     */
     boolean startPartition(DecoratedKey partitionKey, DeletionTime deletionTime) throws IOException;
 
+    /**
+     * Complete a partition. Must be called once for every startPartition.
+     */
     void endPartition() throws IOException;
 
+    /**
+     * Add a new row or marker in the current partition. Must be preceded by startPartition.
+     */
     void addUnfiltered(Unfiltered unfiltered) throws IOException;
 }
