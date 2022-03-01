@@ -2250,10 +2250,7 @@ public class BTree
             return true;
 
         if (cmp != null && !isNodeWellFormed(cmp, node, min, max))
-        {
-            System.out.println("NOT Well formed " + toString(node));
             return false;
-        }
 
         int keyCount = shallowSize(node);
         if (keyCount < 1)
@@ -2275,10 +2272,8 @@ public class BTree
             Object[] child = (Object[]) node[i];
             Object localmax = i < node.length - 2 ? node[i - childOffset(node)] : max;
             if (!isWellFormed(cmp, child, false, min, localmax))
-            {
-                System.out.println("NOT Well formed " + toString(child));
                 return false;
-            }
+
             type |= isLeaf(child) ? 1 : 2;
             min = localmax;
             size += size(child);
@@ -2300,10 +2295,8 @@ public class BTree
         {
             Object current = node[i];
             if (compareWellFormed(cmp, previous, current) >= 0)
-            {
-                System.out.println("previous " + previous + "curent " + current);
                 return false;
-            }
+
             previous = current;
         }
         return compareWellFormed(cmp, previous, max) < 0;
