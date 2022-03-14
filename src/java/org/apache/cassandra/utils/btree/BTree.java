@@ -3576,7 +3576,7 @@ public class BTree
                                     break mainLoop;
                             }
                         }
-                        assert upos == usz;
+//                        assert upos == usz;
                         c = compareWithMaybeInfinity(comparator, ik, uub);
                         if (c < 0)
                         {
@@ -3606,8 +3606,8 @@ public class BTree
                     break mainLoop;
                 unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
 
-                assert uk == unode[upos];
-                assert (c == 0) == (comparator.compare(uk, ik) == 0);
+//                assert uk == unode[upos];
+//                assert (c == 0) == (comparator.compare(uk, ik) == 0);
                 ++upos;
                 if (c == 0)
                 {
