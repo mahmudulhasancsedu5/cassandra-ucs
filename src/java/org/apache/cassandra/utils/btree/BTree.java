@@ -3495,58 +3495,57 @@ public class BTree
                 branch = branch.ensureParent();
 
             Insert ik = insert.next();  // next value from the insert tree.
+            int c;
             // We loop on unode, the node from the update tree. Depening on where ik resides compared to it, we can:
             // - descend into one of the children of unode if ik is in its span
             // - merge ik with one of the keys in the current node if ik matches it
             // - ascend upwards if ik is beyond the upper bound of this node
-            mainLoop:
             while (true)
             {
-                int c;
                 // upos is the index of the first child we could descend into, and the key we should compare to.
 
-                descendLoop:
-                while (true) // unode is a branch
+                int find = exponentialSearchWithUpperBound(comparator, unode, upos, usz, uub, ik);
+                if (find >= 0 && find < usz + 1)
                 {
+                    // Exact match for a key in this branch. Merge and continue with its right-side child.
+                    if (upos < find)
+                        branch.copyPreceding(unode, usz, upos, find - upos);
 
-                    int find = exponentialSearchWithUpperBound(comparator, unode, upos, usz, uub, ik);
-                    if (find >= 0 && find < usz + 1)
+                    branch.addChild((Object[]) unode[usz + find]);
+                    branch.addKey(updateF.apply((Existing) unode[find], ik));
+                    upos = find + 1;
+                    ik = insert.next();
+                    if (null == ik)
+                        break;
+                    continue;
+                }
+                else if (find < 0 && find > -2 - usz)
+                {
+                    // Smaller than some key in the branch, or the node's upper bound, i.e. need to descend into child.
+                    find = -1 - find;   // this is the branch to descend into, also the index of the next key
+
+                    // copy the data before the previous key as well as that key
+                    if (upos < find)
+                        branch.copyPreceding(unode, usz, upos, find - upos);
+
+                    // ik occurs in the child, so descend into it.
+                    // When find < usz, i.e. there is a key in this node after the branch we descend into, we will
+                    // process it during ascent. When find == usz, i.e. this child is the right-most one, the finish
+                    // method will directly ascend onto our parent.
+                    update.descendIntoNextChild(unode, find, usz);
+                    LeafOrBranchBuilder level = branch.child;
+                    if (level != leaf())
                     {
-                        // Exact match for a key in this branch. Merge and continue with its right-side child.
-                        if (upos < find)
-                            branch.copyPreceding(unode, usz, upos, find - upos);
-
-                        branch.addChild((Object[]) unode[usz + find]);
-                        branch.addKey(updateF.apply((Existing) unode[find], ik));
-                        upos = find + 1;
-                        ik = insert.next();
-                        if (ik == null)
-                            break mainLoop;
-                        continue descendLoop;
+                        // Descended into a branch. Continue processing with it.
+                        branch = (BranchBuilder) level;
+                        unode = update.node();
+                        upos = update.position();
+                        uub = (Existing) update.upperBound();
+                        usz = shallowSizeOfBranch(unode);
+                        continue;
                     }
-                    else if (find < 0 && find > -2 - usz)
+                    else
                     {
-                        // Smaller than some key in the branch, or the node's upper bound, i.e. need to descend into child.
-                        find = -1 - find;   // this is the branch to descend into, also the index of the next key
-
-                        // copy the data before the previous key as well as that key
-                        if (upos < find)
-                            branch.copyPreceding(unode, usz, upos, find - upos);
-
-                        // ik occurs in the child, so descend into it.
-                        // When find < usz, i.e. there is a key in this node after the branch we descend into, we will
-                        // process it during ascent. When find == usz, i.e. this child is the right-most one, the finish
-                        // method will directly ascend onto our parent.
-                        update.descendIntoNextChild(unode, find, usz);
-                        LeafOrBranchBuilder level = branch.child;
-                        if (level != leaf())
-                        {
-                            // Descended into a branch. Continue processing with it.
-                            branch = (BranchBuilder) level;
-                            unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
-                            continue descendLoop;
-                        }
-
                         // Descended into a leaf. Process it and then ascend.
                         ik = processLeaf(ik);
                         uub = (Existing) update.upperBound();
@@ -3566,33 +3565,38 @@ public class BTree
                         // c (the comparison result between ik and uub) is carried over
 
                         // -> we're done with unode, ascend
-                        if (null == (branch = finish(level, unode, sizeOfLeaf(unode))))
-                            break mainLoop;
-                        break descendLoop;
-                    }
-                    else
-                    {
-                        // ik is above our upper bound, copy all that's left and ascend
-                        if (upos < usz)
-                            branch.copyPreceding(unode, usz, upos, usz - upos);
-                        // The last child needs to be copied too.
-                        branch.addChild((Object[]) unode[usz + usz]);
-
-                        c = searchResultToComparison(find); // 0 on match with uub, -1 otherwise
-                        // -> we're done with unode, ascend
-                        if (null == (branch = finish(branch, unode, usz)))
-                            break mainLoop;
-                        break descendLoop;
+                        branch = finish(level, unode, sizeOfLeaf(unode));
+                        // continue with the ascent code below
                     }
                 }
-                // descendLoop ends. We get here on exit from the two paths above, after calling finish.
+                else
+                {
+                    // ik is above our upper bound, copy all that's left and ascend
+                    if (upos < usz)
+                        branch.copyPreceding(unode, usz, upos, usz - upos);
+                    // The last child needs to be copied too.
+                    branch.addChild((Object[]) unode[usz + usz]);
+
+                    c = searchResultToComparison(find); // 0 on match with uub, -1 otherwise
+                    // -> we're done with unode, ascend
+                    branch = finish(branch, unode, usz);
+                    // continue with the ascent code below
+                }
+
+                // Complete ascent to an upper-level node by setting up the unode variables and processing the bounding
+                // key on the level we have just reached.
+                if (branch == null)
+                    break;
 
                 // Because finish completes all nodes that were positioned on the right-most child, the upper bound
                 // we compared against matches the current key, and we can also make use of the comparison result c.
                 // invariant: uub == unode[upos];
                 // invariant: (c == 0) == (comparator.compare(uub, ik) == 0);
                 Existing uk = uub;
-                unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
+                unode = update.node();
+                upos = update.position();
+                uub = (Existing) update.upperBound();
+                usz = shallowSizeOfBranch(unode);
 
                 ++upos;
                 if (c == 0)
@@ -3605,10 +3609,9 @@ public class BTree
                     branch.addKey(uk);
 
                 if (ik == null)
-                    break mainLoop;
+                    break;
             }
 
-            assert ik == null;
             if (branch != null)
             {
                 // finish copying each in-progress node upto but excluding root unode
