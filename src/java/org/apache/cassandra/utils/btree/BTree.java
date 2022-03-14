@@ -3131,41 +3131,30 @@ public class BTree
 
         /**
          * Copy the contents of {@code unode} into {@code branchBuffers[branchIndex]},
-         * between keys {@code from} and {@code to}, overflowing as necessary.
-         * {@code from} may be {@code -1}, representing the first child only;
-         * all other indices represent the key/child pairs that follow (i.e. a key and its right-hand child).
+         * starting at the child before key with index {@code offset} up to and
+         * including the key with index {@code offset + length - 1}.
          */
-        void copy(Object[] unode, int usz, int offset, int length)
+        void copyPreceding(Object[] unode, int usz, int offset, int length)
         {
             int[] uszmap = sizeMap(unode);
-            if (offset == -1)
-            {
-                // copy the first child
-                buffer[MAX_KEYS] = unode[usz];
-                sizes[0] = uszmap[0];
-                if (--length == 0)
-                    return;
-                offset = 0;
-            }
-
             if (count + length > MAX_KEYS)
             {
                 // we will overflow, so copy to MAX_KEYS and trigger overflow
                 int copy = MAX_KEYS - count;
-                copyNoOverflow(unode, usz, uszmap, offset, copy);
+                copyPrecedingNoOverflow(unode, usz, uszmap, offset, copy);
                 offset += copy;
 
-                overflow(unode[offset]);
+                // copy last child that fits
+                buffer[MAX_KEYS + MAX_KEYS] = unode[usz + offset];
+                sizes[MAX_KEYS] = uszmap[offset] - (offset > 0 ? (1 + uszmap[offset - 1]) : 0);
 
-                // copy first child again to restore invariants
-                buffer[MAX_KEYS] = unode[usz + offset + 1];
-                sizes[0] = uszmap[offset + 1] - (1 + uszmap[offset]);
+                overflow(unode[offset]);
 
                 length -= 1 + copy;
                 ++offset;
             }
 
-            copyNoOverflow(unode, usz, uszmap, offset, length);
+            copyPrecedingNoOverflow(unode, usz, uszmap, offset, length);
         }
 
         /**
@@ -3174,23 +3163,23 @@ public class BTree
          * {@code from} may be {@code -1}, representing the first child only;
          * all other indices represent the key/child pairs that follow (i.e. a key and its right-hand child).
          */
-        private void copyNoOverflow(Object[] unode, int usz, int[] uszmap, int offset, int length)
+        private void copyPrecedingNoOverflow(Object[] unode, int usz, int[] uszmap, int offset, int length)
         {
             if (length <= 1)
             {
                 if (length == 0)
                     return;
 
+                buffer[MAX_KEYS + count] = unode[usz + offset];
+                sizes[count] = uszmap[offset] - (offset > 0 ? (1 + uszmap[offset - 1]) : 0);
                 buffer[count] = unode[offset];
-                buffer[MAX_KEYS + count + 1] = unode[usz + offset + 1];
-                sizes[count + 1] = uszmap[offset + 1] - (1 + uszmap[offset]);
                 ++count;
             }
             else
             {
+                System.arraycopy(unode, usz + offset, buffer, MAX_KEYS + count, length);
                 System.arraycopy(unode, offset, buffer, count, length);
-                System.arraycopy(unode, usz + offset + 1, buffer, MAX_KEYS + count + 1, length);
-                copySizeMapToSizes(uszmap, offset + 1, sizes, count + 1, length);
+                copySizeMapToSizes(uszmap, offset, sizes, count, length);
                 count += length;
             }
         }
@@ -3239,6 +3228,21 @@ public class BTree
         abstract void reset();
     }
 
+    public static Object[] completeBuild(LeafOrBranchBuilder level)
+    {
+        while (true)
+        {
+            if (!level.hasOverflow())
+                return level.drain();
+
+            BranchBuilder parent = level.ensureParent();
+            level.drainAndPropagate(null, -1, parent);
+            if (level.savedBuffer != null)
+                Arrays.fill(level.savedBuffer, null);
+            level = parent;
+        }
+    }
+
     /**
      * A pooled builder for constructing a tree in-order, and without needing any reconciliation.
      *
@@ -3264,18 +3268,7 @@ public class BTree
 
         public Object[] build()
         {
-            LeafOrBranchBuilder level = leaf();
-            while (true)
-            {
-                if (!level.hasOverflow())
-                    return level.drain();
-
-                BranchBuilder parent = level.ensureParent();
-                level.drainAndPropagate(null, -1, parent);
-                if (level.savedBuffer != null)
-                    Arrays.fill(level.savedBuffer, null);
-                level = parent;
-            }
+            return completeBuild(leaf());
         }
 
         public Object[] buildReverse()
@@ -3384,13 +3377,11 @@ public class BTree
         static final TinyThreadLocalPool<Updater> POOL = new TinyThreadLocalPool<>();
         TinyThreadLocalPool.TinyPool<Updater> pool;
 
-        // the old tree we navigate one tier at a time, deciding if we descend or not
-        // we do not always logically point to a key, as we may point to the position
-        // before the start of the node we're on
-        final SimpleTreeNavigator update = new SimpleTreeNavigator();
         // the new tree we navigate linearly, and are always on a key or at the end
-        final SimpleTreeIterator insert = new SimpleTreeIterator();
-        Object[] result;
+        final SimpleTreeKeysIterator<Compare, Insert> insert = new SimpleTreeKeysIterator<>();
+
+        Comparator<? super Compare> comparator;
+        UpdateFunction<Insert, Existing> updateF;
 
 
         static <Compare, Existing extends Compare, Insert extends Compare> Updater<Compare, Existing, Insert> get()
@@ -3405,265 +3396,24 @@ public class BTree
 
         /**
          * Precondition: {@code update} should not be empty.
-         *
+         * <p>
          * Inserts {@code insert} into {@code update}, after applying {@code updateF} to each item, or matched item pairs.
          */
         Object[] update(Object[] update, Object[] insert, Comparator<? super Compare> comparator, UpdateFunction<Insert, Existing> updateF)
         {
-            this.update.init(update);
             this.insert.init(insert);
+            this.updateF = updateF;
+            this.comparator = comparator;
             this.allocated = isSimple(updateF) ? -1 : 0;
-            return update(comparator, updateF);
-        }
+            int leafDepth = BTree.depth(update) - 1;
+            LeafOrBranchBuilder builder = leaf();
+            for (int i = 0; i < leafDepth; ++i)
+                builder = builder.ensureParent();
 
-        /**
-         * We base our operation on the shape of {@code update}, trying to steal as much of the original tree as
-         * possible for our new tree
-         */
-        private Object[] update(Comparator<? super Compare> comparator, UpdateFunction<Insert, Existing> updateF)
-        {
-            Existing uub = null;
-            Object[] unode = update.node(), inode = insert.node();
-            int upos = update.position(), usz = shallowSize(unode);
-            int ipos = insert.position(), isz = shallowSize(inode);
-
-            LeafOrBranchBuilder level = leaf(); // once level == null, we're done
-            BranchBuilder branch = null; // branch == null if level == leaf(); this is unfortunate, but we need to invoke branch-specific methods
-            for (int i = 0; i < update.leafDepth; ++i)
-                level = branch = level.ensureParent();
-
-            // define:      xnode[xsz] == xub (i.e. the key to our right in our parent can be treated below as a key past the end of the node)
-            // invariants:  iub > unode[upos], uub > inode[ipos]
-            // invariants:  ipos >=  0 && ipos  < isz (imposed by SimpleTreeIterator)
-            // invariants:  upos >= -1 && upos <= usz
-            while (true)
-            {
-                if (level == leaf())
-                {
-                    if (isLeaf(inode))
-                    {
-                        // Both are leaves, so can simply linearly merge them until we reach the update upper bound.
-                        // This is most easily achieved by looping until one of the leaves is consumed, then
-                        // continuing to consume inode until we hit uub
-
-                        // Note that unode can already be exhausted, because we use the original tree to define the
-                        // shape of our updated tree and so we retain the _bounds_ of each sub-tree, only creating
-                        // new bounds during overflow, so once we have copied a leaf we continue inserting elements
-
-                        Insert ik =  (Insert) inode[ipos];
-                        if (upos < usz)
-                        {
-                            Existing uk = (Existing) unode[upos];
-                            int c = comparator.compare(uk, ik);
-                            while (true)
-                            {
-                                if (c == 0)
-                                {
-                                    leaf().addKey(updateF.apply(uk, ik));
-                                    if (++upos < usz)
-                                        uk = (Existing) unode[upos];
-                                    if (++ipos < isz)
-                                        ik = (Insert) inode[ipos];
-                                    if (upos == usz || ipos == isz)
-                                        break;
-                                    c = comparator.compare(uk, ik);
-                                }
-                                else if (c < 0)
-                                {
-                                    int ulim = exponentialSearch(comparator, unode, upos + 1, usz, ik);
-                                    c = ulim < 0 ? 1 : 0; // positive or zero
-                                    if (ulim < 0) ulim = -(1 + ulim);
-                                    leaf().copy(unode, upos, ulim - upos);
-                                    if ((upos = ulim) == usz)
-                                        break;
-                                    uk = (Existing) unode[upos];
-                                }
-                                else
-                                {
-                                    int ilim = exponentialSearch(comparator, inode, ipos + 1, isz, uk);
-                                    c = ilim & 0x80000000; // negative or zero
-                                    if (ilim < 0) ilim = -(1 + ilim);
-                                    leaf().copy(inode, ipos, ilim - ipos, updateF);
-                                    if ((ipos = ilim) == isz)
-                                        break;
-                                    ik = (Insert) inode[ipos];
-                                }
-                            }
-                        }
-
-                        // once here we have either exhausted inode, or inode[ipos] > unode[usz-1]
-                        // if inode is not exhausted, we want to insert its contents up to unode's upper bound (uub)
-                        if (ipos < isz)
-                        {
-                            int ilim = exponentialSearchForMaybeInfinity(comparator, inode, ipos, isz, uub);
-                            if (ilim != -(1 + ipos))
-                            {
-                                if (ilim < 0) ilim = -(1 + ilim);
-                                leaf().copy(inode, ipos, ilim - ipos, updateF);
-                                ipos = ilim;
-                            }
-                        }
-
-                        // if inode is _still_ not exhausted, we've reached uub
-                        // so finish unode, and move to its parent
-                        if (ipos < isz)
-                        {
-                            if (null == (level = branch = finish(level, unode, usz)))
-                                break;
-                            unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
-                        }
-                        else if (insert.ascendToUnfinishedParent())
-                        {
-                            // if inode has been exhausted, move it forwards
-                            inode = insert.node(); ipos = insert.position(); isz = shallowSizeOfBranch(inode);
-                        }
-                        else break;
-                    }
-                    else
-                    {
-                        // {@code insert} is a branch: perform a linear merge between the leaf and this one branch key
-                        Insert ik = (Insert) inode[ipos];
-                        int find = exponentialSearchWithUpperBound(comparator, unode, upos, usz, uub, ik);
-                        boolean isInRange = find != -(2 + usz);
-                        boolean found = find >= 0;
-                        if (find < 0) find = isInRange ? -(1 + find) : usz;
-
-                        if (upos < find)
-                        {
-                            copy(unode, upos, find - upos);
-                            upos = find;
-                        }
-
-                        if (isInRange)
-                        {
-                            leaf().addKey(found ? updateF.apply((Existing) unode[upos++], ik)
-                                                : isSimple(updateF)
-                                                  ? ik
-                                                  : updateF.apply(ik));
-
-                            // We are now immediately after ik; since inode is a branch, the next is in a leaf node
-                            insert.descendIntoNextLeaf(inode, ipos, isz);
-                            inode = insert.node(); ipos = insert.position(); isz = sizeOfLeaf(inode);
-                        }
-                        else
-                        {
-                            if (null == (level = branch = finish(level, unode, usz)))
-                                break;
-                            unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
-                        }
-                    }
-                }
-                else
-                {
-                    // we don't care if the new node is a leaf or branch we just want to decide where we go in the old tree
-                    Insert ik = (Insert) inode[ipos];
-
-                    // invariants:
-                    //      upos >= -1, upos < usz
-                    //      branchBuffers[>bufferIndex] must always end on a key (i.e. have as many children as keys)
-                    //                                  because on ascent they will have a child to add
-                    //      branchBuffers[bufferIndex]  must end _before_ a key, since we enter this loop on a key to handle
-                    //      ukey[0..upos) and uchild[0..upos] have been merged into branchBuffers[branchIndex]
-                    // i.e. we have handled all data in unode prior to unode[upos], the current key
-
-                    int find = exponentialSearchWithUpperBound(comparator, unode, max(0, upos), usz, uub, ik);
-                    boolean found = find >= 0;
-                    if (find < 0) find = -(2 + find);
-                    boolean isInRange = find < usz;
-
-                    // post-conditions:
-                    //           find  >= -1
-                    //      ukey[find] == ik or ukey[find+1] > uk
-                    // ->   ukey[find] <= ik
-                    //    uchild[find]  < ik
-
-                    if (upos < find)
-                    {
-                        branch.copy(unode, usz, upos, find - upos);
-                        upos = find;
-                    }
-
-                    // given: ukey[find] <= ik
-                    // if find is a valid key, we copy it, possibly merging with ik
-                    if (found)
-                    {
-                        // we have an exact match, so merge the key, and we now have as many children as keys
-                        branch.addKey(updateF.apply((Existing) unode[upos], ik));
-                    }
-                    else if (upos >= 0 && upos < usz)
-                    {
-                        // otherwise ik occurs _after_ unode[upos] so we copy it unadulterated
-                        // (but may need to descend into its right child)
-                        branch.addKey(unode[upos]);
-                    }
-                    //      ukey[0..upos+1) and uchild[0..upos+1) have been dealt with
-
-                    boolean noMoreToInsert = false; // exitLoop
-                    boolean descend = isInRange; // assume !found; update in found block otherwise
-                    // now we need to restore our invariants
-                    if (found)
-                    {
-                        // we have consumed ik and uk; first walk inode forwards
-                        if (!isLeaf(inode))
-                        {
-                            insert.descendIntoNextLeaf(inode, ipos, isz);
-                            inode = insert.node(); ipos = insert.position(); isz = sizeOfLeaf(inode);
-                        }
-                        else if (++ipos == isz && !(noMoreToInsert = !insert.ascendToUnfinishedParent()))
-                        {
-                            inode = insert.node(); ipos = insert.position(); isz = shallowSizeOfBranch(inode);
-                        }
-
-                        // now we have to restore our invariant, as we last copied a key,
-                        // so we need to either descend or copy the next child
-
-                        // compare ik to the next key:
-                        //   if doneInsert then we have no ik, so treat it as infinity;
-                        //   if exhausted unode's keys, compare with uub for final child
-                        Existing ub = 1 + upos >= usz ? uub : (Existing) unode[1 + upos];
-                        int c = noMoreToInsert ? 1 : compareWithMaybeInfinity(comparator, (Compare) inode[ipos], ub);
-                        descend = c < 0; // descend if ik occurs in the range owned by the child
-                        if (!descend) // otherwise copy the child and continue the loop
-                            branch.addChild((Object[]) unode[usz + ++upos]);
-                    }
-
-                    if (descend)
-                    {
-                        // ik occurs in the child, so descend
-                        // if we're descending, we _want_ to have a dangling child that we populate on ascent
-                        update.descendIntoNextChild(unode, upos, usz);
-                        unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSize(unode);
-                        level = level.child;
-                        branch = level == leaf() ? null : (BranchBuilder) level;
-                    }
-                    else if (upos >= usz)
-                    {
-                        // -> we're done with unode
-                        if (null == (level = branch = finish(level, unode, usz)))
-                            break;
-                        unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSize(unode);
-                    }
-
-                    if (noMoreToInsert)
-                        break;
-                }
-            }
-
-            if (level != null)
-            {
-                // finish copying each in-progress node upto but excluding root unode
-                // NOTE: we stop maintaining uub at this point, as we no longer need it
-                while (true)
-                {
-                    if (level == leaf()) leaf().copy(unode, upos, usz - upos);
-                    else branch.copy(unode, usz, upos, usz - upos);
-
-                    if (null == (level = branch = finish(level, unode, usz)))
-                        break;
-
-                    unode = update.node(); upos = update.position(); usz = shallowSizeOfBranch(unode);
-                }
-            }
+            Insert ik = this.insert.next();
+            ik = updateRecursive(ik, update, null, builder);
+            assert ik == null;
+            Object[] result = completeBuild(builder);
 
             if (allocated > 0)
                 updateF.onAllocated(allocated);
@@ -3672,33 +3422,134 @@ public class BTree
         }
 
         /**
-         * Called when we have inserted all keys up to {@code uub}, i.e. all those occurring in the
-         * part of the tree logically owned by {@code unode}.
+         * Merge a BTree recursively with the contents of {@code insert} up to the given upper bound.
          *
-         * Constructs the replacement node, inserts it into its parent buffer, and continues finishing
-         * parents if they are also complete as a result of this action.
+         * @param ik The next key from the inserted data.
+         * @param unode The source branch to update.
+         * @param uub The branch's upper bound
+         * @param builder The builder that will receive the data. It needs to be at the same level of the hierarchy
+         *                as the source unode.
+         * @return The next key from the inserted data, >= uub.
          */
-        BranchBuilder finish(LeafOrBranchBuilder level, Object[] unode, int usz)
+        private Insert updateRecursive(Insert ik, Object[] unode, Existing uub, LeafOrBranchBuilder builder)
         {
-            // first handle completing nodes we are updating; we do this at the start of the loop
-            // to reduce code duplication, simply ensuring upos == usz on completion of the prior loop
-            int upos;
-            BranchBuilder parent;
-            do
-            {
-                parent = level.parentIfInUse();
-                Object[] result = level.drainAndPropagate(unode, usz, parent);
-                if (parent == null)
-                    this.result = result;
-
-                if (update.ascendToParent()) { unode = update.node(); upos = update.position(); usz = shallowSizeOfBranch(unode); }
-                else { unode = null; upos = -1; usz = -1; }
-
-                level = parent;
-            } while (level != null && upos == usz);
-
-            return parent;
+            return builder == leaf()
+                   ? updateRecursive(ik, unode, uub, (LeafBuilder) builder)
+                   : updateRecursive(ik, unode, uub, (BranchBuilder) builder);
         }
+
+        private Insert updateRecursive(Insert ik, Object[] unode, Existing uub, BranchBuilder builder)
+        {
+            int upos = 0;
+            int usz = shallowSizeOfBranch(unode);
+
+            while (ik != null)
+            {
+                int find = exponentialSearchWithUpperBound(comparator, unode, upos, usz, uub, ik);
+                int c = searchResultToComparison(find);
+                if (find < 0)
+                    find = -1 - find;
+
+                if (find > usz)
+                    break;  // nothing else needs to be inserted in this branch
+                if (find > upos)
+                    builder.copyPreceding(unode, usz, upos, find - upos);
+
+                final Existing nextUKey = find < usz ? (Existing) unode[find] : uub;
+                final Object[] childUNode = (Object[]) unode[find + usz];
+
+                // process next child
+                if (c < 0)
+                {
+                    // ik fall inside it -- recursively merge the child with the update, using next key as an upper bound
+                    LeafOrBranchBuilder childBuilder = builder.child;
+                    ik = updateRecursive(ik, childUNode, nextUKey, childBuilder);
+                    childBuilder.drainAndPropagate(childUNode, shallowSizeOfBranch(childUNode), builder);
+                    if (find == usz)    // this was the right-most child, branch is complete and we can return immediately
+                        return ik;
+                    c = ik != null ? comparator.compare(nextUKey, ik) : -1;
+                }
+                else
+                    builder.addChild(childUNode);
+
+                // process next key
+                if (c == 0)
+                {
+                    // ik matches next key
+                    builder.addKey(updateF.apply(nextUKey, ik));
+                    ik = insert.next();
+                }
+                else
+                    builder.addKey(nextUKey);
+
+                upos = find + 1;
+            }
+            // copy the rest of the branch and exit
+            if (upos <= usz)
+            {
+                builder.copyPreceding(unode, usz, upos, usz - upos);
+                builder.addChild((Object[]) unode[usz + usz]);
+            }
+
+            return ik;
+        }
+
+        private Insert updateRecursive(Insert ik, Object[] unode, Existing uub, LeafBuilder builder)
+        {
+            int upos = 0;
+            int usz = sizeOfLeaf(unode);
+            Existing uk = (Existing) unode[upos];
+            int c = comparator.compare(uk, ik);
+
+            while (true)
+            {
+                if (c == 0)
+                {
+                    leaf().addKey(updateF.apply(uk, ik));
+                    if (++upos < usz)
+                        uk = (Existing) unode[upos];
+                    ik = insert.next();
+                    if (ik == null)
+                    {
+                        builder.copy(unode, upos, usz - upos);
+                        return null;
+                    }
+                    if (upos == usz)
+                        break;
+                    c = comparator.compare(uk, ik);
+                }
+                else if (c < 0)
+                {
+                    int ulim = exponentialSearch(comparator, unode, upos + 1, usz, ik);
+                    c = -searchResultToComparison(ulim); // 0 if match, 1 otherwise
+                    if (ulim < 0)
+                        ulim = -(1 + ulim);
+                    builder.copy(unode, upos, ulim - upos);
+                    if ((upos = ulim) == usz)
+                        break;
+                    uk = (Existing) unode[upos];
+                }
+                else
+                {
+                    builder.addKey(updateF.apply(ik));
+                    c = insert.copyKeysSmallerThan(uk, comparator, builder, updateF); // 0 on match, -1 otherwise
+                    ik = insert.next();
+                    if (ik == null)
+                    {
+                        builder.copy(unode, upos, usz - upos);
+                        return null;
+                    }
+                }
+            }
+            if (uub == null || comparator.compare(ik, uub) < 0)
+            {
+                builder.addKey(updateF.apply(ik));
+                c = insert.copyKeysSmallerThan(uub, comparator, builder, updateF); // 0 on match, -1 otherwise
+                ik = insert.next();
+            }
+            return ik;
+        }
+
 
         public void close()
         {
@@ -3711,9 +3562,12 @@ public class BTree
         {
             super.reset();
             insert.reset();
-            update.reset();
-            result = null;
         }
+    }
+
+    static int searchResultToComparison(int searchResult)
+    {
+        return searchResult >> 31;
     }
 
     /**
@@ -4186,12 +4040,6 @@ public class BTree
             return leafDepth + 1;
         }
 
-        void advanceLeaf()
-        {
-            if (++positions[depth] == sizeOfLeaf(nodes[depth]))
-                ascendToUnfinishedParent();
-        }
-
         void descendIntoNextLeaf(Object[] node, int pos, int sz)
         {
             positions[depth] = ++pos;
@@ -4212,63 +4060,101 @@ public class BTree
                 return false;
             return --depth >= 0;
         }
-
-        boolean isRoot()
-        {
-            return depth == 0;
-        }
     }
 
-    /**
-     * Like {@code SimpleTreeIterator} except we may not visit every node.
-     * When we first enter branch, we begin before its first key to consider if we should descend into the first child.
-     * Should only be used on non-empty trees.
-     */
-    private static final class SimpleTreeNavigator extends SimpleTreeStack
+
+    private static class SimpleTreeKeysIterator<Compare, Insert extends Compare>
     {
-        Object[] upperBounds;
+        int leafSize;
+        int leafPos;
+        Object[] leaf;
+        Object[][] nodes;
+        int[] positions;
+        int depth;
 
         void init(Object[] tree)
         {
-            int height = height(tree);
-            leafDepth = height - 1;
-            if (positions == null || height >= positions.length)
+            int maxHeight = maxRootHeight(size(tree));
+            if (positions == null || maxHeight >= positions.length)
             {
-                positions = new int[height];
-                nodes = new Object[height][];
-                upperBounds = new Object[height];
+                positions = new int[maxHeight + 1];
+                nodes = new Object[maxHeight + 1][];
             }
-            nodes[this.depth = 0] = tree;
-            positions[0] = leafDepth == 0 ? 0 : -1;
-        }
-
-        void descendIntoNextChild(Object[] parent, int pos, int sz)
-        {
-            positions[depth] = ++pos;
-            ++depth;
-            Object[] child = (Object[]) parent[sz + pos];
-            nodes[depth] = child;
-            upperBounds[depth] = pos < sz ? parent[pos] : upperBounds[depth - 1];
-            positions[depth] = depth == leafDepth ? 0 : -1;
+            depth = 0;
+            descendToLeaf(tree);
         }
 
         void reset()
         {
-            super.reset();
-            Arrays.fill(upperBounds, 0, leafDepth + 1, null);
+            leaf = null;
+            Arrays.fill(nodes, 0, nodes.length, null);
         }
 
-        boolean ascendToParent()
+        Insert next()
         {
+            if (leafPos < leafSize) // fast path
+                return (Insert) leaf[leafPos++];
+
             if (depth == 0)
-                return false;
-            --depth;
-            return true;
+                return null;
+
+            Object[] node = nodes[depth - 1];
+            final int position = positions[depth - 1];
+            Insert result = (Insert) node[position];
+            advanceBranch(node, position + 1);
+            return result;
         }
 
-        Object upperBound()
+        private void advanceBranch(Object[] node, int position)
         {
-            return upperBounds[depth];
+            int count = shallowSizeOfBranch(node);
+            if (position < count)
+                positions[depth - 1] = position;
+            else
+                --depth;  // no more children in this branch, remove from stack
+            descendToLeaf((Object[]) node[count + position]);
+        }
+
+        void descendToLeaf(Object[] node)
+        {
+            while (!isLeaf(node))
+            {
+                nodes[depth] = node;
+                positions[depth] = 0;
+                node = (Object[]) node[shallowSizeOfBranch(node)];
+                ++depth;
+            }
+            leaf = node;
+            leafPos = 0;
+            leafSize = sizeOfLeaf(node);
+        }
+
+        <Update> int copyKeysSmallerThan(Compare bound, Comparator<? super Compare> comparator, LeafBuilder builder, UpdateFunction<Insert, Update> transformer)
+        {
+            while (true)
+            {
+                int lim = exponentialSearchForMaybeInfinity(comparator, leaf, leafPos, leafSize, bound);
+                int end = lim >= 0 ? lim : -1 - lim;
+                if (end > leafPos)
+                {
+                    builder.copy(leaf, leafPos, end - leafPos, transformer);
+                    leafPos = end;
+                }
+                if (end < leafSize)
+                    return searchResultToComparison(lim);    // 0 if next is a match for bound, -1 otherwise
+
+                if (depth == 0)
+                    return -1;
+
+                Object[] node = nodes[depth - 1];
+                final int position = positions[depth - 1];
+                Insert branchKey = (Insert) node[position];
+                int cmp = compareWithMaybeInfinity(comparator, branchKey, bound);
+                if (cmp >= 0)
+                    return -cmp;
+                builder.addKey(transformer.apply(branchKey));
+                advanceBranch(node, position + 1);
+            }
         }
     }
 }
