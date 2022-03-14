@@ -3536,7 +3536,7 @@ public class BTree
                         // ik occurs in the child, so descend into it.
                         // When find < usz, i.e. there is a key in this node after the branch we descend into, we will
                         // process it during ascent. When find == usz, i.e. this child is the right-most one, the finish
-                        // method will directly descend onto our parent.
+                        // method will directly ascend onto our parent.
                         update.descendIntoNextChild(unode, find, usz);
                         LeafOrBranchBuilder level = branch.child;
                         if (level != leaf())
@@ -3585,15 +3585,15 @@ public class BTree
                         break descendLoop;
                     }
                 }
-                // descendLoop ends. We get here on exit from the two paths below, after calling finish.
+                // descendLoop ends. We get here on exit from the two paths above, after calling finish.
 
                 // Because finish completes all nodes that were positioned on the right-most child, the upper bound
                 // we compared against matches the current key, and we can also make use of the comparison result c.
+                // invariant: uub == unode[upos];
+                // invariant: (c == 0) == (comparator.compare(uub, ik) == 0);
                 Existing uk = uub;
                 unode = update.node(); upos = update.position(); uub = (Existing) update.upperBound(); usz = shallowSizeOfBranch(unode);
 
-                // disabled for efficiency: assert uk == unode[upos];
-                // disabled for efficiency: assert (c == 0) == (comparator.compare(uk, ik) == 0);
                 ++upos;
                 if (c == 0)
                 {
@@ -3648,7 +3648,7 @@ public class BTree
             int usz = sizeOfLeaf(unode);
             Existing uk = (Existing) unode[upos];
             int c = comparator.compare(uk, ik);
-            leafLoop:
+
             while (true)
             {
                 if (c == 0)
