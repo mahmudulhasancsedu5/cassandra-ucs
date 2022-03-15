@@ -4040,12 +4040,6 @@ public class BTree
             return leafDepth + 1;
         }
 
-        void advanceLeaf()
-        {
-            if (++positions[depth] == sizeOfLeaf(nodes[depth]))
-                ascendToUnfinishedParent();
-        }
-
         void descendIntoNextLeaf(Object[] node, int pos, int sz)
         {
             positions[depth] = ++pos;
@@ -4065,11 +4059,6 @@ public class BTree
             if (depth < 0)
                 return false;
             return --depth >= 0;
-        }
-
-        boolean isRoot()
-        {
-            return depth == 0;
         }
     }
 
@@ -4163,7 +4152,7 @@ public class BTree
                 int cmp = compareWithMaybeInfinity(comparator, branchKey, bound);
                 if (cmp >= 0)
                     return -cmp;
-                builder.addKey(branchKey);
+                builder.addKey(transformer.apply(branchKey));
                 advanceBranch(node, position + 1);
             }
         }
