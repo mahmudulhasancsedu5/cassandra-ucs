@@ -3532,7 +3532,7 @@ public class BTree
                 else
                 {
                     builder.addKey(updateF.apply(ik));
-                    c = insert.addKeysBelow(uk, comparator, builder, updateF); // 0 on match, -1 otherwise
+                    c = insert.copyKeysSmallerThan(uk, comparator, builder, updateF); // 0 on match, -1 otherwise
                     ik = insert.next();
                     if (ik == null)
                     {
@@ -3544,7 +3544,7 @@ public class BTree
             if (uub == null || comparator.compare(ik, uub) < 0)
             {
                 builder.addKey(updateF.apply(ik));
-                c = insert.addKeysBelow(uub, comparator, builder, updateF); // 0 on match, -1 otherwise
+                c = insert.copyKeysSmallerThan(uub, comparator, builder, updateF); // 0 on match, -1 otherwise
                 ik = insert.next();
             }
             return ik;
@@ -4129,7 +4129,7 @@ public class BTree
             leafSize = sizeOfLeaf(node);
         }
 
-        <Update> int addKeysBelow(Compare bound, Comparator<? super Compare> comparator, LeafBuilder builder, UpdateFunction<Insert, Update> transformer)
+        <Update> int copyKeysSmallerThan(Compare bound, Comparator<? super Compare> comparator, LeafBuilder builder, UpdateFunction<Insert, Update> transformer)
         {
             while (true)
             {
