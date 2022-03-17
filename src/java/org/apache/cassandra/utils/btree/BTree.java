@@ -2241,50 +2241,52 @@ public class BTree
 
     public static boolean isWellFormed(Object[] btree, Comparator<?> cmp)
     {
-        return isWellFormed(cmp, btree, true, NEGATIVE_INFINITY, POSITIVE_INFINITY);
+        return isWellFormedReturnHeight(cmp, btree, true, NEGATIVE_INFINITY, POSITIVE_INFINITY) >= 0;
     }
 
-    private static boolean isWellFormed(Comparator<?> cmp, Object[] node, boolean isRoot, Object min, Object max)
+    private static int isWellFormedReturnHeight(Comparator<?> cmp, Object[] node, boolean isRoot, Object min, Object max)
     {
         if (isEmpty(node))
-            return true;
+            return 0;
 
         if (cmp != null && !isNodeWellFormed(cmp, node, min, max))
-            return false;
+            return -1;
 
         int keyCount = shallowSize(node);
         if (keyCount < 1)
-            return false;
+            return -1;
         if (!isRoot && keyCount < BRANCH_FACTOR/2 - 1)
-            return false;
+            return -1;
         if (keyCount >= BRANCH_FACTOR)
-            return false;
+            return -1;
 
         if (isLeaf(node))
-            return true;
+            return 0;
 
         int[] sizeMap = sizeMap(node);
-        int type = 0;
         int size = 0;
+        int childHeight = -1;
         // compare each child node with the branch element at the head of this node it corresponds with
         for (int i = childOffset(node); i < childEndOffset(node) ; i++)
         {
             Object[] child = (Object[]) node[i];
             Object localmax = i < node.length - 2 ? node[i - childOffset(node)] : max;
-            if (!isWellFormed(cmp, child, false, min, localmax))
-                return false;
+            int height = isWellFormedReturnHeight(cmp, child, false, min, localmax);
+            if (height == -1)
+                return -1;
+            if (childHeight == -1)
+                childHeight = height;
+            if (childHeight != height)
+                return -1;
 
-            type |= isLeaf(child) ? 1 : 2;
             min = localmax;
             size += size(child);
             if (sizeMap[i - childOffset(node)] != size)
-                return false;
+                return -1;
             size += 1;
         }
 
-        if (type >= 3)
-            return false;
-        return true; // either all leaves or all branches but not a mix
+        return childHeight + 1;
     }
 
     private static boolean isNodeWellFormed(Comparator<?> cmp, Object[] node, Object min, Object max)
@@ -3836,8 +3838,8 @@ public class BTree
          */
         private Object[] stealAndMaybeRepropagate(LeafOrBranchBuilder fill, BranchBuilder parent)
         {
-            if (!prependFromParent(fill, parent))
-                return fill.drain();
+            // parent already stole, we steal one from it
+            prependFromParent(fill, parent);
 
             // if we've emptied our parent, attempt to restore it from our grandparent,
             // this is so that we can determine an accurate exhausted status
@@ -3852,11 +3854,14 @@ public class BTree
         private boolean tryPrependFromParent(BranchBuilder parent)
         {
             BranchBuilder grandparent = parentIfStillInUse(parent);
-            return grandparent != null && prependFromParent(parent, grandparent);
+            if (grandparent == null)
+                return false;
+            prependFromParent(parent, grandparent);
+            return true;
         }
 
         // should only be invoked with parent = parentIfStillInUse(fill), if non-null result
-        private boolean prependFromParent(LeafOrBranchBuilder fill, BranchBuilder parent)
+        private void prependFromParent(LeafOrBranchBuilder fill, BranchBuilder parent)
         {
             assert !parent.isEmpty();
 
@@ -3886,7 +3891,6 @@ public class BTree
             }
 
             fill.prepend(predecessor, predecessorNextKey);
-            return true;
         }
 
         void reset()
