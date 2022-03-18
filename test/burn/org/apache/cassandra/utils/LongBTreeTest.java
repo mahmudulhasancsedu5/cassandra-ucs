@@ -1112,7 +1112,7 @@ public class LongBTreeTest
         {
             return update;
         }
-        public void onAllocated(long heapSize)
+        public void onAllocatedOnHeap(long heapSize)
         {
         }
         public V apply(V v)

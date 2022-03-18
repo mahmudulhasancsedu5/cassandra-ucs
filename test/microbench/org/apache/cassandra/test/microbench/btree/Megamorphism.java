@@ -40,14 +40,14 @@ public class Megamorphism
     private static final UpdateFunction UNSIMPLE_KEEP_OLD = new UpdateFunction()
     {
         public Object apply(Object replacing, Object update) { return replacing; }
-        public void onAllocated(long heapSize) { }
+        public void onAllocatedOnHeap(long heapSize) { }
         public Object apply(Object v) { return v; }
     };
 
     private static final UpdateFunction UNSIMPLE_KEEP_NEW = new UpdateFunction()
     {
         public Object apply(Object replacing, Object update) { return update; }
-        public void onAllocated(long heapSize) { }
+        public void onAllocatedOnHeap(long heapSize) { }
         public Object apply(Object v) { return v; }
     };
 

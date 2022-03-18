@@ -45,7 +45,7 @@ public class BTreeTest
             return ints[update];
         }
 
-        public void onAllocated(long heapSize)
+        public void onAllocatedOnHeap(long heapSize)
         {
         }
 
@@ -431,7 +431,7 @@ public class BTreeTest
         }
 
         @Override
-        public void onAllocated(long heapSize)
+        public void onAllocatedOnHeap(long heapSize)
         {
 
         }

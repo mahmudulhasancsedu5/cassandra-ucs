@@ -37,7 +37,7 @@ public interface UpdateFunction<K, V> extends Function<K, V>
     /**
      * @param heapSize extra heap space allocated (over previous tree)
      */
-    void onAllocated(long heapSize);
+    void onAllocatedOnHeap(long heapSize);
 
     public static final class Simple<V> implements UpdateFunction<V, V>
     {
@@ -60,7 +60,7 @@ public interface UpdateFunction<K, V> extends Function<K, V>
         }
 
         @Override
-        public void onAllocated(long heapSize)
+        public void onAllocatedOnHeap(long heapSize)
         {
         }
 

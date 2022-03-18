@@ -44,20 +44,20 @@ public class BTree
      * The {@code BRANCH_FACTOR} is defined as the maximum number of children of each branch, with between
      * BRANCH_FACTOR/2-1 and BRANCH_FACTOR-1 keys being stored in every node. This yields a minimum tree size of
      * {@code (BRANCH_FACTOR/2)^height - 1} and a maximum tree size of {@code BRANCH_FACTOR^height - 1}.
-     *
+     * <p>
      * Branches differ from leaves only in that they contain a suffix region containing the child nodes that occur
      * either side of the keys, and a sizeMap in the last position, permitting seeking by index within the tree.
      * Nodes are disambiguated by the length of the array that represents them: an even number is a branch, odd a leaf.
-     *
+     * <p>
      * Leaf Nodes are represented by an odd-length array of keys, with the final element possibly null, i.e.
      * Object[V1, V2, ...,null?]
-     *
+     * <p>
      * Branch nodes: Object[V1, V2, ..., child[&lt;V1.key], child[&lt;V2.key], ..., child[&lt; Inf], sizeMap]
      * Each child is either a branch or leaf, i.e., always an Object[].
      * The key elements in a branch node occupy the first half of the array (minus one)
-     *
+     * <p>
      * BTrees are immutable; updating one returns a new tree that reuses unmodified nodes.
-     *
+     * <p>
      * There are no references back to a parent node from its children (this would make it impossible to re-use
      * subtrees when modifying the tree, since the modified tree would need new parent references).
      * Instead, we store these references in a Path as needed when navigating the tree.
@@ -65,7 +65,7 @@ public class BTree
     public static final int BRANCH_SHIFT = Integer.getInteger("cassandra.btree.branchshift", 5);
 
     private static final int BRANCH_FACTOR = 1 << BRANCH_SHIFT;
-    public static final int MIN_KEYS = BRANCH_FACTOR/2 - 1;
+    public static final int MIN_KEYS = BRANCH_FACTOR / 2 - 1;
     public static final int MAX_KEYS = BRANCH_FACTOR - 1;
 
     // An empty BTree Leaf - which is the same as an empty BTree
@@ -109,7 +109,7 @@ public class BTree
      */
     public static Object[] singleton(Object value)
     {
-        return new Object[] { value };
+        return new Object[]{ value };
     }
 
     @Deprecated
@@ -147,7 +147,7 @@ public class BTree
         insert.fetch(values, 0, size);
         if (!isSimple(updateF))
         {
-            updateF.onAllocated(ObjectSizes.sizeOfReferenceArray(values.length));
+            updateF.onAllocatedOnHeap(ObjectSizes.sizeOfReferenceArray(values.length));
             for (int i = 0; i < size; i++)
                 values[i] = updateF.apply((I) values[i]);
         }
@@ -193,7 +193,7 @@ public class BTree
     /**
      * Build a tree containing only dense nodes except at most two on any level. This matches the structure that
      * a FastBuilder would create, with some optimizations in constructing the dense nodes.
-     *
+     * <p>
      * We do this by repeatedly constructing fully dense children until we reach a threshold, chosen so that we would
      * not be able to create another child with fully dense children and at least MIN_KEYS keys. After the threshold,
      * the remainder may fit a single node, or is otherwise split roughly halfway to create one child with at least
@@ -277,7 +277,7 @@ public class BTree
 
         branch[2 * keyCount + 1] = sizeMap;
         if (!isSimple(updateF))
-            updateF.onAllocated(ObjectSizes.sizeOfArray(branch) + ObjectSizes.sizeOfArray(sizeMap));
+            updateF.onAllocatedOnHeap(ObjectSizes.sizeOfArray(branch) + ObjectSizes.sizeOfArray(sizeMap));
 
         return branch;
     }
@@ -285,7 +285,7 @@ public class BTree
     private static <C, I extends C, O extends C> Object[] buildPerfectDenseAndAddUsage(BulkIterator<I> source, int height, UpdateFunction<I, O> updateF)
     {
         Object[] result = buildPerfectDense(source, height, updateF);
-        updateF.onAllocated(PERFECT_DENSE_SIZE_ON_HEAP[height]);
+        updateF.onAllocatedOnHeap(PERFECT_DENSE_SIZE_ON_HEAP[height]);
         return result;
     }
 
@@ -330,7 +330,7 @@ public class BTree
     /**
      * Inserts {@code insert} into {@code update}, applying {@code updateF} to each new item in {@code insert},
      * as well as any matched items in {@code update}.
-     *
+     * <p>
      * Note that {@code UpdateFunction.noOp} is assumed to indicate a lack of interest in which value survives.
      */
     public static <Compare, Existing extends Compare, Insert extends Compare> Object[] update(Object[] update, Object[] insert, Comparator<? super Compare> comparator, UpdateFunction<Insert, Existing> updateF)
@@ -346,7 +346,7 @@ public class BTree
 
             // if update is empty and updateF is non-trivial, perform a simple fast transformation of the input tree
             insert = BTree.transform(insert, updateF);
-            updateF.onAllocated(sizeOnHeapOf(insert));
+            updateF.onAllocatedOnHeap(sizeOnHeapOf(insert));
             return insert;
         }
 
@@ -354,7 +354,7 @@ public class BTree
         {
             // if both are leaves, perform a tight-loop leaf variant of update
             // possibly flipping the input order if sizes suggest and updateF permits
-            if (updateF == (UpdateFunction)UpdateFunction.noOp && update.length < insert.length)
+            if (updateF == (UpdateFunction) UpdateFunction.noOp && update.length < insert.length)
             {
                 Object[] tmp = update;
                 update = insert;
@@ -376,8 +376,8 @@ public class BTree
                 Object[] tmp = insert;
                 insert = update;
                 update = tmp;
-                if (updateF != (UpdateFunction)UpdateFunction.noOp)
-                    updateF = ((UpdateFunction.Simple)updateF).flip();
+                if (updateF != (UpdateFunction) UpdateFunction.noOp)
+                    updateF = ((UpdateFunction.Simple) updateF).flip();
             }
         }
 
@@ -405,7 +405,8 @@ public class BTree
             {
                 upos = exponentialSearch(comparator, unode, upos + 1, usz, ik);
                 c = upos < 0 ? 1 : 0; // positive or zero
-                if (upos < 0) upos = -(1 + upos);
+                if (upos < 0)
+                    upos = -(1 + upos);
                 if (upos == usz)
                     break;
                 uk = (Existing) unode[upos];
@@ -472,7 +473,8 @@ public class BTree
                         {
                             int until = exponentialSearch(comparator, unode, upos + 1, usz, ik);
                             c = until < 0 ? 1 : 0; // must find greater or equal; set >= 0 (equal) to 0; set < 0 (greater) to c=+ve
-                            if (until < 0) until = -(1 + until);
+                            if (until < 0)
+                                until = -(1 + until);
                             builder.leaf().copy(unode, upos, until - upos);
                             if ((upos = until) == usz)
                                 break;
@@ -482,13 +484,13 @@ public class BTree
                         {
                             int until = exponentialSearch(comparator, inode, ipos + 1, isz, uk);
                             c = until & 0x80000000; // must find less or equal; set >= 0 (equal) to 0, otherwise leave intact
-                            if (until < 0) until = -(1 + until);
+                            if (until < 0)
+                                until = -(1 + until);
                             builder.leaf().copy(inode, ipos, until - ipos, updateF);
                             if ((ipos = until) == isz)
                                 break;
                             ik = (Insert) inode[ipos];
                         }
-
                     }
                 }
                 if (upos < usz)
@@ -517,8 +519,9 @@ public class BTree
      * known globallyl shared sizeMap for dense nodes that do not need to be modified, and
      * for permitting certain users (namely FastBuilder) to declare that non-matching sizeMap
      * can be mutated directly without allocating {@code new int[]}
-     * @param tree the tree to reverse in situ
-     * @param height the height of the tree
+     *
+     * @param tree         the tree to reverse in situ
+     * @param height       the height of the tree
      * @param copySizeMaps whether or not to copy any non-globally-shared sizeMap before reversing them
      */
     private static void reverseInSitu(Object[] tree, int height, boolean copySizeMaps)
@@ -532,7 +535,7 @@ public class BTree
             int keyCount = shallowSizeOfBranch(tree);
             reverse(tree, 0, keyCount);
             reverse(tree, keyCount, keyCount * 2 + 1);
-            for (int i = keyCount ; i <= keyCount * 2 ; ++i)
+            for (int i = keyCount; i <= keyCount * 2; ++i)
                 reverseInSitu((Object[]) tree[i], height - 1, copySizeMaps);
 
             int[] sizeMap = (int[]) tree[2 * keyCount + 1];
@@ -582,8 +585,8 @@ public class BTree
     /**
      * Returns an Iterator over the entire tree
      *
-     * @param btree  the tree to iterate over
-     * @param dir    direction of iteration
+     * @param btree the tree to iterate over
+     * @param dir   direction of iteration
      * @param <V>
      * @return
      */
@@ -598,8 +601,8 @@ public class BTree
      * @param comparator the comparator that defines the ordering over the items in the tree
      * @param start      the beginning of the range to return, inclusive (in ascending order)
      * @param end        the end of the range to return, exclusive (in ascending order)
-     * @param dir   if false, the iterator will start at the last item and move backwards
-     * @return           an Iterator over the defined sub-range of the tree
+     * @param dir        if false, the iterator will start at the last item and move backwards
+     * @return an Iterator over the defined sub-range of the tree
      */
     public static <K, V extends K> BTreeSearchIterator<K, V> slice(Object[] btree, Comparator<? super K> comparator, K start, K end, Dir dir)
     {
@@ -609,10 +612,10 @@ public class BTree
     /**
      * @param btree      the tree to iterate over
      * @param comparator the comparator that defines the ordering over the items in the tree
-     * @param startIndex      the start index of the range to return, inclusive
-     * @param endIndex        the end index of the range to return, inclusive
-     * @param dir   if false, the iterator will start at the last item and move backwards
-     * @return           an Iterator over the defined sub-range of the tree
+     * @param startIndex the start index of the range to return, inclusive
+     * @param endIndex   the end index of the range to return, inclusive
+     * @param dir        if false, the iterator will start at the last item and move backwards
+     * @return an Iterator over the defined sub-range of the tree
      */
     public static <K, V extends K> BTreeSearchIterator<K, V> slice(Object[] btree, Comparator<? super K> comparator, int startIndex, int endIndex, Dir dir)
     {
@@ -628,7 +631,7 @@ public class BTree
      * @param end            high bound of the range
      * @param endInclusive   inclusivity of higher bound
      * @param dir            direction of iteration
-     * @return               an Iterator over the defined sub-range of the tree
+     * @return an Iterator over the defined sub-range of the tree
      */
     public static <K, V extends K> BTreeSearchIterator<K, V> slice(Object[] btree, Comparator<? super K> comparator, K start, boolean startInclusive, K end, boolean endInclusive, Dir dir)
     {
@@ -687,7 +690,7 @@ public class BTree
                 return;
             }
 
-            boundary = -1 -boundary;
+            boundary = -1 - boundary;
             if (boundary > 0)
             {
                 assert boundary < sizeMap.length;
@@ -727,6 +730,7 @@ public class BTree
 
     /**
      * Honours result semantics of {@link Arrays#binarySearch}, as though it were performed on the tree flattened into an array
+     *
      * @return index of item in tree, or <tt>(-(<i>insertion point</i>) - 1)</tt> if not present
      */
     public static <V> int findIndex(Object[] node, Comparator<? super V> comparator, V find)
@@ -782,7 +786,7 @@ public class BTree
                 return (V) node[boundary];
             }
 
-            boundary = -1 -boundary;
+            boundary = -1 - boundary;
             if (boundary > 0)
             {
                 assert boundary < sizeMap.length;
@@ -803,7 +807,7 @@ public class BTree
     {
         int i = findIndex(btree, comparator, find);
         if (i < 0)
-            i = -1 -i;
+            i = -1 - i;
         return i - 1;
     }
 
@@ -817,7 +821,7 @@ public class BTree
     {
         int i = findIndex(btree, comparator, find);
         if (i < 0)
-            i = -2 -i;
+            i = -2 - i;
         return i;
     }
 
@@ -830,8 +834,10 @@ public class BTree
     public static <V> int higherIndex(Object[] btree, Comparator<? super V> comparator, V find)
     {
         int i = findIndex(btree, comparator, find);
-        if (i < 0) i = -1 -i;
-        else i++;
+        if (i < 0)
+            i = -1 - i;
+        else
+            i++;
         return i;
     }
 
@@ -845,7 +851,7 @@ public class BTree
     {
         int i = findIndex(btree, comparator, find);
         if (i < 0)
-            i = -1 -i;
+            i = -1 - i;
         return i;
     }
 
@@ -937,7 +943,7 @@ public class BTree
         long size = ObjectSizes.sizeOfArray(tree);
         if (isLeaf(tree))
             return size;
-        for (int i = getChildStart(tree) ; i < getChildEnd(tree) ; i++)
+        for (int i = getChildStart(tree); i < getChildEnd(tree); i++)
             size += sizeOfStructureOnHeap((Object[]) tree[i]);
         return size;
     }
@@ -1009,8 +1015,9 @@ public class BTree
 
     /**
      * Fill the target array with the contents of the provided subtree, in ascending order, starting at targetOffset
-     * @param tree source
-     * @param target array
+     *
+     * @param tree         source
+     * @param target       array
      * @param targetOffset offset in target array
      * @return number of items copied (size of tree)
      */
@@ -1018,6 +1025,7 @@ public class BTree
     {
         return toArray(tree, 0, size(tree), target, targetOffset);
     }
+
     public static int toArray(Object[] tree, int treeStart, int treeEnd, Object[] target, int targetOffset)
     {
         if (isLeaf(tree))
@@ -1030,7 +1038,7 @@ public class BTree
         int newTargetOffset = targetOffset;
         int childCount = getChildCount(tree);
         int childOffset = getChildStart(tree);
-        for (int i = 0 ; i < childCount ; i++)
+        for (int i = 0; i < childCount; i++)
         {
             int childStart = treeIndexOffsetOfChild(tree, i);
             int childEnd = treeIndexOfBranchKey(tree, i);
@@ -1052,7 +1060,8 @@ public class BTree
     private static <I, O> Object[] transformAndFilterLeaf(Object[] leaf, Function<? super I, ? extends O> apply)
     {
         int i = 0, sz = sizeOfLeaf(leaf);
-        I in; O out;
+        I in;
+        O out;
         do // optimistic loop, looking for first point transformation modifies the input (if any)
         {
             in = (I) leaf[i];
@@ -1114,7 +1123,7 @@ public class BTree
     /**
      * Takes a tree and transforms it using the provided function, filtering out any null results.
      * The result of any transformation must sort identically as their originals, wrt other results.
-     *
+     * <p>
      * If no modifications are made, the original is returned.
      * NOTE: codewise *identical* to {@link #transformAndFilter(Object[], Function)}
      */
@@ -1135,9 +1144,9 @@ public class BTree
     /**
      * Takes a tree and transforms it using the provided function, filtering out any null results.
      * The result of any transformation must sort identically as their originals, wrt other results.
-     *
+     * <p>
      * If no modifications are made, the original is returned.
-     *
+     * <p>
      * An efficient transformAndFilter implementation suitable for a tree consisting of a single leaf root
      * NOTE: codewise *identical* to {@link #transformAndFilter(Object[], BiFunction, Object)}
      */
@@ -1162,7 +1171,8 @@ public class BTree
     private static <I, I2, O> Object[] transformAndFilterLeaf(Object[] leaf, BiFunction<? super I, ? super I2, ? extends O> apply, I2 param)
     {
         int i = 0, sz = sizeOfLeaf(leaf);
-        I in; O out;
+        I in;
+        O out;
         do // optimistic loop, looking for first point transformation modifies the input (if any)
         {
             in = (I) leaf[i];
@@ -1224,7 +1234,7 @@ public class BTree
     /**
      * Takes a tree and transforms it using the provided function.
      * The result of any transformation must sort identically as their originals, wrt other results.
-     *
+     * <p>
      * If no modifications are made, the original is returned.
      */
     public static <I, O> Object[] transform(Object[] tree, Function<? super I, ? extends O> function)
@@ -1237,7 +1247,7 @@ public class BTree
 
         Object[] result = tree; // optimistically assume we'll return our input unmodified
         int keyCount = shallowSizeOfBranch(tree);
-        for (int i = 0 ; i < keyCount ; ++i)
+        for (int i = 0; i < keyCount; ++i)
         {
             // operate on a pair of (child,key) each loop
             Object[] curChild = (Object[]) tree[keyCount + i];
@@ -1283,7 +1293,7 @@ public class BTree
     {
         Object[] result = leaf; // optimistically assume we'll return our input unmodified
         int size = sizeOfLeaf(leaf);
-        for (int i = 0 ; i < size ; ++i)
+        for (int i = 0; i < size; ++i)
         {
             Object current = leaf[i];
             Object updated = apply.apply((I) current);
@@ -1314,7 +1324,6 @@ public class BTree
         for (Object v : iterable(btree))
             result = 31 * result + Objects.hashCode(v);
         return result;
-
     }
 
     public static String toString(Object[] btree)
@@ -1339,7 +1348,7 @@ public class BTree
             builder.append(branch[i]);
         }
         // add children
-        for (int i = keyCount, m = branch.length -1; i < m; i++)
+        for (int i = keyCount, m = branch.length - 1; i < m; i++)
         {
             builder.append(", ");
             appendBranchOrLeaf(builder, (Object[]) branch[i]);
@@ -1356,9 +1365,10 @@ public class BTree
 
     /**
      * tree index => index of key wrt all items in the tree laid out serially
-     *
+     * <p>
      * This version of the method permits requesting out-of-bounds indexes, -1 and size
-     * @param root to calculate tree index within
+     *
+     * @param root     to calculate tree index within
      * @param keyIndex root-local index of key to calculate tree-index
      * @return the number of items preceding the key in the whole tree of root
      */
@@ -1385,7 +1395,7 @@ public class BTree
     }
 
     /**
-     * @param root to calculate tree-index within
+     * @param root     to calculate tree-index within
      * @param keyIndex root-local index of key to calculate tree-index of
      * @return the number of items preceding the key in the whole tree of root
      */
@@ -1395,7 +1405,7 @@ public class BTree
     }
 
     /**
-     * @param root to calculate tree-index within
+     * @param root       to calculate tree-index within
      * @param childIndex root-local index of *child* to calculate tree-index of
      * @return the number of items preceding the child in the whole tree of root
      */
@@ -1474,6 +1484,7 @@ public class BTree
 
         /**
          * Creates a copy of this {@code Builder}.
+         *
          * @return a copy of this {@code Builder}.
          */
         public Builder<V> copy()
@@ -1637,7 +1648,7 @@ public class BTree
                 }
                 else
                 {
-                    a[newCount++] =  c < 0 ? a[i++] : a[j++];
+                    a[newCount++] = c < 0 ? a[i++] : a[j++];
                 }
             }
 
@@ -1666,7 +1677,7 @@ public class BTree
         {
             assert !auto;
             int mid = count / 2;
-            for (int i = 0 ; i < mid ; i++)
+            for (int i = 0; i < mid; i++)
             {
                 Object t = values[i];
                 values[i] = values[count - (1 + i)];
@@ -1689,7 +1700,7 @@ public class BTree
                 sort();
                 int prevIdx = 0;
                 V prev = (V) values[0];
-                for (int i = 1 ; i < count ; i++)
+                for (int i = 1; i < count; i++)
                 {
                     V next = (V) values[i];
                     if (comparator.compare(prev, next) != 0)
@@ -1708,7 +1719,7 @@ public class BTree
             {
                 int c = 0;
                 int prev = 0;
-                for (int i = 1 ; i < count ; i++)
+                for (int i = 1; i < count; i++)
                 {
                     if (comparator.compare((V) values[i], (V) values[prev]) != 0)
                     {
@@ -1733,18 +1744,6 @@ public class BTree
         }
     }
 
-    /** simple static wrapper to calls to cmp.compare() which checks if either a or b are Special (i.e. represent an infinity) */
-    static <V> int compare(Comparator<V> cmp, Object a, Object b)
-    {
-        if (a == b)
-            return 0;
-        if (a == NEGATIVE_INFINITY | b == POSITIVE_INFINITY)
-            return -1;
-        if (b == NEGATIVE_INFINITY | a == POSITIVE_INFINITY)
-            return 1;
-        return cmp.compare((V) a, (V) b);
-    }
-
     private static <V, A> void applyValue(V value, BiConsumer<A, V> function, A argument)
     {
         function.accept(argument, value);
@@ -1754,13 +1753,13 @@ public class BTree
     {
         Preconditions.checkArgument(isLeaf(btree));
         int limit = getLeafKeyEnd(btree);
-        for (int i=0; i<limit; i++)
+        for (int i = 0; i < limit; i++)
             applyValue((V) btree[i], function, argument);
     }
 
     /**
      * Simple method to walk the btree forwards and apply a function till a stop condition is reached
-     *
+     * <p>
      * Private method
      *
      * @param btree
@@ -1776,7 +1775,7 @@ public class BTree
 
         int childOffset = getChildStart(btree);
         int limit = btree.length - 1 - childOffset;
-        for (int i = 0 ; i < limit ; i++)
+        for (int i = 0; i < limit; i++)
         {
 
             apply((Object[]) btree[childOffset + i], function, argument);
@@ -1788,7 +1787,7 @@ public class BTree
 
     /**
      * Simple method to walk the btree forwards and apply a function till a stop condition is reached
-     *
+     * <p>
      * Private method
      *
      * @param btree
@@ -1839,7 +1838,7 @@ public class BTree
     /**
      * Walk the btree and accumulate a long value using the supplied accumulator function. Iteration will stop if the
      * accumulator function returns the sentinel values Long.MIN_VALUE or Long.MAX_VALUE
-     *
+     * <p>
      * If the optional from argument is not null, iteration will start from that value (or the one after it's insertion
      * point if an exact match isn't found)
      */
@@ -1869,7 +1868,7 @@ public class BTree
         }
 
         int limit = btree.length - 1 - childOffset;
-        for (int i=startChild; i<limit; i++)
+        for (int i = startChild; i < limit; i++)
         {
             value = accumulate((Object[]) btree[childOffset + i], accumulator, arg, comparator, from, value);
 
@@ -1932,12 +1931,12 @@ public class BTree
         int count = (32 / branchShift) - 1;
         int childCount = 1 << branchShift;
         int[][] sizeMaps = new int[count][childCount];
-        for (int height = 0 ; height < count ; ++height)
+        for (int height = 0; height < count; ++height)
         {
             int childSize = treeSize2n(height + 1, branchShift);
             int size = 0;
             int[] sizeMap = sizeMaps[height];
-            for (int i = 0 ; i < childCount ; ++i)
+            for (int i = 0; i < childCount; ++i)
             {
                 sizeMap[i] = size += childSize;
                 size += 1;
@@ -1950,7 +1949,7 @@ public class BTree
     private static void reverse(Object[] array, int from, int to)
     {
         int mid = (from + to) / 2;
-        for (int i = from ; i < mid ; i++)
+        for (int i = from; i < mid; i++)
         {
             int j = to - (1 + i - from);
             Object tmp = array[i];
@@ -1963,7 +1962,7 @@ public class BTree
     private static void reverse(int[] array, int from, int to)
     {
         int mid = (from + to) / 2;
-        for (int i = from ; i < mid ; i++)
+        for (int i = from; i < mid; i++)
         {
             int j = to - (1 + i - from);
             int tmp = array[i];
@@ -1978,7 +1977,7 @@ public class BTree
     private static int sizesToSizeMap(int[] sizeMap)
     {
         int total = sizeMap[0];
-        for (int i = 1 ; i < sizeMap.length ; ++i)
+        for (int i = 1; i < sizeMap.length; ++i)
             sizeMap[i] = total += 1 + sizeMap[i];
         return total;
     }
@@ -1986,7 +1985,7 @@ public class BTree
     private static int sizesToSizeMap(int[] sizes, int count)
     {
         int total = sizes[0];
-        for (int i = 1 ; i < count ; ++i)
+        for (int i = 1; i < count; ++i)
             sizes[i] = total += 1 + sizes[i];
         return total;
     }
@@ -1996,7 +1995,7 @@ public class BTree
      */
     private static void sizeMapToSizes(int[] sizeMap)
     {
-        for (int i = sizeMap.length ; i > 1 ; --i)
+        for (int i = sizeMap.length; i > 1; --i)
             sizeMap[i] -= 1 + sizeMap[i - 1];
     }
 
@@ -2053,7 +2052,7 @@ public class BTree
      * @return same as {@link Arrays#binarySearch} if {@code find} occurs in the range {@code [in[from]..in[to])};
      * otherwise the insertion position {@code -(1+to)} if {@code find} is less than {@code ub}, and {@code -(2+t)}
      * if it is greater than or equal to.
-     *
+     * <p>
      * {@code ub} may be {@code null}, representing infinity.
      */
     static <Compare> int exponentialSearchWithUpperBound(Comparator<? super Compare> comparator, Object[] in, int from, int to, Compare ub, Compare find)
@@ -2082,7 +2081,7 @@ public class BTree
         }
         return Arrays.binarySearch((Compare[]) in, from, to, find, comparator);
     }
-    
+
     /**
      * Compute the size-in-bytes of full trees of cardinality {@code branchFactor^height - 1}
      */
@@ -2091,7 +2090,7 @@ public class BTree
         long[] result = new long[heightAtSize2n(Integer.MAX_VALUE, branchShift)];
         int branchFactor = 1 << branchShift;
         result[0] = branchFactor - 1;
-        for (int i = 1 ; i < result.length ; ++i)
+        for (int i = 1; i < result.length; ++i)
             result[i] = sizeOnHeapOfPerfectTree(i + 1, branchFactor);
         return result;
     }
@@ -2105,7 +2104,7 @@ public class BTree
         int branchFactor = 1 << branchShift;
         long branchSize = ObjectSizes.sizeOfReferenceArray(branchFactor * 2);
         int branchCount = height == 2 ? 1 : 2 + treeSize2n(height - 2, branchShift);
-        long leafSize = ObjectSizes.sizeOfReferenceArray((branchFactor - 1)|1);
+        long leafSize = ObjectSizes.sizeOfReferenceArray((branchFactor - 1) | 1);
         int leafCount = 1 + treeSize2n(height - 1, branchShift);
         return (branchSize * branchCount) + (leafSize * leafCount);
     }
@@ -2161,7 +2160,7 @@ public class BTree
             return 1;
         return 1 + heightAtSize2n((size - 1) / 2, BRANCH_SHIFT - 1);
     }
-    
+
     private static int sizeOfBranch(Object[] branch)
     {
         int length = branch.length;
@@ -2192,7 +2191,7 @@ public class BTree
         long size = ObjectSizes.sizeOfArray(tree);
         if (isLeaf(tree))
             return size;
-        for (int i = childOffset(tree); i < childEndOffset(tree) ; i++)
+        for (int i = childOffset(tree); i < childEndOffset(tree); i++)
             size += sizeOnHeapOf((Object[]) tree[i]);
         size += ObjectSizes.sizeOfArray(sizeMap(tree)); // may overcount, since we share size maps
         return size;
@@ -2202,7 +2201,9 @@ public class BTree
     private static Object POSITIVE_INFINITY = new Object();
     private static Object NEGATIVE_INFINITY = new Object();
 
-    /** simple static wrapper to calls to cmp.compare() which checks if either a or b are Special (i.e. represent an infinity) */
+    /**
+     * simple static wrapper to calls to cmp.compare() which checks if either a or b are Special (i.e. represent an infinity)
+     */
     private static <V> int compareWellFormed(Comparator<V> cmp, Object a, Object b)
     {
         if (a == b)
@@ -2230,7 +2231,7 @@ public class BTree
         int keyCount = shallowSize(node);
         if (keyCount < 1)
             return -1;
-        if (!isRoot && keyCount < BRANCH_FACTOR/2 - 1)
+        if (!isRoot && keyCount < BRANCH_FACTOR / 2 - 1)
             return -1;
         if (keyCount >= BRANCH_FACTOR)
             return -1;
@@ -2242,7 +2243,7 @@ public class BTree
         int size = 0;
         int childHeight = -1;
         // compare each child node with the branch element at the head of this node it corresponds with
-        for (int i = childOffset(node); i < childEndOffset(node) ; i++)
+        for (int i = childOffset(node); i < childEndOffset(node); i++)
         {
             Object[] child = (Object[]) node[i];
             Object localmax = i < node.length - 2 ? node[i - childOffset(node)] : max;
@@ -2281,7 +2282,7 @@ public class BTree
 
     /**
      * Build a tree of unknown size, in order.
-     *
+     * <p>
      * Can be used with {@link #reverseInSitu} to build a tree in reverse.
      */
     public static <V> FastBuilder<V> fastBuilder()
@@ -2318,9 +2319,9 @@ public class BTree
 
         /**
          * either
-         *  1) an empty leftover buffer from a past usage, which can be used when we exhaust {@code buffer}; or
-         *  2) a full {@code buffer} that has been parked until we next overflow, so we can steal some back
-         *     if we finish before reaching MIN_KEYS in {@code buffer}
+         * 1) an empty leftover buffer from a past usage, which can be used when we exhaust {@code buffer}; or
+         * 2) a full {@code buffer} that has been parked until we next overflow, so we can steal some back
+         * if we finish before reaching MIN_KEYS in {@code buffer}
          */
         Object[] savedBuffer;
         /**
@@ -2374,6 +2375,7 @@ public class BTree
          * Drain the contents of this builder and build up to two nodes, as necessary.
          * If {@code unode != null} and we are building a single node that is identical to it, use {@code unode} instead.
          * If {@code propagateTo != null} propagate any nodes we build to it.
+         *
          * @return the last node we construct
          */
         abstract Object[] drainAndPropagate(Object[] unode, int usz, BranchBuilder propagateTo);
@@ -2381,6 +2383,7 @@ public class BTree
         /**
          * Drain the contents of this builder and build at most one node.
          * Requires {@code !hasOverflow()}
+         *
          * @return the node we construct
          */
         abstract Object[] drain();
@@ -2391,7 +2394,7 @@ public class BTree
          * to the current buffer's contents.  This can be used to redistribute already-propagated
          * contents to a parent in cases where this is convenient (i.e. when transforming)
          *
-         * @param predecessor directly preceding node
+         * @param predecessor        directly preceding node
          * @param predecessorNextKey key that would have separated predecessor from buffer contents
          */
         abstract void prepend(Object[] predecessor, Object predecessorNextKey);
@@ -2400,7 +2403,7 @@ public class BTree
          * Indicates if this builder produces dense nodes, i.e. those that are populated with MAX_KEYS
          * at every level.  Only the last two children of any branch may be non-dense, and in some cases only
          * the last two nodes in any tier of the tree.
-         *
+         * <p>
          * This flag switches whether or not we maintain a buffer of sizes, or use the globally shared contents of
          * DENSE_SIZE_MAPS.
          */
@@ -2413,31 +2416,19 @@ public class BTree
         {
             if (parent == null)
                 parent = new BranchBuilder(this);
-            parent.touched = true;
+            parent.inUse = true;
             return parent;
         }
 
         /**
          * Mark a branch builder as utilised, so that we must clear it when resetting any {@link AbstractFastBuilder}
+         *
          * @return {@code branch}
          */
-        static BranchBuilder touch(BranchBuilder branch)
+        static BranchBuilder markUsed(BranchBuilder branch)
         {
-            branch.touched = true;
+            branch.inUse = true;
             return branch;
-        }
-
-        /**
-         * @return the parent builder iff we will overflow or the parent has already been touched
-         */
-        final BranchBuilder parentIfInUse()
-        {
-            // if we have enough data to propagate, ensure there is a parent and return it
-            if (hasOverflow())
-                return ensureParent();
-
-            // otherwise return it only if it's already in use
-            return parent == null || !parent.touched ? null : parent;
         }
 
         /**
@@ -2445,7 +2436,7 @@ public class BTree
          */
         static boolean areIdentical(Object[] a, int aOffset, Object[] b, int bOffset, int count)
         {
-            for (int i = 0 ; i < count ; ++i)
+            for (int i = 0; i < count; ++i)
             {
                 if (a[i + aOffset] != b[i + bOffset])
                     return false;
@@ -2458,7 +2449,7 @@ public class BTree
          */
         static boolean areIdentical(int[] a, int aOffset, int[] b, int bOffset, int count)
         {
-            for (int i = 0 ; i < count ; ++i)
+            for (int i = 0; i < count; ++i)
             {
                 if (a[i + aOffset] != b[i + bOffset])
                     return false;
@@ -2569,14 +2560,14 @@ public class BTree
             if (count + length > MAX_KEYS)
             {
                 int copy = MAX_KEYS - count;
-                for (int i = 0 ; i < copy ; ++i)
+                for (int i = 0; i < copy; ++i)
                     buffer[count + i] = updateF.apply((Insert) source[offset + i]);
                 offset += copy;
 //              implicitly:  leaf().count = MAX_KEYS;
                 overflow(updateF.apply((Insert) source[offset++]));
                 length -= 1 + copy;
             }
-            for (int i = 0 ; i < length ; ++i)
+            for (int i = 0; i < length; ++i)
                 buffer[count + i] = updateF.apply((Insert) source[offset + i]);
             count += length;
         }
@@ -2605,6 +2596,7 @@ public class BTree
         /**
          * Redistribute the contents of {@link #savedBuffer} into {@link #buffer}, finalise {@link #savedBuffer} and flush upwards.
          * Invoked when we are building from {@link #buffer}, have insufficient values but a complete leaf in {@link #savedBuffer}
+         *
          * @return the size of the leaf we flushed to our parent from {@link #savedBuffer}
          */
         Object[] redistributeOverflowAndDrain()
@@ -2629,9 +2621,9 @@ public class BTree
             // first shift leaf().buffer and steal some keys from leaf().savedBuffer and leaf().savedBufferNextKey
             int steal = MIN_KEYS - count;
             Object[] newLeaf = new Object[MIN_KEYS];
-            System.arraycopy(pred,  predSize - (steal - 1), newLeaf, 0,     steal - 1);
-                                                            newLeaf [steal - 1] = predNextKey;
-            System.arraycopy(buffer, 0,                     newLeaf, steal, count);
+            System.arraycopy(pred, predSize - (steal - 1), newLeaf, 0, steal - 1);
+            newLeaf[steal - 1] = predNextKey;
+            System.arraycopy(buffer, 0, newLeaf, steal, count);
 
             // then create a leaf out of the remainder of savedBuffer
             int newPredecessorCount = predSize - steal;
@@ -2647,18 +2639,19 @@ public class BTree
          * Invoked to fill our {@link #buffer} to >= MIN_KEYS with data ocurring before {@link #buffer};
          * possibly instead fills {@link #savedBuffer}
          *
-         * @param pred directly preceding node
+         * @param pred        directly preceding node
          * @param predNextKey key that would have separated predecessor from buffer contents
          */
         void prepend(Object[] pred, Object predNextKey)
         {
+            assert !hasOverflow();
             int predSize = sizeOfLeaf(pred);
             int newKeys = 1 + predSize;
             if (newKeys + count <= MAX_KEYS)
             {
                 System.arraycopy(buffer, 0, buffer, newKeys, count);
-                System.arraycopy(pred,   0, buffer, 0,       predSize);
-                                            buffer [predSize] = predNextKey;
+                System.arraycopy(pred, 0, buffer, 0, predSize);
+                buffer[predSize] = predNextKey;
                 count += newKeys;
             }
             else
@@ -2674,10 +2667,10 @@ public class BTree
                 {
                     int removeKeys = MAX_KEYS - predSize;
                     count -= removeKeys;
-                                                         savedBuffer [predSize] = predNextKey;
-                    System.arraycopy(buffer, 0,          savedBuffer, predSize + 1, MAX_KEYS - newKeys);
-                                                         savedNextKey      = buffer[MAX_KEYS - newKeys];
-                    System.arraycopy(buffer, removeKeys, buffer,      0,            count);
+                    savedBuffer[predSize] = predNextKey;
+                    System.arraycopy(buffer, 0, savedBuffer, predSize + 1, MAX_KEYS - newKeys);
+                    savedNextKey = buffer[MAX_KEYS - newKeys];
+                    System.arraycopy(buffer, removeKeys, buffer, 0, count);
                 }
             }
         }
@@ -2687,7 +2680,7 @@ public class BTree
          */
         void propagateOverflow()
         {
-            // propagate the leaf we have saved in altLeafBuffer
+            // propagate the leaf we have saved in savedBuffer
             // precondition: savedLeafCount == MAX_KEYS
             if (allocated >= 0)
                 allocated += ObjectSizes.sizeOfReferenceArray(MAX_KEYS);
@@ -2699,6 +2692,9 @@ public class BTree
         /**
          * Construct a new leaf from the contents of {@link #buffer}, unless the contents have not changed
          * from {@code unode}, in which case return {@code unode} to avoid allocating unnecessary objects.
+         *
+         * This is only called when we have enough data to complete the node, i.e. we have MIN_KEYS or more items added
+         * or the node is the BTree's root.
          */
         Object[] drainAndPropagate(Object[] unode, int usz, BranchBuilder propagateTo)
         {
@@ -2735,11 +2731,11 @@ public class BTree
         }
 
         /**
-         * Construct a new leaf from the contents of {@code leaf().buffer}, unless the contents have not changed
-         * from {@code unode}, in which case return {@code unode} to avoid allocating unnecessary objects.
+         * Construct a new leaf from the contents of {@code leaf().buffer}, assuming that the node does not overflow.
          */
         Object[] drain()
         {
+            // the number of children here may be smaller than MIN_KEYS if this is the root node
             assert !hasOverflow();
             if (count == 0)
                 return empty();
@@ -2755,12 +2751,18 @@ public class BTree
     {
         final LeafBuilder leaf;
 
-        /** sizes of the children in {@link #buffer}. If null, we only produce dense nodes. */
+        /**
+         * sizes of the children in {@link #buffer}. If null, we only produce dense nodes.
+         */
         int[] sizes;
-        /** sizes of the children in {@link #savedBuffer} */
+        /**
+         * sizes of the children in {@link #savedBuffer}
+         */
         int[] savedSizes;
-        /** marker to limit unnecessary work with unused levels, esp. on reset */
-        boolean touched;
+        /**
+         * marker to limit unnecessary work with unused levels, esp. on reset
+         */
+        boolean inUse;
 
         BranchBuilder(LeafOrBranchBuilder child)
         {
@@ -2858,6 +2860,7 @@ public class BTree
         /**
          * Redistribute the contents of branch.savedBuffer into branch.buffer, finalise savedBuffer and flush upwards.
          * Invoked when we are building from branch, have insufficient values but a complete branch in savedBuffer.
+         *
          * @return the size of the branch we flushed to our parent from savedBuffer
          */
         Object[] redistributeOverflowAndDrain()
@@ -2868,17 +2871,17 @@ public class BTree
             // and the dangling key we use in place of savedNextKey for our parent key.
             int steal = MIN_KEYS - count;
             Object[] newBranch = new Object[2 * (MIN_KEYS + 1)];
-            System.arraycopy(savedBuffer,     MAX_KEYS - (steal - 1), newBranch, 0,         steal - 1);
+            System.arraycopy(savedBuffer, MAX_KEYS - (steal - 1), newBranch, 0, steal - 1);
             newBranch[steal - 1] = savedNextKey;
-            System.arraycopy(buffer,          0,                      newBranch, steal,     count);
-            System.arraycopy(savedBuffer, 2 * MAX_KEYS + 1 - steal,   newBranch, MIN_KEYS,  steal);
-            System.arraycopy(buffer,          MAX_KEYS,               newBranch, MIN_KEYS + steal, count + 1);
+            System.arraycopy(buffer, 0, newBranch, steal, count);
+            System.arraycopy(savedBuffer, 2 * MAX_KEYS + 1 - steal, newBranch, MIN_KEYS, steal);
+            System.arraycopy(buffer, MAX_KEYS, newBranch, MIN_KEYS + steal, count + 1);
             setRedistributedSizeMap(newBranch, steal);
 
             // then create a branch out of the remainder of savedBuffer
             int savedBranchCount = MAX_KEYS - steal;
             Object[] savedBranch = new Object[2 * (savedBranchCount + 1)];
-            System.arraycopy(savedBuffer, 0,        savedBranch, 0,                savedBranchCount);
+            System.arraycopy(savedBuffer, 0, savedBranch, 0, savedBranchCount);
             System.arraycopy(savedBuffer, MAX_KEYS, savedBranch, savedBranchCount, savedBranchCount + 1);
             int savedBranchSize = setOverflowSizeMap(savedBranch, savedBranchCount);
             if (leaf.allocated >= 0)
@@ -2894,6 +2897,7 @@ public class BTree
          */
         void prepend(Object[] pred, Object predNextKey)
         {
+            assert !hasOverflow();
             // assumes sizes != null, since only makes sense to use this method in that context
 
             int predKeys = shallowSizeOfBranch(pred);
@@ -2901,14 +2905,14 @@ public class BTree
             int newKeys = 1 + predKeys;
             if (newKeys + count <= MAX_KEYS)
             {
-                System.arraycopy(buffer,    0,        buffer, newKeys,            count);
-                System.arraycopy(sizes,     0,        sizes,  newKeys,            count + 1);
-                System.arraycopy(buffer,    MAX_KEYS, buffer, MAX_KEYS + newKeys, count + 1);
+                System.arraycopy(buffer, 0, buffer, newKeys, count);
+                System.arraycopy(sizes, 0, sizes, newKeys, count + 1);
+                System.arraycopy(buffer, MAX_KEYS, buffer, MAX_KEYS + newKeys, count + 1);
 
-                System.arraycopy(pred,      0,        buffer, 0,                  predKeys);
+                System.arraycopy(pred, 0, buffer, 0, predKeys);
                 buffer[predKeys] = predNextKey;
-                System.arraycopy(pred,      predKeys, buffer, MAX_KEYS,           predKeys + 1);
-                copySizeMapToSizes(sizeMap, 0,        sizes,  0,                  predKeys + 1);
+                System.arraycopy(pred, predKeys, buffer, MAX_KEYS, predKeys + 1);
+                copySizeMapToSizes(sizeMap, 0, sizes, 0, predKeys + 1);
                 count += newKeys;
             }
             else
@@ -2919,9 +2923,9 @@ public class BTree
                     savedSizes = new int[1 + MAX_KEYS];
                 }
 
-                System.arraycopy(  pred,    0,        savedBuffer, 0,        predKeys);
-                System.arraycopy(  pred,    predKeys, savedBuffer, MAX_KEYS, predKeys + 1);
-                copySizeMapToSizes(sizeMap, 0,        savedSizes,  0,        predKeys + 1);
+                System.arraycopy(pred, 0, savedBuffer, 0, predKeys);
+                System.arraycopy(pred, predKeys, savedBuffer, MAX_KEYS, predKeys + 1);
+                copySizeMapToSizes(sizeMap, 0, savedSizes, 0, predKeys + 1);
                 if (newKeys == MAX_KEYS + 1)
                 {
                     savedNextKey = predNextKey;
@@ -2931,14 +2935,14 @@ public class BTree
                     int removeKeys = (1 + MAX_KEYS - newKeys);
                     int remainingKeys = count - removeKeys;
 
-                    savedBuffer [predKeys] = predNextKey;
-                    System.arraycopy(buffer, 0,                     savedBuffer, newKeys,            MAX_KEYS     - newKeys);
-                    savedNextKey =            buffer[MAX_KEYS     - newKeys];
-                    System.arraycopy(sizes,  0,                     savedSizes,  newKeys,            MAX_KEYS + 1 - newKeys);
-                    System.arraycopy(buffer, MAX_KEYS,              savedBuffer, MAX_KEYS + newKeys, MAX_KEYS + 1 - newKeys);
-                    System.arraycopy(buffer, removeKeys,            buffer,      0,                  remainingKeys);
-                    System.arraycopy(buffer, MAX_KEYS + removeKeys, buffer,      MAX_KEYS,           remainingKeys + 1);
-                    System.arraycopy(sizes,  removeKeys,            sizes,       0,                  remainingKeys + 1);
+                    savedBuffer[predKeys] = predNextKey;
+                    System.arraycopy(buffer, 0, savedBuffer, newKeys, MAX_KEYS - newKeys);
+                    savedNextKey = buffer[MAX_KEYS - newKeys];
+                    System.arraycopy(sizes, 0, savedSizes, newKeys, MAX_KEYS + 1 - newKeys);
+                    System.arraycopy(buffer, MAX_KEYS, savedBuffer, MAX_KEYS + newKeys, MAX_KEYS + 1 - newKeys);
+                    System.arraycopy(buffer, removeKeys, buffer, 0, remainingKeys);
+                    System.arraycopy(buffer, MAX_KEYS + removeKeys, buffer, MAX_KEYS, remainingKeys + 1);
+                    System.arraycopy(sizes, removeKeys, sizes, 0, remainingKeys + 1);
                     count = remainingKeys;
                 }
             }
@@ -2952,6 +2956,9 @@ public class BTree
         /**
          * Construct a new branch from the contents of {@code branchBuffers[branchIndex]}, unless the contents have
          * not changed from {@code unode}, in which case return {@code unode} to avoid allocating unnecessary objects.
+         *
+         * This is only called when we have enough data to complete the node, i.e. we have MIN_KEYS or more items added
+         * or the node is the BTree's root.
          */
         Object[] drainAndPropagate(Object[] unode, int usz, BranchBuilder propagateTo)
         {
@@ -2963,7 +2970,7 @@ public class BTree
                 sizeOfBranch = sizeOfBranch(branch);
             }
             else if (!hasOverflow() && usz == count
-                     && areIdentical(buffer, 0,        unode, 0,   usz)
+                     && areIdentical(buffer, 0, unode, 0, usz)
                      && areIdentical(buffer, MAX_KEYS, unode, usz, usz + 1))
             {
                 branch = unode;
@@ -2974,8 +2981,11 @@ public class BTree
                 if (hasOverflow())
                     propagateOverflow();
 
+                // the number of children here may be smaller than MIN_KEYS if this is the root node, but there must
+                // be at least one key / two children.
+                assert count > 0;
                 branch = new Object[2 * (count + 1)];
-                System.arraycopy(buffer, 0,        branch, 0,     count);
+                System.arraycopy(buffer, 0, branch, 0, count);
                 System.arraycopy(buffer, MAX_KEYS, branch, count, count + 1);
                 sizeOfBranch = setDrainSizeMap(unode, usz, branch, count);
             }
@@ -2988,8 +2998,7 @@ public class BTree
         }
 
         /**
-         * Construct a new branch from the contents of {@code branchBuffers[branchIndex]}, unless the contents have
-         * not changed from {@code unode}, in which case return {@code unode} to avoid allocating unnecessary objects.
+         * Construct a new branch from the contents of {@code buffer}, assuming that the node does not overflow.
          */
         Object[] drain()
         {
@@ -3006,7 +3015,7 @@ public class BTree
             }
             else
             {
-                System.arraycopy(buffer, 0,        branch, 0,    keys);
+                System.arraycopy(buffer, 0, branch, 0, keys);
                 System.arraycopy(buffer, MAX_KEYS, branch, keys, keys + 1);
             }
             setDrainSizeMap(null, -1, branch, keys);
@@ -3016,7 +3025,7 @@ public class BTree
         /**
          * Compute (or fetch from cache) and set the sizeMap in {@code branch}, knowing that it
          * was constructed from for the contents of {@code buffer}.
-         *
+         * <p>
          * For {@link FastBuilder} these are mostly the same, so they are fetched from a global cache and
          * resized accordingly, but for {@link AbstractUpdater} we maintain a buffer of sizes.
          */
@@ -3033,8 +3042,10 @@ public class BTree
             {
                 // if we cannot, then we either take the buffer wholesale and replace its buffer, or copy a prefix
                 sizeMap = this.sizes;
-                if (keysInBranch < MAX_KEYS) sizeMap = Arrays.copyOf(sizeMap, keysInBranch + 1);
-                else this.sizes = new int[MAX_KEYS + 1];
+                if (keysInBranch < MAX_KEYS)
+                    sizeMap = Arrays.copyOf(sizeMap, keysInBranch + 1);
+                else
+                    this.sizes = new int[MAX_KEYS + 1];
             }
             branch[2 * keysInBranch + 1] = sizeMap;
             return size;
@@ -3043,7 +3054,7 @@ public class BTree
         /**
          * Compute (or fetch from cache) and set the sizeMap in {@code branch}, knowing that it
          * was constructed from for the contents of {@code savedBuffer}.
-         *
+         * <p>
          * For {@link FastBuilder} these are always the same size, so they are fetched from a global cache,
          * but for {@link AbstractUpdater} we maintain a buffer of sizes.
          *
@@ -3054,15 +3065,18 @@ public class BTree
             if (producesOnlyDense())
             {
                 int[] sizeMap = DENSE_SIZE_MAPS[height - 2];
-                if (keys < MAX_KEYS) sizeMap = Arrays.copyOf(sizeMap, keys + 1);
+                if (keys < MAX_KEYS)
+                    sizeMap = Arrays.copyOf(sizeMap, keys + 1);
                 branch[2 * keys + 1] = sizeMap;
                 return keys < MAX_KEYS ? sizeMap[keys] : checkedDenseSize(height + 1);
             }
             else
             {
                 int[] sizes = savedSizes;
-                if (keys < MAX_KEYS) sizes = Arrays.copyOf(sizes, keys + 1);
-                else savedSizes = null;
+                if (keys < MAX_KEYS)
+                    sizes = Arrays.copyOf(sizes, keys + 1);
+                else
+                    savedSizes = null;
                 branch[2 * keys + 1] = sizes;
                 return sizesToSizeMap(sizes);
             }
@@ -3071,7 +3085,7 @@ public class BTree
         /**
          * Compute (or fetch from cache) and set the sizeMap in {@code branch}, knowing that it
          * was constructed from the contents of both {@code savedBuffer} and {@code buffer}
-         *
+         * <p>
          * For {@link FastBuilder} these are mostly the same size, so they are fetched from a global cache
          * and only the last items updated, but for {@link AbstractUpdater} we maintain a buffer of sizes.
          */
@@ -3100,8 +3114,8 @@ public class BTree
         {
             int[] sizeMap = Arrays.copyOf(DENSE_SIZE_MAPS[height - 2], keys + 1);
             int size = keys == 1 ? 0 : 1 + sizeMap[keys - 2];
-            sizeMap[keys - 1] = size +=     size((Object[]) branch[2 * keys - 1]);
-            sizeMap[keys]     = size += 1 + size((Object[]) branch[2 * keys]);
+            sizeMap[keys - 1] = size += size((Object[]) branch[2 * keys - 1]);
+            sizeMap[keys] = size += 1 + size((Object[]) branch[2 * keys]);
             branch[2 * keys + 1] = sizeMap;
             return size;
         }
@@ -3173,7 +3187,7 @@ public class BTree
                 out[outOffset++] = in[inOffset++];
                 --count;
             }
-            for (int i = 0 ; i < count ; ++i)
+            for (int i = 0; i < count; ++i)
                 out[outOffset + i] = in[inOffset + i] - (1 + in[inOffset + i - 1]);
         }
     }
@@ -3181,7 +3195,7 @@ public class BTree
     /**
      * Shared parent of {@link FastBuilder} and {@link Updater}, both of which
      * construct their trees in order without knowing the resultant size upfront.
-     *
+     * <p>
      * Maintains a simple stack of buffers that we provide utilities to navigate and update.
      */
     private static abstract class AbstractFastBuilder extends LeafBuilder
@@ -3194,11 +3208,14 @@ public class BTree
         /**
          * An aesthetic convenience for declaring when we are interacting with the leaf, instead of invoking {@code this} directly
          */
-        final LeafBuilder leaf() { return this; }
+        final LeafBuilder leaf()
+        {
+            return this;
+        }
 
         /**
          * Clear any references we might still retain, to avoid holding onto memory.
-         *
+         * <p>
          * While this method is not strictly  necessary, it exists to
          * ensure the implementing classes are aware they must handle it.
          */
@@ -3222,7 +3239,7 @@ public class BTree
 
     /**
      * A pooled builder for constructing a tree in-order, and without needing any reconciliation.
-     *
+     * <p>
      * Constructs whole nodes in place, so that a flush of a complete node can take its buffer entirely.
      * Since we build trees of a predictable shape (i.e. perfectly dense) we do not construct a size map.
      */
@@ -3231,7 +3248,10 @@ public class BTree
         private static final TinyThreadLocalPool<FastBuilder<?>> POOL = new TinyThreadLocalPool<>();
         private TinyThreadLocalPool.TinyPool<FastBuilder<?>> pool;
 
-        FastBuilder() { allocated = -1; } // disable allocation tracking
+        FastBuilder()
+        {
+            allocated = -1;
+        } // disable allocation tracking
 
         public void add(V value)
         {
@@ -3272,12 +3292,12 @@ public class BTree
             Arrays.fill(leaf().buffer, 0, leaf().count, null);
             leaf().count = 0;
             BranchBuilder branch = leaf().parent;
-            while (branch != null && branch.touched)
+            while (branch != null && branch.inUse)
             {
                 Arrays.fill(branch.buffer, 0, branch.count, null);
                 Arrays.fill(branch.buffer, MAX_KEYS, MAX_KEYS + 1 + branch.count, null);
                 branch.count = 0;
-                branch.touched = false;
+                branch.inUse = false;
                 branch = branch.parent;
             }
         }
@@ -3293,13 +3313,13 @@ public class BTree
                 Arrays.fill(leaf().savedBuffer, null);
 
             BranchBuilder branch = leaf().parent;
-            while (branch != null && branch.touched)
+            while (branch != null && branch.inUse)
             {
                 assert branch.count == 0;
                 clearBranchBuffer(branch.buffer);
                 if (branch.savedBuffer != null && branch.savedBuffer[0] != null)
                     Arrays.fill(branch.savedBuffer, null); // by definition full, if non-empty
-                branch.touched = false;
+                branch.inUse = false;
                 branch = branch.parent;
             }
         }
@@ -3314,7 +3334,8 @@ public class BTree
                 return;
             // find first null entry; loop from beginning, to amortise cost over size of working set
             int i = 1;
-            while (i < array.length && array[i] != null) ++i;
+            while (i < array.length && array[i] != null)
+                ++i;
             Arrays.fill(array, 0, i, null);
         }
 
@@ -3329,7 +3350,8 @@ public class BTree
 
             // find first null entry; loop from beginning, to amortise cost over size of working set
             int i = 1;
-            while (i < MAX_KEYS && array[i] != null) ++i;
+            while (i < MAX_KEYS && array[i] != null)
+                ++i;
             Arrays.fill(array, 0, i, null);
             Arrays.fill(array, MAX_KEYS, MAX_KEYS + i + 1, null);
         }
@@ -3337,15 +3359,15 @@ public class BTree
 
     /**
      * A pooled object for modifying an existing tree with a new (typically smaller) tree.
-     *
+     * <p>
      * Constructs the new tree around the shape of the existing tree, as though we had performed inserts in
      * order, copying as much of the original tree as possible.  We achieve this by simply merging leaf nodes
      * up to the immediately following key in an ancestor, maintaining up to two complete nodes in a buffer until
      * this happens, and flushing any nodes we produce in excess of this immediately into the parent buffer.
-     *
+     * <p>
      * We construct whole nodes in place, except the size map, so that a flush of a complete node can take its buffer
      * entirely.
-     *
+     * <p>
      * Searches within both trees to accelerate the process of modification, instead of performing a simple
      * iteration over the new tree.
      */
@@ -3393,7 +3415,7 @@ public class BTree
             Object[] result = completeBuild(builder);
 
             if (allocated > 0)
-                updateF.onAllocated(allocated);
+                updateF.onAllocatedOnHeap(allocated);
 
             return result;
         }
@@ -3401,9 +3423,9 @@ public class BTree
         /**
          * Merge a BTree recursively with the contents of {@code insert} up to the given upper bound.
          *
-         * @param ik The next key from the inserted data.
-         * @param unode The source branch to update.
-         * @param uub The branch's upper bound
+         * @param ik      The next key from the inserted data.
+         * @param unode   The source branch to update.
+         * @param uub     The branch's upper bound
          * @param builder The builder that will receive the data. It needs to be at the same level of the hierarchy
          *                as the source unode.
          * @return The next key from the inserted data, >= uub.
@@ -3550,16 +3572,16 @@ public class BTree
     /**
      * Attempts to perform a clean transformation of the original tree into a new tree,
      * by replicating its original shape as far as possible.
-     *
+     * <p>
      * We do this by attempting to flush our buffers whenever we finish a source-branch at the given level;
      * if there are too few contents, we wait until we finish another node at the same level.
-     *
+     * <p>
      * This way, we are always resetting at the earliest point we might be able to reuse more parts of the original
      * tree, maximising potential reuse.
-     *
+     * <p>
      * This can permit us to build unbalanced right-most nodes at each level, in which case we simply rebalance
      * when done.
-     *
+     * <p>
      * The approach taken here hopefully balances simplicity, garbage generation and execution time.
      */
     private static abstract class AbstractTransformer<I, O> extends AbstractUpdater implements AutoCloseable
@@ -3579,7 +3601,7 @@ public class BTree
         {
             allocated = -1;
             ensureParent();
-            parent.touched = false;
+            parent.inUse = false;
         }
 
         abstract O apply(I v);
@@ -3620,7 +3642,7 @@ public class BTree
                         if ((propagatedOriginalLeaf = (upos == usz)))
                         {
                             // if input is unmodified by transformation, propagate the input node
-                            touch(parent).addChild(unode, usz);
+                            markUsed(parent).addChild(unode, usz);
                         }
                         else
                         {
@@ -3655,7 +3677,9 @@ public class BTree
                 {
                     update.ascendToParent(); // always have a node above leaf level, else we'd invoke transformLeaf
                     BranchBuilder level = parent;
-                    unode = update.node(); upos = update.position(); usz = shallowSizeOfBranch(unode);
+                    unode = update.node();
+                    upos = update.position();
+                    usz = shallowSizeOfBranch(unode);
 
                     while (upos == usz)
                     {
@@ -3666,19 +3690,23 @@ public class BTree
                             return finishAndDrain(propagatedOriginalLeaf);
 
                         level = level.ensureParent();
-                        unode = update.node(); upos = update.position(); usz = shallowSizeOfBranch(unode);
+                        unode = update.node();
+                        upos = update.position();
+                        usz = shallowSizeOfBranch(unode);
                     }
 
-                    nextKey = apply((I)unode[upos]);
+                    nextKey = apply((I) unode[upos]);
                     if (nextKey == null && leaf().count > MIN_KEYS) // if we don't have a key, try to steal from leaf().buffer
                         nextKey = (O) leaf().buffer[--leaf().count];
 
                     update.descendIntoNextLeaf(unode, upos, usz);
-                    unode = update.node(); upos = update.position(); usz = sizeOfLeaf(unode);
+                    unode = update.node();
+                    upos = update.position();
+                    usz = sizeOfLeaf(unode);
 
                     // nextKey might have been filtered, so we may need to look in this next leaf for it
                     while (nextKey == null && upos < usz)
-                        nextKey = apply((I)unode[upos++]);
+                        nextKey = apply((I) unode[upos++]);
 
                     // if we still found no key loop and try again on the next parent, leaf, parent... ad infinitum
                 } while (nextKey == null);
@@ -3752,25 +3780,25 @@ public class BTree
 
         /**
          * Invoked once we have consumed all input.
-         * The buffers below {@code start} are expected to be empty, i.e. in the case we exhaust the input
-         * before we finish finding a right-hand key to restore our buffer invariants.
-         *
-         * We drain all buffers and propagate their contents to their pareents.  If any have insufficient keys,
-         * we simply make a note of the fact the tree needs balancing.
+         * <p>
+         * Completes all unfinished buffers. If they do not contain enough keys, data is stolen from the preceding
+         * node to the left on the same level. This is easy if our parent already contains a completed child; if it
+         * does not, we recursively apply the stealing procedure to obtain a non-empty parent. If this process manages
+         * to reach the root and still find no preceding branch, this will result in making this branch the new root.
          */
         private Object[] finishAndDrain(boolean skipLeaf)
         {
             LeafOrBranchBuilder level = leaf();
             if (skipLeaf)
             {
-                level = parentIfStillInUse(level);
+                level = nonEmptyParentMaybeSteal(level);
                 // handle an edge case, where we have propagated a single complete leaf but have no other contents in any parent
                 if (level == null)
                     return (Object[]) leaf().parent.buffer[MAX_KEYS];
             }
             while (true)
             {
-                BranchBuilder parent = parentIfStillInUse(level);
+                BranchBuilder parent = nonEmptyParentMaybeSteal(level);
                 if (parent != null && !level.isSufficient())
                 {
                     Object[] result = stealAndMaybeRepropagate(level, parent);
@@ -3780,8 +3808,8 @@ public class BTree
                 else
                 {
 
-                    Object[] originalNode  = level == leaf() ? null : queuedToFinish[level.height - 2];
-                    int sizeOfOriginalNode = level == leaf() ? -1   : shallowSizeOfBranch(originalNode);
+                    Object[] originalNode = level == leaf() ? null : queuedToFinish[level.height - 2];
+                    int sizeOfOriginalNode = level == leaf() ? -1 : shallowSizeOfBranch(originalNode);
                     Object[] result = level.drainAndPropagate(originalNode, sizeOfOriginalNode, parent);
                     if (parent == null)
                         return result;
@@ -3790,26 +3818,26 @@ public class BTree
             }
         }
 
-        BranchBuilder parentIfStillInUse(LeafOrBranchBuilder level)
+        BranchBuilder nonEmptyParentMaybeSteal(LeafOrBranchBuilder level)
         {
             if (level.hasOverflow())
                 return level.ensureParent();
             BranchBuilder parent = level.parent;
-            if (parent == null || !parent.touched || (parent.isEmpty() && !tryPrependFromParent(parent)))
+            if (parent == null || !parent.inUse || (parent.isEmpty() && !tryPrependFromParent(parent)))
                 return null;
             return parent;
         }
 
         /**
          * precondition: {@code fill.parentInUse()} must return {@code fill.parent}
-         *
+         * <p>
          * Steal some data from our ancestors, if possible.
-         *   1) If no ancestor has any data to steal, simply drain and return the current contents.
-         *   2) If we exhaust all of our ancestors, and are not now ourselves overflowing, drain and return
-         *   3) Otherwise propagate the redistributed contents to our parent and return null, indicating we can continue to parent
+         * 1) If no ancestor has any data to steal, simply drain and return the current contents.
+         * 2) If we exhaust all of our ancestors, and are not now ourselves overflowing, drain and return
+         * 3) Otherwise propagate the redistributed contents to our parent and return null, indicating we can continue to parent
          *
          * @return {@code null} if {@code parent} is still logicallly in use after we execute;
-         *         otherwise the return value is the final result
+         * otherwise the return value is the final result
          */
         private Object[] stealAndMaybeRepropagate(LeafOrBranchBuilder fill, BranchBuilder parent)
         {
@@ -3828,7 +3856,7 @@ public class BTree
 
         private boolean tryPrependFromParent(BranchBuilder parent)
         {
-            BranchBuilder grandparent = parentIfStillInUse(parent);
+            BranchBuilder grandparent = nonEmptyParentMaybeSteal(parent);
             if (grandparent == null)
                 return false;
             prependFromParent(parent, grandparent);
@@ -3841,21 +3869,21 @@ public class BTree
             assert !parent.isEmpty();
 
             Object[] predecessor;
-            Object   predecessorNextKey;
+            Object predecessorNextKey;
             // parent will have same number of children as shallow key count (and may be empty)
             if (parent.count == 0 && parent.hasOverflow())
             {
                 // use the saved buffer instead of going to our parent
-                predecessorNextKey  = parent.savedNextKey;
-                predecessor         = (Object[]) parent.savedBuffer[2 * MAX_KEYS];
-                Object[] tmpBuffer  = parent.savedBuffer;
-                int[]    tmpSizes   = parent.savedSizes;
-                parent.savedBuffer  = parent.buffer;
-                parent.savedSizes   = parent.sizes;
-                parent.buffer       = tmpBuffer;
-                parent.sizes        = tmpSizes;
+                predecessorNextKey = parent.savedNextKey;
+                predecessor = (Object[]) parent.savedBuffer[2 * MAX_KEYS];
+                Object[] tmpBuffer = parent.savedBuffer;
+                int[] tmpSizes = parent.savedSizes;
+                parent.savedBuffer = parent.buffer;
+                parent.savedSizes = parent.sizes;
+                parent.buffer = tmpBuffer;
+                parent.sizes = tmpSizes;
                 parent.savedNextKey = null;
-                parent.count        = MAX_KEYS;
+                parent.count = MAX_KEYS;
                 // end with MAX_KEYS keys and children in parent, having stolen MAX_KEYS+1 child and savedNextKey
             }
             else
@@ -3968,8 +3996,10 @@ public class BTree
         // ascend to the first parent that has children or keys left to visit
         boolean ascendToUnfinishedParent()
         {
-            if (depth < 0) return false;
-            while (--depth >= 0 && positions[depth] == shallowSizeOfBranch(nodes[depth]));
+            if (depth < 0)
+                return false;
+            while (--depth >= 0 && positions[depth] == shallowSizeOfBranch(nodes[depth]))
+                ;
             return depth >= 0;
         }
 
