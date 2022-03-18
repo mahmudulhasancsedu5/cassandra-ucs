@@ -72,9 +72,7 @@ public class BTree
     private static final Object[] EMPTY_LEAF = new Object[1];
 
     private static final int[][] DENSE_SIZE_MAPS = buildBalancedSizeMaps(BRANCH_SHIFT);
-    private static final int[][] SPARSE_SIZE_MAPS = buildBalancedSizeMaps(BRANCH_SHIFT - 1);
     private static final long[] PERFECT_DENSE_SIZE_ON_HEAP = sizeOnHeapOfPerfectTrees(BRANCH_SHIFT);
-    private static final long[] PERFECT_SPARSE_SIZE_ON_HEAP = sizeOnHeapOfPerfectTrees(BRANCH_SHIFT - 1);
 
     /**
      * Represents the direction of iteration.
@@ -158,7 +156,7 @@ public class BTree
 
     /**
      * Build a leaf with {@code size} elements taken in bulk from {@code insert}, and apply {@code updateF} to these elements
-     * Do not invoke {@code updateF.onAllocated}.  Used by {@link #buildMaximallyDense} and {@link #buildPerfect} which
+     * Do not invoke {@code updateF.onAllocated}.  Used by {@link #buildMaximallyDense} and {@link #buildPerfectDense} which
      * track the size for the entire tree they build in order to save on work.
      */
     private static <C, I extends C, O extends C> Object[] buildLeafWithoutSizeTracking(BulkIterator<I> insert, int size, UpdateFunction<I, O> updateF)
@@ -182,27 +180,24 @@ public class BTree
         // first calculate the minimum height needed for this size of tree
         int height = minHeight(size);
         assert height > 1;
+        assert height * BRANCH_SHIFT < 32;
 
         int denseChildSize = denseSize(height - 1);
+        // Divide the size by the child size + 1, adjusting size by +1 to compensate for not having an upper key on the
+        // last child and rounding up, i.e. (size + 1 + div - 1) / div == size / div + 1 where div = childSize + 1
         int childCount = size / (denseChildSize + 1) + 1;
 
         return buildMaximallyDense(source, childCount, size, height, updateF);
     }
 
     /**
-     * Build a tree containing some initial quantity of dense nodes, up to a single node of arbitrary size (between
-     * dense and sparse), and the remainder of nodes all sparse.
+     * Build a tree containing only dense nodes except at most two on any level. This matches the structure that
+     * a FastBuilder would create, with some optimizations in constructing the dense nodes.
      *
-     * This permits us to build any size of tree:
-     * 1) A root node can have any number of children, so for a given height we can build our smallest tree with two
-     *    sparse nodes.  For a given childCount we can vary up to a whole dense child's size with this scheme,
-     *    and any more difference would require a change in child count anyway. We have at most two sparse nodes.
-     * 2) An internal node of size > 1/2 max can be constructed in exactly the same way, the extra constraint only
-     *    imposed because we must have at least BRANCH_FACTOR/2 children.
-     * 3) A smaller internal node simply uses precisely BRANCH_FACTOR/2 children, and applies the same algorithm.
-     *    This permits up to all children to be sparse, if necessary.
-     *
-     * For branches just above the leaf level, we split more evenly, since there's no advantage to imbalance.
+     * We do this by repeatedly constructing fully dense children until we reach a threshold, chosen so that we would
+     * not be able to create another child with fully dense children and at least MIN_KEYS keys. After the threshold,
+     * the remainder may fit a single node, or is otherwise split roughly halfway to create one child with at least
+     * MIN_KEYS+1 fully dense children, and one that has at least MIN_KEYS-1 fully dense and up to two non-dense.
      */
     private static <C, I extends C, O extends C> Object[] buildMaximallyDense(BulkIterator<I> source,
                                                                               int childCount,
@@ -210,7 +205,7 @@ public class BTree
                                                                               int height,
                                                                               UpdateFunction<I, O> updateF)
     {
-        assert height * BRANCH_SHIFT < 32;
+        assert childCount <= MAX_KEYS + 1;
 
         int keyCount = childCount - 1;
         int[] sizeMap = new int[childCount];
@@ -219,103 +214,92 @@ public class BTree
         if (height == 2)
         {
             // we use the _exact same logic_ as below, only we invoke buildLeaf
-            // denseCount: subtract the minimal (sparse) size of the tree and
-            // divide the remainder by the amount extra needed extra per dense
-            int denseCount = (size - (childCount * MIN_KEYS + keyCount + 1)) / (1+MIN_KEYS);
+            int remaining = size;
+            int threshold = MAX_KEYS + 1 + MIN_KEYS;
             int i = 0;
-            while (i < denseCount)
+            while (remaining >= threshold)
             {
-                sizeMap[i] = i * (1+MAX_KEYS) + MAX_KEYS;
-                branch[keyCount + i] = buildLeafWithoutSizeTracking(source, MAX_KEYS, updateF);
-                branch[i++] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                branch[keyCount + i] = buildLeaf(source, MAX_KEYS, updateF);
+                branch[i] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                remaining -= MAX_KEYS + 1;
+                sizeMap[i++] = size - remaining - 1;
             }
-            int sparseCount = childCount - (1 + denseCount);
-            int remainderSize = size - (denseCount * (1+MAX_KEYS) + sparseCount * (1+MIN_KEYS));
+            if (remaining > MAX_KEYS)
             {
-                branch[keyCount + i] = buildLeafWithoutSizeTracking(source, remainderSize, updateF);
-                sizeMap[i] = size = i * (1+MAX_KEYS) + remainderSize;
+                int childSize = remaining / 2;
+                branch[keyCount + i] = buildLeaf(source, childSize, updateF);
+                branch[i] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                remaining -= childSize + 1;
+                sizeMap[i++] = size - remaining - 1;
             }
-            // finally build "sparse" children to consume the remaining elements
-            while (i < keyCount)
-            {
-                branch[i++] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
-                branch[keyCount + i] = buildLeafWithoutSizeTracking(source, MIN_KEYS, updateF);
-                sizeMap[i] = size += 1 + MIN_KEYS;
-            }
-            if (!isSimple(updateF))
-            {
-                updateF.onAllocated(denseCount * PERFECT_DENSE_SIZE_ON_HEAP[0]
-                                    + sparseCount * PERFECT_SPARSE_SIZE_ON_HEAP[0]
-                                    + ObjectSizes.sizeOfReferenceArray(remainderSize | 1));
-            }
+            branch[keyCount + i] = buildLeaf(source, remaining, updateF);
+            sizeMap[i++] = size;
+            assert i == childCount;
         }
         else
         {
             --height;
-
-            // denseCount: subtract the minimal (sparse) size of the tree and
-            // divide the remainder by the amount extra needed extra per dense
-            int denseCount = (size - (childCount * sparseSize(height) + keyCount + 1)) / (denseSize(height) - sparseSize(height));
+            int denseChildSize = denseSize(height);
+            int denseGrandChildSize = denseSize(height - 1);
+            // The threshold is the point after which we can't add a dense child and still add another child with
+            // at least MIN_KEYS fully dense children plus at least one more key.
+            int threshold = denseChildSize + 1 + MIN_KEYS * (denseGrandChildSize + 1);
+            int remaining = size;
             int i = 0;
-            while (i < denseCount)
+            // Add dense children until we reach the threshold.
+            while (remaining >= threshold)
             {
-                sizeMap[i] = (1 + i) * (1 + denseSize(height)) - 1;
-                branch[keyCount + i] = buildPerfectDense(source, height, updateF);
-                branch[i++] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                branch[keyCount + i] = buildPerfectDenseAndAddUsage(source, height, updateF);
+                branch[i] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                remaining -= denseChildSize + 1;
+                sizeMap[i++] = size - remaining - 1;
             }
-            int sparseCount = childCount - (1 + denseCount);
-            int remainderSize = size - (denseCount * (1+denseSize(height)) + sparseCount * (1+sparseSize(height)));
+            // If the remainder does not fit one child, split it roughly in half, where the first child only has dense
+            // grandchildren.
+            if (remaining > denseChildSize)
             {
-                // need to decide our number of children either based on denseGrandChildSize,
-                // or the least number of children we can use, if we want to be maximally dense
-                int grandChildCount = remainderSize < denseSize(height)/2
-                                      ? MIN_KEYS + 1
-                                      : remainderSize / (denseSize(height-1)+1) + 1;
-
-                branch[keyCount + i] = buildMaximallyDense(source, grandChildCount, remainderSize, height, updateF);
-                sizeMap[i] = size = (1 + denseSize(height)) * i + remainderSize;
+                int grandChildCount = remaining / ((denseGrandChildSize + 1) * 2);
+                assert grandChildCount >= MIN_KEYS + 1;
+                int childSize = grandChildCount * (denseGrandChildSize + 1) - 1;
+                branch[keyCount + i] = buildMaximallyDense(source, grandChildCount, childSize, height, updateF);
+                branch[i] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
+                remaining -= childSize + 1;
+                sizeMap[i++] = size - remaining - 1;
             }
-            // finally build sparse children to consume the remaining elements
-            while (i < keyCount)
-            {
-                branch[i++] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
-                branch[keyCount + i] = buildPerfectSparse(source, height, updateF);
-                sizeMap[i] = size += 1 + sparseSize(height);
-            }
-            if (!isSimple(updateF))
-            {
-                // accounts only for the perfect allocations; recursive calls of buildMaximallyDense will account for the remainder
-                updateF.onAllocated(denseCount * PERFECT_DENSE_SIZE_ON_HEAP[height - 1]
-                                    + sparseCount * PERFECT_SPARSE_SIZE_ON_HEAP[height - 1]);
-            }
+            // Put the remainder in the last child, it is now guaranteed to fit and have the required minimum of children.
+            int grandChildCount = remaining / (denseGrandChildSize + 1) + 1;
+            assert grandChildCount >= MIN_KEYS + 1;
+            int childSize = remaining;
+            branch[keyCount + i] = buildMaximallyDense(source, grandChildCount, childSize, height, updateF);
+            sizeMap[i++] = size;
+            assert i == childCount;
         }
 
         branch[2 * keyCount + 1] = sizeMap;
+        if (!isSimple(updateF))
+            updateF.onAllocated(ObjectSizes.sizeOfArray(branch) + ObjectSizes.sizeOfArray(sizeMap));
+
         return branch;
     }
 
-    private static <C, I extends C, O extends C> Object[] buildPerfectDense(BulkIterator<I> source, int height, UpdateFunction<I, O> updateF)
+    private static <C, I extends C, O extends C> Object[] buildPerfectDenseAndAddUsage(BulkIterator<I> source, int height, UpdateFunction<I, O> updateF)
     {
-        return buildPerfect(source, height, BRANCH_SHIFT, updateF, DENSE_SIZE_MAPS);
-    }
-
-    private static <C, I extends C, O extends C> Object[] buildPerfectSparse(BulkIterator<I> source, int height, UpdateFunction<I, O> updateF)
-    {
-        return buildPerfect(source, height, BRANCH_SHIFT-1, updateF, SPARSE_SIZE_MAPS);
+        Object[] result = buildPerfectDense(source, height, updateF);
+        updateF.onAllocated(PERFECT_DENSE_SIZE_ON_HEAP[height]);
+        return result;
     }
 
     /**
      * Build a tree of size precisely {@code branchFactor^height - 1}
      */
-    private static <C, I extends C, O extends C> Object[] buildPerfect(BulkIterator<I> source, int height, int branchShift, UpdateFunction<I, O> updateF, int[][] lookupSizeMap)
+    private static <C, I extends C, O extends C> Object[] buildPerfectDense(BulkIterator<I> source, int height, UpdateFunction<I, O> updateF)
     {
-        assert height * branchShift < 32;
-        int keyCount = (1 << branchShift) - 1;
-        Object[] node = new Object[(1 << branchShift) * 2];
+        int keyCount = (1 << BRANCH_SHIFT) - 1;
+        Object[] node = new Object[(1 << BRANCH_SHIFT) * 2];
 
         if (height == 2)
         {
-            int childSize = treeSize2n(1, branchShift);
+            int childSize = treeSize2n(1, BRANCH_SHIFT);
             for (int i = 0; i < keyCount; i++)
             {
                 node[keyCount + i] = buildLeafWithoutSizeTracking(source, childSize, updateF);
@@ -327,13 +311,13 @@ public class BTree
         {
             for (int i = 0; i < keyCount; i++)
             {
-                Object[] child = buildPerfect(source, height-1, branchShift, updateF, lookupSizeMap);
+                Object[] child = buildPerfectDense(source, height - 1, updateF);
                 node[keyCount + i] = child;
                 node[i] = isSimple(updateF) ? source.next() : updateF.apply(source.next());
             }
-            node[2 * keyCount] = buildPerfect(source, height-1, branchShift, updateF, lookupSizeMap);
+            node[2 * keyCount] = buildPerfectDense(source, height - 1, updateF);
         }
-        node[keyCount + (1 << branchShift)] = lookupSizeMap[height - 2];
+        node[keyCount * 2 + 1] = DENSE_SIZE_MAPS[height - 2];
 
         return node;
     }
@@ -1939,9 +1923,8 @@ public class BTree
         // => full size at height + 1        =  1 << (branchShift * height)
         // => shift(full size at height + 1) = branchShift * height
         // => shift(full size at height + 1) / branchShift = height
-        int indexOfHighestBit = 63 - Long.numberOfLeadingZeros(size + 1);
-        indexOfHighestBit += (1L << indexOfHighestBit) == (size + 1) ? 0 : 1;
-        return (branchShift - 1 + indexOfHighestBit) / branchShift;
+        int lengthInBinary = 64 - Long.numberOfLeadingZeros(size);
+        return (branchShift - 1 + lengthInBinary) / branchShift;
     }
 
     private static int[][] buildBalancedSizeMaps(int branchShift)
@@ -2142,14 +2125,6 @@ public class BTree
             tree = (Object[]) tree[shallowSizeOfBranch(tree)];
         }
         return height;
-    }
-
-    /**
-     * @return the minimum representable size at {@code height}, for an internal (non-root) node.
-     */
-    private static int sparseSize(int height)
-    {
-        return treeSize2n(height, BRANCH_SHIFT - 1);
     }
 
     /**
