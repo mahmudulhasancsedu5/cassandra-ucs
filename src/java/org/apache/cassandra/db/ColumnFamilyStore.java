@@ -3476,5 +3476,4 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         CommitLog.instance.forceRecycleAllSegments(Collections.singleton(metadata.id));
         CompactionManager.instance.interruptCompactionForCFs(concatWithIndexes(), (sstable) -> true, true);
     }
-
 }
