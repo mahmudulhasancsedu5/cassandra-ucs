@@ -332,7 +332,7 @@ This is the trivial case, as we can simply use the input bytes in big-endian ord
 and fixed length values are trivially prefix free, i.e. (1) and (2) are satisfied, and thus (3) and (4) follow from the
 observation above.
 
-## Fixed-length signed integers (byte, short, int, bigint)
+## Fixed-length signed integers (byte, short, int, legacy bigint)
 
 As above, but we need to invert the sign bit of the number to put negative numbers before positives. This maps 
 `MIN_VALUE` to `0x00`..., `-1` to `0x7F…`, `0` to `0x80…`, and `MAX_VALUE` to `0xFF…`; comparing the resulting number 
@@ -347,6 +347,46 @@ Examples:
 |byte 0        |00         |             80
 |int MAX_VALUE |7F FF FF FF|             FF FF FF FF
 |long MIN_VALUE|80 00 00 00 00 00 00 00| 00 00 00 00 00 00 00 00
+
+## Variable-length encoding of integers (current bigint)
+
+Another way to encode integers that may save significant amounts of space when smaller numbers are often in use, but
+still permits large values to be efficiently encoded, is to use an encoding scheme similar to UTF-8.
+
+For unsigned numbers this can be done by starting the number with as many 1s in most significant bits as there are 
+additional bytes in the encoding, followed by a 0, and the bits of the number. Numbers between 0 and 127 are encoded
+in one byte, and each additional byte adds 7 more bits. Values that use all 8 bytes do not need a 9th bit of 0 and can
+thus fit 9 bytes. Because longer numbers have more 1s in their MSBs, they compare 
+higher than shorter ones (and we always use the shortest representation). Because the length is specified through these
+initial bits, no value can be a prefix of another.
+
+| Value     | bytes                   |encodes as|
+|-----------|-------------------------|----------|
+| 0         | 00                      |             00
+| 1         | 00 01                   |             01
+| 127       | 00 00 00 7F             |             7F
+| 128       | 00 80                   |             80 80
+| 2^31      | 7F FF FF FF             |         FF FF FF FF
+| 2^64- 1   | FF FF FF FF FF FF FF FF | FF FF FF FF FF FF FF FF FF
+
+
+To encode signed numbers, we must start with the sign bit, and must also ensure that longer negative numbers sort 
+smaller than shorter ones. The first bit of the encoding is the inverted sign (i.e. 1 for positive, 0 for negative),
+followed by the length encoded as a sequence of bits that matches the inverted sign, followed by a bit that differs 
+(like above, not necessary for 9-byte encodings) and the bits of the number's two's complement.
+
+| Value             | bytes                   |encodes as|
+|-------------------|-------------------------|----------|
+| 1                 | 00 00 00 01             |             01
+| -1                | FF FF                   |             7F
+| 0                 | 00                      |             80
+| 63                | 3F                      |             BF
+| -64               | C0                      |             40
+| 64                | 40                      |             C0 40
+| -65               | BF                      |             3F BF
+| Integer.MAX_VALUE | 7F FF FF FF             |             F8 7F FF FF FF
+| Long.MIN_VALUE    | 80 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00
+
 
 ## Fixed-size floating-point numbers (float, double)
 
@@ -455,7 +495,7 @@ another, the latter has to have a `FE` or `FF` as the next byte, which ensures b
 makes it no longer a prefix of the latter) and (3) (adding `10`-`EF` to the former makes it smaller than the latter; in
 this case the original value of the former is a prefix of the original value of the latter).
 
-## Variable-length integers (varint, RandomPartitioner token)
+## Variable-length integers (varint, RandomPartitioner token), legacy encoding
 
 If integers of unbounded length are guaranteed to start with a non-zero digit, to compare them we can first use a signed
 length, as numbers with longer representations have higher magnitudes. Only if the lengths match we need to compare the
@@ -493,6 +533,41 @@ Examples:
 |-2^32  |    FF 00 00 00 00  | 7C·00 00 00 00
 |2^1024 |    01 00(128 times)| FF 80·01 00(128 times)
 |-2^2048|    FF 00(256 times)| 00 00 80·00(256 times)
+
+(Middle dot · shows the transition point between length and digits.)
+
+## Variable-length integers, current encoding
+
+Because variable-length integers are also often used to store smaller range integers, it makes sense to also apply
+the variable-length integer encoding. Thus, the current varint scheme chooses to:
+- map numbers directly to their variable-length integer encoding, if they have 6 bytes or less
+- otherwise, encode as:
+  - a sign byte (00 for negative numbers, FF for positive, distinct from the leading byte of the variable-length 
+    encoding above)
+  - a variable-length encoded number of bytes, inverted for negative numbers (so that greater length compares smaller)
+  - the bytes of the number, two's complement encoded.
+We never use a longer encoding (e.g. using the second method if variable-length suffices or with added 00 leading 
+bytes) if a shorter one suffices.
+
+By the same reasoning as above, and the fact that the sign byte cannot be confused with a variable-length encoding 
+first byte, no value can be a prefix of another. As the sign byte compares smaller for negative (respectively bigger 
+for positive numbers) than any variable-length encoded integer, the comparison order is maintained when one number 
+uses variable-length encoding, and the other doesn't. Longer numbers compare smaller when negative (because of the 
+inverted length bytes), and bigger when positive.
+
+Examples:
+
+|value|bytes|encodes as|
+|---:|---|---|
+|0      |    00              | 80
+|1      |    01              | 81
+|-1     |    FF              | 7F
+|255    |    00 FF           | C0 FF
+|-256   |    FF 00           | 3F 00
+|2^16   |    01 00 00        | E1 00 00
+|-2^32  |    FF 00 00 00 00  | 07 00 00 00 00
+|2^1024 |    01 00(128 times)| FF·80 80·00(128 times)
+|-2^2048|    FF 00(256 times)| 00·7E FF·00(256 times)
 
 (Middle dot · shows the transition point between length and digits.)
 

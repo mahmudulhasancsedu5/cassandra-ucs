@@ -599,9 +599,8 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
                               safeStr(type.getSerializer().toCQLLiteral(b)),
                               safeStr(ByteBufferUtil.bytesToHex(b)),
                               typeToComparable(type, b).byteComparableAsString(VERSION));
-        }
-        for (Object i : values)
             assertConvertsSame(type, i);
+        }
         if (!type.isReversed())
             testType(ReversedType.getInstance(type), values);
     }

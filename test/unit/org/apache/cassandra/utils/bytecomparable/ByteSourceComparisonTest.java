@@ -1009,7 +1009,17 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                     assertEquals(String.format("Failed comparing reversed %s(%s, %s) and %s(%s, %s) direct (%d) and as clustering", safeStr(v1), ByteBufferUtil.bytesToHex(b1), c1, safeStr(v2), ByteBufferUtil.bytesToHex(b2), c2, actual), expected, actualcc);
                 }
                 else
-                    assertEquals(String.format("Failed comparing %s(%s) and %s(%s)", safeStr(v1), ByteBufferUtil.bytesToHex(b1), safeStr(v2), ByteBufferUtil.bytesToHex(b2)), expected, actual);
+                    if (expected != actual)
+                    assertEquals(String.format("Failed comparing %s(%s BC %s) and %s(%s BC %s) version %s",
+                                               safeStr(v1),
+                                               ByteBufferUtil.bytesToHex(b1),
+                                               bc1.byteComparableAsString(version),
+                                               safeStr(v2),
+                                               ByteBufferUtil.bytesToHex(b2),
+                                               bc2.byteComparableAsString(version),
+                                               version),
+                                 expected,
+                                 actual);
             }
             maybeCheck41Properties(expected, bc1, bc2, version);
         }

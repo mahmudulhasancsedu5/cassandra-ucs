@@ -183,6 +183,16 @@ public interface ByteSource
     }
 
     /**
+     * Produce a source for a signed integer, stored using variable length encoding.
+     * The representation takes between 1 and 9 bytes, is prefix-free and compares
+     * correctly.
+     */
+    static ByteSource variableLengthInteger(long value)
+    {
+        return new VariableLengthInteger(value);
+    }
+
+    /**
      * Returns a separator for two byte sources, i.e. something that is definitely > prevMax, and <= currMin, assuming
      * prevMax < currMin.
      * This returns the shortest prefix of currMin that is greater than prevMax.
@@ -450,6 +460,113 @@ public interface ByteSource
                 v ^= 0x80;
             ++bufpos;
             return v;
+        }
+    }
+
+    /**
+     * Variable-length encoding for unsigned integers.
+     * The encoding is similar to UTF-8 encoding.
+     * Numbers between 0 and 127 are encoded in one byte, using 0 in the most significant bit.
+     * Larger values have 1s in as many of the most significant bits as the number of additional bytes
+     * in the representation, followed by a 0. This ensures that longer numbers compare larger than shorter
+     * ones. Since we never use a longer representation than necessary, this implies numbers compare correctly.
+     * As the number of bytes is specified in the bits of the first, no value is a prefix of another.
+     */
+    static class VariableLengthUnsignedInteger implements ByteSource
+    {
+        final long value;
+        int pos = -1;
+
+        public VariableLengthUnsignedInteger(long value)
+        {
+            this.value = value;
+        }
+
+        public int next()
+        {
+            if (pos == -1)
+            {
+                int bitsMinusOne = 63 - (Long.numberOfLeadingZeros(value | 1)); // 0 to 63 (the | 1 is to make sure 0 maps to 0 (1 bit))
+                int bytesMinusOne = bitsMinusOne / 7;
+                int mask = -256 >> bytesMinusOne;   // sequence of bytesMinusOne 1s in the most-significant bits
+                pos = bytesMinusOne * 8;
+                return (int) ((value >>> pos) | mask) & 0xFF;
+            }
+            pos -= 8;
+            if (pos < 0)
+                return END_OF_STREAM;
+            return (int) (value >>> pos) & 0xFF;
+        }
+    }
+
+    /**
+     * Variable-length encoding for signed integers.
+     * The encoding is based on the unsigned encoding above, where the first bit stored is the inverted sign,
+     * followed by as many matching bits as there are additional bytes in the encoding, followed by the two's
+     * complement of the number.
+     * Because of the inverted sign bit, negative numbers compare smaller than positives, and because the length
+     * bits match the sign, longer positive numbers compare greater and longer negative ones compare smaller.
+     *
+     * Examples:
+     *      0              encodes as           80
+     *      1              encodes as           81
+     *     -1              encodes as           7F
+     *     63              encodes as           BF
+     *     64              encodes as           C040
+     *    -64              encodes as           40
+     *    -65              encodes as           3FBF
+     *   2^20-1            encodes as           EFFFFF
+     *   2^20              encodes as           F0100000
+     *  -2^20              encodes as           100000
+     *   2^64-1            encodes as           FFFFFFFFFFFFFFFFFF
+     *  -2^64              encodes as           000000000000000000
+     *
+     * As the number of bytes is specified in bits 2-9, no value is a prefix of another.
+     */
+    static class VariableLengthInteger implements ByteSource
+    {
+        final long value;
+        int pos;
+
+        public VariableLengthInteger(long value)
+        {
+            long negativeMask = value >> 63;    // -1 for negative, 0 for positive
+            value ^= negativeMask;
+
+            int bits = 64 - Long.numberOfLeadingZeros(value | 1); // 1 to 63 (can't be 64 because we flip negative numbers)
+            int bytes = bits / 7 + 1;   // 0-6 bits 1 byte 7-13 2 bytes etc to 56-63 9 bytes
+            if (bytes >= 9)
+            {
+                value |= 0x8000000000000000L;   // 8th bit, which doesn't fit the first byte
+                pos = negativeMask < 0 ? 256 : -1; // out of 0-64 range integer such that & 0xFF is 0x00 for negative and 0xFF for positive
+            }
+            else
+            {
+                long mask = (-0x100 >> bytes) & 0xFF; // one in sign bit and as many more as there are extra bytes
+                pos = bytes * 8;
+                value = value | (mask << (pos - 8));
+            }
+
+            value ^= negativeMask;
+            this.value = value;
+        }
+
+        public int next()
+        {
+            if (pos <= 0 || pos > 64)
+            {
+                if (pos == 0)
+                    return END_OF_STREAM;
+                else
+                {
+                    // 8-byte value, returning first byte
+                    int result = pos & 0xFF; // 0x00 for negative numbers, 0xFF for positive
+                    pos = 64;
+                    return result;
+                }
+            }
+            pos -= 8;
+            return (int) (value >>> pos) & 0xFF;
         }
     }
 

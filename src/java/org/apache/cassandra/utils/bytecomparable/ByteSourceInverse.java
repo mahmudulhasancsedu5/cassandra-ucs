@@ -268,6 +268,58 @@ public final class ByteSourceInverse
     }
 
     /**
+     * Decode a variable-length signed integer.
+     */
+    public static long getVariableLengthInteger(ByteSource byteSource)
+    {
+        int signAndMask = byteSource.next();
+
+        long sum = 0;
+        int bytes;
+        // For every bit after the sign that matches the sign, read one more byte.
+        for (bytes = 0; bytes < 7 && sameByteSign(signAndMask << (bytes + 1), signAndMask); ++bytes)
+            sum = (sum << 8) | byteSource.next();
+
+        // The eighth length bit is stored in the second byte.
+        if (bytes == 7 && sameByteSign((int) (sum >> 48), signAndMask))
+            return ((sum << 8) | byteSource.next()) ^ LONG_SIGN_BIT;    // 9-byte encoding, use bytes 2-9 with inverted sign
+        else
+        {
+            sum |= (((long) signAndMask) << bytes * 8);     // add the rest of the bits
+            long signMask = -0x40L << bytes * 7;            // mask of the bits that should be replaced by the sign
+            long sign = (byte) (signAndMask ^ 0x80) >> 7;   // -1 if negative (0 leading bit), 0 otherwise
+            return sum & ~signMask | sign & signMask;
+        }
+    }
+
+    /**
+     * Decode a variable-length unsigned integer, passing all bytes read through XOR with the given xorWith parameter.
+     *
+     * Used in BigInteger encoding to read number length, where negative numbers have their length negated
+     * (i.e. xorWith = 0xFF) to ensure correct ordering.
+     */
+    public static long getVariableLengthUnsignedIntegerXoring(ByteSource byteSource, int xorWith)
+    {
+        int signAndMask = byteSource.next() ^ xorWith;
+
+        long sum = 0;
+        int bytes;
+        // Read an extra byte while the next most significant bit is 1.
+        for (bytes = 0; bytes <= 7 && ((signAndMask << bytes) & 0x80) != 0; ++bytes)
+            sum = (sum << 8) | byteSource.next() ^ xorWith;
+
+        // Strip the length bits from the leading byte.
+        signAndMask &= ~(-256 >> bytes);
+        return sum | (((long) signAndMask) << bytes * 8);     // Add the rest of the bits of the leading byte.
+    }
+
+    /** Returns true if the two parameters treated as bytes have the same sign. */
+    private static boolean sameByteSign(int a, int b)
+    {
+        return ((a ^ b) & 0x80) == 0;
+    }
+
+    /**
      * As above, but converts the result to a ByteSource.
      */
     public static ByteSource unescape(ByteSource.Peekable byteSource)
