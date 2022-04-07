@@ -268,17 +268,10 @@ public class BTree
                 sizeMap[i++] = size - remaining - 1;
             }
             // Put the remainder in the last child, it is now guaranteed to fit and have the required minimum of children.
-            if (remaining == denseChildSize)
-            {
-                branch[keyCount + i] = buildPerfectDense(source, height, updateF);
-            }
-            else
-            {
-                int grandChildCount = remaining / (denseGrandChildSize + 1) + 1;
-                assert grandChildCount >= MIN_KEYS + 1;
-                int childSize = remaining;
-                branch[keyCount + i] = buildMaximallyDense(source, grandChildCount, childSize, height, updateF);
-            }
+            int grandChildCount = remaining / (denseGrandChildSize + 1) + 1;
+            assert grandChildCount >= MIN_KEYS + 1;
+            int childSize = remaining;
+            branch[keyCount + i] = buildMaximallyDense(source, grandChildCount, childSize, height, updateF);
             sizeMap[i++] = size;
             assert i == childCount;
         }
