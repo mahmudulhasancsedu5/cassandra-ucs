@@ -45,6 +45,7 @@ public final class IntegerType extends NumberType<BigInteger>
     private static final int POSITIVE_VARINT_LENGTH_HEADER = 0xFF;
     private static final byte BIG_INTEGER_NEGATIVE_LEADING_ZERO = (byte) 0xFF;
     private static final byte BIG_INTEGER_POSITIVE_LEADING_ZERO = (byte) 0x00;
+    public static final int FULL_FORM_THRESHOLD = 7;
 
     private static <V> int findMostSignificantByte(V value, ValueAccessor<V> accessor)
     {
@@ -144,17 +145,20 @@ public final class IntegerType extends NumberType<BigInteger>
 
     /**
      * Constructs a byte-comparable representation of the number.
+     *
      * In the current format we represent it:
      *    directly as varint, if the length is 6 or smaller (the encoding has non-00/FF first byte)
-     *    <signbyte><length as unsigned varint><7 or more bytes>, otherwise
+     *    <signbyte><length as unsigned integer - 7><7 or more bytes>, otherwise
      * where <signbyte> is 00 for negative numbers and FF for positive ones, and the length's bytes are inverted if
      * the number is negative (so that longer length sorts smaller).
      *
      * Because we present the sign separately, we don't need to include 0x00 prefix for positive integers whose first
-     * byte is >= 0x80 or 0xFF prefix for negative integers whose first byte is < 0x80.
+     * byte is >= 0x80 or 0xFF prefix for negative integers whose first byte is < 0x80. Note that we do this before
+     * taking the length for the purposes of choosing between varint and full-form encoding.
      *
-     * The representations are prefix-free, because representations of different length always have length bytes that
-     * differ.
+     * The representations are prefix-free, because the choice between varint and full-form encoding is determined by
+     * the first byte where varints are properly ordered between full-form negative and full-form positive, varint
+     * encoding is prefix-free, and full-form representations of different length always have length bytes that differ.
      *
      * Examples:
      *    -1            as 7F
@@ -164,22 +168,16 @@ public final class IntegerType extends NumberType<BigInteger>
      *    255           as 80FF
      *    2^32-1        as F8FFFFFFFF
      *    2^32          as F900000000
-     *    2^47-1        as fe7fffffffffff
-     *    2^47          as ff06800000000000
+     *    2^56-1        as FEFFFFFFFFFFFFFF
+     *    2^56          as FF000100000000000000
      *
-     * See asComparableBytesLegacy for description of the legacy format.
+     * See {@link #asComparableBytesLegacy} for description of the legacy format.
      */
     public <V> ByteSource asComparableBytes(ValueAccessor<V> accessor, V data, ByteComparable.Version version)
     {
         final int limit = accessor.size(data);
-        if (limit <= 6)
-        {
-            if (limit == 0)
-                return null;
-            if (version != ByteComparable.Version.LEGACY)
-                return encodeAsVarInt(accessor, data, limit);
-        }
-
+        if (limit == 0)
+            return null;
 
         // skip any leading sign-only byte(s)
         int p = 0;
@@ -194,14 +192,16 @@ public final class IntegerType extends NumberType<BigInteger>
         }
 
         if (version != ByteComparable.Version.LEGACY)
-            return asComparableBytesCurrent(accessor, data, p, limit, (signbyte >> 7) & 0xFF);
+            return (limit - p < FULL_FORM_THRESHOLD)
+                   ? encodeAsVarInt(accessor, data, limit)
+                   : asComparableBytesCurrent(accessor, data, p, limit, (signbyte >> 7) & 0xFF);
         else
             return asComparableBytesLegacy(accessor, data, p, limit, signbyte);
     }
 
     /**
      * Encode the BigInteger stored in the given buffer as a variable-length signed integer.
-     * The length of the number is given in the limit argument, and must be <= 6.
+     * The length of the number is given in the limit argument, and must be <= 8.
      */
     private <V> ByteSource encodeAsVarInt(ValueAccessor<V> accessor, V data, int limit)
     {
@@ -226,6 +226,12 @@ public final class IntegerType extends NumberType<BigInteger>
             case 6:
                 v = ((long) accessor.getInt(data, 0) << 16) | (accessor.getShort(data, 4) & 0xFFFF);
                 break;
+            case 7:
+                v = ((long) accessor.getInt(data, 0) << 24) | ((accessor.getShort(data, 4) & 0xFFFF) << 8) | (accessor.getByte(data, 6) & 0xFF);
+                break;
+            case 8:
+                v = accessor.getLong(data, 0);
+                break;
             default:
                 throw new AssertionError();
         }
@@ -233,10 +239,10 @@ public final class IntegerType extends NumberType<BigInteger>
     }
 
     /**
-     * Constructs a byte-comparable representation of the number.
-     * We represent it:
-     *    directly as varint, if the length is 6 or smaller (the encoding has non-00/FF first byte)
-     *    <signbyte><length as unsigned varint><7 or more bytes>, otherwise
+     * Constructs a full-form byte-comparable representation of the number in the current format.
+     *
+     * This contains:
+     *    <signbyte><length as unsigned integer - 7><7 or more bytes>, otherwise
      * where <signbyte> is 00 for negative numbers and FF for positive ones, and the length's bytes are inverted if
      * the number is negative (so that longer length sorts smaller).
      *
@@ -245,17 +251,6 @@ public final class IntegerType extends NumberType<BigInteger>
      *
      * The representations are prefix-free, because representations of different length always have length bytes that
      * differ.
-     *
-     * Examples:
-     *    -1            as 7F
-     *    0             as 80
-     *    1             as 81
-     *    127           as C07F
-     *    255           as 80FF
-     *    2^32-1        as F8FFFFFFFF
-     *    2^32          as F900000000
-     *    2^47-1        as fe7fffffffffff
-     *    2^47          as ff06800000000000
      */
     private <V> ByteSource asComparableBytesCurrent(ValueAccessor<V> accessor, V data, int startpos, int limit, int signbyte)
     {
@@ -263,7 +258,7 @@ public final class IntegerType extends NumberType<BigInteger>
         return new ByteSource()
         {
             int pos = -2;
-            ByteSource lengthEncoding = new VariableLengthUnsignedInteger(limit - startpos);
+            ByteSource lengthEncoding = new VariableLengthUnsignedInteger(limit - startpos - FULL_FORM_THRESHOLD);
 
             public int next()
             {
@@ -374,7 +369,7 @@ public final class IntegerType extends NumberType<BigInteger>
         comparableBytes.next();
 
         // Read the length (inverted if the number is negative)
-        int valueBytes = Math.toIntExact(ByteSourceInverse.getVariableLengthUnsignedIntegerXoring(comparableBytes, sign));
+        int valueBytes = Math.toIntExact(ByteSourceInverse.getVariableLengthUnsignedIntegerXoring(comparableBytes, sign) + FULL_FORM_THRESHOLD);
         // Get the bytes.
         return extractBytes(accessor, comparableBytes, sign, valueBytes);
     }
@@ -405,6 +400,14 @@ public final class IntegerType extends NumberType<BigInteger>
             case 6:
                 accessor.putInt(buf, 0, (int) (value >> 16));
                 accessor.putShort(buf, 4, (short) value);
+                break;
+            case 7:
+                accessor.putInt(buf, 0, (int) (value >> 24));
+                accessor.putShort(buf, 4, (short) (value >> 8));
+                accessor.putByte(buf, 6, (byte) value);
+                break;
+            case 8:
+                accessor.putLong(buf, 0, value);
                 break;
             default:
                 throw new AssertionError();

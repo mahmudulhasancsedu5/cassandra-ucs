@@ -360,14 +360,19 @@ thus fit 9 bytes. Because longer numbers have more 1s in their MSBs, they compar
 higher than shorter ones (and we always use the shortest representation). Because the length is specified through these
 initial bits, no value can be a prefix of another.
 
-| Value     | bytes                   |encodes as|
-|-----------|-------------------------|----------|
-| 0         | 00                      |             00
-| 1         | 00 01                   |             01
-| 127       | 00 00 00 7F             |             7F
-| 128       | 00 80                   |             80 80
-| 2^31      | 7F FF FF FF             |         FF FF FF FF
-| 2^64- 1   | FF FF FF FF FF FF FF FF | FF FF FF FF FF FF FF FF FF
+| Value            | bytes                   |encodes as|
+|------------------|-------------------------|----------|
+| 0                | 00 00 00 00 00 00 00 00 |             00
+| 1                | 00 00 00 00 00 00 00 01 |             01
+| 127 (2^7-1)      | 00 00 00 00 00 00 00 7F |             7F
+| 128 (2^7)        | 00 00 00 00 00 00 00 80 |             80 80
+| 16383 (2^14 - 1) | 00 00 00 00 00 00 3F FF |             BF FF
+| 16384 (2^14)     | 00 00 00 00 00 00 40 00 |             C0 40 00
+| 2^31 - 1         | 00 00 00 00 7F FF FF FF |         F0 7F FF FF FF
+| 2^31             | 00 00 00 00 80 00 00 00 |         F0 80 00 00 00
+| 2^56 - 1         | 00 FF FF FF FF FF FF FF | FE FF FF FF FF FF FF FF
+| 2^56             | 01 00 00 00 00 00 00 00 | FF 01 00 00 00 00 00 00 00
+| 2^64- 1          | FF FF FF FF FF FF FF FF | FF FF FF FF FF FF FF FF FF
 
 
 To encode signed numbers, we must start with the sign bit, and must also ensure that longer negative numbers sort 
@@ -375,17 +380,19 @@ smaller than shorter ones. The first bit of the encoding is the inverted sign (i
 followed by the length encoded as a sequence of bits that matches the inverted sign, followed by a bit that differs 
 (like above, not necessary for 9-byte encodings) and the bits of the number's two's complement.
 
-| Value             | bytes                   |encodes as|
-|-------------------|-------------------------|----------|
-| 1                 | 00 00 00 01             |             01
-| -1                | FF FF                   |             7F
-| 0                 | 00                      |             80
-| 63                | 3F                      |             BF
-| -64               | C0                      |             40
-| 64                | 40                      |             C0 40
-| -65               | BF                      |             3F BF
-| Integer.MAX_VALUE | 7F FF FF FF             |             F8 7F FF FF FF
-| Long.MIN_VALUE    | 80 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00
+| Value             | bytes                    |encodes as|
+|-------------------|--------------------------|----------|
+| 1                 | 00 00 00 00 00 00 00 01  |             01
+| -1                | FF FF FF FF FF FF FF FF  |             7F
+| 0                 | 00 00 00 00 00 00 00 00  |             80
+| 63                | 00 00 00 00 00 00 00 3F  |             BF
+| -64               | FF FF FF FF FF FF FF C0  |             40
+| 64                | 00 00 00 00 00 00 00 40  |             C0 40
+| -65               | FF FF FF FF FF FF FF BF  |             3F BF
+| 8191              | 00 00 00 00 00 00 1F FF  | DF FF
+| 8192              | 00 00 00 00 00 00 20 00  | E0 20 00
+| Integer.MAX_VALUE | 00 00 00 00 7F FF FF FF  |             F8 7F FF FF FF
+| Long.MIN_VALUE    | 80 00 00 00 00 00 00 00  | 00 00 00 00 00 00 00 00 00
 
 
 ## Fixed-size floating-point numbers (float, double)
@@ -433,9 +440,9 @@ end. The values we chose for the separator and terminator are `0x40` and `0x38`,
 - Permits partially specified bounds, with strict/exclusive or non-strict/inclusive semantics. This is done by finishing
   a bound with a terminator value that is smaller/greater than the separator and terminator. We can use `0x20` for </≥
   and `0x60` for ≤/>.
-- Permits encoding of `null` values. We use `0x3F` as the separator in this case, followed by no value bytes. This is 
-  always smaller than a sequence with non-null value for this component, but not smaller than a sequence that ends in
-  this component.
+- Permits encoding of `null` and `empty` values. We use `0x3E` as the separator for nulls and `0x3F` for empty, 
+  followed by no value bytes. This is always smaller than a sequence with non-null value for this component, but not 
+  smaller than a sequence that ends in this component.
 - Helps identify the ending of variable-length components (see below).
 
 Examples:
@@ -443,10 +450,10 @@ Examples:
 |Types and values|bytes|encodes as|
 |---|---|---|
 |(short 1, float 1.0)    |    00 01, 3F 80 00 00    |   40·80 01·40·BF 80 00 00·38
-|(short -1, null)        |    FF FF, —              |   40·7F FF·3F·38
+|(short -1, null)        |    FF FF, —              |   40·7F FF·3E·38
 |≥ (short 0, float -Inf) |    00 00, FF 80 00 00, >=|   40·80 00·40·00 7F FF FF·20
 |< (short MIN)           |    80 00, <=             |   40·00 00·20
-|\> (null)               |                          |   3F·60
+|\> (null)               |                          |   3E·60
 |BOTTOM                  |                          |   20
 |TOP                     |                          |   60
 
@@ -522,17 +529,18 @@ as well.
 
 Examples:
 
-|value|bytes|encodes as|
-|---:|---|---|
-|0      |    00              | 80·00
-|1      |    01              | 80·01
-|-1     |    FF              | 7F·FF
-|255    |    00 FF           | 80·FF
-|-256   |    FF 00           | 7F·00
-|2^16   |    01 00 00        | 82·01 00 00
-|-2^32  |    FF 00 00 00 00  | 7C·00 00 00 00
-|2^1024 |    01 00(128 times)| FF 80·01 00(128 times)
-|-2^2048|    FF 00(256 times)| 00 00 80·00(256 times)
+|   value | bytes            |encodes as|
+|--------:|------------------|---|
+|       0 | 00               | 80·00
+|       1 | 01               | 80·01
+|      -1 | FF               | 7F·FF
+|     255 | 00 FF            | 80·FF
+|    -256 | FF 00            | 7F·00
+|     256 | 01 00            | 81·01 00
+|    2^16 | 01 00 00         | 82·01 00 00
+|   -2^32 | FF 00 00 00 00   | 7C·00 00 00 00
+|  2^1024 | 01 00(128 times) | FF 80·01 00(128 times)
+| -2^2048 | FF 00(256 times) | 00 00 80·00(256 times)
 
 (Middle dot · shows the transition point between length and digits.)
 
@@ -540,11 +548,13 @@ Examples:
 
 Because variable-length integers are also often used to store smaller range integers, it makes sense to also apply
 the variable-length integer encoding. Thus, the current varint scheme chooses to:
-- map numbers directly to their variable-length integer encoding, if they have 6 bytes or less
-- otherwise, encode as:
+- Strip any leading zeros. Note that for negative numbers, `BigInteger` encodes leading 0 as `0xFF`.
+- Map numbers directly to their variable-length integer encoding, if they have 6 bytes or less.
+- Otherwise, encode as:
   - a sign byte (00 for negative numbers, FF for positive, distinct from the leading byte of the variable-length 
     encoding above)
-  - a variable-length encoded number of bytes, inverted for negative numbers (so that greater length compares smaller)
+  - a variable-length encoded number of bytes adjusted by -7 (so that the smallest length this encoding uses maps to 
+    0), inverted for negative numbers (so that greater length compares smaller)
   - the bytes of the number, two's complement encoded.
 We never use a longer encoding (e.g. using the second method if variable-length suffices or with added 00 leading 
 bytes) if a shorter one suffices.
@@ -557,17 +567,22 @@ inverted length bytes), and bigger when positive.
 
 Examples:
 
-|value|bytes|encodes as|
-|---:|---|---|
-|0      |    00              | 80
-|1      |    01              | 81
-|-1     |    FF              | 7F
-|255    |    00 FF           | C0 FF
-|-256   |    FF 00           | 3F 00
-|2^16   |    01 00 00        | E1 00 00
-|-2^32  |    FF 00 00 00 00  | 07 00 00 00 00
-|2^1024 |    01 00(128 times)| FF·80 80·00(128 times)
-|-2^2048|    FF 00(256 times)| 00·7E FF·00(256 times)
+|    value | bytes                   |encodes as|
+|---------:|-------------------------|---|
+|        0 | 00                      | 80
+|        1 | 01                      | 81
+|       -1 | FF                      | 7F
+|      255 | 00 FF                   | C0 FF
+|     -256 | FF 00                   | 3F 00
+|      256 | 01 00                   | C1 00
+|     2^16 | 01 00 00                | E1 00 00
+|    -2^32 | FF 00 00 00 00          | 07 00 00 00 00
+|   2^56-1 | 00 FF FF FF FF FF FF FF | FE FF FF FF FF FF FF FF
+|    -2^56 | FF 00 00 00 00 00 00 00 | 01 00 00 00 00 00 00 00
+|     2^56 | 01 00 00 00 00 00 00 00 | FF·00·01 00 00 00 00 00 00 00
+| -2^56-1  | FE FF FF FF FF FF FF FF | 00·FF·FE FF FF FF FF FF FF FF
+|   2^1024 | 01 00(128 times)        | FF·7A·01 00(128 times)
+|  -2^2048 | FF 00(256 times)        | 00·7F 06·00(256 times)
 
 (Middle dot · shows the transition point between length and digits.)
 
@@ -654,12 +669,21 @@ Examples:
 The values are prefix-free, because no exponent’s encoding can be a prefix of another, and the mantissas can never have
 a `00` byte at any place other than the last byte, and thus all (1)-(4) are satisfied.
 
+## Nulls and empty encodings
+
+Some types in Cassandra (e.g. numbers) admit null values that are represented as empty byte buffers. This is 
+distinct from null byte buffers, which can also appear in some cases. Particularly, null values in clustering 
+columns, when allowed by the type, are interpreted as empty byte buffers, encoded with the empty separator `0x3F`. 
+Unspecified clustering columns (at the end of a clustering specification), possible with `COMPACT STORAGE` or secondary 
+indexes, use the null separator `0x3E`.
+
 ## Reversed types
 
 Reversing a type is straightforward: flip all bits of the encoded byte sequence. Since the source type encoding must
 satisfy (3) and (4), the flipped bits also do for the reversed comparator. (It is also true that if the source type 
 satisfies (1)-(2), the reversed will satisfy these too.)
 
-In a sequence we also must correct the `null` encoding for a reversed type (since it must be greater than all values).
-Instead of `0x3F` we use `0x41` as the separator byte.
+In a sequence we also must correct the empty encoding for a reversed type (since it must be greater than all values).
+Instead of `0x3F` we use `0x41` as the separator byte. Null encodings are not modified, as nulls compare smaller even
+in reversed types.
 
