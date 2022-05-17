@@ -87,6 +87,7 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     public static final BufferType BUFFER_TYPE;
 
     public static final String SHARDS_OPTION = "shards";
+    public static final String TRACK_LOCKING_OPTION = "track_locking";
 
     static
     {
@@ -148,24 +149,31 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     private static volatile int SHARD_COUNT = Integer.getInteger(SHARD_COUNT_PROPERTY, FBUtilities.getAvailableProcessors());
 
     // only to be used by init(), to setup the very first memtable for the cfs
-    TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption)
+    TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound,
+                 TableMetadataRef metadataRef,
+                 Owner owner,
+                 Integer shardCountOption,
+                 boolean trackLocking)
     {
         super(commitLogLowerBound, metadataRef, owner);
         int shardCount = shardCountOption != null ? shardCountOption : getShardCount();
         this.boundaries = owner.localRangeSplits(shardCount);
         this.metrics = new TrieMemtableMetricsView(metadataRef.keyspace, metadataRef.name);
-        this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef, metrics);
+        this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef, metrics, trackLocking);
         this.mergedTrie = makeMergedTrie(shards);
     }
 
     private static MemtableShard[] generatePartitionShards(int splits,
                                                            MemtableAllocator allocator,
                                                            TableMetadataRef metadata,
-                                                           TrieMemtableMetricsView metrics)
+                                                           TrieMemtableMetricsView metrics,
+                                                           boolean trackLocking)
     {
         MemtableShard[] partitionMapContainer = new MemtableShard[splits];
         for (int i = 0; i < splits; i++)
-            partitionMapContainer[i] = new MemtableShard(metadata, allocator, metrics);
+            partitionMapContainer[i] = trackLocking
+                                       ? new LockTrackingMemtableShard(metadata, allocator, metrics)
+                                       : new MemtableShard(metadata, allocator);
 
         return partitionMapContainer;
     }
@@ -430,9 +438,6 @@ public class TrieMemtable extends AbstractAllocatorMemtable
 
         private volatile long currentOperations = 0;
 
-        @Unmetered
-        private ReentrantLock writeLock = new ReentrantLock();
-
         // Content map for the given shard. This is implemented as a memtable trie which uses the prefix-free
         // byte-comparable ByteSource representations of the keys to address the partitions.
         //
@@ -454,75 +459,60 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         private final StatsCollector statsCollector;
 
         @Unmetered  // total pool size should not be included in memtable's deep size
-        private final MemtableAllocator allocator;
-
-        @Unmetered
-        private final TrieMemtableMetricsView metrics;
+        final MemtableAllocator allocator;
 
         @VisibleForTesting
-        MemtableShard(TableMetadataRef metadata, MemtableAllocator allocator, TrieMemtableMetricsView metrics)
+        MemtableShard(TableMetadataRef metadata, MemtableAllocator allocator)
         {
             this.data = new MemtableTrie<>(BUFFER_TYPE);
             this.columnsCollector = new AbstractMemtable.ColumnsCollector(metadata.get().regularAndStaticColumns());
             this.statsCollector = new AbstractMemtable.StatsCollector();
             this.allocator = allocator;
-            this.metrics = metrics;
         }
 
         public long put(DecoratedKey key, PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup)
         {
             BTreePartitionUpdater updater = new BTreePartitionUpdater(allocator, opGroup, indexer);
-            boolean locked = writeLock.tryLock();
-            if (locked)
+            synchronized (this)
             {
-                metrics.uncontendedPuts.inc();
+                put(key, update, opGroup, updater);
             }
-            else
-            {
-                metrics.contendedPuts.inc();
-                long lockStartTime = Clock.Global.nanoTime();
-                writeLock.lock();
-                metrics.contentionTime.addNano(Clock.Global.nanoTime() - lockStartTime);
-            }
+            return updater.colUpdateTimeDelta;
+        }
+
+        void put(DecoratedKey key, PartitionUpdate update, OpOrder.Group opGroup, BTreePartitionUpdater updater)
+        {
             try
             {
+                long onHeap = data.sizeOnHeap();
+                long offHeap = data.sizeOffHeap();
+                // Use the fast recursive put if we know the key is small enough to not cause a stack overflow.
                 try
                 {
-                    long onHeap = data.sizeOnHeap();
-                    long offHeap = data.sizeOffHeap();
-                    // Use the fast recursive put if we know the key is small enough to not cause a stack overflow.
-                    try
-                    {
-                        data.putSingleton(key,
-                                          update,
-                                          updater::mergePartitions,
-                                          key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
-                    }
-                    catch (MemtableTrie.SpaceExhaustedException e)
-                    {
-                        // This should never really happen as a flush would be triggered long before this limit is reached.
-                        throw Throwables.propagate(e);
-                    }
-                    allocator.offHeap().adjust(data.sizeOffHeap() - offHeap, opGroup);
-                    allocator.onHeap().adjust(data.sizeOnHeap() - onHeap, opGroup);
+                    data.putSingleton(key,
+                                      update,
+                                      updater::mergePartitions,
+                                      key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
                 }
-                finally
+                catch (MemtableTrie.SpaceExhaustedException e)
                 {
-                    updateMinTimestamp(update.stats().minTimestamp);
-                    updateMinLocalDeletionTime(update.stats().minLocalDeletionTime);
-                    updateLiveDataSize(updater.dataSize);
-                    updateCurrentOperations(update.operationCount());
-
-                    // TODO: lambov 2021-03-30: check if stats are further optimisable
-                    columnsCollector.update(update.columns());
-                    statsCollector.update(update.stats());
+                    // This should never really happen as a flush would be triggered long before this limit is reached.
+                    throw Throwables.propagate(e);
                 }
+                allocator.offHeap().adjust(data.sizeOffHeap() - offHeap, opGroup);
+                allocator.onHeap().adjust(data.sizeOnHeap() - onHeap, opGroup);
             }
             finally
             {
-                writeLock.unlock();
+                updateMinTimestamp(update.stats().minTimestamp);
+                updateMinLocalDeletionTime(update.stats().minLocalDeletionTime);
+                updateLiveDataSize(updater.dataSize);
+                updateCurrentOperations(update.operationCount());
+
+                // TODO: lambov 2021-03-30: check if stats are further optimisable
+                columnsCollector.update(update.columns());
+                statsCollector.update(update.stats());
             }
-            return updater.colUpdateTimeDelta;
         }
 
         public boolean isEmpty()
@@ -576,6 +566,47 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         {
             return minLocalDeletionTime;
         }
+    }
+
+    static class LockTrackingMemtableShard extends MemtableShard
+    {
+        @Unmetered
+        private ReentrantLock writeLock = new ReentrantLock();
+        @Unmetered
+        private final TrieMemtableMetricsView metrics;
+
+        LockTrackingMemtableShard(TableMetadataRef metadata, MemtableAllocator allocator, TrieMemtableMetricsView metrics)
+        {
+            super(metadata, allocator);
+            this.metrics = metrics;
+        }
+
+        public long put(DecoratedKey key, PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup)
+        {
+            BTreePartitionUpdater updater = new BTreePartitionUpdater(allocator, opGroup, indexer);
+            boolean locked = writeLock.tryLock();
+            if (locked)
+            {
+                metrics.uncontendedPuts.inc();
+            }
+            else
+            {
+                metrics.contendedPuts.inc();
+                long lockStartTime = Clock.Global.nanoTime();
+                writeLock.lock();
+                metrics.contentionTime.addNano(Clock.Global.nanoTime() - lockStartTime);
+            }
+            try
+            {
+                put(key, update, opGroup, updater);
+            }
+            finally
+            {
+                writeLock.unlock();
+            }
+            return updater.colUpdateTimeDelta;
+        }
+
     }
 
     static class MemtableUnfilteredPartitionIterator extends AbstractUnfilteredPartitionIterator implements UnfilteredPartitionIterator
@@ -708,23 +739,26 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     {
         String shardsString = optionsCopy.remove(SHARDS_OPTION);
         Integer shardCount = shardsString != null ? Integer.parseInt(shardsString) : null;
-        return new Factory(shardCount);
+        boolean trackLocking = Boolean.parseBoolean(optionsCopy.remove(TRACK_LOCKING_OPTION));
+        return new Factory(shardCount, trackLocking);
     }
 
     static class Factory implements Memtable.Factory
     {
         final Integer shardCount;
+        final boolean trackLocking;
 
-        Factory(Integer shardCount)
+        Factory(Integer shardCount, boolean trackLocking)
         {
             this.shardCount = shardCount;
+            this.trackLocking = trackLocking;
         }
 
         public Memtable create(AtomicReference<CommitLogPosition> commitLogLowerBound,
                                TableMetadataRef metadaRef,
                                Owner owner)
         {
-            return new TrieMemtable(commitLogLowerBound, metadaRef, owner, shardCount);
+            return new TrieMemtable(commitLogLowerBound, metadaRef, owner, shardCount, trackLocking);
         }
 
         @Override

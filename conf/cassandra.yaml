@@ -587,8 +587,8 @@ concurrent_materialized_view_writes: 32
 # accepting writes when the limit is exceeded until a flush completes,
 # and will trigger a flush based on memtable_cleanup_threshold
 # If omitted, Cassandra will set both to 1/4 the size of the heap.
-# memtable_heap_space: 2048MiB
-# memtable_offheap_space: 2048MiB
+memtable_heap_space: 8192MiB
+memtable_offheap_space: 8192MiB
 
 # memtable_cleanup_threshold is deprecated. The default calculation
 # is the only reasonable choice. See the comments on  memtable_flush_writers
@@ -601,7 +601,7 @@ concurrent_materialized_view_writes: 32
 # under heavy write load.
 #
 # memtable_cleanup_threshold defaults to 1 / (memtable_flush_writers + 1)
-# memtable_cleanup_threshold: 0.11
+memtable_cleanup_threshold: 0.8
 
 # Specify the way Cassandra allocates and manages memtable memory.
 # Options are:
@@ -1716,3 +1716,25 @@ drop_compact_storage_enabled: false
 #    heartbeat_file: /var/lib/cassandra/data/cassandra-heartbeat
 #    excluded_keyspaces: # comma separated list of keyspaces to exclude from the check
 #    excluded_tables: # comma separated list of keyspace.table pairs to exclude from the check
+
+memtable:
+  configurations:
+    trie:
+      class_name: TrieMemtable
+      parameters:
+        shards: 8
+    trie_explicit_lock:
+      inherits: trie
+      parameters:
+        track_locking: true
+    skip_list:
+      class_name: SkipListMemtable
+    sharded_skip_list:
+      class_name: ShardedSkipListMemtable
+      parameters:
+        shards: 8
+        serialize_writes: false
+    blocking_skip_list:
+      inherits: sharded_skip_list
+      parameters:
+        serialize_writes: true
