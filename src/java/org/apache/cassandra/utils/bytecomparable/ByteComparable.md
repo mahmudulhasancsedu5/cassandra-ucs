@@ -549,7 +549,8 @@ Examples:
 Because variable-length integers are also often used to store smaller range integers, it makes sense to also apply
 the variable-length integer encoding. Thus, the current varint scheme chooses to:
 - Strip any leading zeros. Note that for negative numbers, `BigInteger` encodes leading 0 as `0xFF`.
-- Map numbers directly to their variable-length integer encoding, if they have 6 bytes or less.
+- Map numbers directly to their [variable-length integer encoding](#variable-length-encoding-of-integers-current-bigint),
+  if they have 6 bytes or less.
 - Otherwise, encode as:
   - a sign byte (00 for negative numbers, FF for positive, distinct from the leading byte of the variable-length 
     encoding above)
@@ -606,11 +607,13 @@ class’s methods to operate on it as a number.
 We then use the following encoding:
 - If the number is 0, the encoding is a single `0x80` byte.
 - Convert the input to signed mantissa and signed exponent in base-100. If the value is negative, invert the sign of the
-  exponent.
+  exponent to form the "modulated exponent".
 - Output a byte encoding:
   - the sign of the number encoded as `0x80` if positive and `0x00` if negative,
-  - the exponent length (stripping leading 0s) in bytes as `0x40 + exponent_length * exponent_sign`.
-- Output `exponent_length` of exponent, 2’s complement encoded so that negative values are correctly ordered.
+  - the exponent length (stripping leading 0s) in bytes as `0x40 + modulated_exponent_length`, where the length is given
+    with the sign of the modulated exponent.
+- Output `exponent_length` bytes of modulated exponent, 2’s complement encoded so that negative values are correctly 
+  ordered.
 - Output `0x80 + leading signed byte of mantissa`, which is obtained by multiplying the mantissa by 100 and rounding to
   -∞. The rounding is done so that the remainder of the mantissa becomes positive, and thus every new byte adds some 
   value to it, making shorter sequences lower in value.

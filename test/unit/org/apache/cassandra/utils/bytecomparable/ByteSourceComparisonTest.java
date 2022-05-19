@@ -772,11 +772,22 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
 
         if (s1 == null || s2 == null || 0 == expectedComparison)
             return;
-        int b1 = ThreadLocalRandom.current().nextInt(ByteSource.MIN_SEPARATOR, ByteSource.MAX_SEPARATOR + 1);
-        int b2 = ThreadLocalRandom.current().nextInt(ByteSource.MIN_SEPARATOR, ByteSource.MAX_SEPARATOR + 1);
+        int b1 = randomTerminator();
+        int b2 = randomTerminator();
         assertEquals(String.format("Comparison failed for %s(%s + %02x) and %s(%s + %02x)", s1, s1.byteComparableAsString(version), b1, s2, s2.byteComparableAsString(version), b2),
                 expectedComparison, Integer.signum(compare(ByteSource.withTerminator(b1, s1.asComparableBytes(version)), ByteSource.withTerminator(b2, s2.asComparableBytes(version)))));
         assertNotPrefix(ByteSource.withTerminator(b1, s1.asComparableBytes(version)), ByteSource.withTerminator(b2, s2.asComparableBytes(version)));
+    }
+
+    private int randomTerminator()
+    {
+        int term;
+        do
+        {
+            term = ThreadLocalRandom.current().nextInt(ByteSource.MIN_SEPARATOR, ByteSource.MAX_SEPARATOR + 1);
+        }
+        while (term >= ByteSource.MIN_NEXT_COMPONENT && term <= ByteSource.MAX_NEXT_COMPONENT);
+        return term;
     }
 
     <K, V, M extends Map<K, V>> void testMap(MapType<K, V> tt, K[] keys, V[] values, Supplier<M> gen, Random rand)

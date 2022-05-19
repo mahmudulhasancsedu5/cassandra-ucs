@@ -228,7 +228,7 @@ public class TupleType extends AbstractType<ByteBuffer>
         // We always have a fixed number of sources, with the trailing ones possibly being nulls.
         // This can only result in a prefix if the last type in the tuple allows prefixes. Since that type is required
         // to be weakly prefix-free, so is the tuple.
-        return ByteSource.withTerminator(ByteSource.END_OF_STREAM, srcs);
+        return ByteSource.withTerminatorLegacy(ByteSource.END_OF_STREAM, srcs);
     }
 
     public <V> ByteSource asComparableBytesNew(ValueAccessor<V> accessor, V data, ByteComparable.Version version)

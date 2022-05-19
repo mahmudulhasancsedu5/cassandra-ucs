@@ -267,8 +267,7 @@ public class DynamicCompositeType extends AbstractCompositeType
             ++i;
         }
 
-        return ByteSource.withTerminator(version == Version.LEGACY ? ByteSource.END_OF_STREAM : ByteSource.TERMINATOR,
-                                         srcs.toArray(EMPTY_BYTE_SOURCE_ARRAY));
+        return ByteSource.withTerminatorMaybeLegacy(version, ByteSource.END_OF_STREAM, srcs.toArray(EMPTY_BYTE_SOURCE_ARRAY));
     }
 
     @Override

@@ -43,7 +43,7 @@ public interface ByteSource
 
     /**
      * Escape value. Used, among other things, to mark the end of subcomponents (so that shorter compares before anything longer).
-     * Actual zeros in input need to be escaped if this is in use (see BufferReinterpreter).
+     * Actual zeros in input need to be escaped if this is in use (see {@link AbstractEscaper}).
      */
     int ESCAPE = 0x00;
 
@@ -62,10 +62,16 @@ public interface ByteSource
     int NEXT_COMPONENT_EMPTY_REVERSED = 0x41;
     // Marker for null components in tuples, maps, sets and clustering keys.
     int NEXT_COMPONENT_NULL = 0x3E;
+
+    // Section for next component markers which is not allowed for use
+    int MIN_NEXT_COMPONENT = 0x3C;
+    int MAX_NEXT_COMPONENT = 0x44;
+
     // Default terminator byte in sequences. Smaller than NEXT_COMPONENT_NULL, but larger than LT_NEXT_COMPONENT to
     // ensure lexicographic compares go in the correct direction
     int TERMINATOR = 0x38;
-    // These are special endings, for exclusive/inclusive bounds (i.e. smaller than anything with more components, bigger than anything with more components)
+    // These are special endings, for exclusive/inclusive bounds (i.e. smaller than anything with more components,
+    // bigger than anything with more components)
     int LT_NEXT_COMPONENT = 0x20;
     int GT_NEXT_COMPONENT = 0x60;
 
@@ -73,59 +79,78 @@ public interface ByteSource
     int EXCLUDED = 0x18;
 
     /**
-     * Reinterprets a byte buffer as a byte-comparable source that has 0s escaped and finishes in an escape.
+     * Reinterprets byte-accessible data as a byte-comparable source that has 0s escaped and finishes in an escaped
+     * state.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
-     * (See ByteSource.BufferReinterpreter/Multi for explanation.)
+     * (See {@link AbstractEscaper} for a detailed explanation.)
      */
     static <V> ByteSource of(ValueAccessor<V> accessor, V data, Version version)
     {
-        return new AccessorReinterpreter<>(accessor, data, version);
+        return new AccessorEscaper<>(accessor, data, version);
     }
 
     /**
      * Reinterprets a byte buffer as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
-     * (See ByteSource.BufferReinterpreter/Multi for explanation.)
+     * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
     static ByteSource of(ByteBuffer buf, Version version)
     {
-        return new BufferReinterpreter(buf, version);
+        return new BufferEscaper(buf, version);
     }
 
     /**
      * Reinterprets a byte array as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a prefix-free byte-comparable version of the content to use in sequences.
-     * (See ByteSource.BufferReinterpreter/Multi for explanation.)
+     * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
     static ByteSource of(byte[] buf, Version version)
     {
-        return new ReinterpreterArray(buf, version);
+        return new ArrayEscaper(buf, version);
     }
 
     /**
      * Reinterprets a memory range as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
-     * (See ByteSource.BufferReinterpreter/Multi for explanation.)
+     * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
     static ByteSource of(long address, int length, ByteComparable.Version version)
     {
-        return new MemoryReinterpreter(address, length, version);
+        return new MemoryEscaper(address, length, version);
     }
 
     /**
      * Combines a chain of sources, turning their weak-prefix-free byte-comparable representation into the combination's
      * prefix-free byte-comparable representation, with the included terminator character.
-     * For correctness, the terminator must be within MIN-MAX_SEPARATOR and different from NEXT_COMPONENT+/-1.
+     * For correctness, the terminator must be within MIN-MAX_SEPARATOR and outside the range reserved for
+     * NEXT_COMPONENT markers.
      * Typically TERMINATOR, or LT/GT_NEXT_COMPONENT if used for partially specified bounds.
      */
     static ByteSource withTerminator(int terminator, ByteSource... srcs)
     {
+        assert terminator >= MIN_SEPARATOR && terminator <= MAX_SEPARATOR;
+        assert terminator < MIN_NEXT_COMPONENT || terminator > MAX_NEXT_COMPONENT;
         return new Multi(srcs, terminator);
+    }
+
+    /**
+     * As above, but permits any separator. The legacy format wasn't using weak prefix freedom and has some
+     * non-reversible transformations.
+     */
+    static ByteSource withTerminatorLegacy(int terminator, ByteSource... srcs)
+    {
+        return new Multi(srcs, terminator);
+    }
+
+    static ByteSource withTerminatorMaybeLegacy(Version version, int legacyTerminator, ByteSource... srcs)
+    {
+        return version == Version.LEGACY ? withTerminatorLegacy(legacyTerminator, srcs)
+                                         : withTerminator(TERMINATOR, srcs);
     }
 
     static ByteSource of(String s, Version version)
     {
-        return new ReinterpreterArray(s.getBytes(StandardCharsets.UTF_8), version);
+        return new ArrayEscaper(s.getBytes(StandardCharsets.UTF_8), version);
     }
 
     static ByteSource of(long value)
@@ -218,12 +243,12 @@ public interface ByteSource
         assert i >= 0 && i <= 0xFF;
         return new ByteSource()
         {
-            boolean given = false;
+            boolean consumed = false;
             public int next()
             {
-                if (given)
+                if (consumed)
                     return END_OF_STREAM;
-                given = true;
+                consumed = true;
                 return i;
             }
         };
@@ -277,27 +302,32 @@ public interface ByteSource
 
     /**
      * Variable-length encoding. Escapes 0s as ESCAPE + zero or more ESCAPED_0_CONT + ESCAPED_0_DONE.
-     * Finishes with an escape value (to which Multi will add non-zero component separator)
-     * E.g. A00B translates to 4100FEFF4200
-     *      A0B0               4100FF4200FE (+00 for {@link Version#LEGACY})
-     *      A0                 4100FE       (+00 for {@link Version#LEGACY})
+     * If the source ends in 0, we use ESCAPED_0_CONT to make sure that the encoding remains smaller than that source
+     * with a further 0 at the end.
+     * Finishes in an escaped state (either with ESCAPE or ESCAPED_0_CONT), which in {@link Multi} is followed by
+     * a component separator between 0x10 and 0xFE.
+     *
+     * E.g. "A\0\0B" translates to 4100FEFF4200
+     *      "A\0B\0"               4100FF4200FE (+00 for {@link Version#LEGACY})
+     *      "A\0"                  4100FE       (+00 for {@link Version#LEGACY})
+     *      "AB"                   414200
      *
      * If in a single byte source, the bytes could be simply passed unchanged, but this would not allow us to
      * combine components. This translation preserves order, and since the encoding for 0 is higher than the separator
      * also makes sure shorter components are treated as smaller.
      *
-     * The encoding is not prefix-free, since e.g. the encoding of "A" (4100) is a prefix of the encoding of "A0"
+     * The encoding is not prefix-free, since e.g. the encoding of "A" (4100) is a prefix of the encoding of "A\0"
      * (4100FE), but the byte following the prefix is guaranteed to be FE or FF, which makes the encoding weakly
      * prefix-free. Additionally, any such prefix sequence will compare smaller than the value to which it is a prefix,
      * because any permitted separator byte will be smaller than the byte following the prefix.
      */
-    abstract static class AbstractReinterpreter implements ByteSource
+    abstract static class AbstractEscaper implements ByteSource
     {
-        final Version version;
-        int bufpos;
-        boolean escaped;
+        private final Version version;
+        private int bufpos;
+        private boolean escaped;
 
-        AbstractReinterpreter(int position, Version version)
+        AbstractEscaper(int position, Version version)
         {
             this.bufpos = position;
             this.version = version;
@@ -344,12 +374,12 @@ public interface ByteSource
         protected abstract int limit();
     }
 
-    static class AccessorReinterpreter<V> extends AbstractReinterpreter
+    static class AccessorEscaper<V> extends AbstractEscaper
     {
         private final V data;
         private final ValueAccessor<V> accessor;
 
-        private AccessorReinterpreter(ValueAccessor<V> accessor, V data, Version version)
+        private AccessorEscaper(ValueAccessor<V> accessor, V data, Version version)
         {
             super(0, version);
             this.accessor = accessor;
@@ -367,11 +397,11 @@ public interface ByteSource
         }
     }
 
-    static class BufferReinterpreter extends AbstractReinterpreter
+    static class BufferEscaper extends AbstractEscaper
     {
-        final ByteBuffer buf;
+        private final ByteBuffer buf;
 
-        private BufferReinterpreter(ByteBuffer buf, Version version)
+        private BufferEscaper(ByteBuffer buf, Version version)
         {
             super(buf.position(), version);
             this.buf = buf;
@@ -388,11 +418,11 @@ public interface ByteSource
         }
     }
 
-    static class ReinterpreterArray extends AbstractReinterpreter
+    static class ArrayEscaper extends AbstractEscaper
     {
-        final byte[] buf;
+        private final byte[] buf;
 
-        private ReinterpreterArray(byte[] buf, Version version)
+        private ArrayEscaper(byte[] buf, Version version)
         {
             super(0, version);
             this.buf = buf;
@@ -411,12 +441,12 @@ public interface ByteSource
         }
     }
 
-    static class MemoryReinterpreter extends AbstractReinterpreter
+    static class MemoryEscaper extends AbstractEscaper
     {
-        final long address;
-        final int length;
+        private final long address;
+        private final int length;
 
-        MemoryReinterpreter(long address, int length, ByteComparable.Version version)
+        MemoryEscaper(long address, int length, ByteComparable.Version version)
         {
             super(0, version);
             this.address = address;
@@ -440,9 +470,9 @@ public interface ByteSource
      */
     static class SignedFixedLengthNumber<V> implements ByteSource
     {
-        final ValueAccessor<V> accessor;
-        final V data;
-        int bufpos;
+        private final ValueAccessor<V> accessor;
+        private final V data;
+        private int bufpos;
 
         public SignedFixedLengthNumber(ValueAccessor<V> accessor, V data)
         {
@@ -474,8 +504,8 @@ public interface ByteSource
      */
     static class VariableLengthUnsignedInteger implements ByteSource
     {
-        final long value;
-        int pos = -1;
+        private final long value;
+        private int pos = -1;
 
         public VariableLengthUnsignedInteger(long value)
         {
@@ -525,8 +555,8 @@ public interface ByteSource
      */
     static class VariableLengthInteger implements ByteSource
     {
-        final long value;
-        int pos;
+        private final long value;
+        private int pos;
 
         public VariableLengthInteger(long value)
         {
@@ -572,8 +602,8 @@ public interface ByteSource
 
     static class Number implements ByteSource
     {
-        final long value;
-        int pos;
+        private final long value;
+        private int pos;
 
         public Number(long value, int length)
         {
@@ -595,10 +625,10 @@ public interface ByteSource
      */
     static class SignedFixedLengthFloat<V> implements ByteSource
     {
-        final ValueAccessor<V> accessor;
-        final V data;
-        int bufpos;
-        boolean invert;
+        private final ValueAccessor<V> accessor;
+        private final V data;
+        private int bufpos;
+        private boolean invert;
 
         public SignedFixedLengthFloat(ValueAccessor<V> accessor, V data)
         {
@@ -629,9 +659,9 @@ public interface ByteSource
      */
     static class Multi implements ByteSource
     {
-        final ByteSource[] srcs;
-        int srcnum = -1;
-        int sequenceTerminator;
+        private final ByteSource[] srcs;
+        private int srcnum = -1;
+        private final int sequenceTerminator;
 
         Multi(ByteSource[] srcs, int sequenceTerminator)
         {
@@ -668,10 +698,10 @@ public interface ByteSource
      */
     static class Separator implements ByteSource
     {
-        final ByteSource prev;
-        final ByteSource curr;
-        boolean done = false;
-        final boolean useCurr;
+        private final ByteSource prev;
+        private final ByteSource curr;
+        private boolean done = false;
+        private final boolean useCurr;
 
         Separator(ByteSource prevMax, ByteSource currMin, boolean useCurr)
         {
@@ -769,10 +799,10 @@ public interface ByteSource
 
     public class Peekable implements ByteSource
     {
-        static final int NONE = Integer.MIN_VALUE;
+        private static final int NONE = Integer.MIN_VALUE;
 
-        final ByteSource wrapped;
-        int peeked = NONE;
+        private final ByteSource wrapped;
+        private int peeked = NONE;
 
         public Peekable(ByteSource wrapped)
         {
