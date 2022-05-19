@@ -438,8 +438,8 @@ Examples:
 As mentioned above, we encode sequences by adding separator bytes in front, between components, and a terminator at the
 end. The values we chose for the separator and terminator are `0x40` and `0x38`, and they serve several purposes:
 - Permits partially specified bounds, with strict/exclusive or non-strict/inclusive semantics. This is done by finishing
-  a bound with a terminator value that is smaller/greater than the separator and terminator. We can use `0x20` for </≥
-  and `0x60` for ≤/>.
+  a bound with a terminator value that is smaller/greater than the separator and terminator. We can use `0x20` for `<`/`≥`
+  and `0x60` for `≤`/`>`.
 - Permits encoding of `null` and `empty` values. We use `0x3E` as the separator for nulls and `0x3F` for empty, 
   followed by no value bytes. This is always smaller than a sequence with non-null value for this component, but not 
   smaller than a sequence that ends in this component.

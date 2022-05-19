@@ -27,7 +27,7 @@ import org.apache.cassandra.utils.memory.MemoryUtil;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * A stream of byte, used for byte-order-comparable representations of data, and utilities to convert various values
+ * A stream of bytes, used for byte-order-comparable representations of data, and utilities to convert various values
  * to their byte-ordered translation.
  * See ByteComparable.md for details about the encoding scheme.
  */
@@ -209,7 +209,7 @@ public interface ByteSource
 
     /**
      * Produce a source for a signed integer, stored using variable length encoding.
-     * The representation takes between 1 and 9 bytes, is prefix-free and compares
+     * The representation uses between 1 and 9 bytes, is prefix-free and compares
      * correctly.
      */
     static ByteSource variableLengthInteger(long value)
@@ -655,7 +655,7 @@ public interface ByteSource
     }
 
     /**
-     * Combination of multiple byte sources. Adds NEXT_COMPONENT before sources, or NEXT_COMPONENT_NULL if next is null.
+     * Combination of multiple byte sources. Adds {@link NEXT_COMPONENT} before sources, or {@link NEXT_COMPONENT_NULL} if next is null.
      */
     static class Multi implements ByteSource
     {
@@ -744,7 +744,7 @@ public interface ByteSource
             @Override
             public int next()
             {
-                return ++pos < accessor.size(data) ? accessor.getByte(data, pos) & 0xFF : -1;
+                return ++pos < accessor.size(data) ? accessor.getByte(data, pos) & 0xFF : END_OF_STREAM;
             }
         };
     }
@@ -764,7 +764,7 @@ public interface ByteSource
             @Override
             public int next()
             {
-                return ++pos < b.limit() ? b.get(pos) & 0xFF : -1;
+                return ++pos < b.limit() ? b.get(pos) & 0xFF : END_OF_STREAM;
             }
         };
     }
