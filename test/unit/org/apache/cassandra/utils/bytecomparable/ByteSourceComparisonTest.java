@@ -686,6 +686,61 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
         ByteSource.fixedLength(bytes, 4, 1);
     }
 
+    @Test
+    public void testSeparatorGT()
+    {
+        testSeparator(ByteSource::separatorGt, testLongs, LongType.instance);
+    }
+
+    @Test
+    public void testSeparatorPrefix()
+    {
+        testSeparator(ByteSource::separatorPrefix, testLongs, LongType.instance);
+    }
+
+    private <V> void testSeparator(BiFunction<ByteSource, ByteSource, ByteSource> separatorMethod, V[] testValues, AbstractType<V> type)
+    {
+        for (V v1 : testValues)
+            for (V v2 : testValues)
+            {
+                if (v1 == null || v2 == null)
+                    continue;
+                if (type.compare(type.decompose(v1), type.decompose(v2)) >= 0)
+                    continue;
+                ByteComparable separator = getSeparator(separatorMethod, type, v1, v2);
+                ByteComparable bc1 = getByteComparable(type, v1);
+                ByteComparable bc2 = getByteComparable(type, v2);
+
+                for (Version version : Version.values())
+                {
+                    Assert.assertTrue("Sanity check failed", ByteComparable.compare(bc1, bc2, version) < 0);
+                    Assert.assertTrue(String.format("Separator %s must be greater than left %s (for %s) (version %s)",
+                                                    separator.byteComparableAsString(version),
+                                                    bc1.byteComparableAsString(version),
+                                                    v1,
+                                                    version),
+                                      ByteComparable.compare(bc1, separator, version) < 0);
+                    Assert.assertTrue(String.format("Separator %s must be less than or equal to right %s (for %s) (version %s)",
+                                                    separator.byteComparableAsString(version),
+                                                    bc2.byteComparableAsString(version),
+                                                    v2,
+                                                    version),
+                                      ByteComparable.compare(separator, bc2, version) <= 0);
+                }
+            }
+    }
+
+    private <V> ByteComparable getSeparator(BiFunction<ByteSource, ByteSource, ByteSource> separatorMethod, AbstractType<V> type, V v1, V v2)
+    {
+        return version -> separatorMethod.apply(type.asComparableBytes(type.decompose(v1), version),
+                                                type.asComparableBytes(type.decompose(v2), version));
+    }
+
+    private <V> ByteComparable getByteComparable(AbstractType<V> type, V v1)
+    {
+        return version -> type.asComparableBytes(type.decompose(v1), version);
+    }
+
     public void testDecoratedKeyPrefixes(Version version)
     {
         testDecoratedKeyPrefixes("012345678BCDE\0", "", version);

@@ -20,6 +20,8 @@ package org.apache.cassandra.utils.bytecomparable;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import com.google.common.base.Preconditions;
+
 import org.apache.cassandra.db.marshal.ValueAccessor;
 
 /**
@@ -38,26 +40,18 @@ public final class ByteSourceInverse
     private static final long LONG_SIGN_BIT = 1L << 63;
 
     /**
-     * Get the given number of bytes and produce a long from them, effectively treating the bytes as a big-endian
+     * Consume the given number of bytes and produce a long from them, effectively treating the bytes as a big-endian
      * unsigned encoding of the number.
      */
     public static long getUnsignedFixedLengthAsLong(ByteSource byteSource, int length)
     {
-        if (byteSource == null)
-            throw new IllegalArgumentException("Unexpected null ByteSource");
-        if (length < 1 || length > 8)
-            throw new IllegalArgumentException("Between 1 and 8 bytes can be read at a time");
+        Preconditions.checkNotNull(byteSource);
+        Preconditions.checkArgument(length >= 1 && length <= 8, "Between 1 and 8 bytes can be read at a time");
 
         long result = 0;
         for (int i = 0; i < length; ++i)
-        {
-            int data = byteSource.next();
-            if (data == ByteSource.END_OF_STREAM)
-                throw new IllegalArgumentException(
-                        String.format("Unexpected end of stream reached after %d bytes (expected >= %d)", i, length));
-            assertValidByte(data);
-            result = (result << 8) | data;
-        }
+            result = (result << 8) | getAndCheckByte(byteSource, i, length);  // note: this must use the unsigned byte value
+
         return result;
     }
 
@@ -67,24 +61,15 @@ public final class ByteSourceInverse
      */
     public static <V> V getSignedFixedLength(ValueAccessor<V> accessor, ByteSource byteSource, int length)
     {
-        if (byteSource == null)
-            throw new IllegalArgumentException("Unexpected null ByteSource");
-        if (length < 1)
-            throw new IllegalArgumentException("At least 1 byte should be read");
+        Preconditions.checkNotNull(byteSource);
+        Preconditions.checkArgument(length >= 1, "At least 1 byte should be read");
 
         V result = accessor.allocate(length);
         // The first byte needs to have its sign flipped
-        accessor.putByte(result, 0, (byte) (byteSource.next() ^ BYTE_SIGN_BIT));
+        accessor.putByte(result, 0, (byte) (getAndCheckByte(byteSource, 0, length) ^ BYTE_SIGN_BIT));
         // and the rest can be retrieved unchanged.
         for (int i = 1; i < length; ++i)
-        {
-            int data = byteSource.next();
-            if (data == ByteSource.END_OF_STREAM)
-                throw new IllegalArgumentException(
-                        String.format("Unexpected end of stream reached after %d bytes (expected >= %d)", i, length));
-            assertValidByte(data);
-            accessor.putByte(result, i, (byte) data);
-        }
+            accessor.putByte(result, i, (byte) getAndCheckByte(byteSource, i, length));
         return result;
     }
 
@@ -103,16 +88,13 @@ public final class ByteSourceInverse
      */
     public static <V> V getSignedFixedLengthFloat(ValueAccessor<V> accessor, ByteSource byteSource, int length)
     {
-        if (byteSource == null)
-            throw new IllegalArgumentException("Unexpected null ByteSource");
-        if (length < 1)
-            throw new IllegalArgumentException("At least 1 byte should be read");
+        Preconditions.checkNotNull(byteSource);
+        Preconditions.checkArgument(length >= 1, "At least 1 byte should be read");
 
         V result = accessor.allocate(length);
 
         int xor;
-        int first = byteSource.next();
-        assertValidByte(first);
+        int first = getAndCheckByte(byteSource, 0, length);
         if (first < 0x80)
         {
             // Negative number. Invert all bits.
@@ -129,15 +111,8 @@ public final class ByteSourceInverse
 
         // xor is now applied to the rest of the bytes to flip their bits if necessary.
         for (int i = 1; i < length; ++i)
-        {
-            int data = byteSource.next();
-            if (data == ByteSource.END_OF_STREAM)
-                throw new IllegalArgumentException(
-                String.format("Unexpected end of stream reached after %d bytes (expected >= %d)", i, length));
-            assertValidByte(data);
-            data ^= xor;
-            accessor.putByte(result, i, (byte) data);
-        }
+            accessor.putByte(result, i, (byte) (getAndCheckByte(byteSource, i, length) ^ xor));
+
         return result;
     }
 
@@ -152,30 +127,21 @@ public final class ByteSourceInverse
     }
 
     /**
-     * Get the next length bytes from the source unchanged.
+     * Consume the next length bytes from the source unchanged.
      */
     public static <V> V getFixedLength(ValueAccessor<V> accessor, ByteSource byteSource, int length)
     {
-        if (byteSource == null)
-            throw new IllegalArgumentException("Unexpected null ByteSource");
-        if (length < 1)
-            throw new IllegalArgumentException("At least 1 byte should be read");
+        Preconditions.checkNotNull(byteSource);
+        Preconditions.checkArgument(length >= 1, "At least 1 byte should be read");
 
         V result = accessor.allocate(length);
         for (int i = 0; i < length; ++i)
-        {
-            int data = byteSource.next();
-            if (data == ByteSource.END_OF_STREAM)
-                throw new IllegalArgumentException(
-                        String.format("Unexpected end of stream reached after %d bytes (expected >= %d)", i, length));
-            assertValidByte(data);
-            accessor.putByte(result, i, (byte) data);
-        }
+            accessor.putByte(result, i, (byte) getAndCheckByte(byteSource, i, length));
         return result;
     }
 
     /**
-     * Get the next length bytes from the source unchanged, also translating null to an empty buffer.
+     * Consume the next length bytes from the source unchanged, also translating null to an empty buffer.
      */
     public static <V> V getOptionalFixedLength(ValueAccessor<V> accessor, ByteSource byteSource, int length)
     {
@@ -183,7 +149,7 @@ public final class ByteSourceInverse
     }
 
     /**
-     * Gets the next {@code int} from the current position of the given {@link ByteSource}. The source position is
+     * Consume the next {@code int} from the current position of the given {@link ByteSource}. The source position is
      * modified accordingly (moved 4 bytes forward).
      * <p>
      * The source is not strictly required to represent just the encoding of an {@code int} value, so theoretically
@@ -204,7 +170,7 @@ public final class ByteSourceInverse
     }
 
     /**
-     * Gets the next {@code long} from the current position of the given {@link ByteSource}. The source position is
+     * Consume the next {@code long} from the current position of the given {@link ByteSource}. The source position is
      * modified accordingly (moved 8 bytes forward).
      * <p>
      * The source is not strictly required to represent just the encoding of a {@code long} value, so theoretically
@@ -231,13 +197,7 @@ public final class ByteSourceInverse
      */
     public static byte getSignedByte(ByteSource byteSource)
     {
-        if (byteSource == null)
-            throw new IllegalArgumentException("Unexpected null ByteSource");
-        int theByte = byteSource.next();
-        if (theByte == ByteSource.END_OF_STREAM)
-            throw new IllegalArgumentException("Unexpected ByteSource with length 0 instead of 1");
-
-        return (byte) (theByte ^ BYTE_SIGN_BIT);
+        return (byte) (getAndCheckByte(Preconditions.checkNotNull(byteSource), 0, 1) ^ BYTE_SIGN_BIT);
     }
 
     /**
@@ -255,34 +215,21 @@ public final class ByteSourceInverse
     }
 
     /**
-     * Reads a single variable-length byte sequence (blob, string, ...) encoded according to the scheme described
-     * in ByteSource.md, decoding it back to its original, unescaped form.
-     *
-     * @param byteSource The source of the variable-length bytes sequence.
-     * @return A byte array containing the original, unescaped bytes of the given source. Unescaped here means
-     * not including any of the escape sequences of the encoding scheme used for variable-length byte sequences.
-     */
-    public static byte[] getUnescapedBytes(ByteSource.Peekable byteSource)
-    {
-        return byteSource == null ? null : readBytes(unescape(byteSource));
-    }
-
-    /**
      * Decode a variable-length signed integer.
      */
     public static long getVariableLengthInteger(ByteSource byteSource)
     {
-        int signAndMask = byteSource.next();
+        int signAndMask = getAndCheckByte(byteSource);
 
         long sum = 0;
         int bytes;
         // For every bit after the sign that matches the sign, read one more byte.
         for (bytes = 0; bytes < 7 && sameByteSign(signAndMask << (bytes + 1), signAndMask); ++bytes)
-            sum = (sum << 8) | byteSource.next();
+            sum = (sum << 8) | getAndCheckByte(byteSource);
 
         // The eighth length bit is stored in the second byte.
         if (bytes == 7 && sameByteSign((int) (sum >> 48), signAndMask))
-            return ((sum << 8) | byteSource.next()) ^ LONG_SIGN_BIT;    // 9-byte encoding, use bytes 2-9 with inverted sign
+            return ((sum << 8) | getAndCheckByte(byteSource)) ^ LONG_SIGN_BIT;    // 9-byte encoding, use bytes 2-9 with inverted sign
         else
         {
             sum |= (((long) signAndMask) << bytes * 8);     // add the rest of the bits
@@ -300,13 +247,13 @@ public final class ByteSourceInverse
      */
     public static long getVariableLengthUnsignedIntegerXoring(ByteSource byteSource, int xorWith)
     {
-        int signAndMask = byteSource.next() ^ xorWith;
+        int signAndMask = getAndCheckByte(byteSource) ^ xorWith;
 
         long sum = 0;
         int bytes;
         // Read an extra byte while the next most significant bit is 1.
         for (bytes = 0; bytes <= 7 && ((signAndMask << bytes) & 0x80) != 0; ++bytes)
-            sum = (sum << 8) | byteSource.next() ^ xorWith;
+            sum = (sum << 8) | getAndCheckByte(byteSource) ^ xorWith;
 
         // Strip the length bits from the leading byte.
         signAndMask &= ~(-256 >> bytes);
@@ -319,6 +266,37 @@ public final class ByteSourceInverse
         return ((a ^ b) & 0x80) == 0;
     }
 
+
+    private static int getAndCheckByte(ByteSource byteSource)
+    {
+        return getAndCheckByte(byteSource, -1, -1);
+    }
+
+    private static int getAndCheckByte(ByteSource byteSource, int pos, int length)
+    {
+        int data = byteSource.next();
+        if (data == ByteSource.END_OF_STREAM)
+            throw new IllegalArgumentException(
+                length > 0 ? String.format("Unexpected end of stream reached after %d bytes (expected >= %d)", pos, length)
+                           : "Unexpected end of stream");
+        assert data >= BYTE_NO_BITS && data <= BYTE_ALL_BITS
+            : "A ByteSource must produce unsigned bytes and end in END_OF_STREAM";
+        return data;
+    }
+
+    /**
+     * Reads a single variable-length byte sequence (blob, string, ...) encoded according to the scheme described
+     * in ByteComparable.md, decoding it back to its original, unescaped form.
+     *
+     * @param byteSource The source of the variable-length bytes sequence.
+     * @return A byte array containing the original, unescaped bytes of the given source. Unescaped here means
+     * not including any of the escape sequences of the encoding scheme used for variable-length byte sequences.
+     */
+    public static byte[] getUnescapedBytes(ByteSource.Peekable byteSource)
+    {
+        return byteSource == null ? null : readBytes(unescape(byteSource));
+    }
+
     /**
      * As above, but converts the result to a ByteSource.
      */
@@ -327,6 +305,7 @@ public final class ByteSourceInverse
         return new ByteSource() {
             boolean escaped = false;
 
+            @Override
             public int next()
             {
                 if (!escaped)
@@ -388,8 +367,7 @@ public final class ByteSourceInverse
      */
     public static byte[] readBytes(ByteSource byteSource, final int initialBufferCapacity)
     {
-        if (byteSource == null)
-            return new byte[0];
+        Preconditions.checkNotNull(byteSource);
 
         int readBytes = 0;
         byte[] buf = new byte[initialBufferCapacity];
@@ -470,10 +448,7 @@ public final class ByteSourceInverse
      */
     public static ByteSource.Peekable nextComponentSource(ByteSource.Peekable source)
     {
-        int separator = source.next();
-        return nextComponentNull(separator)
-               ? null
-               : source;
+        return nextComponentSource(source, source.next());
     }
 
     /**
@@ -492,10 +467,5 @@ public final class ByteSourceInverse
     {
         return separator == ByteSource.NEXT_COMPONENT_NULL || separator == ByteSource.NEXT_COMPONENT_EMPTY
                || separator == ByteSource.NEXT_COMPONENT_EMPTY_REVERSED;
-    }
-
-    private static void assertValidByte(int data)
-    {
-        assert data >= BYTE_NO_BITS && data <= BYTE_ALL_BITS;
     }
 }

@@ -114,7 +114,7 @@ public interface ByteSource
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
      * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
-    static ByteSource of(long address, int length, ByteComparable.Version version)
+    static ByteSource ofMemory(long address, int length, ByteComparable.Version version)
     {
         return new MemoryEscaper(address, length, version);
     }
