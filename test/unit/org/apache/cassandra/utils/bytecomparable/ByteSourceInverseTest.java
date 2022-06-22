@@ -282,13 +282,13 @@ public class ByteSourceInverseTest
             {
                 ByteSource.Peekable byteSource = ByteSource.peekable(ByteSource.of(ByteBuffer.wrap(initialBytes), version));
                 byte[] decodedBytes = ByteSourceInverse.getUnescapedBytes(byteSource);
-                Assert.assertTrue(Arrays.equals(initialBytes, decodedBytes));
+                Assert.assertArrayEquals(initialBytes, decodedBytes);
             },
             initialBytes ->
             {
                 ByteSource.Peekable byteSource = ByteSource.peekable(ByteSource.of(initialBytes, version));
                 byte[] decodedBytes = ByteSourceInverse.getUnescapedBytes(byteSource);
-                Assert.assertTrue(Arrays.equals(initialBytes, decodedBytes));
+                Assert.assertArrayEquals(initialBytes, decodedBytes);
             },
             initialBytes ->
             {
@@ -298,7 +298,7 @@ public class ByteSourceInverseTest
                     MemoryUtil.setBytes(address, initialBytes, 0, initialBytes.length);
                     ByteSource.Peekable byteSource = ByteSource.peekable(ByteSource.ofMemory(address, initialBytes.length, version));
                     byte[] decodedBytes = ByteSourceInverse.getUnescapedBytes(byteSource);
-                    Assert.assertTrue(Arrays.equals(initialBytes, decodedBytes));
+                    Assert.assertArrayEquals(initialBytes, decodedBytes);
                 }
                 finally
                 {

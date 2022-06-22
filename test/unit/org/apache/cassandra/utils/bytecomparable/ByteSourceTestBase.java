@@ -32,7 +32,6 @@ import java.util.UUID;
 
 import com.google.common.base.Throwables;
 
-import org.apache.cassandra.db.ClusteringPrefix;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BooleanType;
 import org.apache.cassandra.db.marshal.DecimalType;
@@ -41,7 +40,6 @@ import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.utils.TimeUUID;
-import org.apache.cassandra.utils.UUIDGen;
 
 public class ByteSourceTestBase
 {

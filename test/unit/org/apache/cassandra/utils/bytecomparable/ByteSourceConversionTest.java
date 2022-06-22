@@ -28,6 +28,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import org.junit.Rule;
 import org.junit.Test;
@@ -201,7 +202,7 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
             for (Object o : testValues[i])
                 values.add(testTypes[i].decompose(o));
 
-        testType(BytesType.instance, values.toArray());
+        testType(BytesType.instance, values);
     }
 
     @Test
@@ -313,7 +314,12 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
                                 };
         for (ByteBuffer[] input : inputs)
         {
-            assertClusteringPairConvertsSame(ByteBufferAccessor.instance, UTF8Type.instance, Int32Type.instance, input[0], input[1], (t, v) -> v);
+            assertClusteringPairConvertsSame(ByteBufferAccessor.instance,
+                                             UTF8Type.instance,
+                                             Int32Type.instance,
+                                             input[0],
+                                             input[1],
+                                             (t, v) -> (ByteBuffer) v);
         }
     }
 
@@ -323,10 +329,10 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
             assertClusteringPairConvertsSame(accessor, t1, t2, o1, o2, AbstractType::decompose);
     }
 
-    <T, V> void assertClusteringPairConvertsSame(ValueAccessor<V> accessor,
-                                                 AbstractType t1, AbstractType t2,
-                                                 T o1, T o2,
-                                                 BiFunction<AbstractType, T, ByteBuffer> decompose)
+    <V> void assertClusteringPairConvertsSame(ValueAccessor<V> accessor,
+                                              AbstractType<?> t1, AbstractType<?> t2,
+                                              Object o1, Object o2,
+                                              BiFunction<AbstractType, Object, ByteBuffer> decompose)
     {
         boolean checkEquals = t1 != DecimalType.instance && t2 != DecimalType.instance;
         for (ClusteringPrefix.Kind k1 : ClusteringPrefix.Kind.values())
@@ -416,16 +422,19 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
         TupleType tt = new TupleType(ImmutableList.of(UTF8Type.instance, Int32Type.instance));
         List<ByteBuffer> tests = ImmutableList.of
             (
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {decomposeAndRandomPad(UTF8Type.instance, ""),
-                                                                                decomposeAndRandomPad(Int32Type.instance, 0)}),
+            TupleType.buildValue(ByteBufferAccessor.instance,
+                                 decomposeAndRandomPad(UTF8Type.instance, ""),
+                                 decomposeAndRandomPad(Int32Type.instance, 0)),
             // Note: a decomposed null (e.g. decomposeAndRandomPad(Int32Type.instance, null)) should not reach a tuple
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {decomposeAndRandomPad(UTF8Type.instance, ""),
-                                                                                null}),
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {null,
-                                                                                decomposeAndRandomPad(Int32Type.instance, 0)}),
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {decomposeAndRandomPad(UTF8Type.instance, "")}),
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[] {null}),
-            TupleType.buildValue(ByteBufferAccessor.instance, new ByteBuffer[0])
+            TupleType.buildValue(ByteBufferAccessor.instance,
+                                 decomposeAndRandomPad(UTF8Type.instance, ""),
+                                 null),
+            TupleType.buildValue(ByteBufferAccessor.instance,
+                                 null,
+                                 decomposeAndRandomPad(Int32Type.instance, 0)),
+            TupleType.buildValue(ByteBufferAccessor.instance, decomposeAndRandomPad(UTF8Type.instance, "")),
+            TupleType.buildValue(ByteBufferAccessor.instance, (ByteBuffer) null),
+            TupleType.buildValue(ByteBufferAccessor.instance)
             );
         testBuffers(tt, tests);
     }
@@ -434,11 +443,8 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
     {
         TupleType tt = new TupleType(ImmutableList.of(t1, t2));
         ByteBuffer b1 = TupleType.buildValue(ByteBufferAccessor.instance,
-                                             new ByteBuffer[]
-                                             {
-                                                decomposeForTuple(t1, o1),
-                                                decomposeForTuple(t2, o2)
-                                             });
+                                             decomposeForTuple(t1, o1),
+                                             decomposeForTuple(t2, o2));
         assertConvertsSameBuffers(tt, b1);
     }
 
@@ -534,7 +540,7 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
 
                 tests.add(l);
             }
-        testType(tt, tests.toArray());
+        testType(tt, tests);
     }
 
     @Test
@@ -566,13 +572,13 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
 
                 tests.add(l);
             }
-        testType(tt, tests.toArray());
+        testType(tt, tests);
     }
 
     /*
      * Convert type to a comparable.
      */
-    private ByteComparable typeToComparable(AbstractType type, ByteBuffer value)
+    private ByteComparable typeToComparable(AbstractType<?> type, ByteBuffer value)
     {
         return new ByteComparable()
         {
@@ -590,9 +596,14 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
         };
     }
 
-    public void testType(AbstractType type, Object[] values)
+    public <T> void testType(AbstractType<T> type, Object[] values)
     {
-        for (Object i : values) {
+        testType(type, Iterables.transform(Arrays.asList(values), x -> (T) x));
+    }
+
+    public <T> void testType(AbstractType<? super T> type, Iterable<T> values)
+    {
+        for (T i : values) {
             ByteBuffer b = decomposeAndRandomPad(type, i);
             logger.info("Value {} ({}) bytes {} ByteSource {}",
                               safeStr(i),
@@ -605,15 +616,18 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
             testType(ReversedType.getInstance(type), values);
     }
 
-    public void testTypeBuffers(AbstractType type, Object[] values)
+    public <T> void testTypeBuffers(AbstractType<T> type, Object[] values)
+    {
+        testTypeBuffers(type, Lists.transform(Arrays.asList(values), x -> (T) x));
+    }
+
+    public <T> void testTypeBuffers(AbstractType<T> type, List<T> values)
     {
         // Main difference with above is that we use type.compare instead of checking equals
-        testBuffers(type, Arrays.stream(values)
-                                .map(value -> decomposeAndRandomPad(type, value))
-                                .collect(Collectors.toList()));
+        testBuffers(type, Lists.transform(values, value -> decomposeAndRandomPad(type, value)));
 
     }
-    public void testBuffers(AbstractType type, List<ByteBuffer> values)
+    public void testBuffers(AbstractType<?> type, List<ByteBuffer> values)
     {
         try
         {
@@ -633,7 +647,7 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
             assertConvertsSameBuffers(type, i);
     }
 
-    void assertConvertsSameBuffers(AbstractType type, ByteBuffer b1)
+    void assertConvertsSameBuffers(AbstractType<?> type, ByteBuffer b1)
     {
         final ByteComparable bs1 = typeToComparable(type, b1);
 
@@ -717,12 +731,12 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
         assertEquals(String.format("ByteSource %s", b1.byteComparableAsString(VERSION)), v1, actual);
     }
 
-    void assertConvertsSame(AbstractType type, Object v1)
+    <T> void assertConvertsSame(AbstractType<T> type, T v1)
     {
         ByteBuffer b1 = decomposeAndRandomPad(type, v1);
         final ByteComparable bc1 = typeToComparable(type, b1);
         ByteBuffer convertedBuffer = type.fromComparableBytes(source(bc1), VERSION);
-        Object actual = type.compose(convertedBuffer);
+        T actual = type.compose(convertedBuffer);
 
         assertEquals(String.format("Failed equals %s(%s bs %s), got %s",
                                    safeStr(v1),
@@ -733,7 +747,7 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
                      actual);
     }
 
-    ByteBuffer decomposeAndRandomPad(AbstractType type, Object v)
+    <T> ByteBuffer decomposeAndRandomPad(AbstractType<T> type, T v)
     {
         ByteBuffer b = type.decompose(v);
         Random rand = new Random(0);

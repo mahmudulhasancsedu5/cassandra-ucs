@@ -33,7 +33,7 @@ import static com.google.common.base.Preconditions.checkArgument;
  */
 public interface ByteSource
 {
-    /** Get the next byte, unsigned. Must be between 0 and 255, or END_OF_STREAM if there are no more bytes. */
+    /** Consume the next byte, unsigned. Must be between 0 and 255, or END_OF_STREAM if there are no more bytes. */
     int next();
 
     /** Value returned if at the end of the stream. */
@@ -240,10 +240,12 @@ public interface ByteSource
 
     public static ByteSource oneByte(int i)
     {
-        assert i >= 0 && i <= 0xFF;
+        assert i >= 0 && i <= 0xFF : "Argument must be a valid unsigned byte.";
         return new ByteSource()
         {
             boolean consumed = false;
+
+            @Override
             public int next()
             {
                 if (consumed)
@@ -278,7 +280,6 @@ public interface ByteSource
      * @param src the input source to wrap
      * @param cutoff the size of the source returned
      * @param padding a padding byte (an int subject to a 0xFF mask)
-     * @return
      */
     public static ByteSource cutOrRightPad(ByteSource src, int cutoff, int padding)
     {
@@ -333,6 +334,7 @@ public interface ByteSource
             this.version = version;
         }
 
+        @Override
         public final int next()
         {
             if (bufpos >= limit())
@@ -481,6 +483,7 @@ public interface ByteSource
             this.bufpos = 0;
         }
 
+        @Override
         public int next()
         {
             if (bufpos >= accessor.size(data))
@@ -512,6 +515,7 @@ public interface ByteSource
             this.value = value;
         }
 
+        @Override
         public int next()
         {
             if (pos == -1)
@@ -581,6 +585,7 @@ public interface ByteSource
             this.value = value;
         }
 
+        @Override
         public int next()
         {
             if (pos <= 0 || pos > 64)
@@ -611,6 +616,7 @@ public interface ByteSource
             this.pos = length;
         }
 
+        @Override
         public int next()
         {
             if (pos == 0)
@@ -637,6 +643,7 @@ public interface ByteSource
             this.bufpos = 0;
         }
 
+        @Override
         public int next()
         {
             if (bufpos >= accessor.size(data))
@@ -669,6 +676,7 @@ public interface ByteSource
             this.sequenceTerminator = sequenceTerminator;
         }
 
+        @Override
         public int next()
         {
             if (srcnum == srcs.length)
@@ -710,6 +718,7 @@ public interface ByteSource
             this.useCurr = useCurr;
         }
 
+        @Override
         public int next()
         {
             if (done)
@@ -809,6 +818,7 @@ public interface ByteSource
             this.wrapped = wrapped;
         }
 
+        @Override
         public int next()
         {
             if (peeked != NONE)

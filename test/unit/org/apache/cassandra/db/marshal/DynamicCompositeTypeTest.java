@@ -325,8 +325,7 @@ public class DynamicCompositeTypeTest
         return createDynamicCompositeKey(s, uuid, i, lastIsOne, false);
     }
 
-    public static ByteBuffer createDynamicCompositeKey(String s, UUID uuid, int i, boolean lastIsOne,
-                                                final boolean reversed)
+    public static ByteBuffer createDynamicCompositeKey(String s, UUID uuid, int i, boolean lastIsOne, boolean reversed)
     {
         String intType = (reversed ? "ReversedType(IntegerType)" : "IntegerType");
         ByteBuffer bytes = ByteBufferUtil.bytes(s);
