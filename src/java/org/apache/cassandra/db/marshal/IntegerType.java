@@ -165,7 +165,7 @@ public final class IntegerType extends NumberType<BigInteger>
      *    0             as 80
      *    1             as 81
      *    127           as C07F
-     *    255           as 80FF
+     *    255           as C0FF
      *    2^32-1        as F8FFFFFFFF
      *    2^32          as F900000000
      *    2^56-1        as FEFFFFFFFFFFFFFF
@@ -173,6 +173,7 @@ public final class IntegerType extends NumberType<BigInteger>
      *
      * See {@link #asComparableBytesLegacy} for description of the legacy format.
      */
+    @Override
     public <V> ByteSource asComparableBytes(ValueAccessor<V> accessor, V data, ByteComparable.Version version)
     {
         final int limit = accessor.size(data);
@@ -230,6 +231,7 @@ public final class IntegerType extends NumberType<BigInteger>
                 v = ((long) accessor.getInt(data, 0) << 24) | ((accessor.getShort(data, 4) & 0xFFFF) << 8) | (accessor.getByte(data, 6) & 0xFF);
                 break;
             case 8:
+                // This is not reachable within the encoding; added for completeness.
                 v = accessor.getLong(data, 0);
                 break;
             default:
@@ -260,6 +262,7 @@ public final class IntegerType extends NumberType<BigInteger>
             int pos = -2;
             ByteSource lengthEncoding = new VariableLengthUnsignedInteger(limit - startpos - FULL_FORM_THRESHOLD);
 
+            @Override
             public int next()
             {
                 if (pos == -2)
@@ -304,9 +307,9 @@ public final class IntegerType extends NumberType<BigInteger>
      *    1             as 8001
      *    127           as 807F
      *    255           as 80FF
-     *    2^32-1        as 837FFFFFFF
-     *    2^32          as 8380000000
-     *    2^33          as 840100000000
+     *    2^31-1        as 837FFFFFFF
+     *    2^31          as 8380000000
+     *    2^32          as 840100000000
      */
     private <V> ByteSource asComparableBytesLegacy(ValueAccessor<V> accessor, V data, int startpos, int limit, int signbyte)
     {
@@ -347,18 +350,10 @@ public final class IntegerType extends NumberType<BigInteger>
     @Override
     public <V> V fromComparableBytes(ValueAccessor<V> accessor, ByteSource.Peekable comparableBytes, ByteComparable.Version version)
     {
+        assert version != ByteComparable.Version.LEGACY;
         if (comparableBytes == null)
             return accessor.empty();
 
-        if (version == ByteComparable.Version.LEGACY)
-            return fromComparableBytesLegacy(accessor, comparableBytes);
-        else
-            return fromComparableBytesCurrent(accessor, comparableBytes);
-    }
-
-
-    private <V> V fromComparableBytesCurrent(ValueAccessor<V> accessor, ByteSource.Peekable comparableBytes)
-    {
         // Consume the first byte to determine whether the encoded number is positive and
         // start iterating through the length header bytes and collecting the number of value bytes.
         int sign = comparableBytes.peek() ^ 0xFF;   // FF if negative, 00 if positive
@@ -407,6 +402,7 @@ public final class IntegerType extends NumberType<BigInteger>
                 accessor.putByte(buf, 6, (byte) value);
                 break;
             case 8:
+                // This is not reachable within the encoding; added for completeness.
                 accessor.putLong(buf, 0, value);
                 break;
             default:
@@ -440,37 +436,6 @@ public final class IntegerType extends NumberType<BigInteger>
             accessor.putByte(buf, writtenBytes++, (byte) comparableBytes.next());
 
         return buf;
-    }
-
-    private <V> V fromComparableBytesLegacy(ValueAccessor<V> accessor, ByteSource.Peekable comparableBytes)
-    {
-        int valueBytes;
-        byte signedZero;
-        // Consume the first byte to determine whether the encoded number is positive and
-        // start iterating through the length header bytes and collecting the number of value bytes.
-        int curr = comparableBytes.next();
-        if (curr >= POSITIVE_VARINT_HEADER) // positive number
-        {
-            valueBytes = curr - POSITIVE_VARINT_HEADER + 1;
-            while (curr == POSITIVE_VARINT_LENGTH_HEADER)
-            {
-                curr = comparableBytes.next();
-                valueBytes += curr - POSITIVE_VARINT_HEADER + 1;
-            }
-            signedZero = 0;
-        }
-        else // negative number
-        {
-            valueBytes = POSITIVE_VARINT_HEADER - curr;
-            while (curr == NEGATIVE_VARINT_LENGTH_HEADER)
-            {
-                curr = comparableBytes.next();
-                valueBytes += POSITIVE_VARINT_HEADER - curr;
-            }
-            signedZero = -1;
-        }
-
-        return extractBytes(accessor, comparableBytes, signedZero, valueBytes);
     }
 
     public ByteBuffer fromString(String source) throws MarshalException

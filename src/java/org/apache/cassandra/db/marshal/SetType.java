@@ -156,19 +156,19 @@ public class SetType<T> extends CollectionType<Set<T>>
 
     public <VL, VR> int compareCustom(VL left, ValueAccessor<VL> accessorL, VR right, ValueAccessor<VR> accessorR)
     {
-        return ListType.compareListOrSet(elements, left, accessorL, right, accessorR);
+        return compareListOrSet(elements, left, accessorL, right, accessorR);
     }
 
     @Override
     public <V> ByteSource asComparableBytes(ValueAccessor<V> accessor, V data, ByteComparable.Version version)
     {
-        return ListType.asComparableBytesListOrSet(getElementsType(), accessor, data, version);
+        return asComparableBytesListOrSet(getElementsType(), accessor, data, version);
     }
 
     @Override
     public <V> V fromComparableBytes(ValueAccessor<V> accessor, ByteSource.Peekable comparableBytes, ByteComparable.Version version)
     {
-        return ListType.fromComparableBytesListOrSet(accessor, comparableBytes, version, getElementsType());
+        return fromComparableBytesListOrSet(accessor, comparableBytes, version, getElementsType());
     }
 
     public SetSerializer<T> getSerializer()
@@ -224,6 +224,6 @@ public class SetType<T> extends CollectionType<Set<T>>
     @Override
     public String toJSONString(ByteBuffer buffer, ProtocolVersion protocolVersion)
     {
-        return ListType.setOrListToJsonString(buffer, elements, protocolVersion);
+        return setOrListToJsonString(buffer, elements, protocolVersion);
     }
 }

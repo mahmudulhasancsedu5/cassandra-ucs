@@ -46,6 +46,7 @@ public abstract class AbstractTimeUUIDType<T> extends TemporalType<T>
         return true;
     }
 
+    @Override
     public <VL, VR> int compareCustom(VL left, ValueAccessor<VL> accessorL, VR right, ValueAccessor<VR> accessorR)
     {
         // Compare for length
@@ -121,7 +122,7 @@ public abstract class AbstractTimeUUIDType<T> extends TemporalType<T>
 
     private void verifyVersion(long hiBits)
     {
-        long version = (hiBits >>> 12) & 0xf;
+        long version = (hiBits >>> 12) & 0xF;
         if (version != 1)
             throw new MarshalException(String.format("Invalid UUID version %d for timeuuid",
                                                      version));

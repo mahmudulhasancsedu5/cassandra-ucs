@@ -200,6 +200,9 @@ public class CompositeType extends AbstractCompositeType
             srcs[i * 2 + 2] = ByteSource.oneByte(lastEoc & 0xFF ^ 0x80); // end-of-component also takes part in comparison as signed byte
             ++i;
         }
+        // A composite may be leaving some values unspecified. If this is the case, make sure we terminate early
+        // so that translations created before an extra field was added match translations that have the field but don't
+        // specify a value for it.
         if (i * 2 + 1 < srcs.length)
             srcs = Arrays.copyOfRange(srcs, 0, i * 2 + 1);
 
@@ -452,23 +455,7 @@ public class CompositeType extends AbstractCompositeType
     @SafeVarargs
     public static <V> V build(ValueAccessor<V> accessor, boolean isStatic, V... values)
     {
-        int totalLength = isStatic ? 2 : 0;
-        for (V v : values)
-            totalLength += 2 + accessor.size(v) + 1;
-
-        ByteBuffer out = ByteBuffer.allocate(totalLength);
-
-        if (isStatic)
-            out.putShort((short)STATIC_MARKER);
-
-        for (V v : values)
-        {
-            ByteBufferUtil.writeShortLength(out, accessor.size(v));
-            accessor.write(v, out);
-            out.put((byte) 0);
-        }
-        out.flip();
-        return accessor.valueOf(out);
+        return build(accessor, isStatic, values, (byte) 0);
     }
 
     @VisibleForTesting
