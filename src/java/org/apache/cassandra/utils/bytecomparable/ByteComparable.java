@@ -34,15 +34,10 @@ public interface ByteComparable
      */
     ByteSource asComparableBytes(Version version);
 
-    default ByteSource.Peekable asPeekableBytes(Version version)
-    {
-        return ByteSource.peekable(asComparableBytes(version));
-    }
-
     enum Version
     {
         LEGACY, // Encoding used in legacy sstable format; forward (value to byte-comparable) translation only
-        OSS41,  // CASSANDRA 4.1 encoding
+        OSS42,  // CASSANDRA 4.2 encoding
     }
 
     ByteComparable EMPTY = (Version version) -> ByteSource.EMPTY;

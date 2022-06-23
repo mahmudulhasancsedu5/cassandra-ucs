@@ -138,8 +138,8 @@ public class UUIDType extends AbstractType<UUID>
         long hiBits = ByteSourceInverse.getUnsignedFixedLengthAsLong(comparableBytes, 8);
         long loBits = ByteSourceInverse.getUnsignedFixedLengthAsLong(comparableBytes, 8);
 
-        long version1 = hiBits >>> 60 & 0xF;
-        if (version1 == 1)
+        long uuidVersion = hiBits >>> 60 & 0xF;
+        if (uuidVersion == 1)
         {
             // If the version bits are set to 1, this is a time-based UUID, and its high bits are significantly more
             // shuffled than in other UUIDs. Revert the shuffle.
@@ -149,7 +149,7 @@ public class UUIDType extends AbstractType<UUID>
         {
             // For non-time UUIDs, the only thing that's needed is to put the version bits back where they were originally.
             hiBits = hiBits << 4 & 0xFFFFFFFFFFFF0000L
-                     | version1 << 12
+                     | uuidVersion << 12
                      | hiBits & 0x0000000000000FFFL;
         }
 

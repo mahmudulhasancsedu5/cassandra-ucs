@@ -249,9 +249,9 @@ public class ClusteringComparator implements Comparator<Clusterable>
      * and
      *   asByteComparable(x) is not a prefix of asByteComparable(y)
      */
-    public ByteComparable asByteComparable(ClusteringPrefix clustering)
+    public <V> ByteComparable asByteComparable(ClusteringPrefix<V> clustering)
     {
-        return new ByteComparableClustering(clustering);
+        return new ByteComparableClustering<>(clustering);
     }
 
     /**
@@ -346,18 +346,13 @@ public class ClusteringComparator implements Comparator<Clusterable>
      * does not correctly encode a clustering of this type, including if it encodes a position before or after a
      * clustering (i.e. a bound/boundary).
      *
-     * @param accessor Accessor to use to construct components. Because this will be used to construct individual
-     *                 arrays/buffers for each component, it may be sensible to use an accessor that allocates larger
-     *                 buffers in advance.
+     * @param accessor Accessor to use to construct components.
      * @param comparable The clustering encoded as a byte-comparable sequence.
      */
-    public <V> Clustering<V> clusteringFromByteComparable(ValueAccessor<V> accessor,
-                                                          ByteComparable comparable)
+    public <V> Clustering<V> clusteringFromByteComparable(ValueAccessor<V> accessor, ByteComparable comparable)
     {
-        ByteComparable.Version version = ByteComparable.Version.OSS41;
+        ByteComparable.Version version = ByteComparable.Version.OSS42;
         ByteSource.Peekable orderedBytes = ByteSource.peekable(comparable.asComparableBytes(version));
-        if (orderedBytes == null)
-            return null;
 
         // First check for special cases (partition key only, static clustering) that can do without buffers.
         int sep = orderedBytes.next();
@@ -387,6 +382,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
                 components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
+                // Decode the next component, consuming bytes from orderedBytes.
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
                 break;
             case TERMINATOR:
@@ -411,9 +407,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
      * for a exclusive end and an inclusive start is the same, before the exact clustering). The type must be supplied
      * separately (in the bound... vs boundary... call and isEnd argument).
      *
-     * @param accessor Accessor to use to construct components. Because this will be used to construct individual
-     *                 arrays/buffers for each component, it may be sensible to use an accessor that allocates larger
-     *                 buffers in advance.
+     * @param accessor Accessor to use to construct components.
      * @param comparable The clustering position encoded as a byte-comparable sequence.
      * @param isEnd true if the bound marks the end of a range, false is it marks the start.
      */
@@ -421,10 +415,8 @@ public class ClusteringComparator implements Comparator<Clusterable>
                                                           ByteComparable comparable,
                                                           boolean isEnd)
     {
-        ByteComparable.Version version = ByteComparable.Version.OSS41;
+        ByteComparable.Version version = ByteComparable.Version.OSS42;
         ByteSource.Peekable orderedBytes = ByteSource.peekable(comparable.asComparableBytes(version));
-        if (orderedBytes == null)
-            return null;
 
         int sep = orderedBytes.next();
         int cc = 0;
@@ -442,6 +434,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
                 components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
+                // Decode the next component, consuming bytes from orderedBytes.
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
                 break;
             case ByteSource.LT_NEXT_COMPONENT:
@@ -469,20 +462,14 @@ public class ClusteringComparator implements Comparator<Clusterable>
      * for a exclusive end and an inclusive start is the same, before the exact clustering). The type must be supplied
      * separately (in the bound... vs boundary... call and isEnd argument).
      *
-     * @param accessor Accessor to use to construct components. Because this will be used to construct individual
-     *                 arrays/buffers for each component, it may be sensible to use an accessor that allocates larger
-     *                 buffers in advance.
+     * @param accessor Accessor to use to construct components.
      * @param comparable The clustering position encoded as a byte-comparable sequence.
      */
-    public <V> ClusteringBoundary<V> boundaryFromByteComparable(ValueAccessor<V> accessor,
-                                                                ByteComparable comparable)
+    public <V> ClusteringBoundary<V> boundaryFromByteComparable(ValueAccessor<V> accessor, ByteComparable comparable)
     {
-        ByteComparable.Version version = ByteComparable.Version.OSS41;
+        ByteComparable.Version version = ByteComparable.Version.OSS42;
         ByteSource.Peekable orderedBytes = ByteSource.peekable(comparable.asComparableBytes(version));
-        if (orderedBytes == null)
-            return null;
 
-        // First check for special cases (partition key only, static clustering) that can do without buffers.
         int sep = orderedBytes.next();
         int cc = 0;
         V[] components = accessor.createArray(size());
@@ -499,6 +486,7 @@ public class ClusteringComparator implements Comparator<Clusterable>
                 components[cc] = subtype(cc).fromComparableBytes(accessor, null, version);
                 break;
             case NEXT_COMPONENT:
+                // Decode the next component, consuming bytes from orderedBytes.
                 components[cc] = subtype(cc).fromComparableBytes(accessor, orderedBytes, version);
                 break;
             case ByteSource.LT_NEXT_COMPONENT:

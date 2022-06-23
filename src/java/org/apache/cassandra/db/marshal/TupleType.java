@@ -208,14 +208,14 @@ public class TupleType extends AbstractType<ByteBuffer>
         {
             case LEGACY:
                 return asComparableBytesLegacy(accessor, data);
-            case OSS41:
+            case OSS42:
                 return asComparableBytesNew(accessor, data, version);
             default:
                 throw new AssertionError();
         }
     }
 
-    public <V> ByteSource asComparableBytesLegacy(ValueAccessor<V> accessor, V data)
+    private <V> ByteSource asComparableBytesLegacy(ValueAccessor<V> accessor, V data)
     {
         if (accessor.isEmpty(data))
             return null;
@@ -231,7 +231,7 @@ public class TupleType extends AbstractType<ByteBuffer>
         return ByteSource.withTerminatorLegacy(ByteSource.END_OF_STREAM, srcs);
     }
 
-    public <V> ByteSource asComparableBytesNew(ValueAccessor<V> accessor, V data, ByteComparable.Version version)
+    private <V> ByteSource asComparableBytesNew(ValueAccessor<V> accessor, V data, ByteComparable.Version version)
     {
         if (accessor.isEmpty(data))
             return null;
@@ -254,7 +254,7 @@ public class TupleType extends AbstractType<ByteBuffer>
     @Override
     public <V> V fromComparableBytes(ValueAccessor<V> accessor, ByteSource.Peekable comparableBytes, ByteComparable.Version version)
     {
-        assert version == ByteComparable.Version.OSS41; // Reverse translation is not supported for the legacy version.
+        assert version == ByteComparable.Version.OSS42; // Reverse translation is not supported for the legacy version.
         if (comparableBytes == null)
             return accessor.empty();
 
@@ -272,7 +272,9 @@ public class TupleType extends AbstractType<ByteBuffer>
         }
         // consume terminator
         int terminator = comparableBytes.next();
-        assert terminator == ByteSource.TERMINATOR;
+        assert terminator == ByteSource.TERMINATOR : String.format("Expected TERMINATOR (0x%2x) after %d components",
+                                                                   ByteSource.TERMINATOR,
+                                                                   types.size());
         return buildValue(accessor, componentBuffers);
     }
 

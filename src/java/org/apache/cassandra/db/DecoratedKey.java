@@ -111,7 +111,7 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
     {
         // Note: In the legacy version one encoding could be a prefix of another as the escaping is only weakly
         // prefix-free (see ByteSourceTest.testDecoratedKeyPrefixes()).
-        // The OSS41 version avoids this by adding a terminator.
+        // The OSS42 version avoids this by adding a terminator.
         return ByteSource.withTerminatorMaybeLegacy(version,
                                                     ByteSource.END_OF_STREAM,
                                                     token.asComparableBytes(version),
@@ -123,7 +123,7 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
     {
         return version ->
         {
-            assert (version != Version.LEGACY);
+            assert (version != Version.LEGACY) : "Decorated key bounds are not supported by the legacy encoding.";
 
             return ByteSource.withTerminator(
                     before ? ByteSource.LT_NEXT_COMPONENT : ByteSource.GT_NEXT_COMPONENT,
@@ -213,14 +213,14 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
                                                          IPartitioner partitioner,
                                                          BiFunction<Token, byte[], T> decoratedKeyFactory)
     {
-        ByteSource.Peekable peekable = byteComparable.asPeekableBytes(version);
+        ByteSource.Peekable peekable = ByteSource.peekable(byteComparable.asComparableBytes(version));
         // Decode the token from the first component of the multi-component sequence representing the whole decorated key.
         Token token = partitioner.getTokenFactory().fromComparableBytes(ByteSourceInverse.nextComponentSource(peekable), version);
         // Decode the key bytes from the second component.
         byte[] keyBytes = ByteSourceInverse.getUnescapedBytes(ByteSourceInverse.nextComponentSource(peekable));
         // Consume the terminator byte.
         int terminator = peekable.next();
-        assert terminator == ByteSource.TERMINATOR;
+        assert terminator == ByteSource.TERMINATOR : "Decorated key encoding must end in terminator.";
         // Instantiate a decorated key from the decoded token and key bytes, using the provided factory method.
         return decoratedKeyFactory.apply(token, keyBytes);
     }
@@ -236,7 +236,7 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
         // Decode the key bytes from the second component.
         byte[] keyBytes = ByteSourceInverse.getUnescapedBytes(ByteSourceInverse.nextComponentSource(peekableByteSource));
         int terminator = peekableByteSource.next();
-        assert terminator == ByteSource.TERMINATOR;
+        assert terminator == ByteSource.TERMINATOR : "Decorated key encoding must end in terminator.";
         return keyBytes;
     }
 }

@@ -76,7 +76,7 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
     public void testStringsUTF8()
     {
         testType(UTF8Type.instance, testStrings);
-        testDirect(x -> ByteSource.of(x, Version.OSS41), Ordering.<String>natural()::compare, testStrings);
+        testDirect(x -> ByteSource.of(x, Version.OSS42), Ordering.<String>natural()::compare, testStrings);
     }
 
     @Test
@@ -359,6 +359,45 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
             }
     }
 
+    @Test
+    public void testNullsInClusteringLegacy()
+    {
+        // verify the legacy encoding treats null clustering the same as null value
+        ClusteringPrefix<ByteBuffer> aNull = makeBound(ClusteringPrefix.Kind.CLUSTERING,
+                                                       decomposeAndRandomPad(UTF8Type.instance, "a"),
+                                                       decomposeAndRandomPad(Int32Type.instance, null));
+        ClusteringPrefix<ByteBuffer> aEmpty = makeBound(ClusteringPrefix.Kind.CLUSTERING,
+                                                        decomposeAndRandomPad(UTF8Type.instance, "a"),
+                                                        null);
+        ClusteringComparator comp = new ClusteringComparator(UTF8Type.instance, Int32Type.instance);
+        assertEquals(0, ByteComparable.compare(comp.asByteComparable(aNull), comp.asByteComparable(aEmpty), Version.LEGACY));
+        ClusteringComparator compReversed = new ClusteringComparator(UTF8Type.instance, ReversedType.getInstance(Int32Type.instance));
+        assertEquals(0, ByteComparable.compare(compReversed.asByteComparable(aNull), compReversed.asByteComparable(aEmpty), Version.LEGACY));
+    }
+
+    @Test
+    public void testEmptyClustering()
+    {
+        assertEmptyComparedToStatic(1, ClusteringPrefix.Kind.CLUSTERING, Version.OSS42);
+        assertEmptyComparedToStatic(0, ClusteringPrefix.Kind.STATIC_CLUSTERING, Version.OSS42);
+        assertEmptyComparedToStatic(1, ClusteringPrefix.Kind.INCL_START_BOUND, Version.OSS42);
+        assertEmptyComparedToStatic(1, ClusteringPrefix.Kind.INCL_END_BOUND, Version.OSS42);
+
+        assertEmptyComparedToStatic(1, ClusteringPrefix.Kind.CLUSTERING, Version.LEGACY);
+        assertEmptyComparedToStatic(0, ClusteringPrefix.Kind.STATIC_CLUSTERING, Version.LEGACY);
+        assertEmptyComparedToStatic(-1, ClusteringPrefix.Kind.INCL_START_BOUND, Version.LEGACY);
+        assertEmptyComparedToStatic(1, ClusteringPrefix.Kind.INCL_END_BOUND, Version.LEGACY);
+    }
+
+    private void assertEmptyComparedToStatic(int expected, ClusteringPrefix.Kind kind, Version version)
+    {
+        ClusteringPrefix<ByteBuffer> empty = makeBound(kind);
+        ClusteringComparator compEmpty = new ClusteringComparator();
+        assertEquals(expected, Integer.signum(ByteComparable.compare(compEmpty.asByteComparable(empty),
+                                                                     compEmpty.asByteComparable(Clustering.STATIC_CLUSTERING),
+                                                                     version)));
+    }
+
     void assertClusteringPairComparesSame(AbstractType<?> t1, AbstractType<?> t2, Object o1, Object o2, Object o3, Object o4)
     {
         assertClusteringPairComparesSame(t1, t2, o1, o2, o3, o4, AbstractType::decompose, true);
@@ -408,7 +447,7 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                 }
     }
 
-    static ClusteringPrefix<ByteBuffer> makeBound(ClusteringPrefix.Kind k1, ByteBuffer[] b)
+    static ClusteringPrefix<ByteBuffer> makeBound(ClusteringPrefix.Kind k1, ByteBuffer... b)
     {
         return makeBound(ByteBufferAccessor.instance.factory(), k1, b);
     }
@@ -486,11 +525,11 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
         ByteComparable bOneAndNull2 = typeToComparable(t2, vOneAndNull);
 
         assertEquals("The byte-comparable version of a one-field tuple must be the same as a two-field tuple with non-present second component.",
-                     bOne1.byteComparableAsString(Version.OSS41),
-                     bOne2.byteComparableAsString(Version.OSS41));
+                     bOne1.byteComparableAsString(Version.OSS42),
+                     bOne2.byteComparableAsString(Version.OSS42));
         assertEquals("The byte-comparable version of a one-field tuple must be the same as a two-field tuple with null as second component.",
-                     bOne1.byteComparableAsString(Version.OSS41),
-                     bOneAndNull2.byteComparableAsString(Version.OSS41));
+                     bOne1.byteComparableAsString(Version.OSS42),
+                     bOneAndNull2.byteComparableAsString(Version.OSS42));
     }
 
 
@@ -616,10 +655,10 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
     }
 
     @Test
-    public void testDecoratedKeyPrefixesVOSS41()
+    public void testDecoratedKeyPrefixesVOSS42()
     {
         // This should pass with the OSS 4.1 encoding
-        testDecoratedKeyPrefixes(Version.OSS41);
+        testDecoratedKeyPrefixes(Version.OSS42);
     }
 
     @Test
@@ -698,16 +737,35 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
     @Test
     public void testSeparatorGT()
     {
-        testSeparator(ByteSource::separatorGt, testLongs, LongType.instance);
+        testSeparator(ByteComparable::separatorGt, testLongs, LongType.instance);
     }
 
     @Test
     public void testSeparatorPrefix()
     {
-        testSeparator(ByteSource::separatorPrefix, testLongs, LongType.instance);
+        testSeparator(ByteComparable::separatorPrefix, testLongs, LongType.instance);
     }
 
-    private <T> void testSeparator(BiFunction<ByteSource, ByteSource, ByteSource> separatorMethod, T[] testValues, AbstractType<T> type)
+    @Test
+    public void testSeparatorPrefixViaDiffPoint()
+    {
+        testSeparator((x, y) -> version -> ByteSource.cut(y.asComparableBytes(version),
+                                                          ByteComparable.diffPoint(x, y, version)),
+                      testLongs,
+                      LongType.instance);
+    }
+    @Test
+    public void testSeparatorNext()
+    {
+        // Appending a 00 byte at the end gives the immediate next possible value after x.
+        testSeparator((x, y) -> version -> ByteSource.cutOrRightPad(x.asComparableBytes(version),
+                                                                    ByteComparable.length(x, version) + 1,
+                                                                    0),
+                      testLongs,
+                      LongType.instance);
+    }
+
+    private <T> void testSeparator(BiFunction<ByteComparable, ByteComparable, ByteComparable> separatorMethod, T[] testValues, AbstractType<T> type)
     {
         for (T v1 : testValues)
             for (T v2 : testValues)
@@ -716,9 +774,9 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                     continue;
                 if (type.compare(type.decompose(v1), type.decompose(v2)) >= 0)
                     continue;
-                ByteComparable separator = getSeparator(separatorMethod, type, v1, v2);
                 ByteComparable bc1 = getByteComparable(type, v1);
                 ByteComparable bc2 = getByteComparable(type, v2);
+                ByteComparable separator = separatorMethod.apply(bc1, bc2);
 
                 for (Version version : Version.values())
                 {
@@ -737,12 +795,6 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                                       ByteComparable.compare(separator, bc2, version) <= 0);
                 }
             }
-    }
-
-    private <T> ByteComparable getSeparator(BiFunction<ByteSource, ByteSource, ByteSource> separatorMethod, AbstractType<T> type, T v1, T v2)
-    {
-        return version -> separatorMethod.apply(type.asComparableBytes(type.decompose(v1), version),
-                                                type.asComparableBytes(type.decompose(v2), version));
     }
 
     private <T> ByteComparable getByteComparable(AbstractType<T> type, T v1)
@@ -825,13 +877,13 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
 
     private void maybeAssertNotPrefix(ByteComparable s1, ByteComparable s2, Version version)
     {
-        if (version == Version.OSS41)
+        if (version == Version.OSS42)
             assertNotPrefix(s1.asComparableBytes(version), s2.asComparableBytes(version));
     }
 
     private void maybeCheck41Properties(int expectedComparison, ByteComparable s1, ByteComparable s2, Version version)
     {
-        if (version != Version.OSS41)
+        if (version != Version.OSS42)
             return;
 
         if (s1 == null || s2 == null || 0 == expectedComparison)
@@ -904,7 +956,7 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                               safeStr(i),
                               safeStr(type.getSerializer().toCQLLiteral(b)),
                               safeStr(ByteBufferUtil.bytesToHex(b)),
-                              typeToComparable(type, b).byteComparableAsString(Version.OSS41));
+                              typeToComparable(type, b).byteComparableAsString(Version.OSS42));
         }
         for (T i : values)
             for (T j : values)
@@ -921,7 +973,7 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
                 logger.info("Value {} bytes {} ByteSource {}",
                             safeStr(type.getSerializer().toCQLLiteral(b)),
                             safeStr(ByteBufferUtil.bytesToHex(b)),
-                            typeToComparable(type, b).byteComparableAsString(Version.OSS41));
+                            typeToComparable(type, b).byteComparableAsString(Version.OSS42));
             }
         }
         catch (UnsupportedOperationException e)
@@ -985,7 +1037,7 @@ public class ByteSourceComparisonTest extends ByteSourceTestBase
 
     void assertDecoratedKeyBounds(IPartitioner type, ByteBuffer b)
     {
-        Version version = Version.OSS41;
+        Version version = Version.OSS42;
         DecoratedKey k = type.decorateKey(b);
         final ByteComparable after = k.asComparableBound(false);
         final ByteComparable before = k.asComparableBound(true);

@@ -67,7 +67,7 @@ requested. The interface is implemented by `DecoratedKey`, and can be requested 
 `Buffer/NativeDecoratedKey.fromByteComparable` and `ClusteringComparator.clustering/bound/boundaryFromByteComparable`.
 
 The (rather technical) paragraphs below detail the encoding we have chosen for the various types. For simplicity we
-only discuss the bidirectional `OSS41` version of the translation. The implementations in code of the various mappings
+only discuss the bidirectional `OSS42` version of the translation. The implementations in code of the various mappings
 are in the releavant `AbstractType` subclass.
 
 ### Desired properties
@@ -340,13 +340,14 @@ as an unsigned integer has the same effect as comparing the source signed.
 
 Examples:
 
-|Type and value|bytes|encodes as|
-|--------------|-----|----------|
-|int 1         |00 00 00 01|             80 00 00 01
-|short -1      |FF FF      |             7F FF
-|byte 0        |00         |             80
-|int MAX_VALUE |7F FF FF FF|             FF FF FF FF
-|long MIN_VALUE|80 00 00 00 00 00 00 00| 00 00 00 00 00 00 00 00
+| Type and value | bytes                   |encodes as|
+|----------------|-------------------------|----------|
+| int 1          | 00 00 00 01             |             80 00 00 01
+| short -1       | FF FF                   |             7F FF
+| byte 0         | 00                      |             80
+| byte -2        | FE                      |             7E
+| int MAX_VALUE  | 7F FF FF FF             |             FF FF FF FF
+| long MIN_VALUE | 80 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00
 
 ## Variable-length encoding of integers (current bigint)
 

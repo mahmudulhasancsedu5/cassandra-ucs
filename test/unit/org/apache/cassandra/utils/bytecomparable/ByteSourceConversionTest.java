@@ -25,7 +25,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -59,7 +58,7 @@ import static org.junit.Assert.assertEquals;
 public class ByteSourceConversionTest extends ByteSourceTestBase
 {
     private final static Logger logger = LoggerFactory.getLogger(ByteSourceConversionTest.class);
-    public static final Version VERSION = Version.OSS41;
+    public static final Version VERSION = Version.OSS42;
 
     @Rule
     public final ExpectedException expectedException = ExpectedException.none();
@@ -310,7 +309,7 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
                                 new ByteBuffer[] {null,
                                                   decomposeAndRandomPad(Int32Type.instance, null)},
                                 new ByteBuffer[] {null,
-                                                  null}
+                                                  null},
                                 };
         for (ByteBuffer[] input : inputs)
         {
@@ -320,6 +319,22 @@ public class ByteSourceConversionTest extends ByteSourceTestBase
                                              input[0],
                                              input[1],
                                              (t, v) -> (ByteBuffer) v);
+        }
+    }
+
+    @Test
+    public void testEmptyClustering()
+    {
+        ValueAccessor<ByteBuffer> accessor = ByteBufferAccessor.instance;
+        ClusteringComparator comp = new ClusteringComparator();
+        for (ClusteringPrefix.Kind kind : ClusteringPrefix.Kind.values())
+        {
+            if (kind.isBoundary())
+                continue;
+
+            ClusteringPrefix<ByteBuffer> empty = ByteSourceComparisonTest.makeBound(kind);
+            ClusteringPrefix<ByteBuffer> converted = getClusteringPrefix(accessor, kind, comp, comp.asByteComparable(empty));
+            assertEquals(empty, converted);
         }
     }
 

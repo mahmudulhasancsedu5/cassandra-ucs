@@ -648,16 +648,10 @@ public abstract class ColumnCondition
                 return cell == null ? null : cell.buffer();
             }
 
-            // getCell returns Cell<?>, which requires a method call to properly convert.
-            return getCellBuffer(getCell(row, column), userType);
-        }
-
-        private <V> ByteBuffer getCellBuffer(Cell<V> cell, UserType userType)
-        {
+            Cell<?> cell = getCell(row, column);
             return cell == null
-                      ? null
-                      : ByteBufferAccessor.instance.convert(userType.split(cell.accessor(), cell.value())[userType.fieldPosition(field)],
-                                                            cell.accessor());
+                   ? null
+                   : userType.split(ByteBufferAccessor.instance, cell.buffer())[userType.fieldPosition(field)];
         }
 
         private boolean isSatisfiedBy(ByteBuffer rowValue)

@@ -56,7 +56,7 @@ public class ByteSourceSequenceTest
     @Parameterized.Parameters(name = "version={0}")
     public static Iterable<ByteComparable.Version> versions()
     {
-        return ImmutableList.of(ByteComparable.Version.OSS41);
+        return ImmutableList.of(ByteComparable.Version.OSS42);
     }
 
     private final ByteComparable.Version version;
@@ -336,35 +336,35 @@ public class ByteSourceSequenceTest
 
             ClusteringPrefix prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
             // Use the regular comparator.
-            ByteSource.Peekable comparableBytes = COMP.asByteComparable(prefix).asPeekableBytes(version);
+            ByteSource.Peekable comparableBytes = ByteSource.peekable(COMP.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentValue(comparableBytes, DECIMAL, decimalValue);
             expectNextComponentValue(comparableBytes, VARINT, varintValue);
 
             prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
             // Use the comparator reversing the ordering for the first unknown length type.
-            comparableBytes = COMP_REVERSED_UNKNOWN_LENGTH.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_UNKNOWN_LENGTH.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(UTF8), stringValue);
             expectNextComponentValue(comparableBytes, DECIMAL, decimalValue);
             expectNextComponentValue(comparableBytes, VARINT, varintValue);
 
             prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
             // Use the comparator reversing the ordering for the second unknown length type.
-            comparableBytes = COMP_REVERSED_UNKNOWN_LENGTH_2.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_UNKNOWN_LENGTH_2.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(DECIMAL), decimalValue);
             expectNextComponentValue(comparableBytes, VARINT, varintValue);
 
             prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
             // Use the comparator reversing the ordering for the known/computable length type.
-            comparableBytes = COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentValue(comparableBytes, DECIMAL, decimalValue);
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(VARINT), varintValue);
 
             prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
             // Use the all-reversing comparator.
-            comparableBytes = COMP_ALL_REVERSED.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_ALL_REVERSED.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(UTF8), stringValue);
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(DECIMAL), decimalValue);
             expectNextComponentValue(comparableBytes, ReversedType.getInstance(VARINT), varintValue);
@@ -398,26 +398,26 @@ public class ByteSourceSequenceTest
 
             // Test the decoding of a null component of a non-reversed unknown length type.
             ClusteringPrefix prefix = BufferClusteringBound.create(prefixKind, unknownLengthNull);
-            ByteSource.Peekable comparableBytes = COMP.asByteComparable(prefix).asPeekableBytes(version);
+            ByteSource.Peekable comparableBytes = ByteSource.peekable(COMP.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentNull(comparableBytes);
             expectNextComponentValue(comparableBytes, VARINT, varintValue);
             // Test the decoding of a null component of a reversed unknown length type.
             prefix = BufferClusteringBound.create(prefixKind, unknownLengthNull);
-            comparableBytes = COMP_REVERSED_UNKNOWN_LENGTH_2.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_UNKNOWN_LENGTH_2.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentNull(comparableBytes);
             expectNextComponentValue(comparableBytes, VARINT, varintValue);
 
             // Test the decoding of a null component of a non-reversed known/computable length type.
             prefix = BufferClusteringBound.create(prefixKind, knownLengthNull);
-            comparableBytes = COMP.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentValue(comparableBytes, DECIMAL, decimalValue);
             expectNextComponentNull(comparableBytes);
             // Test the decoding of a null component of a reversed known/computable length type.
             prefix = BufferClusteringBound.create(prefixKind, knownLengthNull);
-            comparableBytes = COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asComparableBytes(version));
             expectNextComponentValue(comparableBytes, UTF8, stringValue);
             expectNextComponentValue(comparableBytes, DECIMAL, decimalValue);
             expectNextComponentNull(comparableBytes);
@@ -470,7 +470,7 @@ public class ByteSourceSequenceTest
 
             // Test that the read terminator value is exactly the encoded value of this prefix' bound.
             ClusteringPrefix prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
-            ByteSource.Peekable comparableBytes = COMP.asByteComparable(prefix).asPeekableBytes(version);
+            ByteSource.Peekable comparableBytes = ByteSource.peekable(COMP.asByteComparable(prefix).asComparableBytes(version));
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
             ByteSourceInverse.getString(comparableBytes);
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
@@ -483,7 +483,7 @@ public class ByteSourceSequenceTest
             // Test that the read terminator value is exactly the encoded value of this prefix' bound, when the
             // terminator is preceded by a null value.
             prefix = BufferClusteringBound.create(prefixKind, nullValueBeforeTerminator);
-            comparableBytes = COMP.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP.asByteComparable(prefix).asComparableBytes(version));
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
             ByteSourceInverse.getString(comparableBytes);
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
@@ -500,7 +500,7 @@ public class ByteSourceSequenceTest
             // That's the comparator that will reverse the ordering of the type of the last value in the prefix (the
             // one before the terminator). In other tests we're more interested in the fact that values of this type
             // have known/computable length, which is why we've named it so...
-            comparableBytes = COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asPeekableBytes(version);
+            comparableBytes = ByteSource.peekable(COMP_REVERSED_KNOWN_LENGTH.asByteComparable(prefix).asComparableBytes(version));
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
             ByteSourceInverse.getString(comparableBytes);
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
@@ -562,7 +562,7 @@ public class ByteSourceSequenceTest
                 continue;
 
             ClusteringPrefix prefix = BufferClusteringBound.create(prefixKind, clusteringKeyValues);
-            ByteSource.Peekable comparableBytes = comparator.asByteComparable(prefix).asPeekableBytes(version);
+            ByteSource.Peekable comparableBytes = ByteSource.peekable(comparator.asByteComparable(prefix).asComparableBytes(version));
 
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes.next());
             assertEquals(getComponentValue(UTF8, comparableBytes), stringValue);
@@ -577,7 +577,7 @@ public class ByteSourceSequenceTest
             assertEquals(ByteSource.END_OF_STREAM, comparableBytes.next());
 
             ClusteringPrefix prefix2 = BufferClusteringBound.create(prefixKind, clusteringKeyValues2);
-            ByteSource.Peekable comparableBytes2 = comparator2.asByteComparable(prefix2).asPeekableBytes(version);
+            ByteSource.Peekable comparableBytes2 = ByteSource.peekable(comparator2.asByteComparable(prefix2).asComparableBytes(version));
 
             assertEquals(ByteSource.NEXT_COMPONENT, comparableBytes2.next());
             assertEquals(getComponentValue(DECIMAL, comparableBytes2), decimalValue);

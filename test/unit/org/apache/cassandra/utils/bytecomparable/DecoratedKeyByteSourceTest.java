@@ -39,7 +39,7 @@ public class DecoratedKeyByteSourceTest
     @Parameterized.Parameters(name = "version={0}")
     public static Iterable<ByteComparable.Version> versions()
     {
-        return ImmutableList.of(ByteComparable.Version.OSS41);
+        return ImmutableList.of(ByteComparable.Version.OSS42);
     }
 
     private final ByteComparable.Version version;
@@ -69,7 +69,7 @@ public class DecoratedKeyByteSourceTest
         {
             BufferDecoratedKey initialBuffer =
                     (BufferDecoratedKey) ByteOrderedPartitioner.instance.decorateKey(newRandomBytesBuffer());
-            ByteSource.Peekable src = initialBuffer.asPeekableBytes(version);
+            ByteSource.Peekable src = ByteSource.peekable(initialBuffer.asComparableBytes(version));
             byte[] keyBytes = DecoratedKey.keyFromByteSource(src, version, ByteOrderedPartitioner.instance);
             Assert.assertEquals(ByteSource.END_OF_STREAM, src.next());
             Assert.assertArrayEquals(initialBuffer.getKey().array(), keyBytes);
