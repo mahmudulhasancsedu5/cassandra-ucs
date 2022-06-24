@@ -79,7 +79,7 @@ public interface ByteSource
     int EXCLUDED = 0x18;
 
     /**
-     * Reinterprets byte-accessible data as a byte-comparable source that has 0s escaped and finishes in an escaped
+     * Encodes byte-accessible data as a byte-comparable source that has 0s escaped and finishes in an escaped
      * state.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
      * (See {@link AbstractEscaper} for a detailed explanation.)
@@ -90,7 +90,7 @@ public interface ByteSource
     }
 
     /**
-     * Reinterprets a byte buffer as a byte-comparable source that has 0s escaped and finishes in an escape.
+     * Encodes a byte buffer as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
      * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
@@ -100,7 +100,7 @@ public interface ByteSource
     }
 
     /**
-     * Reinterprets a byte array as a byte-comparable source that has 0s escaped and finishes in an escape.
+     * Encodes a byte array as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a prefix-free byte-comparable version of the content to use in sequences.
      * (See ByteSource.BufferEscaper/Multi for explanation.)
      */
@@ -110,7 +110,7 @@ public interface ByteSource
     }
 
     /**
-     * Reinterprets a memory range as a byte-comparable source that has 0s escaped and finishes in an escape.
+     * Encodes a memory range as a byte-comparable source that has 0s escaped and finishes in an escape.
      * This provides a weakly-prefix-free byte-comparable version of the content to use in sequences.
      * (See ByteSource.BufferEscaper/Multi for explanation.)
      */

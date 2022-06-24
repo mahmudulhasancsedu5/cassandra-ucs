@@ -206,7 +206,7 @@ public class OrderPreservingPartitioner implements IPartitioner
         @Override
         public ByteSource asComparableBytes(ByteComparable.Version version)
         {
-            return ByteSource.of((String) token, version);
+            return ByteSource.of(token, version);
         }
     }
 
