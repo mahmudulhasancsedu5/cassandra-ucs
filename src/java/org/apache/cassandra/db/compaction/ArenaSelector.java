@@ -28,7 +28,6 @@ import java.util.stream.Collectors;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.unified.Controller;
-import org.assertj.core.util.Lists;
 
 /**
  * Arena selector, used by UnifiedCompactionStrategy to distribute SSTables to separate compaction arenas.
@@ -103,7 +102,7 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
     public int shardFor(CompactionSSTable ssTableReader)
     {
         // If shards on L0 are disabled and the size of the sstable is less than the max L0 size, always pick the fist shard
-        if (!controller.areL0ShardsEnabled() && shardAdjustedSize(ssTableReader) < controller.getMaxL0Size())
+        if (!controller.areL0ShardsEnabled() && density(ssTableReader) < controller.getMaxL0Density())
             return 0;
 
         return shardFor(ssTableReader.getFirst());
@@ -126,26 +125,24 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
         return -pos - 1;
     }
 
-    public static int shardsSpanned(CompactionSSTable rdr, List<PartitionPosition> shardBoundaries)
+    /**
+     * Return the token space share that the given SSTable spans, 1.0 being the full token space.
+     */
+    public static double rangeSpanned(CompactionSSTable rdr)
     {
-        if (shardBoundaries.size() <= 1)
-            return 1;
-        int startIdx = shardFor(rdr.getFirst(), shardBoundaries);
-        PartitionPosition last = rdr.getLast();
-        if (last.compareTo(shardBoundaries.get(startIdx)) < 0)
-            return 1;   // quick path, end boundary is in the same shard
-        return shardFor(last, shardBoundaries) - startIdx + 1;
+        return rdr.getFirst().getToken().size(rdr.getLast().getToken().nextValidToken());
     }
 
-    public long shardAdjustedSize(CompactionSSTable rdr)
+    /**
+     * Return the density of an SSTable, i.e. its size divided by the covered token space share.
+     * This is an improved measure of the compaction age of an sstable that grows both with STCS-like full-SSTable
+     * compactions (where size grows, share is constant), LCS-like size-threshold splitting (where size is constant
+     * but share shrinks), UCS-like compactions (where size may grow and covered shards i.e. share may decrease)
+     * and can reproduce levelling structure that corresponds to all, including their mixtures.
+     */
+    public static double density(CompactionSSTable rdr)
     {
-        return shardAdjustedSize(rdr, shardBoundaries);
-    }
-
-    public static long shardAdjustedSize(CompactionSSTable rdr, List<PartitionPosition> shardBoundaries)
-    {
-        // This may need to duplicate the above to avoid the division in the happy path
-        return rdr.onDiskLength() / shardsSpanned(rdr, shardBoundaries);
+        return rdr.onDiskLength() / rangeSpanned(rdr);
     }
 
     public static Set<CompactionSSTable> sstablesFor(int boundaryIndex,
@@ -159,9 +156,9 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
                        .collect(Collectors.toSet());
     }
 
-    public int compareByShardAdjustedSize(CompactionSSTable a, CompactionSSTable b)
+    public int compareByDensity(CompactionSSTable a, CompactionSSTable b)
     {
-        return Long.compare(shardAdjustedSize(a), shardAdjustedSize(b));
+        return Double.compare(density(a), density(b));
     }
 
     /**

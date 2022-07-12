@@ -779,10 +779,10 @@ public abstract class Controller
         // fixed and positive W this should not hurt us, as the hierarchy will be in multiples of F and will still
         // result in the same buckets, but for negative W or hybrid strategies this may cause temporary overcompaction.
         // If this is a concern, the flush size override should be used to avoid it until DB-4401.
-        return Math.max(1 << 20, getFlushSizeBytes()) * (1.0 - 0.9 / F) / getNumShards();
+        return Math.max(1 << 20, getFlushSizeBytes()) * (1.0 - 0.9 / F);
     }
 
-    public long getMaxLevelSize(int index, long minSize)
+    public double getMaxLevelDensity(int index, double minSize)
     {
         int fanout = getFanout(index);
         double survivalFactor = getSurvivalFactor(index);
@@ -790,12 +790,12 @@ public abstract class Controller
         if (minSize == 0)
             baseSize = getBaseSstableSize(fanout);
 
-        return (long) Math.floor(baseSize * fanout * survivalFactor);
+        return Math.floor(baseSize * fanout * survivalFactor);
     }
 
-    public long getMaxL0Size()
+    public double getMaxL0Density()
     {
-        return getMaxLevelSize(0, 0);
+        return getMaxLevelDensity(0, 0);
     }
 
     public double maxThroughput()
