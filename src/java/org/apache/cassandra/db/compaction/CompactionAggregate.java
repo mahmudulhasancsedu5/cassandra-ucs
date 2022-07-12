@@ -716,7 +716,7 @@ public abstract class CompactionAggregate
             return bucket.index;
         }
 
-        public long bucketMin()
+        public double bucketMin()
         {
             return bucket.min;
         }

@@ -925,13 +925,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         for (Shard shard : shards)
         {
             List<Bucket> buckets = new ArrayList<>(MAX_LEVELS);
-            shard.sstables.sort(arenaSelector::compareByShardAdjustedSize);
+            shard.sstables.sort(arenaSelector::compareByDensity);
 
             int index = 0;
             Bucket bucket = new Bucket(controller, index, 0);
             for (CompactionSSTable candidate : shard.sstables)
             {
-                final long size = arenaSelector.shardAdjustedSize(candidate);
+                final double size = arenaSelector.density(candidate);
                 if (size < bucket.max)
                 {
                     bucket.add(candidate);
@@ -1062,11 +1062,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         final int scalingParameter; // scaling parameter used to calculate fanout and threshold
         final int fanout; // fanout factor between buckets
         final int threshold; // number of SSTables that trigger a compaction
-        final long min; // min size of sstables for this bucket
-        final long max; // max size of sstables for this bucket
+        final double min; // min density of sstables for this bucket
+        final double max; // max density of sstables for this bucket
         double avg = 0; // avg size of sstables in this bucket
 
-        Bucket(Controller controller, int index, long minSize)
+        Bucket(Controller controller, int index, double minSize)
         {
             this.index = index;
             this.survivalFactor = controller.getSurvivalFactor(index);
@@ -1075,7 +1075,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             this.threshold = controller.getThreshold(index);
             this.sstables = new ArrayList<>(threshold);
             this.min = minSize;
-            this.max = controller.getMaxLevelSize(index, this.min);
+            this.max = controller.getMaxLevelDensity(index, this.min);
         }
 
         public Collection<CompactionSSTable> getSSTables()
@@ -1313,7 +1313,18 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         public String toString()
         {
             return String.format("W: %d, T: %d, F: %d, index: %d, min: %s, max %s, %d sstables",
-                                 scalingParameter, threshold, fanout, index, FBUtilities.prettyPrintMemory(min), FBUtilities.prettyPrintMemory(max), sstables.size());
+                                 scalingParameter,
+                                 threshold,
+                                 fanout,
+                                 index,
+                                 densityAsString(min),
+                                 densityAsString(max),
+                                 sstables.size());
+        }
+
+        private String densityAsString(double density)
+        {
+            return FBUtilities.prettyPrintBinary(density, "B", " ");
         }
     }
 

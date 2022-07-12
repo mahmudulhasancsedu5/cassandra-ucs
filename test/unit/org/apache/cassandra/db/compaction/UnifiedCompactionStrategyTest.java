@@ -67,9 +67,9 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 /**
@@ -134,7 +134,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
         when(controller.getScalingParameter(anyInt())).thenReturn(4);
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -231,7 +231,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         });
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
 
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.random()).thenCallRealMethod();
@@ -453,7 +453,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(W);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -612,7 +612,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(W);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -990,8 +990,8 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(W);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
-        when(controller.getMaxL0Size()).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
+        when(controller.getMaxL0Density()).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.getNumShards()).thenReturn(shards.size());
@@ -1137,7 +1137,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(0);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -1175,7 +1175,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(0);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -1301,7 +1301,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
     {
         Controller controller = Mockito.mock(Controller.class);
         long minimalSizeBytes = 2 << 20;
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
         when(controller.getScalingParameter(anyInt())).thenReturn(3); // T=5
         when(controller.getFanout(anyInt())).thenCallRealMethod();
@@ -1356,7 +1356,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
     {
         Controller controller = Mockito.mock(Controller.class);
         long minimalSizeBytes = 2 << 20;
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
         when(controller.getScalingParameter(anyInt())).thenReturn(2);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
@@ -1439,7 +1439,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getScalingParameter(anyInt())).thenReturn(0);
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
@@ -1506,7 +1506,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxSSTablesToCompact()).thenReturn(10); // same as fanout
 
         long minimalSizeBytes = 2 << 20;
-        when(controller.getMaxLevelSize(anyInt(), anyLong())).thenCallRealMethod();
+        when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getNumShards()).thenReturn(1);
