@@ -91,4 +91,16 @@ public class MinMaxAvgMetric
             return 0.0;
         }
     }
+
+    @Override
+    public String toString()
+    {
+        return "{" +
+               "min=" + min +
+               ", max=" + max +
+               ", avg=" + (sum * 1.0 / numSamples) +
+               ", stdDev=" + stddev() +
+               ", numSamples=" + numSamples +
+               '}';
+    }
 }

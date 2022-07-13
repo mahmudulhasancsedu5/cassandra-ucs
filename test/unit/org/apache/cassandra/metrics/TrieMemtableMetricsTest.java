@@ -102,7 +102,7 @@ public class TrieMemtableMetricsTest extends SchemaLoader
     private ColumnFamilyStore recreateTable(String table)
     {
         session.execute(String.format("DROP TABLE IF EXISTS %s.%s", KEYSPACE, table));
-        session.execute(String.format("CREATE TABLE IF NOT EXISTS %s.%s (id int, val1 text, val2 text, PRIMARY KEY(id, val1)) WITH MEMTABLE = {'class':'TrieMemtable'};", KEYSPACE, table));
+        session.execute(String.format("CREATE TABLE IF NOT EXISTS %s.%s (id int, val1 text, val2 text, PRIMARY KEY(id, val1)) WITH MEMTABLE = 'test_memtable_metrics';", KEYSPACE, table));
         return ColumnFamilyStore.getIfExists(KEYSPACE, table);
     }
 
@@ -138,7 +138,7 @@ public class TrieMemtableMetricsTest extends SchemaLoader
         // verify that metrics survive flush / memtable switching
         writeAndFlush(10);
         assertEquals(20, metrics.contendedPuts.getCount() + metrics.uncontendedPuts.getCount());
-        assertEquals(metrics.lastFlushShardDataSizes.toString(), NUM_SHARDS, (int) metrics.lastFlushShardDataSizes.numSamplesGauge.getValue());
+        assertEquals(metrics.lastFlushShardDataSizes.toString(), NUM_SHARDS, metrics.lastFlushShardDataSizes.numSamplesGauge.getValue().intValue());
     }
 
     @Test
