@@ -27,9 +27,6 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.db.AbstractArrayClusteringPrefix;
-import org.apache.cassandra.db.AbstractBufferClusteringPrefix;
-import org.apache.cassandra.db.ClusteringPrefix;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
