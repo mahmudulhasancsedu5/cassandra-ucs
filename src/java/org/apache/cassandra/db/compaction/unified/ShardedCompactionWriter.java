@@ -16,7 +16,6 @@
 
 package org.apache.cassandra.db.compaction.unified;
 
-import java.util.List;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -24,13 +23,13 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.db.compaction.ArenaSelector;
 import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.CompactionSSTable;
+import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -46,8 +45,8 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     protected final static Logger logger = LoggerFactory.getLogger(ShardedCompactionWriter.class);
 
     private final long minSstableSizeInBytes;
-    private final List<PartitionPosition> boundaries;
-    private final double overwriteRatio;
+    private final ShardManager boundaries;
+    private final double survivalRatio;
 
     private int currentIndex;
 
@@ -57,7 +56,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
                                    Set<SSTableReader> nonExpiredSSTables,
                                    boolean keepOriginals,
                                    long minSstableSizeInBytes,
-                                   List<PartitionPosition> boundaries)
+                                   ShardManager boundaries)
     {
         super(realm, directories, txn, nonExpiredSSTables, keepOriginals);
 
@@ -67,7 +66,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
         long totalKeyCount = nonExpiredSSTables.stream()
                                                .mapToLong(SSTableReader::estimatedKeys)
                                                .sum();
-        this.overwriteRatio = 1.0 * SSTableReader.getApproximateKeyCount(nonExpiredSSTables) / totalKeyCount;
+        this.survivalRatio = 1.0 * SSTableReader.getApproximateKeyCount(nonExpiredSSTables) / totalKeyCount;
     }
 
     @Override
@@ -77,8 +76,9 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
         /*
         The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
         we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
+        Boundaries are end-inclusive.
          */
-        while (currentIndex < boundaries.size() && key.compareTo(boundaries.get(currentIndex)) >= 0)
+        while (currentIndex < boundaries.size() && key.getToken().compareTo(boundaries.get(currentIndex)) >= 0)
         {
             currentIndex++;
             boundaryCrossed = true;
@@ -98,13 +98,13 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
     @Override
     @SuppressWarnings("resource")
-    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, PartitionPosition diskBoundary)
+    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, Token diskBoundary)
     {
-        while (diskBoundary != null && currentIndex < boundaries.size() && diskBoundary.compareTo(boundaries.get(currentIndex)) < 0)
+        while (diskBoundary != null && currentIndex < boundaries.size() && diskBoundary.compareTo(boundaries.get(currentIndex)) >= 0)
             currentIndex++;
 
         return SSTableWriter.create(realm.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
-                                    shardAdjustedKeyCount(currentIndex, boundaries, minSstableSizeInBytes, nonExpiredSSTables, overwriteRatio),
+                                    shardAdjustedKeyCount(currentIndex, boundaries, minSstableSizeInBytes, nonExpiredSSTables, survivalRatio),
                                     minRepairedAt,
                                     pendingRepair,
                                     isTransient,
@@ -116,28 +116,32 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     }
 
     private long shardAdjustedKeyCount(int shardIdx,
-                                       List<PartitionPosition> boundaries,
+                                       ShardManager boundaries,
                                        long minSstableSizeInBytes,
                                        Set<SSTableReader> sstables,
-                                       double overwriteRatio)
+                                       double survivalRatio)
     {
+        // Note: computationally non-trivial.
         long shardAdjustedSize = 0;
         long shardAdjustedKeyCount = 0;
+
         for (int i = shardIdx; i < boundaries.size(); i++)
         {
-            Set<CompactionSSTable> sstablesForShard = ArenaSelector.sstablesFor(i, boundaries, sstables);
-            for (CompactionSSTable sstable : sstablesForShard)
+            for (CompactionSSTable sstable : sstables)
             {
-                int shardsSpanned = ArenaSelector.shardsSpanned(sstable, boundaries);
+                double inShardSize = boundaries.rangeSpannedInShard(sstable, i);
+                if (inShardSize == 0)
+                    continue;   // to avoid NaNs on totalSize == 0
+                double totalSize = boundaries.rangeSpanned(sstable);
                 // calculating manually instead of calling ArenaSelector.shardAdjustedSize to save 1 call to ArenaSelector.shardsSpanned
-                shardAdjustedSize += sstable.onDiskLength() / shardsSpanned;
-                shardAdjustedKeyCount += sstable.estimatedKeys() / shardsSpanned;
+                shardAdjustedSize += sstable.onDiskLength() * inShardSize / totalSize;
+                shardAdjustedKeyCount += sstable.estimatedKeys() * inShardSize / totalSize;
             }
 
             if (shardAdjustedSize > minSstableSizeInBytes)
                 break;
         }
 
-        return Math.round(shardAdjustedKeyCount * overwriteRatio);
+        return Math.round(shardAdjustedKeyCount * survivalRatio);
     }
 }

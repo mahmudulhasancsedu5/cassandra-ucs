@@ -30,8 +30,10 @@ import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
 import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.compaction.CompactionRealm;
+import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
@@ -65,10 +67,11 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     private final Collection<Index.Group> indexGroups;
     private final LifecycleNewTracker lifecycleNewTracker;
     private final long minSstableSizeInBytes;
-    private final List<PartitionPosition> boundaries;
+    private final ShardManager boundaries;
     private final SSTableMultiWriter[] writers;
     private final int estimatedSSTables;
     private int currentBoundary;
+
     private int currentWriter;
 
     public ShardedMultiWriter(CompactionRealm realm,
@@ -82,7 +85,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
                               Collection<Index.Group> indexGroups,
                               LifecycleNewTracker lifecycleNewTracker,
                               long minSstableSizeInBytes,
-                              List<PartitionPosition> boundaries)
+                              ShardManager boundaries)
     {
         this.realm = realm;
         this.descriptor = descriptor;
@@ -139,7 +142,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
         we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
          */
-        while (currentBoundary < boundaries.size() && key.compareTo(boundaries.get(currentBoundary)) >= 0)
+        while (currentBoundary < boundaries.size() && key.getToken().compareTo(boundaries.get(currentBoundary)) >= 0)
         {
             currentBoundary++;
             if (!boundaryCrossed)
