@@ -27,7 +27,11 @@ import java.util.stream.Collectors;
 
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.unified.Controller;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Splitter;
+import org.apache.cassandra.dht.Token;
 
 /**
  * Arena selector, used by UnifiedCompactionStrategy to distribute SSTables to separate compaction arenas.
@@ -42,13 +46,14 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
 {
     private final EquivClassSplitter[] classSplitters;
     final Controller controller;
-    final List<PartitionPosition> shardBoundaries;
     final DiskBoundaries diskBoundaries;
 
-    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries, List<PartitionPosition> shardBoundaries)
+    final ShardManager shardManager;
+
+    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries, List<PartitionPosition> shardBoundaries, SortedLocalRanges localRanges)
     {
+        shardManager = new ShardManager(shardBoundaries.toArray(new PartitionPosition[shardBoundaries.size()]), localRanges);
         this.controller = controller;
-        this.shardBoundaries = shardBoundaries;
         this.diskBoundaries = diskBoundaries;
 
         ArrayList<EquivClassSplitter> ret = new ArrayList<>(2);
@@ -77,7 +82,8 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
         return new ArenaSelector(controller,
                                  diskBoundaries,
                                  diskBoundaries.getPositions() == null ? Collections.EMPTY_LIST
-                                                                       : diskBoundaries.getPositions());
+                                                                       : diskBoundaries.getPositions(),
+                                 shardManager.localRanges);
     }
 
     @Override
@@ -96,80 +102,9 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
                      .collect(Collectors.joining("-"));
     }
 
-    /**
-     * Return the shard for an sstable, which may be fixed to zero for L0 sstables if shards are disabled on L0
-     */
-    public int shardFor(CompactionSSTable ssTableReader)
+    public int shardFor(PartitionPosition pos)
     {
-        // If shards on L0 are disabled and the size of the sstable is less than the max L0 size, always pick the fist shard
-        if (!controller.areL0ShardsEnabled() && density(ssTableReader) < controller.getMaxL0Density())
-            return 0;
-
-        return shardFor(ssTableReader.getFirst());
-    }
-
-    /**
-     * Returns the shard where this key belongs. Shards are given by their end boundaries (i.e. shard 0 covers the space
-     * between minimum and shardBoundaries[0], shard 1 is is between shardBoundaries[0] and shardBoundaries[1]), thus
-     * finding the index of the first bigger boundary gives the index of the covering shard.
-     */
-    public int shardFor(PartitionPosition key)
-    {
-        return shardFor(key, shardBoundaries);
-    }
-
-    public static int shardFor(PartitionPosition key, List<PartitionPosition> shardBoundaries)
-    {
-        int pos = Collections.binarySearch(shardBoundaries, key);
-        assert pos < 0; // boundaries are .minkeybound and .maxkeybound so they should never be equal to a DecoratedKey
-        return -pos - 1;
-    }
-
-    public static int shardsSpanned(CompactionSSTable rdr, List<PartitionPosition> shardBoundaries)
-    {
-        if (shardBoundaries.size() <= 1)
-            return 1;
-        int startIdx = shardFor(rdr.getFirst(), shardBoundaries);
-        PartitionPosition last = rdr.getLast();
-        if (last.compareTo(shardBoundaries.get(startIdx)) < 0)
-            return 1;   // quick path, end boundary is in the same shard
-        return shardFor(last, shardBoundaries) - startIdx + 1;
-    }
-
-    /**
-     * Return the token space share that the given SSTable spans, 1.0 being the full token space.
-     */
-    public static double rangeSpanned(CompactionSSTable rdr)
-    {
-        return rdr.getFirst().getToken().size(rdr.getLast().getToken().nextValidToken());
-    }
-
-    /**
-     * Return the density of an SSTable, i.e. its size divided by the covered token space share.
-     * This is an improved measure of the compaction age of an sstable that grows both with STCS-like full-SSTable
-     * compactions (where size grows, share is constant), LCS-like size-threshold splitting (where size is constant
-     * but share shrinks), UCS-like compactions (where size may grow and covered shards i.e. share may decrease)
-     * and can reproduce levelling structure that corresponds to all, including their mixtures.
-     */
-    public static double density(CompactionSSTable rdr)
-    {
-        return rdr.onDiskLength() / rangeSpanned(rdr);
-    }
-
-    public static Set<CompactionSSTable> sstablesFor(int boundaryIndex,
-                                                     List<PartitionPosition> shardBoundaries,
-                                                     Set<? extends CompactionSSTable> sstables)
-    {
-        assert boundaryIndex < shardBoundaries.size();
-        return sstables.stream()
-                       .filter(sstable -> shardFor(sstable.getFirst(), shardBoundaries) <= boundaryIndex &&
-                                          shardFor(sstable.getLast(), shardBoundaries) >= boundaryIndex)
-                       .collect(Collectors.toSet());
-    }
-
-    public int compareByDensity(CompactionSSTable a, CompactionSSTable b)
-    {
-        return Double.compare(density(a), density(b));
+        return shardManager.shardFor(pos);
     }
 
     /**
@@ -213,6 +148,18 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
             else
                 return "pending_repair_" + ssTableReader.getPendingRepair();
         }
+    }
+
+    /**
+     * Return the shard for an sstable, which may be fixed to zero for L0 sstables if shards are disabled on L0
+     */
+    public int shardFor(CompactionSSTable ssTableReader)
+    {
+        // If shards on L0 are disabled and the size of the sstable is less than the max L0 size, always pick the fist shard
+        if (!controller.areL0ShardsEnabled() && shardManager.density(ssTableReader) < controller.getMaxL0Density())
+            return 0;
+
+        return shardManager.shardFor(ssTableReader.getFirst());
     }
 
     /**

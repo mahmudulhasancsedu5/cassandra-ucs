@@ -97,7 +97,7 @@ public class SortedLocalRangesTest
     SortedLocalRanges makeRanges(long ringVersion, List<Splitter.WeightedRange> ranges)
     {
         when(tmd.getRingVersion()).thenReturn(ringVersion);
-        return new SortedLocalRanges(storageService, cfs, ringVersion, ranges);
+        return new SortedLocalRanges(cfs, ringVersion, ranges);
     }
 
     @Test

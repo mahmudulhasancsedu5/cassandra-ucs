@@ -62,7 +62,6 @@ import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.utils.Throwables.perform;
@@ -295,11 +294,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 return; // another thread beat us to the update
 
             DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
-            List<PartitionPosition> shardBoundaries = computeShardBoundaries(currentBoundaries.getLocalRanges(),
+            SortedLocalRanges localRanges = currentBoundaries.getLocalRanges();
+            List<PartitionPosition> shardBoundaries = computeShardBoundaries(localRanges,
                                                                              currentBoundaries.getPositions(),
                                                                              controller.getNumShards(),
                                                                              realm.getPartitioner());
-            arenaSelector = new ArenaSelector(controller, currentBoundaries, shardBoundaries);
+            arenaSelector = new ArenaSelector(controller, currentBoundaries, shardBoundaries, localRanges);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.
         }
@@ -335,8 +335,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                              .left
                                                              .getPartitioner()
                                                              .equals(partitioner))
-            localRanges = new SortedLocalRanges(StorageService.instance,
-                                                localRanges.getRealm(),
+            localRanges = new SortedLocalRanges(localRanges.getRealm(),
                                                 localRanges.getRingVersion(),
                                                 ImmutableList.of(new Splitter.WeightedRange(1.0,
                                                                                             new Range<>(partitioner.getMinimumToken(),
@@ -411,10 +410,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @VisibleForTesting
-    List<PartitionPosition> getShardBoundaries()
+    ShardManager getShardBoundaries()
     {
         maybeUpdateSelector();
-        return arenaSelector.shardBoundaries;
+        return arenaSelector.shardManager;
     }
 
     private CompactionLimits getCurrentLimits(int maxConcurrentCompactions)
@@ -925,13 +924,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         for (Shard shard : shards)
         {
             List<Bucket> buckets = new ArrayList<>(MAX_LEVELS);
-            shard.sstables.sort(arenaSelector::compareByDensity);
+            shard.sstables.sort(arenaSelector.shardManager::compareByDensity);
 
             int index = 0;
             Bucket bucket = new Bucket(controller, index, 0);
             for (CompactionSSTable candidate : shard.sstables)
             {
-                final double size = arenaSelector.density(candidate);
+                final double size = arenaSelector.shardManager.density(candidate);
                 if (size < bucket.max)
                 {
                     bucket.add(candidate);

@@ -25,11 +25,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
 import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.compaction.CompactionRealm;
+import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.index.Index;
@@ -65,10 +65,11 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     private final Collection<Index.Group> indexGroups;
     private final LifecycleNewTracker lifecycleNewTracker;
     private final long minSstableSizeInBytes;
-    private final List<PartitionPosition> boundaries;
+    private final ShardManager boundaries;
     private final SSTableMultiWriter[] writers;
     private final int estimatedSSTables;
     private int currentBoundary;
+
     private int currentWriter;
 
     public ShardedMultiWriter(CompactionRealm realm,
@@ -82,7 +83,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
                               Collection<Index.Group> indexGroups,
                               LifecycleNewTracker lifecycleNewTracker,
                               long minSstableSizeInBytes,
-                              List<PartitionPosition> boundaries)
+                              ShardManager boundaries)
     {
         this.realm = realm;
         this.descriptor = descriptor;

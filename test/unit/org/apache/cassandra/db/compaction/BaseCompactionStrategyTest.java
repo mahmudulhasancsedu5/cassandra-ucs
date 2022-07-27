@@ -129,7 +129,7 @@ public class BaseCompactionStrategyTest
         if (numShards > 1)
             assertNotNull("Splitter is required with multiple compaction shards", splitter);
 
-        localRanges = SortedLocalRanges.forTesting(realm, ImmutableList.of(new Splitter.WeightedRange(1.0, new Range<>(partitioner.getMinimumToken(), partitioner.getMaximumToken()))));
+        localRanges = SortedLocalRanges.forTestingFull(realm);
 
         when(realm.metadata()).thenReturn(metadata);
         when(realm.getKeyspaceName()).thenReturn(keyspace);

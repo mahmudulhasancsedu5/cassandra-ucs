@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +34,6 @@ import org.apache.cassandra.dht.Splitter;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.locator.TokenMetadata;
-import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.service.PendingRangeCalculatorService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
@@ -47,7 +45,6 @@ public class SortedLocalRanges
 {
     private static final Logger logger = LoggerFactory.getLogger(SortedLocalRanges.class);
 
-    private final StorageService storageService;
     private final CompactionRealm realm;
     private final long ringVersion;
     private final List<Splitter.WeightedRange> ranges;
@@ -55,9 +52,8 @@ public class SortedLocalRanges
 
     private volatile boolean valid;
 
-    public SortedLocalRanges(StorageService storageService, CompactionRealm realm, long ringVersion, List<Splitter.WeightedRange> ranges)
+    public SortedLocalRanges(CompactionRealm realm, long ringVersion, List<Splitter.WeightedRange> ranges)
     {
-        this.storageService = storageService;
         this.realm = realm;
         this.ringVersion = ringVersion;
 
@@ -85,7 +81,6 @@ public class SortedLocalRanges
      */
     static SortedLocalRanges create(ColumnFamilyStore cfs)
     {
-        StorageService storageService = StorageService.instance;
         RangesAtEndpoint localRanges;
         List<Splitter.WeightedRange> weightedRanges;
         long ringVersion;
@@ -110,7 +105,7 @@ public class SortedLocalRanges
         while (ringVersion != tmd.getRingVersion()); // if ringVersion is different here it means that
         // it might have changed before we calculated localRanges - recalculate
 
-        return new SortedLocalRanges(storageService, cfs, ringVersion, weightedRanges);
+        return new SortedLocalRanges(cfs, ringVersion, weightedRanges);
     }
 
     private static RangesAtEndpoint getLocalRanges(ColumnFamilyStore cfs, TokenMetadata tmd)
@@ -135,7 +130,12 @@ public class SortedLocalRanges
     @VisibleForTesting
     public static SortedLocalRanges forTesting(CompactionRealm realm, List<Splitter.WeightedRange> ranges)
     {
-        return new SortedLocalRanges(null, realm, 0, ranges);
+        return new SortedLocalRanges(realm, 0, ranges);
+    }
+
+    public static SortedLocalRanges forTestingFull(CompactionRealm realm)
+    {
+        return forTesting(realm, null);
     }
 
     /**

@@ -20,9 +20,9 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.cassandra.db.Directories;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.CompactionTask;
+import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -34,14 +34,14 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 public class UnifiedCompactionTask extends CompactionTask
 {
     private final long minSstableSizeInBytes;
-    private final List<PartitionPosition> boundaries;
+    private final ShardManager boundaries;
 
     public UnifiedCompactionTask(CompactionRealm cfs,
                                  UnifiedCompactionStrategy strategy,
                                  LifecycleTransaction txn,
                                  int gcBefore,
                                  long minSstableSizeInBytes,
-                                 List<PartitionPosition> boundaries)
+                                 ShardManager boundaries)
     {
         super(cfs, txn, gcBefore, strategy.getController().getIgnoreOverlapsInExpirationCheck(), strategy);
         this.minSstableSizeInBytes = minSstableSizeInBytes;
