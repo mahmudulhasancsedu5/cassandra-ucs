@@ -55,7 +55,6 @@ import org.apache.cassandra.index.transactions.UpdateTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.Cloner;
 import org.apache.cassandra.utils.memory.MemtableAllocator;
@@ -73,19 +72,11 @@ import org.github.jamm.Unmetered;
  *
  * Also see Memtable_API.md.
  */
-public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
+public class ShardedSkipListMemtable extends AbstractShardedMemtable
 {
     private static final Logger logger = LoggerFactory.getLogger(ShardedSkipListMemtable.class);
 
-    public static final String SHARDS_OPTION = "shards";
     public static final String LOCKING_OPTION = "serialize_writes";
-
-    // The boundaries for the keyspace as they were calculated when the memtable is created.
-    // The boundaries will be NONE for system keyspaces or if StorageService is not yet initialized.
-    // The fact this is fixed for the duration of the memtable lifetime, guarantees we'll always pick the same shard
-    // for a given key, even if we race with the StorageService initialization or with topology changes.
-    @Unmetered
-    final ShardBoundaries boundaries;
 
     /**
      * Core-specific memtable regions. All writes must go through the specific core. The data structures used
@@ -93,21 +84,13 @@ public class ShardedSkipListMemtable extends AbstractAllocatorMemtable
      */
     final MemtableShard[] shards;
 
-    @VisibleForTesting
-    public static final String SHARD_COUNT_PROPERTY = "cassandra.memtable.shard.count";
-
-    // default shard count, used when a specific number of shards is not specified in the parameters
-    private static final int SHARD_COUNT = Integer.getInteger(SHARD_COUNT_PROPERTY, FBUtilities.getAvailableProcessors());
-
     // only to be used by init(), to setup the very first memtable for the cfs
     ShardedSkipListMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound,
                             TableMetadataRef metadataRef,
                             Owner owner,
                             Integer shardCountOption)
     {
-        super(commitLogLowerBound, metadataRef, owner);
-        int shardCount = shardCountOption != null ? shardCountOption : SHARD_COUNT;
-        this.boundaries = owner.localRangeSplits(shardCount);
+        super(commitLogLowerBound, metadataRef, owner, shardCountOption);
         this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef);
     }
 

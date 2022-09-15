@@ -52,15 +52,6 @@ import static org.junit.Assert.fail;
 
 public class AlterTest extends CQLTester
 {
-    @BeforeClass
-    public static void setUpClass()
-    {
-        // AlterTest uses Murmur3 partitioner, but injects OrderPreservingPartitioner.StringToken
-        // into TokenMetadata; expect trouble
-        System.setProperty(ShardedSkipListMemtable.SHARD_COUNT_PROPERTY, "1");
-        CQLTester.setUpClass();
-    }
-
     @Test
     public void testAddList() throws Throwable
     {

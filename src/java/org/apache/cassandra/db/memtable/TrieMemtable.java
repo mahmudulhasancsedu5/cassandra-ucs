@@ -79,15 +79,12 @@ import org.apache.cassandra.utils.memory.EnsureOnHeap;
 import org.apache.cassandra.utils.memory.MemtableAllocator;
 import org.github.jamm.Unmetered;
 
-public class TrieMemtable extends AbstractAllocatorMemtable
+public class TrieMemtable extends AbstractShardedMemtable
 {
     private static final Logger logger = LoggerFactory.getLogger(TrieMemtable.class);
-    public static final String TRIE_MEMTABLE_CONFIG_OBJECT_NAME = "org.apache.cassandra.db:type=TrieMemtableConfig";
 
     /** Buffer type to use for memtable tries (on- vs off-heap) */
     public static final BufferType BUFFER_TYPE;
-
-    public static final String SHARDS_OPTION = "shards";
 
     static
     {
@@ -104,8 +101,6 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         default:
             throw new AssertionError();
         }
-
-        MBeanWrapper.instance.registerMBean(new TrieMemtableConfig(), TRIE_MEMTABLE_CONFIG_OBJECT_NAME, MBeanWrapper.OnException.LOG);
     }
 
     /** If keys is below this length, we will use a recursive procedure for inserting data in the memtable trie. */
@@ -118,14 +113,6 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     // Set to true when the memtable requests a switch (e.g. for trie size limit being reached) to ensure only one
     // thread calls cfs.switchMemtableIfCurrent.
     private AtomicBoolean switchRequested = new AtomicBoolean(false);
-
-
-    // The boundaries for the keyspace as they were calculated when the memtable is created.
-    // The boundaries will be NONE for system keyspaces or if StorageService is not yet initialized.
-    // The fact this is fixed for the duration of the memtable lifetime, guarantees we'll always pick the same core
-    // for the a given key, even if we race with the StorageService initialization or with topology changes.
-    @Unmetered
-    private final ShardBoundaries boundaries;
 
     /**
      * Core-specific memtable regions. All writes must go through the specific core. The data structures used
@@ -142,18 +129,10 @@ public class TrieMemtable extends AbstractAllocatorMemtable
     @Unmetered
     private final TrieMemtableMetricsView metrics;
 
-    @VisibleForTesting
-    public static final String SHARD_COUNT_PROPERTY = "cassandra.trie.memtable.shard.count";
-
-    // default shard count, used when a specific number of shards is not specified in the options
-    private static volatile int SHARD_COUNT = Integer.getInteger(SHARD_COUNT_PROPERTY, FBUtilities.getAvailableProcessors());
-
     // only to be used by init(), to setup the very first memtable for the cfs
     TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption)
     {
-        super(commitLogLowerBound, metadataRef, owner);
-        int shardCount = shardCountOption != null ? shardCountOption : getShardCount();
-        this.boundaries = owner.localRangeSplits(shardCount);
+        super(commitLogLowerBound, metadataRef, owner, shardCountOption);
         this.metrics = new TrieMemtableMetricsView(metadataRef.keyspace, metadataRef.name);
         this.shards = generatePartitionShards(boundaries.shardCount(), allocator, metadataRef, metrics);
         this.mergedTrie = makeMergedTrie(shards);
@@ -758,36 +737,5 @@ public class TrieMemtable extends AbstractAllocatorMemtable
         for (MemtableShard shard : shards)
             size += shard.data.unusedReservedMemory();
         return size;
-    }
-
-    private static class TrieMemtableConfig implements TrieMemtableConfigMXBean
-    {
-        @Override
-        public void setShardCount(String shardCount)
-        {
-            if ("auto".equalsIgnoreCase(shardCount))
-            {
-                SHARD_COUNT = FBUtilities.getAvailableProcessors();
-            }
-            else
-            {
-                try
-                {
-                    SHARD_COUNT = Integer.valueOf(shardCount);
-                }
-                catch (NumberFormatException ex)
-                {
-                    logger.warn("Unable to parse {} as valid value for shard count", shardCount);
-                    return;
-                }
-            }
-            logger.info("Requested setting shard count to {}; set to: {}", shardCount, SHARD_COUNT);
-        }
-    }
-
-    @VisibleForTesting
-    public static int getShardCount()
-    {
-        return SHARD_COUNT;
     }
 }

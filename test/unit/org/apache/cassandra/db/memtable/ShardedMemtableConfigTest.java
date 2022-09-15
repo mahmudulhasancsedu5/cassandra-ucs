@@ -34,10 +34,10 @@ import org.junit.Test;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.utils.FBUtilities;
 
-import static org.apache.cassandra.db.memtable.TrieMemtable.TRIE_MEMTABLE_CONFIG_OBJECT_NAME;
+import static org.apache.cassandra.db.memtable.AbstractShardedMemtable.SHARDED_MEMTABLE_CONFIG_OBJECT_NAME;
 import static org.junit.Assert.assertEquals;
 
-public class TrieMemtableConfigTest extends CQLTester
+public class ShardedMemtableConfigTest extends CQLTester
 {
     @BeforeClass
     public static void setup() throws Exception
@@ -47,16 +47,22 @@ public class TrieMemtableConfigTest extends CQLTester
     }
 
     @Test
-    public void testShardCountSetByJMX() throws MalformedObjectNameException, ReflectionException, AttributeNotFoundException, InstanceNotFoundException, MBeanException, IOException, InvalidAttributeValueException
+    public void testShardCountSetByJMX() throws MalformedObjectNameException, ReflectionException, AttributeNotFoundException, InstanceNotFoundException, MBeanException, IOException, InvalidAttributeValueException, InterruptedException
     {
-        jmxConnection.setAttribute(new ObjectName(TRIE_MEMTABLE_CONFIG_OBJECT_NAME), new Attribute("ShardCount", "7"));
-        assertEquals(7, TrieMemtable.getShardCount());
+        // check the default, but also make sure the class is initialized if the default memtable is not sharded
+        assertEquals(FBUtilities.getAvailableProcessors(), AbstractShardedMemtable.getDefaultShardCount());
+        jmxConnection.setAttribute(new ObjectName(SHARDED_MEMTABLE_CONFIG_OBJECT_NAME), new Attribute("ShardCount", "7"));
+        assertEquals(7, AbstractShardedMemtable.getDefaultShardCount());
+        assertEquals("7", jmxConnection.getAttribute(new ObjectName(SHARDED_MEMTABLE_CONFIG_OBJECT_NAME), "ShardCount"));
     }
 
     @Test
     public void testAutoShardCount() throws MalformedObjectNameException, ReflectionException, AttributeNotFoundException, InstanceNotFoundException, MBeanException, IOException, InvalidAttributeValueException
     {
-        jmxConnection.setAttribute(new ObjectName(TRIE_MEMTABLE_CONFIG_OBJECT_NAME), new Attribute("ShardCount", "auto"));
-        assertEquals(FBUtilities.getAvailableProcessors(), TrieMemtable.getShardCount());
+        AbstractShardedMemtable.getDefaultShardCount();    // initialize class
+        jmxConnection.setAttribute(new ObjectName(SHARDED_MEMTABLE_CONFIG_OBJECT_NAME), new Attribute("ShardCount", "auto"));
+        assertEquals(FBUtilities.getAvailableProcessors(), AbstractShardedMemtable.getDefaultShardCount());
+        assertEquals(Integer.toString(FBUtilities.getAvailableProcessors()),
+                     jmxConnection.getAttribute(new ObjectName(SHARDED_MEMTABLE_CONFIG_OBJECT_NAME), "ShardCount"));
     }
 }
