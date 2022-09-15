@@ -49,6 +49,7 @@ default_env_vars: &default_env_vars
     # REPEATED_UTEST_TARGET: test-jvm-dtest-some
     # REPEATED_UTEST_TARGET: test-cdc
     # REPEATED_UTEST_TARGET: test-compression
+    # REPEATED_UTEST_TARGET: test-trie
     # REPEATED_UTEST_TARGET: test-system-keyspace-directory
     REPEATED_UTEST_TARGET: testsome
     # The name of JUnit class to be run multiple times, for example:
@@ -234,6 +235,12 @@ j8_with_dtests_jobs: &j8_with_dtests_jobs
         requires:
           - start_utests_compression
           - j8_build
+    - start_utests_trie:
+        type: approval
+    - utests_trie:
+        requires:
+          - start_utests_trie
+          - j8_build
     - start_utests_stress:
         type: approval
     - utests_stress:
@@ -413,6 +420,12 @@ j8_pre-commit_jobs: &j8_pre-commit_jobs
     - utests_compression:
         requires:
           - start_utests_compression
+          - j8_build
+    - start_utests_trie:
+        type: approval
+    - utests_trie:
+        requires:
+          - start_utests_trie
           - j8_build
     - start_utests_stress:
         type: approval
@@ -861,6 +874,16 @@ jobs:
       - log_environment
       - run_parallel_junit_tests:
           target: testclasslist-compression
+
+  utests_trie:
+    <<: *j8_par_executor
+    steps:
+      - attach_workspace:
+          at: /home/cassandra
+      - create_junit_containers
+      - log_environment
+      - run_parallel_junit_tests:
+          target: testclasslist-trie
 
   utests_stress:
     <<: *j8_seq_executor
@@ -1608,6 +1631,7 @@ commands:
                 if [[ $target == "test" || \
                       $target == "test-cdc" || \
                       $target == "test-compression" || \
+                      $target == "test-trie" || \
                       $target == "test-system-keyspace-directory" ]]; then
                   name="-Dtest.name=$class_name"
                 else

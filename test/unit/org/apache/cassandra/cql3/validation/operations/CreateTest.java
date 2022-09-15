@@ -597,6 +597,7 @@ public class CreateTest extends CQLTester
     {
         createTable("CREATE TABLE %s (a text, b int, c int, primary key (a, b))");
         assertSame(MemtableParams.DEFAULT.factory(), getCurrentColumnFamilyStore().metadata().params.memtable.factory());
+        Class<? extends Memtable> defaultClass = getCurrentColumnFamilyStore().getTracker().getView().getCurrentMemtable().getClass();
 
         assertSchemaOption("memtable", null);
 
@@ -605,7 +606,7 @@ public class CreateTest extends CQLTester
         testMemtableConfig("skiplist_remapped", SkipListMemtable.FACTORY, SkipListMemtable.class);
         testMemtableConfig("test_fullname", TestMemtable.FACTORY, SkipListMemtable.class);
         testMemtableConfig("test_shortname", SkipListMemtable.FACTORY, SkipListMemtable.class);
-        testMemtableConfig("default", MemtableParams.DEFAULT.factory(), SkipListMemtable.class);
+        testMemtableConfig("default", MemtableParams.DEFAULT.factory(), defaultClass);
 
         assertThrowsConfigurationException("The 'class_name' option must be specified.",
                                            "CREATE TABLE %s (a text, b int, c int, primary key (a, b))"

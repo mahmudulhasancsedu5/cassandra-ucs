@@ -1,0 +1,3 @@
+# Note: this attaches at the end of cassandra.yaml, where the memtable configuration setting must be.
+        default:
+            inherits: trie
