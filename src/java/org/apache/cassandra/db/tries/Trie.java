@@ -35,20 +35,21 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
  * Normal users of tries will only use the public methods, which provide various transformations of the trie, conversion
  * of its content to other formats (e.g. iterable of values), and several forms of processing.
  *
- * For any unimplemented data extraction operations one can build on the TrieEntriesWalker (for-each processing) and
- * TrieEntriesIterator (to iterator) base classes, which provide the necessary mechanisms to handle walking the trie.
+ * For any unimplemented data extraction operations one can build on the {@link TrieEntriesWalker} (for-each processing)
+ * and {@link TrieEntriesIterator} (to iterator) base classes, which provide the necessary mechanisms to handle walking
+ * the trie.
  *
- * The internal representation of tries using this interface is defined in the Cursor interface.
+ * The internal representation of tries using this interface is defined in the {@link Cursor} interface.
  *
  * Cursors are a method of presenting the internal structure of a trie without representing nodes as objects, which is
  * still useful for performing the basic operations on tries (iteration, slicing/intersection and merging). A cursor
  * will list the nodes of a trie in order, together with information about the path that was taken to reach them.
  *
- * To begin traversal over a trie, one must retrieve a cursor by calling cursor(). Because cursors are stateful, the
- * traversal must always proceed from one thread. Should concurrent reads be required, separate calls to cursor() must
- * be made. Any modification that has completed before the construction of a cursor must be visible, but any later
- * concurrent modifications may be presented fully, partially or not at all; this also means that if multiple are made,
- * the cursor may see any part of any subset of them.
+ * To begin traversal over a trie, one must retrieve a cursor by calling {@link #cursor()}. Because cursors are
+ * stateful, the traversal must always proceed from one thread. Should concurrent reads be required, separate calls to
+ * {@link #cursor()} must be made. Any modification that has completed before the construction of a cursor must be
+ * visible, but any later concurrent modifications may be presented fully, partially or not at all; this also means that
+ * if multiple are made, the cursor may see any part of any subset of them.
  *
  * Note: This model only supports depth-first traversals. We do not currently have a need for breadth-first walks.
  *

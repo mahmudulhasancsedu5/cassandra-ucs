@@ -43,6 +43,6 @@ public class MemtableSizeHeapBuffersTest extends MemtableSizeTestBase
         MemtablePool memoryPool = AbstractAllocatorMemtable.MEMORY_POOL;
         logger.info("Memtable pool {} off-heap limit {}", memoryPool, memoryPool.offHeap.limit);
         Assert.assertTrue(memoryPool instanceof SlabPool);
-        Assert.assertTrue(memoryPool.offHeap.limit == 0);
+        Assert.assertEquals(0, memoryPool.offHeap.limit);
     }
 }

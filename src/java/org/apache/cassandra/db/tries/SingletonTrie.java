@@ -55,7 +55,9 @@ class SingletonTrie<T> extends Trie<T>
                 return ++currentDepth;
             }
             else
+            {
                 return currentDepth = -1;
+            }
         }
 
         @Override

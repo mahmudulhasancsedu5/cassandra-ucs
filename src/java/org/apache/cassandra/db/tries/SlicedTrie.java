@@ -74,7 +74,7 @@ public class SlicedTrie<T> extends Trie<T>
         /** The cursor is positioned inside the range, i.e. beyond the left bound, possibly on a prefix of the right. */
         INSIDE,
         /** The cursor is positioned beyond the right bound. Exhaustion (depth -1) has been reported. */
-        AFTER_RIGHT;
+        AFTER_RIGHT
     }
 
     private static class SlicedCursor<T> implements Cursor<T>

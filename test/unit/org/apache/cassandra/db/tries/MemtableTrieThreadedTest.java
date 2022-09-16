@@ -56,7 +56,7 @@ public class MemtableTrieThreadedTest
         ByteComparable[] src = generateKeys(rand, COUNT + OTHERS);
         MemtableTrie<String> trie = new MemtableTrie<>(BufferType.ON_HEAP);
         ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
-        List<Thread> threads = new ArrayList<Thread>();
+        List<Thread> threads = new ArrayList<>();
         AtomicBoolean writeCompleted = new AtomicBoolean(false);
         AtomicInteger writeProgress = new AtomicInteger(0);
 

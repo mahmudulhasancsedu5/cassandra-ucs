@@ -71,7 +71,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     // constants for space calculations
     private static final long EMPTY_SIZE_ON_HEAP;
     private static final long EMPTY_SIZE_OFF_HEAP;
-    private static final long REFERENCE_ARRAY_ON_HEAP_SIZE = ObjectSizes.measureDeep(new AtomicReferenceArray(0));
+    private static final long REFERENCE_ARRAY_ON_HEAP_SIZE = ObjectSizes.measureDeep(new AtomicReferenceArray<>(0));
 
     static
     {
@@ -699,7 +699,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         }
 
         /**
-         * Combine existing and and new content.
+         * Combine existing and new content.
          */
         private <U> int updateContentIndex(U mutationContent, int existingContentIndex, final UpsertTransformer<T, U> transformer)
         {

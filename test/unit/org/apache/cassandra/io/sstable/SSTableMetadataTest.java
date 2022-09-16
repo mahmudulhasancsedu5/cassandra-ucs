@@ -273,7 +273,7 @@ public class SSTableMetadataTest
         {
             assertFalse(b.isDirect());
             assertTrue(b.hasArray());
-            assertTrue(b.capacity() == b.remaining());
+            assertEquals(b.capacity(), b.remaining());
             assertEquals(0, b.arrayOffset());
             assertEquals(b.capacity(), b.array().length);
         }

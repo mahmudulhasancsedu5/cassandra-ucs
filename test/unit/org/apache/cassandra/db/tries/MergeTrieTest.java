@@ -60,14 +60,14 @@ public class MergeTrieTest
         SortedMap<ByteComparable, ByteBuffer> content1 = new TreeMap<>((bytes1, bytes2) -> ByteComparable.compare(bytes1, bytes2, VERSION));
         SortedMap<ByteComparable, ByteBuffer> content2 = new TreeMap<>((bytes1, bytes2) -> ByteComparable.compare(bytes1, bytes2, VERSION));
 
-        MemtableTrie trie1 = makeMemtableTrie(src1, content1, true);
-        MemtableTrie trie2 = makeMemtableTrie(src2, content2, true);
+        MemtableTrie<ByteBuffer> trie1 = makeMemtableTrie(src1, content1, true);
+        MemtableTrie<ByteBuffer> trie2 = makeMemtableTrie(src2, content2, true);
 
         addToMemtableTrie(generateKeys(new Random(5), COUNT), content1, trie1, true);
         addToMemtableTrie(generateKeys(new Random(5), COUNT), content2, trie2, true);
 
         content1.putAll(content2);
-        Trie union = trie1.mergeWith(trie2, (x, y) -> y);
+        Trie<ByteBuffer> union = trie1.mergeWith(trie2, (x, y) -> y);
 
         assertSameContent(union, content1);
     }

@@ -161,7 +161,7 @@ public class ClusteringPrefixTest
             testRetainable(ByteBufferAccessor.instance.factory(),
                            x -> new ByteBuffer[] {ByteBufferUtil.bytes(x)},
                            x -> x.kind() == ClusteringPrefix.Kind.CLUSTERING
-                                ? new NativeClustering(allocator, null, (Clustering) x)
+                                ? new NativeClustering(allocator, null, (Clustering<?>) x)
                                 : x);
         }
         finally
@@ -201,18 +201,18 @@ public class ClusteringPrefixTest
         testRetainable(clusterings);
     }
 
-    public void testRetainable(ClusteringPrefix[] clusterings)
+    public void testRetainable(ClusteringPrefix<?>[] clusterings)
     {
-        for (ClusteringPrefix clustering : clusterings)
+        for (ClusteringPrefix<?> clustering : clusterings)
         {
-            ClusteringPrefix retainable = clustering.retainable();
+            ClusteringPrefix<?> retainable = clustering.retainable();
             assertEquals(clustering, retainable);
             assertClusteringIsRetainable(retainable);
         }
     }
 
 
-    public static void assertClusteringIsRetainable(ClusteringPrefix clustering)
+    public static void assertClusteringIsRetainable(ClusteringPrefix<?> clustering)
     {
         if (clustering instanceof AbstractArrayClusteringPrefix)
             return; // has to be on-heap and minimized
@@ -224,7 +224,7 @@ public class ClusteringPrefixTest
         {
             assertFalse(b.isDirect());
             assertTrue(b.hasArray());
-            assertTrue(b.capacity() == b.remaining());
+            assertEquals(b.capacity(), b.remaining());
             assertEquals(0, b.arrayOffset());
             assertEquals(b.capacity(), b.array().length);
         }

@@ -74,6 +74,7 @@ public abstract class TrieEntriesIterator<T, V> extends TriePathReconstructor im
             super(trie);
         }
 
+        @Override
         protected Map.Entry<ByteComparable, T> mapContent(T content, byte[] bytes, int byteLength)
         {
             return toEntry(content, bytes, byteLength);
