@@ -80,11 +80,13 @@ public class ClusteringPrefixTest
     public void testRetainableOnHeapSliced()
     {
         for (int prepend = 0; prepend < 3; ++prepend)
+        {
             for (int append = 0; append < 3; ++append)
             {
                 testRetainable(ByteBufferAccessor.instance.factory(),
                                slicingAllocator(prepend, append));
             }
+        }
     }
 
     private Function<String, ByteBuffer[]> slicingAllocator(int prepend, int append)

@@ -39,9 +39,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.OverrideConfigurationLoader;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.dht.Murmur3Partitioner;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Splitter;
+import org.apache.cassandra.db.memtable.AbstractShardedMemtable;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.service.EmbeddedCassandraService;
@@ -60,7 +58,7 @@ public class TrieMemtableMetricsTest extends SchemaLoader
 {
     private static final int NUM_SHARDS = 13;
 
-    private static Logger logger = LoggerFactory.getLogger(TrieMemtableMetricsTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(TrieMemtableMetricsTest.class);
     private static Session session;
 
     private static final String KEYSPACE = "triememtable";
@@ -79,7 +77,7 @@ public class TrieMemtableMetricsTest extends SchemaLoader
         OverrideConfigurationLoader.override((config) -> {
             config.partitioner = "Murmur3Partitioner";
         });
-        System.setProperty("cassandra.trie.memtable.shard.count", "" + NUM_SHARDS);
+        System.setProperty(AbstractShardedMemtable.DEFAULT_SHARD_COUNT_PROPERTY, "" + NUM_SHARDS);
 
         SchemaLoader.loadSchema();
 

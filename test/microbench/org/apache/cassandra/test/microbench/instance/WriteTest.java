@@ -20,9 +20,6 @@ package org.apache.cassandra.test.microbench.instance;
 
 
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
-import java.util.stream.LongStream;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.openjdk.jmh.annotations.*;

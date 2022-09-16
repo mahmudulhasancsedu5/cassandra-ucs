@@ -47,13 +47,13 @@ public abstract class AbstractBufferClusteringPrefix extends AbstractOnHeapClust
         if (!ByteBufferUtil.canMinimize(values))
             return this;
 
-        ByteBuffer[] values = ByteBufferUtil.minimizeBuffers(this.values);
+        ByteBuffer[] minimizedValues = ByteBufferUtil.minimizeBuffers(this.values);
         if (kind.isBoundary())
-            return accessor().factory().boundary(kind, values);
+            return accessor().factory().boundary(kind, minimizedValues);
         if (kind.isBound())
-            return accessor().factory().bound(kind, values);
+            return accessor().factory().bound(kind, minimizedValues);
 
         assert kind() != Kind.STATIC_CLUSTERING;    // not minimizable
-        return accessor().factory().clustering(values);
+        return accessor().factory().clustering(minimizedValues);
     }
 }

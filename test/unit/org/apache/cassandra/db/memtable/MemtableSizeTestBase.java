@@ -25,6 +25,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import org.slf4j.Logger;
@@ -41,6 +42,7 @@ import org.github.jamm.MemoryMeter;
 
 // Note: This test can be run in idea with the allocation type configured in the test yaml and memtable using the
 // value memtableClass is initialized with.
+@RunWith(Parameterized.class)
 public class MemtableSizeTestBase extends CQLTester
 {
     // Note: To see a printout of the usage for each object, add .enableDebug() here (most useful with smaller number of
@@ -85,7 +87,7 @@ public class MemtableSizeTestBase extends CQLTester
         }
         catch (NoSuchFieldException | IllegalAccessException e)
         {
-            throw Throwables.propagate(e);
+            throw new RuntimeException(e);
         }
 
         CQLTester.setUpClass();

@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import com.google.common.collect.Iterators;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,8 +69,6 @@ import org.apache.cassandra.metrics.TrieMemtableMetricsView;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.Clock;
-import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.MBeanWrapper;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.concurrent.OpOrder;
@@ -112,11 +109,12 @@ public class TrieMemtable extends AbstractShardedMemtable
 
     // Set to true when the memtable requests a switch (e.g. for trie size limit being reached) to ensure only one
     // thread calls cfs.switchMemtableIfCurrent.
-    private AtomicBoolean switchRequested = new AtomicBoolean(false);
+    private final AtomicBoolean switchRequested = new AtomicBoolean(false);
 
     /**
-     * Core-specific memtable regions. All writes must go through the specific core. The data structures used
-     * are concurrent-read safe, thus reads can be carried out from any thread.
+     * Sharded memtable sections. Each is responsible for a contiguous range of the token space (between boundaries[i]
+     * and boundaries[i+1]) and is written to by one thread at a time, while reads are carried out concurrently
+     * (including with any write).
      */
     private final MemtableShard[] shards;
 
@@ -129,7 +127,6 @@ public class TrieMemtable extends AbstractShardedMemtable
     @Unmetered
     private final TrieMemtableMetricsView metrics;
 
-    // only to be used by init(), to setup the very first memtable for the cfs
     TrieMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound, TableMetadataRef metadataRef, Owner owner, Integer shardCountOption)
     {
         super(commitLogLowerBound, metadataRef, owner, shardCountOption);
@@ -162,7 +159,7 @@ public class TrieMemtable extends AbstractShardedMemtable
     public boolean isClean()
     {
         for (MemtableShard shard : shards)
-            if (!shard.isEmpty())
+            if (!shard.isClean())
                 return false;
         return true;
     }
@@ -177,6 +174,7 @@ public class TrieMemtable extends AbstractShardedMemtable
         {
             metrics.lastFlushShardDataSizes.update(shard.liveDataSize());
         }
+        // the buffer release is a longer-running process, do it in a separate loop to not make the metrics update wait
         for (MemtableShard shard : shards)
         {
             shard.data.discardBuffers();
@@ -411,17 +409,16 @@ public class TrieMemtable extends AbstractShardedMemtable
         private volatile long currentOperations = 0;
 
         @Unmetered
-        private ReentrantLock writeLock = new ReentrantLock();
+        private final ReentrantLock writeLock = new ReentrantLock();
 
         // Content map for the given shard. This is implemented as a memtable trie which uses the prefix-free
         // byte-comparable ByteSource representations of the keys to address the partitions.
         //
         // This map is used in a single-producer, multi-consumer fashion: only one thread will insert items but
-        // several threads may read from it and iterate over it. Iterators are created when a the first item of
-        // a flow is requested for example, and then used asynchronously when sub-sequent items are requested.
-        //
-        // Therefore, iterators should not throw ConcurrentModificationExceptions if the underlying map is modified
-        // during iteration, they should provide a weakly consistent view of the map instead.
+        // several threads may read from it and iterate over it. Iterators (especially partition range iterators)
+        // may operate for a long period of time and thus iterators should not throw ConcurrentModificationExceptions
+        // if the underlying map is modified during iteration, they should provide a weakly consistent view of the map
+        // instead.
         //
         // Also, this data is backed by memtable memory, when accessing it callers must specify if it can be accessed
         // unsafely, meaning that the memtable will not be discarded as long as the data is used, or whether the data
@@ -480,20 +477,19 @@ public class TrieMemtable extends AbstractShardedMemtable
                     }
                     catch (MemtableTrie.SpaceExhaustedException e)
                     {
-                        // This should never really happen as a flush would be triggered long before this limit is reached.
-                        throw Throwables.propagate(e);
+                        // This should never happen as a flush would be triggered long before this limit is reached.
+                        throw new IllegalStateException(e);
                     }
                     allocator.offHeap().adjust(data.sizeOffHeap() - offHeap, opGroup);
                     allocator.onHeap().adjust(data.sizeOnHeap() - onHeap, opGroup);
                 }
                 finally
                 {
-                    updateMinTimestamp(update.stats().minTimestamp);
-                    updateMinLocalDeletionTime(update.stats().minLocalDeletionTime);
-                    updateLiveDataSize(updater.dataSize);
-                    updateCurrentOperations(update.operationCount());
+                    minTimestamp = Math.min(minTimestamp, update.stats().minTimestamp);
+                    minLocalDeletionTime = Math.min(minLocalDeletionTime, update.stats().minLocalDeletionTime);
+                    liveDataSize += updater.dataSize;
+                    currentOperations += update.operationCount();
 
-                    // TODO: lambov 2021-03-30: check if stats are further optimisable
                     columnsCollector.update(update.columns());
                     statsCollector.update(update.stats());
                 }
@@ -505,31 +501,9 @@ public class TrieMemtable extends AbstractShardedMemtable
             return updater.colUpdateTimeDelta;
         }
 
-        public boolean isEmpty()
+        public boolean isClean()
         {
             return data.isEmpty();
-        }
-
-        private void updateMinTimestamp(long timestamp)
-        {
-            if (timestamp < minTimestamp)
-                minTimestamp = timestamp;
-        }
-
-        private void updateMinLocalDeletionTime(int delTime)
-        {
-            if (delTime < minLocalDeletionTime)
-                minLocalDeletionTime = delTime;
-        }
-
-        void updateLiveDataSize(long size)
-        {
-            liveDataSize = liveDataSize + size;
-        }
-
-        private void updateCurrentOperations(long op)
-        {
-            currentOperations = currentOperations + op;
         }
 
         public int size()
@@ -562,7 +536,6 @@ public class TrieMemtable extends AbstractShardedMemtable
     {
         private final TableMetadata metadata;
         private final EnsureOnHeap ensureOnHeap;
-        private final Trie<BTreePartitionData> source;
         private final Iterator<Map.Entry<ByteComparable, BTreePartitionData>> iter;
         private final ColumnFilter columnFilter;
         private final DataRange dataRange;
@@ -576,7 +549,6 @@ public class TrieMemtable extends AbstractShardedMemtable
             this.metadata = metadata;
             this.ensureOnHeap = ensureOnHeap;
             this.iter = source.entryIterator();
-            this.source = source;
             this.columnFilter = columnFilter;
             this.dataRange = dataRange;
         }
@@ -660,8 +632,7 @@ public class TrieMemtable extends AbstractShardedMemtable
         @Override
         public UnfilteredRowIterator unfilteredIterator(ColumnFilter selection, NavigableSet<Clustering<?>> clusteringsInQueryOrder, boolean reversed)
         {
-            return ensureOnHeap
-                            .applyToPartition(super.unfilteredIterator(selection, clusteringsInQueryOrder, reversed));
+            return ensureOnHeap.applyToPartition(super.unfilteredIterator(selection, clusteringsInQueryOrder, reversed));
         }
 
         @Override
@@ -673,8 +644,7 @@ public class TrieMemtable extends AbstractShardedMemtable
         @Override
         public UnfilteredRowIterator unfilteredIterator(BTreePartitionData current, ColumnFilter selection, Slices slices, boolean reversed)
         {
-            return ensureOnHeap
-                            .applyToPartition(super.unfilteredIterator(current, selection, slices, reversed));
+            return ensureOnHeap.applyToPartition(super.unfilteredIterator(current, selection, slices, reversed));
         }
 
         @Override

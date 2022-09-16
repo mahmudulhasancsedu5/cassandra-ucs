@@ -1457,49 +1457,49 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         ShardBoundaries shardBoundaries = cachedShardBoundaries;
 
-            if (shardBoundaries == null ||
-                shardBoundaries.shardCount() != shardCount ||
-                shardBoundaries.ringVersion != -1 && shardBoundaries.ringVersion != StorageService.instance.getTokenMetadata().getRingVersion())
+        if (shardBoundaries == null ||
+            shardBoundaries.shardCount() != shardCount ||
+            shardBoundaries.ringVersion != -1 && shardBoundaries.ringVersion != StorageService.instance.getTokenMetadata().getRingVersion())
+        {
+            List<Splitter.WeightedRange> weightedRanges;
+            long ringVersion;
+            if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName()))
             {
-                List<Splitter.WeightedRange> weightedRanges;
-                long ringVersion;
-                if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName()))
-                {
-                    Preconditions.checkState(getPartitioner() == StorageService.instance.getTokenMetadata().partitioner,
-                                             "Only local system tables can use non-system partitioner.");
-                    DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
-                    Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
-                    ringVersion = versionedLocalRanges.ringVersion;
+                Preconditions.checkState(getPartitioner() == StorageService.instance.getTokenMetadata().partitioner,
+                                         "Only local system tables can use non-system partitioner.");
+                DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
+                Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
+                ringVersion = versionedLocalRanges.ringVersion;
 
-                    if (!localRanges.isEmpty())
+                if (!localRanges.isEmpty())
+                {
+                    weightedRanges = new ArrayList<>(localRanges.size());
+                    for (Range<Token> r : localRanges)
                     {
-                        weightedRanges = new ArrayList<>(localRanges.size());
-                        for (Range<Token> r : localRanges)
-                        {
-                            // WeightedRange supports only unwrapped ranges as it relies
-                            // on right - left == num tokens equality
-                            for (Range<Token> u: r.unwrap())
-                                weightedRanges.add(new Splitter.WeightedRange(1.0, u));
-                        }
-                        weightedRanges.sort(Comparator.comparing(Splitter.WeightedRange::left));
+                        // WeightedRange supports only unwrapped ranges as it relies
+                        // on right - left == num tokens equality
+                        for (Range<Token> u: r.unwrap())
+                            weightedRanges.add(new Splitter.WeightedRange(1.0, u));
                     }
-                    else
-                    {
-                        weightedRanges = fullWeightedRange();
-                    }
+                    weightedRanges.sort(Comparator.comparing(Splitter.WeightedRange::left));
                 }
                 else
                 {
-                    // Local tables need to cover the full token range and don't care about ring changes.
                     weightedRanges = fullWeightedRange();
-                    ringVersion = -1;
                 }
+            }
+            else
+            {
+                // Local tables need to cover the full token range and don't care about ring changes.
+                weightedRanges = fullWeightedRange();
+                ringVersion = -1;
+            }
 
-                List<Token> boundaries = getPartitioner().splitter().get().splitOwnedRanges(shardCount, weightedRanges, false);
-                shardBoundaries = new ShardBoundaries(boundaries.subList(0, boundaries.size() - 1),
-                                                      ringVersion);
-                cachedShardBoundaries = shardBoundaries;
-                logger.debug("Memtable shard boundaries for {}.{}: {}", keyspace.getName(), getTableName(), boundaries);
+            List<Token> boundaries = getPartitioner().splitter().get().splitOwnedRanges(shardCount, weightedRanges, false);
+            shardBoundaries = new ShardBoundaries(boundaries.subList(0, boundaries.size() - 1),
+                                                  ringVersion);
+            cachedShardBoundaries = shardBoundaries;
+            logger.debug("Memtable shard boundaries for {}.{}: {}", keyspace.getName(), getTableName(), boundaries);
         }
         return shardBoundaries;
     }

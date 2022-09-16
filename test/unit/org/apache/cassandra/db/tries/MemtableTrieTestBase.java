@@ -37,7 +37,6 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.ObjectSizes;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 public abstract class MemtableTrieTestBase
 {
@@ -624,7 +623,7 @@ public abstract class MemtableTrieTestBase
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
-            throw Throwables.propagate(e);
+            throw new RuntimeException(e);
         }
     }
 }

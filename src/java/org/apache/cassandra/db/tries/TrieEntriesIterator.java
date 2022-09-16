@@ -66,8 +66,7 @@ public abstract class TrieEntriesIterator<T, V> extends TriePathReconstructor im
     /**
      * Iterator representing the content of the trie a sequence of (path, content) pairs.
      */
-    static class AsEntries<T>
-    extends TrieEntriesIterator<T, Map.Entry<ByteComparable, T>>
+    static class AsEntries<T> extends TrieEntriesIterator<T, Map.Entry<ByteComparable, T>>
     {
         public AsEntries(Trie<T> trie)
         {

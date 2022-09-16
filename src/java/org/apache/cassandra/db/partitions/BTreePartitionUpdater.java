@@ -61,7 +61,7 @@ public class BTreePartitionUpdater implements UpdateFunction<Row, Row>, ColumnDa
         if (current == null)
         {
             current = BTreePartitionData.EMPTY;
-            this.onAllocatedOnHeap(BTreePartitionData.UNSHARED_HEAP_SIZE);
+            onAllocatedOnHeap(BTreePartitionData.UNSHARED_HEAP_SIZE);
         }
 
         try
@@ -84,18 +84,23 @@ public class BTreePartitionUpdater implements UpdateFunction<Row, Row>, ColumnDa
         RegularAndStaticColumns columns = current.columns;
         RegularAndStaticColumns newColumns = update.columns().mergeTo(columns);
         onAllocatedOnHeap(newColumns.unsharedHeapSize() - columns.unsharedHeapSize());
-        Row newStatic = update.staticRow();
-        newStatic = newStatic.isEmpty()
-                    ? current.staticRow
-                    : (current.staticRow.isEmpty()
-                       ? this.insert(newStatic)
-                       : this.merge(current.staticRow, newStatic));
+        Row newStatic = mergeStatic(current.staticRow, update.staticRow());
 
         Object[] tree = BTree.update(current.tree, update.holder().tree, update.metadata().comparator, this);
         EncodingStats newStats = current.stats.mergeWith(update.stats());
         onAllocatedOnHeap(newStats.unsharedHeapSize() - current.stats.unsharedHeapSize());
 
         return new BTreePartitionData(newColumns, tree, newDeletionInfo, newStatic, newStats);
+    }
+
+    private Row mergeStatic(Row current, Row update)
+    {
+        if (update.isEmpty())
+            return current;
+        if (current.isEmpty())
+            return insert(update);
+
+        return merge(current, update);
     }
 
     private DeletionInfo merge(DeletionInfo existing, DeletionInfo update)
@@ -123,7 +128,7 @@ public class BTreePartitionUpdater implements UpdateFunction<Row, Row>, ColumnDa
         Row data = insert.clone(cloner);
         indexer.onInserted(insert);
 
-        this.dataSize += data.dataSize();
+        dataSize += data.dataSize();
         onAllocatedOnHeap(data.unsharedHeapSizeExcludingData());
         return data;
     }
@@ -134,17 +139,6 @@ public class BTreePartitionUpdater implements UpdateFunction<Row, Row>, ColumnDa
         indexer.onUpdated(existing, reconciled);
 
         return reconciled;
-    }
-
-    public Row retain(Row existing)
-    {
-        return existing;
-    }
-
-    protected void reset()
-    {
-        this.dataSize = 0;
-        this.heapSize = 0;
     }
 
     public Cell<?> merge(Cell<?> previous, Cell<?> insert)

@@ -43,7 +43,7 @@ public class MemtableTrieThreadedTest
     private static final int PROGRESS_UPDATE = COUNT / 15;
     private static final int READERS = 8;
     private static final int WALKERS = 2;
-    Random rand = new Random();
+    private static final Random rand = new Random();
 
     static String value(ByteComparable b)
     {
@@ -61,95 +61,20 @@ public class MemtableTrieThreadedTest
         AtomicInteger writeProgress = new AtomicInteger(0);
 
         for (int i = 0; i < WALKERS; ++i)
-            threads.add(new Thread()
-            {
-                public void run()
-                {
-                    try
-                    {
-                        Random r = ThreadLocalRandom.current();
-                        while (!writeCompleted.get())
-                        {
-                            int min = writeProgress.get();
-                            int count = 0;
-                            for (Map.Entry<ByteComparable, String> en : trie.entrySet())
-                            {
-                                String v = value(en.getKey());
-                                Assert.assertEquals(en.getKey()
-                                                      .byteComparableAsString(
-                                                      VERSION), v, en.getValue());
-                                ++count;
-                            }
-                            Assert.assertTrue("Got only " + count + " while progress is at " + min, count >= min);
-                        }
-                    }
-                    catch (Throwable t)
-                    {
-                        t.printStackTrace();
-                        errors.add(t);
-                    }
-                }
-            });
-
-        for (int i = 0; i < READERS; ++i)
-        {
-            threads.add(new Thread()
-            {
-                public void run()
-                {
-                    try
-                    {
-                        Random r = ThreadLocalRandom.current();
-                        while (!writeCompleted.get())
-                        {
-                            int min = writeProgress.get();
-
-                            for (int i = 0; i < PROGRESS_UPDATE; ++i)
-                            {
-                                int index = r.nextInt(COUNT + OTHERS);
-                                ByteComparable b = src[index];
-                                String v = value(b);
-                                String result = trie.get(b);
-                                if (result != null)
-                                {
-                                    Assert.assertTrue("Got not added " + index + " when COUNT is " + COUNT,
-                                                      index < COUNT);
-                                    Assert.assertEquals("Failed " + index, v, result);
-                                }
-                                else if (index < min)
-                                    Assert.fail("Failed index " + index + " while progress is at " + min);
-                            }
-                        }
-                    }
-                    catch (Throwable t)
-                    {
-                        t.printStackTrace();
-                        errors.add(t);
-                    }
-                }
-            });
-        }
-
-        threads.add(new Thread()
-        {
-            public void run()
-            {
+            threads.add(new Thread(() -> {
                 try
                 {
-                    for (int i = 0; i < COUNT; i++)
+                    while (!writeCompleted.get())
                     {
-                        ByteComparable b = src[i];
-
-                        // Note: Because we don't ensure order when calling resolve, just use a hash of the key as payload
-                        // (so that all sources have the same value).
-                        String v = value(b);
-                        if (i % 2 == 0)
-                            trie.apply(Trie.singleton(b, v), (x, y) -> y);
-                        else
-                            trie.putRecursive(b, v, (x, y) -> y);
-
-                        if (i % PROGRESS_UPDATE == 0)
-                            writeProgress.set(i);
+                        int min = writeProgress.get();
+                        int count = 0;
+                        for (Map.Entry<ByteComparable, String> en : trie.entrySet())
+                        {
+                            String v = value(en.getKey());
+                            Assert.assertEquals(en.getKey().byteComparableAsString(VERSION), v, en.getValue());
+                            ++count;
+                        }
+                        Assert.assertTrue("Got only " + count + " while progress is at " + min, count >= min);
                     }
                 }
                 catch (Throwable t)
@@ -157,12 +82,72 @@ public class MemtableTrieThreadedTest
                     t.printStackTrace();
                     errors.add(t);
                 }
-                finally
+            }));
+
+        for (int i = 0; i < READERS; ++i)
+        {
+            threads.add(new Thread(() -> {
+                try
                 {
-                    writeCompleted.set(true);
+                    Random r = ThreadLocalRandom.current();
+                    while (!writeCompleted.get())
+                    {
+                        int min = writeProgress.get();
+
+                        for (int i1 = 0; i1 < PROGRESS_UPDATE; ++i1)
+                        {
+                            int index = r.nextInt(COUNT + OTHERS);
+                            ByteComparable b = src[index];
+                            String v = value(b);
+                            String result = trie.get(b);
+                            if (result != null)
+                            {
+                                Assert.assertTrue("Got not added " + index + " when COUNT is " + COUNT,
+                                                  index < COUNT);
+                                Assert.assertEquals("Failed " + index, v, result);
+                            }
+                            else if (index < min)
+                                Assert.fail("Failed index " + index + " while progress is at " + min);
+                        }
+                    }
+                }
+                catch (Throwable t)
+                {
+                    t.printStackTrace();
+                    errors.add(t);
+                }
+            }));
+        }
+
+        threads.add(new Thread(() -> {
+            try
+            {
+                for (int i = 0; i < COUNT; i++)
+                {
+                    ByteComparable b = src[i];
+
+                    // Note: Because we don't ensure order when calling resolve, just use a hash of the key as payload
+                    // (so that all sources have the same value).
+                    String v = value(b);
+                    if (i % 2 == 0)
+                        trie.apply(Trie.singleton(b, v), (x, y) -> y);
+                    else
+                        trie.putRecursive(b, v, (x, y) -> y);
+
+                    if (i % PROGRESS_UPDATE == 0)
+                        writeProgress.set(i);
                 }
             }
-        });
+            catch (Throwable t)
+            {
+                t.printStackTrace();
+                errors.add(t);
+            }
+            finally
+            {
+                writeCompleted.set(true);
+            }
+        }));
 
         for (Thread t : threads)
             t.start();

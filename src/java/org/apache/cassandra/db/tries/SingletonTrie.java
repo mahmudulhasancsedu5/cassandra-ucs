@@ -41,10 +41,10 @@ class SingletonTrie<T> extends Trie<T>
 
     class Cursor implements Trie.Cursor<T>
     {
-        ByteSource src = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
-        int currentDepth = 0;
-        int currentTransition = -1;
-        int nextTransition = src.next();
+        private final ByteSource src = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
+        private int currentDepth = 0;
+        private int currentTransition = -1;
+        private int nextTransition = src.next();
 
         public int advance()
         {

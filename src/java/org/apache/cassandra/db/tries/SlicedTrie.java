@@ -85,11 +85,11 @@ public class SlicedTrie<T> extends Trie<T>
         private final boolean excludeRight;
         private final Cursor<T> source;
 
-        State state;
-        int leftNext;
-        int leftNextDepth;
-        int rightNext;
-        int rightNextDepth;
+        private State state;
+        private int leftNext;
+        private int leftNextDepth;
+        private int rightNext;
+        private int rightNextDepth;
 
         public SlicedCursor(SlicedTrie<T> slicedTrie)
         {

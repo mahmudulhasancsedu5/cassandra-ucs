@@ -86,7 +86,7 @@ public abstract class ReadTest extends SimpleTableWriter
                           cfs.metric.estimatedPartitionCount.getValue(),
                           cfs.metric.writeLatency.latency.getSnapshot().getMean());
         // Needed to stabilize sstable count for off-cache sized tests (e.g. count = 100_000_000)
-        while (cfs.getLiveSSTables().size() >= 150)
+        while (cfs.getLiveSSTables().size() >= 15)
         {
             cfs.enableAutoCompaction(true);
             cfs.disableAutoCompaction();

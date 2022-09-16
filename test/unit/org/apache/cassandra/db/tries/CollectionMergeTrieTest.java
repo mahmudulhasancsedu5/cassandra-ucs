@@ -36,7 +36,7 @@ import static org.apache.cassandra.db.tries.MergeTrieTest.removeDuplicates;
 public class CollectionMergeTrieTest
 {
     private static final int COUNT = 15000;
-    Random rand = new Random();
+    private static final Random rand = new Random();
 
     @Test
     public void testDirect()

@@ -266,7 +266,6 @@ public class SSTableMetadataTest
         }
     }
 
-
     public static void assertBuffersAreRetainable(List<ByteBuffer> buffers)
     {
         for (ByteBuffer b : buffers)

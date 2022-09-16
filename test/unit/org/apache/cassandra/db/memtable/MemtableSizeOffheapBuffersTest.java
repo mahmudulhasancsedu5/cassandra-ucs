@@ -27,7 +27,6 @@ import org.apache.cassandra.config.Config;
 import org.apache.cassandra.utils.memory.MemtablePool;
 import org.apache.cassandra.utils.memory.SlabPool;
 
-@RunWith(Parameterized.class)
 public class MemtableSizeOffheapBuffersTest extends MemtableSizeTestBase
 {
     // Overrides CQLTester.setUpClass to run before it

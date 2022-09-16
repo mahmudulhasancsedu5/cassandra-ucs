@@ -682,6 +682,7 @@ public class ByteBufferUtil
     public static boolean canMinimize(ByteBuffer buf)
     {
         return buf != null && (!buf.hasArray() || buf.array().length > buf.remaining());
+        // Note: buf.array().length is different from buf.capacity() for sliced buffers.
     }
 
     /** trims size of bytebuffer to exactly number of bytes in it, to do not hold too much memory */

@@ -79,12 +79,12 @@ public class ShardedSkipListMemtable extends AbstractShardedMemtable
     public static final String LOCKING_OPTION = "serialize_writes";
 
     /**
-     * Core-specific memtable regions. All writes must go through the specific core. The data structures used
-     * are concurrent-read safe, thus reads can be carried out from any thread.
+     * Sharded memtable sections. Each is responsible for a contiguous range of the token space (between boundaries[i]
+     * and boundaries[i+1]) and is written to by one thread at a time, while reads are carried out concurrently
+     * (including with any write).
      */
     final MemtableShard[] shards;
 
-    // only to be used by init(), to setup the very first memtable for the cfs
     ShardedSkipListMemtable(AtomicReference<CommitLogPosition> commitLogLowerBound,
                             TableMetadataRef metadataRef,
                             Owner owner,
@@ -108,7 +108,7 @@ public class ShardedSkipListMemtable extends AbstractShardedMemtable
     public boolean isClean()
     {
         for (MemtableShard shard : shards)
-            if (!shard.isEmpty())
+            if (!shard.isClean())
                 return false;
         return true;
     }
@@ -399,7 +399,7 @@ public class ShardedSkipListMemtable extends AbstractShardedMemtable
             }
         }
 
-        public boolean isEmpty()
+        public boolean isClean()
         {
             return partitions.isEmpty();
         }

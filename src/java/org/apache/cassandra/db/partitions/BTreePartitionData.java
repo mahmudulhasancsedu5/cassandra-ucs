@@ -31,12 +31,16 @@ import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.btree.BTree;
 
 /**
- * Holder of the content of a partition, see AbstractBTreePartition.
+ * Holder of the content of a partition, see {@link AbstractBTreePartition}.
  * When updating a partition one holder is swapped for another atomically.
  */
 public final class BTreePartitionData
 {
-    public static final BTreePartitionData EMPTY = new BTreePartitionData(RegularAndStaticColumns.NONE, BTree.empty(), DeletionInfo.LIVE, Rows.EMPTY_STATIC_ROW, EncodingStats.NO_STATS);
+    public static final BTreePartitionData EMPTY = new BTreePartitionData(RegularAndStaticColumns.NONE,
+                                                                          BTree.empty(),
+                                                                          DeletionInfo.LIVE,
+                                                                          Rows.EMPTY_STATIC_ROW,
+                                                                          EncodingStats.NO_STATS);
     public static final long UNSHARED_HEAP_SIZE = ObjectSizes.measure(EMPTY);
 
 
@@ -72,7 +76,11 @@ public final class BTreePartitionData
     }
 
     @VisibleForTesting
-    public static BTreePartitionData unsafeConstruct(RegularAndStaticColumns columns, Object[] tree, DeletionInfo deletionInfo, Row staticRow, EncodingStats stats)
+    public static BTreePartitionData unsafeConstruct(RegularAndStaticColumns columns,
+                                                     Object[] tree,
+                                                     DeletionInfo deletionInfo,
+                                                     Row staticRow,
+                                                     EncodingStats stats)
     {
         return new BTreePartitionData(columns, tree, deletionInfo, staticRow, stats);
     }
@@ -82,7 +90,12 @@ public final class BTreePartitionData
     {
         BTreePartitionData holder = partition.unsafeGetHolder();
         if (!BTree.isEmpty(holder.tree))
-            partition.unsafeSetHolder(unsafeConstruct(
-            holder.columns, Arrays.copyOf(holder.tree, holder.tree.length), holder.deletionInfo, holder.staticRow, holder.stats));
+        {
+            partition.unsafeSetHolder(unsafeConstruct(holder.columns,
+                                                      Arrays.copyOf(holder.tree, holder.tree.length),
+                                                      holder.deletionInfo,
+                                                      holder.staticRow,
+                                                      holder.stats));
+        }
     }
 }
