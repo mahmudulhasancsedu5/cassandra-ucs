@@ -83,7 +83,7 @@ public class ShardBoundaries
         if (boundaries.length == 0)
             return 0;
 
-        assert (key.getPartitioner() == DatabaseDescriptor.getPartitioner());
+        assert (key.getPartitioner() == boundaries[0].getPartitioner());
         return getShardForToken(key.getToken());
     }
 
