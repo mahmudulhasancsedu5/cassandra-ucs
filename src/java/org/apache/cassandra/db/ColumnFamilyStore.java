@@ -1463,10 +1463,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         {
             List<Splitter.WeightedRange> weightedRanges;
             long ringVersion;
-            if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName()))
+            if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName())
+                && getPartitioner() == StorageService.instance.getTokenMetadata().partitioner)
             {
-                Preconditions.checkState(getPartitioner() == StorageService.instance.getTokenMetadata().partitioner,
-                                         "Only local system tables can use non-system partitioner.");
                 DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
                 Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
                 ringVersion = versionedLocalRanges.ringVersion;
@@ -1491,6 +1490,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             else
             {
                 // Local tables need to cover the full token range and don't care about ring changes.
+                // We also end up here if the table's partitioner is not the database's, which can happen in tests.
                 weightedRanges = fullWeightedRange();
                 ringVersion = -1;
             }
