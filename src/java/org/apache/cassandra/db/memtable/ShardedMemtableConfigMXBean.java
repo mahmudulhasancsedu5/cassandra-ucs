@@ -24,10 +24,10 @@ public interface ShardedMemtableConfigMXBean
      * Adjust the shard count for sharded memtables that do not specify it explicitly in the memtable options.
      * Changes will apply on the next memtable flush.
      */
-    public void setShardCount(String numShards);
+    public void setDefaultShardCount(String numShards);
 
     /**
      * Returns the shard count for sharded memtables that do not specify it explicitly in the memtable options.
      */
-    public String getShardCount();
+    public String getDefaultShardCount();
 }

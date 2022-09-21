@@ -20,8 +20,6 @@ package org.apache.cassandra.db.memtable;
 
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.utils.memory.MemtablePool;

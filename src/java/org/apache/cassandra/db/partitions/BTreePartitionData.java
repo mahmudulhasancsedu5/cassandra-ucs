@@ -64,7 +64,7 @@ public final class BTreePartitionData
         this.stats = stats;
     }
 
-    protected BTreePartitionData withColumns(RegularAndStaticColumns columns)
+    BTreePartitionData withColumns(RegularAndStaticColumns columns)
     {
         return new BTreePartitionData(columns, this.tree, this.deletionInfo, this.staticRow, this.stats);
     }

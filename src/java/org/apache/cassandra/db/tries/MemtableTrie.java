@@ -105,11 +105,6 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         getChunk(pos).putInt(inChunkPointer(pos), value);
     }
 
-    final void putIntOrdered(int pos, int value)
-    {
-        getChunk(pos).putIntOrdered(inChunkPointer(pos), value);
-    }
-
     final void putIntVolatile(int pos, int value)
     {
         getChunk(pos).putIntVolatile(inChunkPointer(pos), value);

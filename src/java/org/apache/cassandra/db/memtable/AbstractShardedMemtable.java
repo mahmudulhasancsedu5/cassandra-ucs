@@ -68,7 +68,7 @@ public abstract class AbstractShardedMemtable extends AbstractAllocatorMemtable
     private static class ShardedMemtableConfig implements ShardedMemtableConfigMXBean
     {
         @Override
-        public void setShardCount(String shardCount)
+        public void setDefaultShardCount(String shardCount)
         {
             if ("auto".equalsIgnoreCase(shardCount))
             {
@@ -90,7 +90,7 @@ public abstract class AbstractShardedMemtable extends AbstractAllocatorMemtable
         }
 
         @Override
-        public String getShardCount()
+        public String getDefaultShardCount()
         {
             return Integer.toString(defaultShardCount);
         }

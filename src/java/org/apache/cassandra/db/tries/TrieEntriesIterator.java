@@ -18,7 +18,6 @@
 package org.apache.cassandra.db.tries;
 
 import java.util.AbstractMap;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
 

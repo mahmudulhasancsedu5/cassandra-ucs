@@ -21,7 +21,6 @@ package org.apache.cassandra.db.memtable;
 import java.lang.reflect.Field;
 import java.util.List;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import org.junit.Assert;
 import org.junit.Test;
