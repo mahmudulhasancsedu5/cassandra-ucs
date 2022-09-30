@@ -1,0 +1,600 @@
+Prepared, batch 1000 threads 32 flush INMEM
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 21.394 s.
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+0 sstables, total 0.000KiB, 9,999,999 partitions. Mean write latency 10.14 ms
+7.283 ms/op
+# Warmup Iteration   2: 3.295 ms/op
+# Warmup Iteration   3: 3.105 ms/op
+# Warmup Iteration   4: 3.034 ms/op
+# Warmup Iteration   5: 3.107 ms/op
+Iteration   1: 3.080 ms/op
+Iteration   2: 2.983 ms/op
+Iteration   3: 2.970 ms/op
+Iteration   4: 3.060 ms/op
+Iteration   5: 3.040 ms/op
+Iteration   6: 3.038 ms/op
+Iteration   7: 3.068 ms/op
+Iteration   8: 3.088 ms/op
+Iteration   9: 3.051 ms/op
+Iteration  10: 
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+2.991 ms/op
+
+
+
+Prepared, batch 1000 threads 8 flush INMEM
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 19.179 s.
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+0 sstables, total 0.000KiB, 9,999,999 partitions. Mean write latency 7.30 ms
+5.190 ms/op
+# Warmup Iteration   2: 2.056 ms/op
+# Warmup Iteration   3: 2.023 ms/op
+# Warmup Iteration   4: 2.059 ms/op
+# Warmup Iteration   5: 1.997 ms/op
+Iteration   1: 2.033 ms/op
+Iteration   2: 2.076 ms/op
+Iteration   3: 1.987 ms/op
+Iteration   4: 1.961 ms/op
+Iteration   5: 1.940 ms/op
+Iteration   6: 1.987 ms/op
+Iteration   7: 2.052 ms/op
+Iteration   8: 1.939 ms/op
+Iteration   9: 1.993 ms/op
+Iteration  10: 
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+1.931 ms/op
+
+Prepared, batch 1000 threads 1 flush INMEM
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 37.564 s.
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+0 sstables, total 0.000KiB, 9,999,999 partitions. Mean write latency 1.14 ms
+8.879 ms/op
+# Warmup Iteration   2: 4.950 ms/op
+# Warmup Iteration   3: 4.866 ms/op
+# Warmup Iteration   4: 4.798 ms/op
+# Warmup Iteration   5: 4.926 ms/op
+Iteration   1: 4.896 ms/op
+Iteration   2: 4.786 ms/op
+Iteration   3: 4.832 ms/op
+Iteration   4: 4.760 ms/op
+Iteration   5: 4.805 ms/op
+Iteration   6: 4.826 ms/op
+Iteration   7: 4.799 ms/op
+Iteration   8: 4.785 ms/op
+Iteration   9: 4.742 ms/op
+Iteration  10: 
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+4.751 ms/op
+
+
+volatiles +=
+
+Prepared, batch 1000 threads 8 flush INMEM
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 19.551 s.
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+0 sstables, total 0.000KiB, 9,999,999 partitions. Mean write latency 6.95 ms
+5.030 ms/op
+# Warmup Iteration   2: 2.085 ms/op
+# Warmup Iteration   3: 2.084 ms/op
+# Warmup Iteration   4: 2.023 ms/op
+# Warmup Iteration   5: 2.134 ms/op
+Iteration   1: 2.200 ms/op
+Iteration   2: 2.090 ms/op
+Iteration   3: 2.133 ms/op
+Iteration   4: 2.161 ms/op
+Iteration   5: 2.167 ms/op
+Iteration   6: 2.093 ms/op
+Iteration   7: 2.134 ms/op
+Iteration   8: 2.216 ms/op
+Iteration   9: 2.183 ms/op
+Iteration  10: 
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+2.135 ms/op
+
+
+Writing 10000000
+... done in 41.417 s.
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+0 sstables, total 0.000KiB, 9,999,999 partitions. Mean write latency 1.14 ms
+7.659 ms/op
+# Warmup Iteration   2: 4.794 ms/op
+# Warmup Iteration   3: 4.588 ms/op
+# Warmup Iteration   4: 4.757 ms/op
+# Warmup Iteration   5: 4.607 ms/op
+Iteration   1: 4.560 ms/op
+Iteration   2: 4.620 ms/op
+Iteration   3: 4.567 ms/op
+Iteration   4: 4.554 ms/op
+Iteration   5: 4.568 ms/op
+Iteration   6: 4.546 ms/op
+Iteration   7: 4.571 ms/op
+Iteration   8: 4.616 ms/op
+Iteration   9: 4.597 ms/op
+Iteration  10: 
+TrieMemtable in heap_buffers mode: 10000000 ops, 505.447MiB serialized bytes, 4.568GiB (57%) on-heap, 0.000KiB (0%) off-heap
+
+
+
+
+Writing 10000000
+... done in 42.823 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+
+
+
+ReadTestSmallPartitions.readRandomInside       1000  10000000    INMEM                               8     false  avgt   10  2.312 ± 0.185  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  10000000      YES                               8     false  avgt   10  2.488 ± 0.180  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  10000000    INMEM                               8     false  avgt   10  2.182 ± 0.123  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  10000000      YES                               8     false  avgt   10  2.452 ± 0.199  ms/op
+
+
+
+
+ApacheCon benchmarks
+
+
+
+BTI
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 45.293 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+4 sstables, total 602.289MiB, 10,314,002 partitions. Mean write latency 33932.25 ms
+Disk access mode mmap index mmap
+
+Writing 10000000
+... done in 39.198 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+Flushed in 24.143 s.
+4 sstables, total 602.170MiB, 10,314,002 partitions. Mean write latency 1637.93 ms
+17.326 ms/op
+
+
+Benchmark                                 (BATCH)   (count)  (flush)  (memtableClass)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestSmallPartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable              8     false  avgt   10  2.445 ± 0.212  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000      BTI     TrieMemtable              8     false  avgt   10  2.549 ± 0.231  ms/op
+
+
+
+Benchmark                                 (BATCH)   (count)  (flush)  (memtableClass)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestSmallPartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable              1     false  avgt   10  5.556 ± 0.516  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000      BTI     TrieMemtable              1     false  avgt   10  5.952 ± 0.176  ms/op
+
+
+
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 38.073 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+Flushed in 23.118 s.
+1 sstables, total 567.161MiB, 10,314,002 partitions. Mean write latency 1537.86 ms
+13.376 ms/op
+
+
+SkipList/BTI
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 93.826 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 581.741MiB serialized bytes, 3.763GiB (75%) on-heap, 534.058MiB (10%) off-heap
+Flushed in 29.834 s.
+1 sstables, total 567.328MiB, 10,314,002 partitions. Mean write latency 7440.41 ms
+14.995 ms/op
+
+
+BTI Index: 103MB
+BIG Index: 154MB
+
+Benchmark                                 (BATCH)   (count)   (source)    (threadCount)   Mode  Cnt  Score   Error  Units
+ReadTestSmallPartitions.readRandomInside     1000  10000000    TrieMemtable         1     avgt   10   5.461 ± 0.707  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    SkipListMemtable     1     avgt   10  10.137 ± 2.462  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    BTI SSTable          1     avgt   10   5.731 ± 0.117  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    BIG SSTable          1     avgt   10  11.351 ± 2.044  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    TrieMemtable         8     avgt   10   2.301 ± 0.210  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    SkipListMemtable     8     avgt   10   3.376 ± 0.569  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    BTI SSTable          8     avgt   10   2.373 ± 0.105  ms/op
+ReadTestSmallPartitions.readRandomInside     1000  10000000    BIG SSTable          8     avgt   10   4.224 ± 0.581  ms/op
+
+
+Trie/BTI
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 41.690 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+Flushed in 23.415 s.
+1 sstables, total 567.236MiB, 10,314,002 partitions. Mean write latency 30986.91 ms
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 37.767 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 2.719GiB (54%) on-heap, 862.751MiB (17%) off-heap
+Flushed in 22.573 s.
+1 sstables, total 567.157MiB, 10,314,002 partitions. Mean write latency 1544.71 ms
+
+
+SkipList/BIG
+
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 94.470 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 581.741MiB serialized bytes, 3.763GiB (75%) on-heap, 534.058MiB (10%) off-heap
+Flushed in 26.595 s.
+1 sstables, total 618.195MiB, 10,314,002 partitions. Mean write latency 7372.29 ms
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 47.539 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 581.741MiB serialized bytes, 3.763GiB (75%) on-heap, 534.058MiB (10%) off-heap
+Flushed in 27.468 s.
+1 sstables, total 618.121MiB, 10,314,002 partitions. Mean write latency 17437.68 ms
+
+
+
+
+Benchmark                                   (BATCH)  (count)  (source)  (threadCount)Mode  Cnt  Score   Error  Units
+ReadTestSmallPartitions.readFixed              1000  1000000    TrieMemtable     1   avgt   10   4.508 ± 0.057  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    TrieMemtable     8   avgt   10   2.173 ± 0.088  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    BTI SSTable      1   avgt   10   5.245 ± 0.163  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    BTI SSTable      8   avgt   10   2.353 ± 0.088  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    TrieMemtable     1   avgt   10   2.521 ± 0.028  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    TrieMemtable     8   avgt   10   2.105 ± 0.069  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    BTI SSTable      1   avgt   10   3.436 ± 0.092  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    BTI SSTable      8   avgt   10   1.930 ± 0.078  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    TrieMemtable     1   avgt   10   5.058 ± 0.058  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    TrieMemtable     8   avgt   10   2.437 ± 0.099  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    BTI SSTable      1   avgt   10   5.645 ± 0.078  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    BTI SSTable      8   avgt   10   2.349 ± 0.261  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    TrieMemtable     1   avgt   10   5.009 ± 0.132  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    TrieMemtable     8   avgt   10   2.090 ± 0.064  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    BTI SSTable      1   avgt   10   5.608 ± 0.042  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    BTI SSTable      8   avgt   10   2.233 ± 0.144  ms/op
+
+ReadTestSmallPartitions.readFixed              1000  1000000    SkipListMemtable 1   avgt   10   5.196 ± 0.370  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    SkipListMemtable 8   avgt   10   2.274 ± 0.177  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    BIG SSTable      1   avgt   10   5.207 ± 0.295  ms/op
+ReadTestSmallPartitions.readFixed              1000  1000000    BIG SSTable      8   avgt   10   2.315 ± 0.202  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    SkipListMemtable 1   avgt   10   2.795 ± 0.161  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    SkipListMemtable 8   avgt   10   2.291 ± 0.291  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    BIG SSTable      1   avgt   10   3.394 ± 0.192  ms/op
+ReadTestSmallPartitions.readOutside            1000  1000000    BIG SSTable      8   avgt   10   2.132 ± 0.312  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    SkipListMemtable 1   avgt   10   7.186 ± 0.385  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    SkipListMemtable 8   avgt   10   2.497 ± 0.198  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    BIG SSTable      1   avgt   10  11.757 ± 1.219  ms/op
+ReadTestSmallPartitions.readRandomInside       1000  1000000    BIG SSTable      8   avgt   10   3.442 ± 0.834  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    SkipListMemtable 1   avgt   10   7.110 ± 0.330  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    SkipListMemtable 8   avgt   10   2.408 ± 0.150  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    BIG SSTable      1   avgt   10  10.472 ± 1.121  ms/op
+ReadTestSmallPartitions.readRandomWOutside     1000  1000000    BIG SSTable      8   avgt   10   3.313 ± 0.730  ms/op
+
+
+
+Wide partitions, 64k row index
+
+
+Benchmark                                  (BATCH)  (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt    Score    Error  Units
+ReadTestWidePartitions.readFixed              1000  1000000    SkipListMemtable    4         1      avgt   10    6.351 ±  0.286  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000    SkipListMemtable    4         8      avgt   10    2.518 ±  0.162  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000    BIG SSTable         4         1      avgt   10  134.522 ±  1.999  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000    BIG SSTable         4         8      avgt   10   37.523 ±  2.092  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    SkipListMemtable    4         1      avgt   10    7.892 ±  0.483  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    SkipListMemtable    4         8      avgt   10    2.762 ±  0.147  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    BIG SSTable         4         1      avgt   10   84.275 ±  1.557  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    BIG SSTable         4         8      avgt   10   21.321 ±  1.244  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    SkipListMemtable    4         1      avgt   10    7.842 ±  0.370  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    SkipListMemtable    4         8      avgt   10    2.614 ±  0.125  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    BIG SSTable         4         1      avgt   10   75.938 ±  1.429  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    BIG SSTable         4         8      avgt   10   21.034 ±  1.540  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    SkipListMemtable    4         1      avgt   10    4.283 ±  0.213  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    SkipListMemtable    4         8      avgt   10    2.102 ±  0.127  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    BIG SSTable         4         1      avgt   10  117.123 ±  1.743  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    BIG SSTable         4         8      avgt   10   23.725 ±  1.259  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    SkipListMemtable    4         1      avgt   10    7.141 ±  0.302  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    SkipListMemtable    4         8      avgt   10    2.718 ±  0.179  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    BIG SSTable         4         1      avgt   10   80.365 ±  1.257  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    BIG SSTable         4         8      avgt   10   20.364 ±  1.261  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    SkipListMemtable    4         1      avgt   10    7.727 ±  0.329  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    SkipListMemtable    4         8      avgt   10    2.659 ±  0.270  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    BIG SSTable         4         1      avgt   10   84.346 ±  1.770  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    BIG SSTable         4         8      avgt   10   20.620 ±  1.252  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    SkipListMemtable    4         1      avgt   10    7.916 ±  0.352  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    SkipListMemtable    4         8      avgt   10    2.729 ±  0.142  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    BIG SSTable         4         1      avgt   10  517.823 ± 16.118  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    BIG SSTable         4         8      avgt   10  149.626 ±  1.793  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    SkipListMemtable    4         1      avgt   10    8.101 ±  0.371  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    SkipListMemtable    4         8      avgt   10    2.769 ±  0.218  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    BIG SSTable         4         1      avgt   10  529.581 ± 16.239  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    BIG SSTable         4         8      avgt   10  140.016 ±  7.386  ms/op
+
+ReadTestWidePartitions.readFixed              1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    6.323 ± 0.273  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.459 ± 0.102  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      YES     TrieMemtable             4              1     false  avgt   10  100.881 ± 0.963  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      YES     TrieMemtable             4              8     false  avgt   10    9.237 ± 0.126  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.493 ± 0.314  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.814 ± 0.378  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   72.174 ± 0.751  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   23.095 ± 0.384  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.407 ± 0.244  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.495 ± 0.120  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   77.943 ± 0.745  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   19.471 ± 0.718  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    4.374 ± 0.194  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.122 ± 0.127  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      YES     TrieMemtable             4              1     false  avgt   10  112.268 ± 3.370  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      YES     TrieMemtable             4              8     false  avgt   10    8.851 ± 0.154  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.586 ± 0.330  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.718 ± 0.185  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   74.002 ± 1.060  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   20.438 ± 0.272  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.308 ± 0.262  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.674 ± 0.129  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   75.501 ± 0.880  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   20.177 ± 0.314  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.683 ± 0.245  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.683 ± 0.120  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   88.540 ± 1.495  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   21.321 ± 0.592  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    INMEM     TrieMemtable             4              1     false  avgt   10    7.452 ± 0.140  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000    INMEM     TrieMemtable             4              8     false  avgt   10    2.648 ± 0.142  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      YES     TrieMemtable             4              1     false  avgt   10   84.729 ± 0.890  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      YES     TrieMemtable             4              8     false  avgt   10   20.855 ± 0.585  ms/op
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 29.965 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 661.398MiB (13%) off-heap
+Flushed in 11.406 s.
+1 sstables, total 238.244MiB, 4 partitions. Mean write latency 11666.97 ms
+BIG index: 114357
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 27.374 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.455MiB serialized bytes, 1.280GiB (26%) on-heap, 419.628MiB (8%) off-heap
+Flushed in 12.119 s.
+1 sstables, total 238.294MiB, 1,000 partitions. Mean write latency 9023.09 ms
+BIG index: 145989
+
+Benchmark                                (BATCH)   (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES  SkipListMemtable             4              8     false  avgt   10  22.205 ± 2.022  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES  SkipListMemtable          1000              8     false  avgt   10  19.821 ± 1.408  ms/op
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 30.140 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 669.246MiB (13%) off-heap
+Flushed in 11.794 s.
+1 sstables, total 238.174MiB, 4 partitions. Mean write latency 11756.28 ms
+BTI index: 36503
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 26.802 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.455MiB serialized bytes, 1.280GiB (26%) on-heap, 419.628MiB (8%) off-heap
+Flushed in 11.957 s.
+1 sstables, total 238.274MiB, 1,000 partitions. Mean write latency 8812.30 ms
+BTI index: 74468
+
+Benchmark                                (BATCH)   (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES  SkipListMemtable             4              8     false  avgt   10  20.698 ± 2.100  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES  SkipListMemtable          1000              8     false  avgt   10  18.017 ± 1.603  ms/op
+
+
+16 kb row index
+
+Benchmark                                  (BATCH)  (count)  (flush)  (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readFixed              1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  37.244 ± 0.347  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   7.540 ± 0.097  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  25.769 ± 0.315  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   6.396 ± 0.232  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  25.266 ± 0.563  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   6.513 ± 0.090  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  27.380 ± 0.189  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   2.623 ± 0.052  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  24.204 ± 0.175  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   6.622 ± 0.100  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  25.352 ± 0.181  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   6.507 ± 0.069  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  26.384 ± 0.417  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   7.525 ± 0.145  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG     TrieMemtable             4              1     false  avgt   10  26.989 ± 0.360  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG     TrieMemtable             4              8     false  avgt   10   7.110 ± 0.120  ms/op
+
+Benchmark                                  (BATCH)  (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt    Score   Error  Units
+ReadTestWidePartitions.readFixed              1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   23.161 ± 0.510  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   10.613 ± 0.618  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   25.715 ± 0.538  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10    7.716 ± 0.417  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   26.187 ± 0.686  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10    6.940 ± 0.525  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   40.463 ± 0.676  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10    5.728 ± 0.339  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   26.593 ± 0.578  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10    8.028 ± 0.470  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   26.997 ± 0.555  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10    7.414 ± 0.347  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  143.893 ± 2.741  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   36.828 ± 1.996  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  148.012 ± 3.430  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   38.744 ± 2.092  ms/op
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 30.290 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 667.401MiB (13%) off-heap
+Flushed in 12.139 s.
+1 sstables, total 238.264MiB, 4 partitions. Mean write latency 12084.86 ms
+BTI index: 138240 + 76
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 29.022 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.455MiB serialized bytes, 1.280GiB (26%) on-heap, 419.628MiB (8%) off-heap
+Flushed in 12.354 s.
+1 sstables, total 238.326MiB, 1,000 partitions. Mean write latency 9146.88 ms
+BTI index: 170656 + 7824
+
+Benchmark                                (BATCH)   (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000      BTI  SkipListMemtable             4              8     false  avgt   10  7.478 ± 0.581  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BTI  SkipListMemtable          1000              8     false  avgt   10  6.743 ± 0.568  ms/op
+
+1kb row index
+
+BIG: 760k
+Benchmark                                  (BATCH)  (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readFixed              1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  11.863 ± 0.263  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   4.305 ± 0.217  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   9.909 ± 0.258  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   3.576 ± 0.206  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   9.915 ± 0.250  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   3.644 ± 0.237  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10   9.343 ± 0.223  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   3.971 ± 0.207  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  12.576 ± 0.243  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   4.448 ± 0.210  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  12.415 ± 0.328  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   4.308 ± 0.387  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  17.854 ± 0.631  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   5.759 ± 0.305  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG  SkipListMemtable             4              1     false  avgt   10  18.392 ± 0.521  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BIG  SkipListMemtable             4              8     false  avgt   10   5.968 ± 0.318  ms/op
+
+
+BTI: 245k
+Benchmark                                  (BATCH)  (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestWidePartitions.readFixed              1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.959 ± 0.145  ms/op
+ReadTestWidePartitions.readFixed              1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  3.342 ± 0.217  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  7.806 ± 0.261  ms/op
+ReadTestWidePartitions.readGreater            1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  2.974 ± 0.180  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.094 ± 0.208  ms/op
+ReadTestWidePartitions.readGreaterMatch       1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  2.969 ± 0.160  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  6.637 ± 0.147  ms/op
+ReadTestWidePartitions.readOutside            1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  2.634 ± 0.167  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.494 ± 0.174  ms/op
+ReadTestWidePartitions.readRandomInside       1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  3.005 ± 0.172  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.241 ± 0.168  ms/op
+ReadTestWidePartitions.readRandomWOutside     1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  3.017 ± 0.163  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.502 ± 0.159  ms/op
+ReadTestWidePartitions.readReversed           1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  3.032 ± 0.172  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BTI  SkipListMemtable             4              1     false  avgt   10  8.290 ± 0.191  ms/op
+ReadTestWidePartitions.readReversedMatch      1000  1000000      BTI  SkipListMemtable             4              8     false  avgt   10  3.163 ± 0.197  ms/op
+
+Big/SkipList, 1kb row index
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 56.806 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 419.617MiB (8%) off-heap
+Flushed in 11.255 s.
+1 sstables, total 245.576MiB, 4 partitions. Mean write latency 3704.99 ms
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 31.502 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 653.749MiB (13%) off-heap
+Flushed in 11.602 s.
+1 sstables, total 245.597MiB, 4 partitions. Mean write latency 11417.96 ms
+BIG Index 7786k
+
+Benchmark                                (BATCH)   (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM  SkipListMemtable             4              1     false  avgt   10   8.281 ± 0.546  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM  SkipListMemtable             4              8     false  avgt   10   2.967 ± 0.256  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BIG  SkipListMemtable             4              1     false  avgt   10  14.228 ± 0.959  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BIG  SkipListMemtable             4              8     false  avgt   10   4.949 ± 0.358  ms/op
+
+1000p
+
+BIG Index 7578k
+
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 71.389 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.455MiB serialized bytes, 1.280GiB (26%) on-heap, 419.628MiB (8%) off-heap
+Flushed in 12.272 s.
+1 sstables, total 245.448MiB, 1,000 partitions. Mean write latency 5127.72 ms
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 26.669 s.
+SkipListMemtable in offheap_objects mode: 10000000 ops, 505.455MiB serialized bytes, 1.280GiB (26%) on-heap, 419.628MiB (8%) off-heap
+Flushed in 12.282 s.
+1 sstables, total 245.272MiB, 1,000 partitions. Mean write latency 8731.62 ms
+
+Benchmark                                (BATCH)   (count)  (flush)   (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt   Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM  SkipListMemtable          1000              1     false  avgt   10   8.611 ± 0.804  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM  SkipListMemtable          1000              8     false  avgt   10   2.851 ± 0.212  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BIG  SkipListMemtable          1000              1     false  avgt   10  12.893 ± 0.721  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BIG  SkipListMemtable          1000              8     false  avgt   10   4.233 ± 0.309  ms/op
+
+
+BTI/Trie, 1kb row index
+
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 59.302 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 419.617MiB (8%) off-heap
+Flushed in 4.317 s.
+1 sstables, total 240.536MiB, 4 partitions. Mean write latency 3989.23 ms
+
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 96.665 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.281GiB (26%) on-heap, 419.617MiB (8%) off-heap
+Flushed in 4.006 s.
+1 sstables, total 240.652MiB, 4 partitions. Mean write latency 77673.42 ms
+BTI Index 2505k
+
+Benchmark                                (BATCH)   (count)  (flush)  (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable             4              1     false  avgt   10  8.392 ± 0.567  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable             4              8     false  avgt   10  2.906 ± 0.219  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BTI     TrieMemtable             4              1     false  avgt   10  8.554 ± 0.669  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      BTI     TrieMemtable             4              8     false  avgt   10  3.156 ± 0.257  ms/op
+
+1000 p
+
+Prepared, batch 1000 threads 1 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 68.738 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.280GiB (26%) on-heap, 419.664MiB (8%) off-heap
+Flushed in 5.626 s.
+1 sstables, total 240.162MiB, 1,000 partitions. Mean write latency 5112.73 ms
+Prepared, batch 1000 threads 8 flush YES
+Disk access mode mmap index mmap
+Writing 10000000
+... done in 104.451 s.
+TrieMemtable in offheap_objects mode: 10000000 ops, 505.447MiB serialized bytes, 1.280GiB (26%) on-heap, 419.664MiB (8%) off-heap
+Flushed in 4.945 s.
+1 sstables, total 240.244MiB, 1,000 partitions. Mean write latency 86695.54 ms
+
+
+BTI Index 2048k
+Benchmark                                (BATCH)   (count)  (flush)  (memtableClass)  (partitions)  (threadCount)  (useNet)  Mode  Cnt  Score   Error  Units
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable          1000              1     false  avgt   10  8.357 ± 0.569  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000    INMEM     TrieMemtable          1000              8     false  avgt   10  2.911 ± 0.233  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES     TrieMemtable          1000              1     false  avgt   10  8.643 ± 0.521  ms/op
+ReadTestWidePartitions.readRandomInside     1000  10000000      YES     TrieMemtable          1000              8     false  avgt   10  3.323 ± 0.564  ms/op

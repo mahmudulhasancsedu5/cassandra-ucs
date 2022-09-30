@@ -19,29 +19,10 @@
 package org.apache.cassandra.test.microbench.instance;
 
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
-import java.util.stream.LongStream;
 
-import com.google.common.base.Throwables;
-
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.memtable.Memtable;
-import org.apache.cassandra.utils.FBUtilities;
 import org.openjdk.jmh.annotations.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -50,72 +31,21 @@ import org.slf4j.LoggerFactory;
 @Fork(value = 1)
 @Threads(1)
 @State(Scope.Benchmark)
-public class WriteTest extends CQLTester
+public class WriteTest extends SimpleTableWriter
 {
-    private final static Logger logger = LoggerFactory.getLogger(WriteTest.class);
-
-    static String keyspace;
-    String table;
-    ColumnFamilyStore cfs;
-    Random rand;
-
-    @Param({"1000"})
-    int BATCH = 1_000;
 
     public enum EndOp
     {
         INMEM, TRUNCATE, FLUSH
     }
 
-    @Param({"100000"})
-    int count = 100_000;
-
     @Param({"INMEM", "TRUNCATE", "FLUSH"})
     EndOp flush = EndOp.INMEM;
-
-    @Param({""})
-    String memtableClass = "";
-
-    @Param({"false"})
-    boolean useNet = false;
-
-    String writeStatement;
-
-    @Param({"32"})
-    int threadCount;
-
-    ExecutorService executorService;
 
     @Setup(Level.Trial)
     public void setup() throws Throwable
     {
-        rand = new Random(1);
-        executorService = Executors.newFixedThreadPool(threadCount);
-        DatabaseDescriptor.setAutoSnapshot(false);
-        CQLTester.setUpClass();
-        logger.info("setupClass done.");
-        String memtableSetup = "";
-        if (!memtableClass.isEmpty())
-            memtableSetup = String.format(" AND memtable = { 'class': '%s' }", memtableClass);
-        keyspace = createKeyspace(
-        "CREATE KEYSPACE %s with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 } and durable_writes = false");
-        table = createTable(keyspace,
-                            "CREATE TABLE %s ( userid bigint, picid bigint, commentid bigint, PRIMARY KEY(userid, picid)) with compression = {'enabled': false}" +
-                            memtableSetup);
-        execute("use " + keyspace + ";");
-        if (useNet)
-        {
-            CQLTester.requireNetwork();
-            executeNet(getDefaultVersion(), "use " + keyspace + ";");
-        }
-        writeStatement = "INSERT INTO " + table + "(userid,picid,commentid)VALUES(?,?,?)";
-        logger.info("Prepared, batch " + BATCH + " threads " + threadCount + " flush " + flush);
-        logger.info("Disk access mode " + DatabaseDescriptor.getDiskAccessMode() +
-                           " index " + DatabaseDescriptor.getIndexAccessMode());
-
-        cfs = Keyspace.open(keyspace).getColumnFamilyStore(table);
-        cfs.disableAutoCompaction();
-        cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.USER_FORCED);
+        super.commonSetup();
     }
 
     @Benchmark
@@ -149,108 +79,14 @@ public class WriteTest extends CQLTester
         return new Object[] { i, i, i };
     }
 
-    public void performWrite(long ofs, int count) throws Throwable
+    void doExtraChecks()
     {
-        if (useNet)
-        {
-            if (threadCount == 1)
-                performWriteSerialNet(ofs, count);
-            else
-                performWriteThreadsNet(ofs, count);
-        }
-        else
-        {
-            if (threadCount == 1)
-                performWriteSerial(ofs, count);
-            else
-                performWriteThreads(ofs, count);
-        }
-    }
-
-    public void performWriteSerial(long ofs, int count) throws Throwable
-    {
-        for (long i = ofs; i < ofs + count; ++i)
-            execute(writeStatement, writeArguments(i));
-    }
-
-    public void performWriteThreads(long ofs, int count) throws Throwable
-    {
-        List<Future<Integer>> futures = new ArrayList<>();
-        for (int i = 0; i < count; ++i)
-        {
-            long pos = ofs + i;
-            futures.add(executorService.submit(() ->
-            {
-                try
-                {
-                    execute(writeStatement, writeArguments(pos));
-                    return 1;
-                }
-                catch (Throwable throwable)
-                {
-                    throw Throwables.propagate(throwable);
-                }
-            }));
-        }
-        int done = 0;
-        for (Future<Integer> f : futures)
-            done += f.get();
-        assert count == done;
-    }
-
-    public void performWriteSerialNet(long ofs, int count) throws Throwable
-    {
-        for (long i = ofs; i < ofs + count; ++i)
-            sessionNet().execute(writeStatement, writeArguments(i));
-    }
-
-    public void performWriteThreadsNet(long ofs, int count) throws Throwable
-    {
-        List<Future<Integer>> futures = new ArrayList<>();
-        for (long i = 0; i < count; ++i)
-        {
-            long pos = ofs + i;
-            futures.add(executorService.submit(() ->
-                                               {
-                                                   try
-                                                   {
-                                                       sessionNet().execute(writeStatement, writeArguments(pos));
-                                                       return 1;
-                                                   }
-                                                   catch (Throwable throwable)
-                                                   {
-                                                       throw Throwables.propagate(throwable);
-                                                   }
-                                               }));
-        }
-        long done = 0;
-        for (Future<Integer> f : futures)
-            done += f.get();
-        assert count == done;
-    }
-
-    @TearDown(Level.Trial)
-    public void teardown() throws InterruptedException
-    {
-        executorService.shutdown();
-        executorService.awaitTermination(15, TimeUnit.SECONDS);
-        Memtable memtable = cfs.getTracker().getView().getCurrentMemtable();
-        Memtable.MemoryUsage usage = Memtable.getMemoryUsage(memtable);
-        logger.info("\n{} in {} mode: {} ops, {} serialized bytes, {}\n",
-                          memtable.getClass().getSimpleName(),
-                          DatabaseDescriptor.getMemtableAllocationType(),
-                          memtable.getOperations(),
-                          FBUtilities.prettyPrintMemory(memtable.getLiveDataSize()),
-                          usage);
-
-        if (flush == EndOp.INMEM && !cfs.getLiveSSTables().isEmpty())
+        if (flush == WriteTest.EndOp.INMEM && !cfs.getLiveSSTables().isEmpty())
             throw new AssertionError("SSTables created for INMEM test.");
+    }
 
-        // do a flush to print sizes
-        cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.USER_FORCED);
-
-        CommitLog.instance.shutdownBlocking();
-        CQLTester.tearDownClass();
-        CQLTester.cleanup();
+    String extraInfo()
+    {
+        return " flush " + flush;
     }
 }

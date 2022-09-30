@@ -72,7 +72,7 @@ public final class CompactionParams
     public static final TombstoneOption DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES =
             TombstoneOption.valueOf(System.getProperty("default.provide.overlapping.tombstones", TombstoneOption.NONE.toString()).toUpperCase());
 
-    public static final CompactionParams DEFAULT = new CompactionParams(UnifiedCompactionStrategy.class,
+    public static final CompactionParams DEFAULT = new CompactionParams(SizeTieredCompactionStrategy.class,
                                                                         Collections.emptyMap(),
                                                                         DEFAULT_ENABLED,
                                                                         DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES);
