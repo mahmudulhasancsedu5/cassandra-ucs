@@ -49,6 +49,7 @@ public abstract class AbstractArrayClusteringPrefix extends AbstractOnHeapCluste
         return out;
     }
 
+    @Override
     public ClusteringPrefix<byte[]> retainable()
     {
         return this;

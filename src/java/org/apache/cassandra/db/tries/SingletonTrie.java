@@ -46,6 +46,7 @@ class SingletonTrie<T> extends Trie<T>
         private int currentTransition = -1;
         private int nextTransition = src.next();
 
+        @Override
         public int advance()
         {
             currentTransition = nextTransition;
@@ -81,21 +82,25 @@ class SingletonTrie<T> extends Trie<T>
             return currentDepth = ++depth;
         }
 
+        @Override
         public int skipChildren()
         {
             return currentDepth = -1;  // no alternatives
         }
 
+        @Override
         public int depth()
         {
             return currentDepth;
         }
 
+        @Override
         public T content()
         {
             return nextTransition == ByteSource.END_OF_STREAM ? value : null;
         }
 
+        @Override
         public int incomingTransition()
         {
             return currentTransition;

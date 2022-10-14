@@ -42,6 +42,7 @@ public abstract class AbstractBufferClusteringPrefix extends AbstractOnHeapClust
         return getRawValues();
     }
 
+    @Override
     public ClusteringPrefix<ByteBuffer> retainable()
     {
         if (!ByteBufferUtil.canMinimize(values))
