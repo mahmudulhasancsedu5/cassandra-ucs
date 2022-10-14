@@ -266,8 +266,18 @@ public class SlicedTrieTest
                                                      : r == null
                                                        ? content1.tailMap(l, includeLeft)
                                                        : content1.subMap(l, includeLeft, r, includeRight);
-        Trie<ByteBuffer> intersection = t1.subtrie(l, includeLeft, r, includeRight);
 
+        Trie<ByteBuffer> intersection = t1.subtrie(l, includeLeft, r, includeRight);
+        assertSameContent(intersection, imap);
+
+        if (l == null || r == null)
+            return;
+
+        // Test intersecting intersection.
+        intersection = t1.subtrie(l, includeLeft, null, false).subtrie(null, false, r, includeRight);
+        assertSameContent(intersection, imap);
+
+        intersection = t1.subtrie(null, false, r, includeRight).subtrie(l, includeLeft, null, false);
         assertSameContent(intersection, imap);
     }
 
@@ -485,5 +495,33 @@ public class SlicedTrieTest
         assertEquals(asList(), toList(intersection));
 
         // (empty, empty) is an invalid call as the "(empty" is greater than "empty)"
+    }
+
+    @Test
+    public void testSubtrieOnSubtrie()
+    {
+        Trie<Integer> trie = singleLevelIntTrie(15);
+
+        // non-overlapping
+        Trie<Integer> intersection = trie.subtrie(of(0), of(4)).subtrie(of(4), of(8));
+        assertEquals(asList(), toList(intersection));
+        // touching
+        intersection = trie.subtrie(of(0), true, of(3), true).subtrie(of(3), of(8));
+        assertEquals(asList(3), toList(intersection));
+        // overlapping 1
+        intersection = trie.subtrie(of(0), of(4)).subtrie(of(2), of(8));
+        assertEquals(asList(2, 3), toList(intersection));
+        // overlapping 2
+        intersection = trie.subtrie(of(0), of(4)).subtrie(of(1), of(8));
+        assertEquals(asList(1, 2, 3), toList(intersection));
+        // covered
+        intersection = trie.subtrie(of(0), of(4)).subtrie(of(0), of(8));
+        assertEquals(asList(0, 1, 2, 3), toList(intersection));
+        // covered 2
+        intersection = trie.subtrie(of(4), true, of(8), true).subtrie(of(0), of(8));
+        assertEquals(asList(4, 5, 6, 7), toList(intersection));
+        // covered 3
+        intersection = trie.subtrie(of(1), false, of(4), true).subtrie(of(0), of(8));
+        assertEquals(asList(2, 3, 4), toList(intersection));
     }
 }

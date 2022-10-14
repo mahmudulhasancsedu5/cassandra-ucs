@@ -127,8 +127,8 @@ public abstract class Trie<T>
      *  (4, e)   >  (5, k)+        trick*  cursors not equal, advance smaller (4 < 5)
      *  (4, e)+  <  (1, u)         trie*   cursors not equal, advance smaller (4 > 1)
      *  (4, p)+  <  (1, u)         trip*   cursors not equal, advance smaller (4 > 1)
-     *  (1, w)   >  (1, u)         u       cursors not equal, advance smaller (1 = 1, w > u)
-     *  (1, w)   >  (2, p)         up*     cursors not equal, advance smaller (1 = 1, w > u)
+     *  (1, w)   >  (1, u)+        u       cursors not equal, advance smaller (1 = 1, w > u)
+     *  (1, w)   >  (2, p)+        up*     cursors not equal, advance smaller (1 < 2)
      *  (1, w)+  <  (-1, -1)       w       cursors not equal, advance smaller (1 > -1)
      *  (2, i)+  <  (-1, -1)       wi      cursors not equal, advance smaller (2 > -1)
      *  (3, n)+  <  (-1, -1)       win*    cursors not equal, advance smaller (3 > -1)
@@ -282,26 +282,31 @@ public abstract class Trie<T>
      */
     public interface ValueConsumer<T> extends Consumer<T>, Walker<T, Void>
     {
+        @Override
         default void content(T content)
         {
             accept(content);
         }
 
+        @Override
         default Void complete()
         {
             return null;
         }
 
+        @Override
         default void resetPathLength(int newDepth)
         {
             // not tracking path
         }
 
+        @Override
         default void addPathByte(int nextByte)
         {
             // not tracking path
         }
 
+        @Override
         default void addPathBytes(UnsafeBuffer buffer, int pos, int count)
         {
             // not tracking path
@@ -336,7 +341,7 @@ public abstract class Trie<T>
 
     static <T, R> R process(Walker<T, R> walker, Cursor<T> cursor)
     {
-        assert cursor.depth() == 0;
+        assert cursor.depth() == 0 : "The provided cursor has already been advanced.";
         T content = cursor.content();   // handle content on the root node
         if (content == null)
             content = cursor.advanceToContent(walker);
@@ -377,9 +382,8 @@ public abstract class Trie<T>
      * Returns a view of the subtrie containing everything in this trie whose keys fall between the given boundaries.
      * The view is live, i.e. any write to the source will be reflected in the subtrie.
      *
-     * This method will throw an assertion error if the bounds provided are not correctly ordered, including with
-     * respect to the `includeLeft` and `includeRight` constraints (i.e. subtrie(x, false, x, false) is an invalid call
-     * but subtrie(x, true, x, false) is inefficient but fine for an empty subtrie).
+     * This method will not check its arguments for correctness. The resulting trie may be empty or throw an exception
+     * if the right bound is smaller than the left.
      *
      * @param left the left bound for the returned subtrie. If {@code null}, the resulting subtrie is not left-bounded.
      * @param includeLeft whether {@code left} is an inclusive bound of not.
@@ -393,6 +397,26 @@ public abstract class Trie<T>
         if (left == null && right == null)
             return this;
         return new SlicedTrie<>(this, left, includeLeft, right, includeRight);
+    }
+
+    /**
+     * Returns a view of the subtrie containing everything in this trie whose keys fall between the given boundaries,
+     * left-inclusive and right-exclusive.
+     * The view is live, i.e. any write to the source will be reflected in the subtrie.
+     *
+     * This method will not check its arguments for correctness. The resulting trie may be empty or throw an exception
+     * if the right bound is smaller than the left.
+     *
+     * Equivalent to calling subtrie(left, true, right, false).
+     *
+     * @param left the left bound for the returned subtrie. If {@code null}, the resulting subtrie is not left-bounded.
+     * @param right the right bound for the returned subtrie. If {@code null}, the resulting subtrie is not right-bounded.
+     * @return a view of the subtrie containing all the keys of this trie falling between {@code left} (inclusively if
+     * {@code includeLeft}) and {@code right} (inclusively if {@code includeRight}).
+     */
+    public Trie<T> subtrie(ByteComparable left, ByteComparable right)
+    {
+        return subtrie(left, true, right, false);
     }
 
     /**
@@ -416,7 +440,6 @@ public abstract class Trie<T>
      */
     public Iterable<T> values()
     {
-
         return this::valueIterator;
     }
 
@@ -471,6 +494,7 @@ public abstract class Trie<T>
     {
         T resolve(Collection<T> contents);
 
+        @Override
         default T resolve(T c1, T c2)
         {
             return resolve(ImmutableList.of(c1, c2));
@@ -479,7 +503,8 @@ public abstract class Trie<T>
 
     private static final CollectionMergeResolver<Object> THROWING_RESOLVER = new CollectionMergeResolver<Object>()
     {
-        public Object resolve(Collection contents)
+        @Override
+        public Object resolve(Collection<Object> contents)
         {
             throw error();
         }
@@ -494,6 +519,7 @@ public abstract class Trie<T>
      * Returns a resolver that throws whenever more than one of the merged nodes contains content.
      * Can be used to merge tries that are known to have distinct content paths.
      */
+    @SuppressWarnings("unchecked")
     public static <T> CollectionMergeResolver<T> throwingResolver()
     {
         return (CollectionMergeResolver<T>) THROWING_RESOLVER;

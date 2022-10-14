@@ -20,12 +20,14 @@ package org.apache.cassandra.db.tries;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
 import com.google.common.collect.ImmutableList;
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
@@ -152,7 +154,6 @@ public class CollectionMergeTrieTest
         }
 
         Trie<ByteBuffer> union = Trie.mergeDistinct(tries);
-
         assertSameContent(union, content);
     }
 
@@ -160,16 +161,47 @@ public class CollectionMergeTrieTest
     {
         List<Trie<ByteBuffer>> tries = new ArrayList<>(mergeCount);
         SortedMap<ByteComparable, ByteBuffer> content = new TreeMap<>((bytes1, bytes2) -> ByteComparable.compare(bytes1, bytes2, VERSION));
+        ByteComparable[][] keys = new ByteComparable[count][];
+        for (int i = 0; i < mergeCount; ++i)
+            keys[i] = generateKeys(rand, count);
 
         for (int i = 0; i < mergeCount; ++i)
         {
-            ByteComparable[] src = generateKeys(rand, count);
-            Trie<ByteBuffer> trie = makeMemtableTrie(src, content, true);
+            ByteComparable[] src = Arrays.copyOf(keys[i], count + count / 10);
+            // add duplicates from other tries
+            if (mergeCount > 1)
+            {
+                for (int j = count; j < src.length; ++j)
+                    src[j] = keys[randomButNot(rand, mergeCount, i)][rand.nextInt(count)];
+            }
+
+            Trie<ByteBuffer> trie = makeMemtableTrie(keys[i], content, true);
             tries.add(trie);
         }
 
         Trie<ByteBuffer> union = Trie.merge(tries, x -> x.iterator().next());
-
         assertSameContent(union, content);
+
+        try
+        {
+            union = Trie.mergeDistinct(tries);
+            assertSameContent(union, content);
+            Assert.fail("Expected assertion error for duplicate keys.");
+        }
+        catch (AssertionError e)
+        {
+            // correct path
+        }
+    }
+
+    private int randomButNot(Random rand, int bound, int avoid)
+    {
+        int r;
+        do
+        {
+            r = rand.nextInt(bound);
+        }
+        while (r == avoid);
+        return r;
     }
 }

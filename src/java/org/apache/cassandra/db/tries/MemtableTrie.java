@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.agrona.concurrent.UnsafeBuffer;
+import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
@@ -37,10 +38,10 @@ import org.github.jamm.MemoryLayoutSpecification;
  * Memtable trie, i.e. an in-memory trie built for fast modification and reads executing concurrently with writes from
  * a single mutator thread.
  *
- * Writes to this should be atomic (i.e. reads should see either the content before the write, or the content after the
- * write; if any read sees the write, then any subsequent (i.e. started after it completed) read should also see it).
- * This implementation does not currently guarantee this, but we still get the desired result as `apply` is only used
- * with singleton tries.
+ * This class can currently only provide atomicity (i.e. reads seeing either the content before a write, or the
+ * content after it; any read seeing the write enforcing any subsequent (i.e. started after it completed) reads to
+ * also see it) for singleton writes (i.e. calls to {@link #putRecursive}, {@link #putSingleton} or {@link #apply}
+ * with a singleton trie as argument).
  */
 public class MemtableTrie<T> extends MemtableReadTrie<T>
 {
@@ -51,15 +52,16 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      * reachedAllocatedSizeThreshold()) and start switching to a new trie if it is.
      * This must be done to avoid tries growing beyond their hard 2GB size limit (due to the 32-bit pointers).
      */
-    private static final int ALLOCATED_SIZE_THRESHOLD;
+    @VisibleForTesting
+    static final int ALLOCATED_SIZE_THRESHOLD;
     static
     {
-        String propertyName = "dse.trie_size_limit_mb";
-        // Default threshold + 10% == 1 GB. Adjusted slightly up to avoid a tiny final allocation for the 2G max.
-        int limitInMB = Integer.parseInt(System.getProperty(propertyName,
-                                                            Integer.toString(1024 * 10 / 11 + 1)));
+        // Default threshold + 10% == 2 GB. This should give the owner enough time to react to the
+        // reachedAllocatedSizeThreshold signal and switch this trie out before it fills up.
+        int limitInMB = CassandraRelevantProperties.MEMTABLE_OVERHEAD_SIZE.getInt(2048 * 10 / 11);
         if (limitInMB < 1 || limitInMB > 2047)
-            throw new AssertionError(propertyName + " must be within 1 and 2047");
+            throw new AssertionError(CassandraRelevantProperties.MEMTABLE_OVERHEAD_SIZE.getKey() +
+                                     " must be within 1 and 2047");
         ALLOCATED_SIZE_THRESHOLD = 1024 * 1024 * limitInMB;
     }
 
@@ -87,7 +89,6 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
               new AtomicReferenceArray[29 - CONTENTS_START_SHIFT],  // takes at least 4 bytes to write pointer to one content -> 4 times smaller than buffers
               NONE);
         this.bufferType = bufferType;
-        assert INITIAL_BUFFER_CAPACITY % BLOCK_SIZE == 0;
     }
 
     // Buffer, content list and block management
@@ -134,18 +135,14 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         if (inChunkPointer(v) == 0)
         {
             int leadBit = getChunkIdx(v, BUF_START_SHIFT, BUF_START_SIZE);
-            if (leadBit == 31)
+            if (leadBit + BUF_START_SHIFT == 31)
                 throw new SpaceExhaustedException();
 
-            assert buffers[leadBit] == null;
             ByteBuffer newBuffer = bufferType.allocate(BUF_START_SIZE << leadBit);
             buffers[leadBit] = new UnsafeBuffer(newBuffer);
-            // The above does not contain any happens-before enforcing writes, thus at this point the new buffer may be
-            // invisible to any concurrent readers. Touching the volatile root pointer (which any new read must go
-            // through) enforces a happens-before that makes it visible to all new reads (note: when the write completes
-            // it must do some volatile write, but that will be in the new buffer and without the line below could
-            // remain unreachable by other cores).
-            root = root;
+            // Note: Since we are not moving existing data to a new buffer, we are okay with no happens-before enforcing
+            // writes. Any reader that sees a pointer in the new buffer may only do so after reading the volatile write
+            // that attached the new path.
         }
 
         allocatedPos += BLOCK_SIZE;
@@ -160,7 +157,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         AtomicReferenceArray<T> array = contentArrays[leadBit];
         if (array == null)
         {
-            assert ofs == 0;
+            assert ofs == 0 : "Error in content arrays configuration.";
             contentArrays[leadBit] = array = new AtomicReferenceArray<>(CONTENTS_START_SIZE << leadBit);
         }
         array.lazySet(ofs, value); // no need for a volatile set here; at this point the item is not referenced
@@ -205,13 +202,12 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private int attachChild(int node, int trans, int newChild) throws SpaceExhaustedException
     {
-        if (isLeaf(node))
-            throw new AssertionError("attachChild cannot be used on content nodes.");
+        assert !isLeaf(node) : "attachChild cannot be used on content nodes.";
 
         switch (offset(node))
         {
             case PREFIX_OFFSET:
-                throw new AssertionError("attachChild cannot be used on content nodes.");
+                assert false : "attachChild cannot be used on content nodes.";
             case SPARSE_OFFSET:
                 return attachChildToSparse(node, trans, newChild);
             case SPLIT_OFFSET:
@@ -269,24 +265,29 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private int attachChildToSparse(int node, int trans, int newChild) throws SpaceExhaustedException
     {
-        int i;
+        int index;
+        int smallerCount = 0;
         // first check if this is an update and modify in-place if so
-        for (i = 0; i < SPARSE_CHILD_COUNT; ++i)
+        for (index = 0; index < SPARSE_CHILD_COUNT; ++index)
         {
-            if (isNull(getInt(node + SPARSE_CHILDREN_OFFSET + i * 4)))
+            if (isNull(getInt(node + SPARSE_CHILDREN_OFFSET + index * 4)))
                 break;
-            if ((getUnsignedByte(node + SPARSE_BYTES_OFFSET + i)) == trans)
+            final int existing = getUnsignedByte(node + SPARSE_BYTES_OFFSET + index);
+            if (existing == trans)
             {
-                putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
+                putIntVolatile(node + SPARSE_CHILDREN_OFFSET + index * 4, newChild);
                 return node;
             }
+            else if (existing < trans)
+                ++smallerCount;
         }
+        int childCount = index;
 
-        if (i == SPARSE_CHILD_COUNT)
+        if (childCount == SPARSE_CHILD_COUNT)
         {
             // Node is full. Switch to split
             int split = createEmptySplitNode();
-            for (i = 0; i < SPARSE_CHILD_COUNT; ++i)
+            for (int i = 0; i < SPARSE_CHILD_COUNT; ++i)
             {
                 int t = getUnsignedByte(node + SPARSE_BYTES_OFFSET + i);
                 int p = getInt(node + SPARSE_CHILDREN_OFFSET + i * 4);
@@ -297,11 +298,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         }
 
         // Add a new transition. They are not kept in order, so append it at the first free position.
-        putByte(node + SPARSE_BYTES_OFFSET + i,  (byte) trans);
+        putByte(node + SPARSE_BYTES_OFFSET + childCount, (byte) trans);
 
         // Update order word.
         int order = getUnsignedShort(node + SPARSE_ORDER_OFFSET);
-        int newOrder = insertInOrderWord(order, i, trans, node + SPARSE_BYTES_OFFSET);
+        int newOrder = insertInOrderWord(order, childCount, smallerCount);
 
         // Sparse nodes have two access modes: via the order word, when listing transitions, or directly to characters
         // and addresses.
@@ -312,7 +313,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         // correct value (see getSparseChild).
 
         // setting child enables reads to start seeing the new branch
-        putIntVolatile(node + SPARSE_CHILDREN_OFFSET + i * 4, newChild);
+        putIntVolatile(node + SPARSE_CHILDREN_OFFSET + childCount * 4, newChild);
 
         // some readers will decide whether to check the pointer based on the order word
         // write that volatile to make sure they see the new change too
@@ -323,28 +324,21 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     /**
      * Insert the given newIndex in the base-6 encoded order word in the correct position with respect to the ordering.
      *
-     * E.g. if the existing bytes were 20, 50, 30 with order word 120 (decimal 48), then
-     *   - insertOrderWord(120, 3, 5, ptr)  must return 1203 (decimal 48*6 + 3)
-     *   - insertOrderWord(120, 3, 25, ptr) must return 1230 (decimal 8*36 + 3*6 + 0)
-     *   - insertOrderWord(120, 3, 35, ptr) must return 1320 (decimal 1*216 + 3*36 + 12)
-     *   - insertOrderWord(120, 3, 55, ptr) must return 3120 (decimal 3*216 + 48)
+     * E.g.
+     *   - insertOrderWord(120, 3, 0) must return 1203 (decimal 48*6 + 3)
+     *   - insertOrderWord(120, 3, 1, ptr) must return 1230 (decimal 8*36 + 3*6 + 0)
+     *   - insertOrderWord(120, 3, 2, ptr) must return 1320 (decimal 1*216 + 3*36 + 12)
+     *   - insertOrderWord(120, 3, 3, ptr) must return 3120 (decimal 3*216 + 48)
      */
-    private int insertInOrderWord(int order, int newIndex, int transitionByte, int bytesPosition)
+    private static int insertInOrderWord(int order, int newIndex, int smallerCount)
     {
-        int s = order;
         int r = 1;
-        while (s != 0)
-        {
-            int b = getUnsignedByte(bytesPosition + s % SPARSE_CHILD_COUNT);
-            if (b > transitionByte)
-                break;
-
-            assert b < transitionByte;
+        for (int i = 0; i < smallerCount; ++i)
             r *= 6;
-            s /= 6;
-        }
-        // insert i after the ones we have passed (order % r) and before the remaining (s)
-        return order % r + (s * 6 + newIndex) * r;
+        int head = order / r;
+        int tail = order % r;
+        // insert newIndex after the ones we have passed (order % r) and before the remaining (order / r)
+        return tail + (head * 6 + newIndex) * r;
     }
 
     /**
@@ -353,7 +347,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private void attachChildToSplitNonVolatile(int node, int trans, int newChild) throws SpaceExhaustedException
     {
-        assert offset(node) == SPLIT_OFFSET;
+        assert offset(node) == SPLIT_OFFSET : "Invalid split node in trie";
         int midPos = splitBlockPointerAddress(node, splitNodeMidIndex(trans), SPLIT_START_LEVEL_LIMIT);
         int mid = getInt(midPos);
         if (isNull(mid))
@@ -362,7 +356,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             putInt(midPos, mid);
         }
 
-        assert offset(mid) == SPLIT_OFFSET;
+        assert offset(mid) == SPLIT_OFFSET : "Invalid split node in trie";
         int tailPos = splitBlockPointerAddress(mid, splitNodeTailIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         int tail = getInt(tailPos);
         if (isNull(tail))
@@ -371,7 +365,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             putInt(tailPos, tail);
         }
 
-        assert offset(tail) == SPLIT_OFFSET;
+        assert offset(tail) == SPLIT_OFFSET : "Invalid split node in trie";
         int childPos = splitBlockPointerAddress(tail, splitNodeChildIndex(trans), SPLIT_OTHER_LEVEL_LIMIT);
         putInt(childPos, newChild);
     }
@@ -417,7 +411,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
      */
     private int createSparseNode(int byte1, int child1, int byte2, int child2) throws SpaceExhaustedException
     {
-        assert byte1 != byte2;
+        assert byte1 != byte2 : "Attempted to create a sparse node with two of the same transition";
         if (byte1 > byte2)
         {
             // swap them so the smaller is byte1, i.e. there's always something bigger than child 0 so 0 never is
@@ -472,11 +466,9 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         return allocateBlock() + SPLIT_OFFSET;
     }
 
-    private int createContentNode(int contentIndex, int child, boolean isSafeChain) throws SpaceExhaustedException
+    private int createPrefixNode(int contentIndex, int child, boolean isSafeChain) throws SpaceExhaustedException
     {
-        assert !isLeaf(child);
-        if (isNull(child))
-            return ~contentIndex;
+        assert !isNullOrLeaf(child) : "Prefix node cannot reference a childless node.";
 
         int offset = offset(child);
         int node;
@@ -503,10 +495,8 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     private int updatePrefixNodeChild(int node, int child) throws SpaceExhaustedException
     {
-        assert offset(node) == PREFIX_OFFSET;
-
-        if (isNull(child))
-            return ~getInt(node + PREFIX_CONTENT_OFFSET);
+        assert offset(node) == PREFIX_OFFSET : "updatePrefix called on non-prefix node";
+        assert !isNullOrLeaf(child) : "Prefix node cannot reference a childless node.";
 
         // We can only update in-place if we have a full prefix node
         if (!isEmbeddedPrefixNode(node))
@@ -518,7 +508,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         else
         {
             int contentIndex = getInt(node + PREFIX_CONTENT_OFFSET);
-            return createContentNode(contentIndex, child, true);
+            return createPrefixNode(contentIndex, child, true);
         }
     }
 
@@ -555,11 +545,10 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
         // else we have existing prefix node, and we need to reference a new child
         if (isLeaf(existingPreContentNode))
         {
-            assert isNull(existingPostContentNode);
-            return createContentNode(~existingPreContentNode, updatedPostContentNode, true);
+            return createPrefixNode(~existingPreContentNode, updatedPostContentNode, true);
         }
 
-        assert offset(existingPreContentNode) == PREFIX_OFFSET;
+        assert offset(existingPreContentNode) == PREFIX_OFFSET : "Unexpected content in non-prefix and non-leaf node.";
         return updatePrefixNodeChild(existingPreContentNode, updatedPostContentNode);
     }
 
@@ -567,7 +556,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     /**
      * Represents the state for an {@link #apply} operation. Contains a stack of all nodes we descended through
-     * and used to update the nodes with new any new data during ascent.
+     * and used to update the nodes with any new data during ascent.
      *
      * To make this as efficient and GC-friendly as possible, we use an integer array (instead of is an object stack)
      * and we reuse the same object. The latter is safe because memtable tries cannot be mutated in parallel by multiple
@@ -704,19 +693,15 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                 {
                     final T existingContent = getContent(existingContentIndex);
                     T combinedContent = transformer.apply(existingContent, mutationContent);
+                    assert (combinedContent != null) : "Transformer cannot be used to remove content.";
                     setContent(existingContentIndex, combinedContent);
-                    if (combinedContent != null)
-                        return existingContentIndex;
-                    else
-                        return -1;
+                    return existingContentIndex;
                 }
                 else
                 {
                     T combinedContent = transformer.apply(null, mutationContent);
-                    if (combinedContent != null)
-                        return addContent(combinedContent);
-                    else
-                        return -1;
+                    assert (combinedContent != null) : "Transformer cannot be used to remove content.";
+                    return addContent(combinedContent);
                 }
             }
             else
@@ -759,12 +744,12 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             if (existingPreContentNode == existingPostContentNode ||
                 isNull(existingPostContentNode) ||
                 isEmbeddedPrefixNode(existingPreContentNode) && updatedPostContentNode != existingPostContentNode)
-                return createContentNode(contentIndex, updatedPostContentNode, isNull(existingPostContentNode));
+                return createPrefixNode(contentIndex, updatedPostContentNode, isNull(existingPostContentNode));
 
             // Otherwise modify in place
             if (updatedPostContentNode != existingPostContentNode) // to use volatile write but also ensure we don't corrupt embedded nodes
                 putIntVolatile(existingPreContentNode + PREFIX_POINTER_OFFSET, updatedPostContentNode);
-            assert contentIndex == getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET);
+            assert contentIndex == getInt(existingPreContentNode + PREFIX_CONTENT_OFFSET) : "Unexpected change of content index.";
             return existingPreContentNode;
         }
 
@@ -781,7 +766,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             --currentDepth;
             if (currentDepth == -1)
             {
-                assert root == existingPreContentNode;
+                assert root == existingPreContentNode : "Unexpected change to root. Concurrent trie modification?";
                 if (updatedPreContentNode != existingPreContentNode)
                 {
                     // Only write to root if they are different (value doesn't change, but
@@ -811,7 +796,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
          *
          * @param existing Existing content for this key, or null if there isn't any.
          * @param update   The update, always non-null.
-         * @return The combined value to use.
+         * @return The combined value to use. Cannot be null.
          */
         T apply(T existing, U update);
     }
@@ -827,11 +812,11 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     public <U> void apply(Trie<U> mutation, final UpsertTransformer<T, U> transformer) throws SpaceExhaustedException
     {
         Cursor<U> mutationCursor = mutation.cursor();
-        assert mutationCursor.depth() == 0;
+        assert mutationCursor.depth() == 0 : "Unexpected non-fresh cursor.";
         ApplyState state = applyState;
         state.reset();
         state.descend(-1, mutationCursor.content(), transformer);
-        assert state.currentDepth == 0;
+        assert state.currentDepth == 0 : "Unexpected change to applyState. Concurrent trie modification?";
 
         while (true)
         {
@@ -841,14 +826,14 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
                 // There are no more children. Ascend to the parent state to continue walk.
                 if (!state.attachAndMoveToParentState())
                 {
-                    assert depth == -1;
+                    assert depth == -1 : "Unexpected change to applyState. Concurrent trie modification?";
                     return;
                 }
             }
 
             // We have a transition, get child to descend into
             state.descend(mutationCursor.incomingTransition(), mutationCursor.content(), transformer);
-            assert state.currentDepth == depth;
+            assert state.currentDepth == depth : "Unexpected change to applyState. Concurrent trie modification?";
         }
     }
 
@@ -943,7 +928,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
             return node;
         }
         else
-            return createContentNode(addContent(transformer.apply(null, value)), node, false);
+            return createPrefixNode(addContent(transformer.apply(null, value)), node, false);
     }
 
     /**

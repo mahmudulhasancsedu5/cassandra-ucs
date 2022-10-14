@@ -120,7 +120,7 @@ public class SlicedTrie<T> extends Trie<T>
                 rightNextDepth = 1;
                 if (rightNext == ByteSource.END_OF_STREAM && excludeRight)
                     state = State.BEFORE_LEFT;  // This is a hack, we are after the right bound but we don't want to
-                                                // report depth -1 yet. So just make sure root is not reported.
+                                                // report depth -1 yet. So just make sure root's content is not reported.
             }
             else
             {

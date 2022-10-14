@@ -63,7 +63,7 @@ public class MemtableTriePutTest extends MemtableTrieTestBase
     // This tests that trie space allocation works correctly close to the 2G limit. It is normally disabled because
     // the test machines don't provide enough heap memory (test requires ~8G heap to finish). Run it manually when
     // MemtableTrie.allocateBlock is modified.
-    @Ignore
+//    @Ignore
     @Test
     public void testOver1GSize() throws MemtableTrie.SpaceExhaustedException
     {
@@ -77,7 +77,7 @@ public class MemtableTriePutTest extends MemtableTrieTestBase
         Assert.assertNull(trie.get(ByteComparable.of(t2)));
         Assert.assertFalse(trie.reachedAllocatedSizeThreshold());
 
-        trie.advanceAllocatedPos(0x40001000);  // over 1G
+        trie.advanceAllocatedPos(MemtableTrie.ALLOCATED_SIZE_THRESHOLD + 0x1000);
         trie.putRecursive(ByteComparable.of(t2), t2, (x, y) -> y);
         Assert.assertEquals(t1, trie.get(ByteComparable.of(t1)));
         Assert.assertEquals(t2, trie.get(ByteComparable.of(t2)));
@@ -119,5 +119,7 @@ public class MemtableTriePutTest extends MemtableTrieTestBase
         Assert.assertEquals(t2, trie.get(ByteComparable.of(t2)));
         Assert.assertNull(trie.get(ByteComparable.of(t3)));
         Assert.assertTrue(trie.reachedAllocatedSizeThreshold());
+
+        trie.discardBuffers();
     }
 }
