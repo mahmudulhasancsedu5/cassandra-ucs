@@ -134,7 +134,7 @@ public abstract class Trie<T>
      *  (3, n)+  <  (-1, -1)       win*    cursors not equal, advance smaller (3 > -1)
      *  (-1, -1)    (-1, -1)               both exhasted
      */
-    interface Cursor<T>
+    protected interface Cursor<T>
     {
 
         /**
@@ -248,7 +248,7 @@ public abstract class Trie<T>
     /**
      * Used by {@link Cursor#advanceToContent} to track the transitions and backtracking taken.
      */
-    interface ResettingTransitionsReceiver extends TransitionsReceiver
+    protected interface ResettingTransitionsReceiver extends TransitionsReceiver
     {
         /** Delete all bytes beyond the given length. */
         void resetPathLength(int newLength);
@@ -260,7 +260,7 @@ public abstract class Trie<T>
      * See {@link TrieDumper} for an example of how this can be used, and {@link TrieEntriesWalker} as a base class
      * for other common usages.
      */
-    interface Walker<T, R> extends ResettingTransitionsReceiver
+    protected interface Walker<T, R> extends ResettingTransitionsReceiver
     {
         /** Called when content is found. */
         void content(T content);
@@ -270,7 +270,7 @@ public abstract class Trie<T>
     }
 
     // Version of the byte comparable conversion to use for all operations
-    static final ByteComparable.Version BYTE_COMPARABLE_VERSION = ByteComparable.Version.OSS42;
+    protected static final ByteComparable.Version BYTE_COMPARABLE_VERSION = ByteComparable.Version.OSS42;
 
     /**
      * Adapter interface providing the methods a {@link Walker} to a {@link Consumer}, so that the latter can be used
