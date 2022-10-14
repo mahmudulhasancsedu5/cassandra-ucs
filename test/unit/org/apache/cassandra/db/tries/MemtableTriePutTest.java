@@ -63,7 +63,7 @@ public class MemtableTriePutTest extends MemtableTrieTestBase
     // This tests that trie space allocation works correctly close to the 2G limit. It is normally disabled because
     // the test machines don't provide enough heap memory (test requires ~8G heap to finish). Run it manually when
     // MemtableTrie.allocateBlock is modified.
-//    @Ignore
+    @Ignore
     @Test
     public void testOver1GSize() throws MemtableTrie.SpaceExhaustedException
     {
