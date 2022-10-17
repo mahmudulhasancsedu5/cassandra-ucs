@@ -190,17 +190,26 @@ public class TrieMemtable extends AbstractShardedMemtable
     @Override
     public long put(PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup)
     {
-        DecoratedKey key = update.partitionKey();
-        MemtableShard shard = shards[boundaries.getShardForKey(key)];
-        long colUpdateTimeDelta = shard.put(key, update, indexer, opGroup);
-
-        if (shard.data.reachedAllocatedSizeThreshold() && !switchRequested.getAndSet(true))
+        try
         {
-            logger.info("Scheduling flush due to trie size limit reached.");
-            owner.signalFlushRequired(this, ColumnFamilyStore.FlushReason.MEMTABLE_LIMIT);
-        }
+            DecoratedKey key = update.partitionKey();
+            MemtableShard shard = shards[boundaries.getShardForKey(key)];
+            long colUpdateTimeDelta = shard.put(key, update, indexer, opGroup);
 
-        return colUpdateTimeDelta;
+            if (shard.data.reachedAllocatedSizeThreshold() && !switchRequested.getAndSet(true))
+            {
+                logger.info("Scheduling flush due to trie size limit reached.");
+                owner.signalFlushRequired(this, ColumnFamilyStore.FlushReason.MEMTABLE_LIMIT);
+            }
+
+            return colUpdateTimeDelta;
+        }
+        catch (MemtableTrie.SpaceExhaustedException e)
+        {
+            // This should never happen as {@link MemtableTrie#reachedAllocatedSizeThreshold} should become
+            // true and trigger a memtable switch long before this limit is reached.
+            throw new IllegalStateException(e);
+        }
     }
 
     /**
@@ -446,7 +455,7 @@ public class TrieMemtable extends AbstractShardedMemtable
             this.metrics = metrics;
         }
 
-        public long put(DecoratedKey key, PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup)
+        public long put(DecoratedKey key, PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup) throws MemtableTrie.SpaceExhaustedException
         {
             BTreePartitionUpdater updater = new BTreePartitionUpdater(allocator, allocator.cloner(opGroup), opGroup, indexer);
             boolean locked = writeLock.tryLock();
@@ -468,18 +477,10 @@ public class TrieMemtable extends AbstractShardedMemtable
                     long onHeap = data.sizeOnHeap();
                     long offHeap = data.sizeOffHeap();
                     // Use the fast recursive put if we know the key is small enough to not cause a stack overflow.
-                    try
-                    {
-                        data.putSingleton(key,
-                                          update,
-                                          updater::mergePartitions,
-                                          key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
-                    }
-                    catch (MemtableTrie.SpaceExhaustedException e)
-                    {
-                        // This should never happen as a flush would be triggered long before this limit is reached.
-                        throw new IllegalStateException(e);
-                    }
+                    data.putSingleton(key,
+                                      update,
+                                      updater::mergePartitions,
+                                      key.getKeyLength() < MAX_RECURSIVE_KEY_LENGTH);
                     allocator.offHeap().adjust(data.sizeOffHeap() - offHeap, opGroup);
                     allocator.onHeap().adjust(data.sizeOnHeap() - onHeap, opGroup);
                 }
