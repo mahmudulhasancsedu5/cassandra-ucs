@@ -41,7 +41,6 @@ import org.apache.cassandra.config.OverrideConfigurationLoader;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.memtable.AbstractShardedMemtable;
 import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.service.EmbeddedCassandraService;
 import org.apache.cassandra.service.StorageService;
 import org.jboss.byteman.contrib.bmunit.BMRule;
@@ -80,8 +79,6 @@ public class TrieMemtableMetricsTest extends SchemaLoader
         System.setProperty(AbstractShardedMemtable.DEFAULT_SHARD_COUNT_PROPERTY, "" + NUM_SHARDS);
 
         SchemaLoader.loadSchema();
-
-        Schema.instance.clear();
 
         EmbeddedCassandraService cassandra = new EmbeddedCassandraService();
         cassandra.start();

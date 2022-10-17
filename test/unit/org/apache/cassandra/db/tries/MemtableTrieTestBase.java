@@ -624,7 +624,8 @@ public abstract class MemtableTrieTestBase
         }
         catch (MemtableTrie.SpaceExhaustedException e)
         {
-            throw new RuntimeException(e);
+            // Should not happen, test stays well below size limit.
+            throw new AssertionError(e);
         }
     }
 }
