@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;

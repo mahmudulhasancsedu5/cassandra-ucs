@@ -42,6 +42,8 @@ import org.github.jamm.MemoryLayoutSpecification;
  * content after it; any read seeing the write enforcing any subsequent (i.e. started after it completed) reads to
  * also see it) for singleton writes (i.e. calls to {@link #putRecursive}, {@link #putSingleton} or {@link #apply}
  * with a singleton trie as argument).
+ *
+ * Because it uses 32-bit pointers in byte buffers, this trie has a fixed size limit of 2GB.
  */
 public class MemtableTrie<T> extends MemtableReadTrie<T>
 {
@@ -49,7 +51,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     /**
      * Trie size limit. This is not enforced, but users must check from time to time that it is not exceeded (using
-     * reachedAllocatedSizeThreshold()) and start switching to a new trie if it is.
+     * {@link #reachedAllocatedSizeThreshold()}) and start switching to a new trie if it is.
      * This must be done to avoid tries growing beyond their hard 2GB size limit (due to the 32-bit pointers).
      */
     @VisibleForTesting
@@ -57,7 +59,7 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
     static
     {
         // Default threshold + 10% == 2 GB. This should give the owner enough time to react to the
-        // reachedAllocatedSizeThreshold signal and switch this trie out before it fills up.
+        // {@link #reachedAllocatedSizeThreshold()} signal and switch this trie out before it fills up.
         int limitInMB = CassandraRelevantProperties.MEMTABLE_OVERHEAD_SIZE.getInt(2048 * 10 / 11);
         if (limitInMB < 1 || limitInMB > 2047)
             throw new AssertionError(CassandraRelevantProperties.MEMTABLE_OVERHEAD_SIZE.getKey() +
@@ -93,6 +95,14 @@ public class MemtableTrie<T> extends MemtableReadTrie<T>
 
     // Buffer, content list and block management
 
+    /**
+     * Because we use buffers and 32-bit pointers, the trie cannot grow over 2GB of size. This exception is thrown if
+     * a trie operation needs it to grow over that limit.
+     *
+     * To avoid this problem, users should query {@link #reachedAllocatedSizeThreshold} from time to time. If the call
+     * returns true, they should switch to a new trie (e.g. by flushing a memtable) as soon as possible. The threshold
+     * is configurable, and is set by default to 10% under the 2GB limit to give ample time for the switch to happen.
+     */
     public static class SpaceExhaustedException extends Exception
     {
         public SpaceExhaustedException()
