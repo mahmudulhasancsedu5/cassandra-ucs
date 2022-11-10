@@ -50,6 +50,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.utils.EstimatedHistogram;
 import org.apache.cassandra.utils.FBUtilities;
 import org.json.simple.JSONArray;
@@ -158,7 +159,6 @@ public class CompactionLogAnalyzer
     static int readPerSecIndex;
     static int writePerSecIndex;
     static int sizesIndex;
-    static int Tindex;
     static int Windex;
 
     private static void initializeIndexes(String header)
@@ -184,7 +184,6 @@ public class CompactionLogAnalyzer
                     writePerSecIndex = indexMap.get("Write (bytes/sec)");
                     sizesIndex = indexMap.getOrDefault("Tot/Read/Written", -1);
                     sizesIndex = indexMap.get("Tot. comp. size/Read/Written (bytes)");
-                    Tindex = indexMap.get("T");
                     Windex = indexMap.get("W");
                 }
             }
@@ -208,8 +207,8 @@ public class CompactionLogAnalyzer
         String[] sizes = data[sizesIndex].split("/");
         dp.totalBytes = parseHumanReadableSize(sizes[0]);
         dp.remainingReadBytes = dp.totalBytes - parseHumanReadableSize(sizes[1]);
-        int T = Integer.parseInt(data[Tindex]);
-        dp.scalingParameter = Integer.parseInt(data[Windex]);
+        dp.scalingParameter = Controller.parseScalingParameter(data[Windex]);
+        int T = dp.scalingParameter > 0 ? dp.scalingParameter + 2 : 2;
         int compactingSSTables = Integer.parseInt(data[compactingSstablesIndex].split("/")[1]);
         int nonCompacting = dp.sstables - compactingSSTables;
         dp.bucketsAboveT = nonCompacting > T ? 1 : 0;
