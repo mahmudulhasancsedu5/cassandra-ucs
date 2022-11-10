@@ -243,18 +243,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                        Collection<Index.Group> indexGroups,
                                                        LifecycleNewTracker lifecycleNewTracker)
     {
-        if (controller.getNumShards() <= 1)
-            return super.createSSTableMultiWriter(descriptor,
-                                                  keyCount,
-                                                  repairedAt,
-                                                  pendingRepair,
-                                                  isTransient,
-                                                  commitLogPositions,
-                                                  sstableLevel,
-                                                  header,
-                                                  indexGroups,
-                                                  lifecycleNewTracker);
-
         return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,

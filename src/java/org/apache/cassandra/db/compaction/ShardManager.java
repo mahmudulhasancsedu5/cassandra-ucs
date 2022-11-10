@@ -19,10 +19,6 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
@@ -72,10 +68,20 @@ public class ShardManager
      */
     public double rangeSpanned(CompactionSSTable rdr)
     {
-        final double span = rangeSpanned(rdr.getFirst(), rdr.getLast());
+        double reported = rdr.tokenSpaceCoverage();
+        double span;
+        if (reported > 0)   // also false for NaN
+            span = reported;
+        else
+            span = rangeSpanned(rdr.getFirst(), rdr.getLast());
+
         if (span >= MINIMUM_TOKEN_COVERAGE)
             return span;
-        return 1.0;  // this will be chosen if span is NaN too
+
+        // Too small ranges are expected to be the result of either a single-partition sstable or falling outside
+        // of the local token ranges. In these cases we substitute it with 1 because for them sharding and density
+        // tiering does not make sense.
+        return 1.0;  // This will be chosen if span is NaN too.
     }
 
     public double rangeSpanned(PartitionPosition first, PartitionPosition last)

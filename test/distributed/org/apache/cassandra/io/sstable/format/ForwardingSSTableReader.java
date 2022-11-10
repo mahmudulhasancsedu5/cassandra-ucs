@@ -741,6 +741,12 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     }
 
     @Override
+    public double tokenSpaceCoverage()
+    {
+        return delegate.tokenSpaceCoverage();
+    }
+
+    @Override
     public boolean hasIndex()
     {
         return delegate.hasIndex();

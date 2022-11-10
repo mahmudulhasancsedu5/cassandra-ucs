@@ -86,6 +86,16 @@ public interface CompactionSSTable
     long uncompressedLength();
 
     /**
+     * @return the fraction of the token space for which this sstable has content. In the simplest case this is just the
+     * size of the interval returned by {@link #getBounds()}, but the sstable may contain "holes" when the locally-owned
+     * range is not contiguous (e.g. with vnodes).
+     * As this is affected by the local ranges which can change, the token space fraction is calculated at the time of
+     * writing the sstable and stored with its metadata.
+     * For older sstables that do not contain this metadata field, this method returns NaN.
+     */
+    double tokenSpaceCoverage();
+
+    /**
      * @return the sum of the on-disk size of the given sstables.
      */
     static long getTotalBytes(Iterable<? extends CompactionSSTable> sstables)

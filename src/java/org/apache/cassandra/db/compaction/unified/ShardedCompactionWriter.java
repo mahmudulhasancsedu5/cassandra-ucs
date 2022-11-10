@@ -144,4 +144,15 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
         return Math.round(shardAdjustedKeyCount * survivalRatio);
     }
+
+    @Override
+    protected void switchCompactionWriter(Directories.DataDirectory directory)
+    {
+        final SSTableWriter currentWriter = sstableWriter.currentWriter();
+        // Note: the size for inner writers can be taken to be boundaries.shardSpanSize(), but the first and last
+        // writers should deal with partial coverage.
+        if (currentWriter != null)
+            currentWriter.setTokenSpaceCoverage(boundaries.rangeSpanned(currentWriter.first, currentWriter.last));
+        super.switchCompactionWriter(directory);
+    }
 }
