@@ -64,9 +64,18 @@ public class ShardManagerTest
         assertEquals(0.5, shardManager.rangeSizeNonWrapping(range(0.2, 0.7)), delta);
         assertEquals(0.2, shardManager.rangeSpanned(range(0.3, 0.5)), delta);
 
-        assertEquals(0.2, shardManager.rangeSpanned(mockedTable(0.5, 0.7)), delta);
+        assertEquals(0.2, shardManager.rangeSpanned(mockedTable(0.5, 0.7, Double.NaN)), delta);
         // single-partition correction
-        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.3, 0.3)), delta);
+        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.3, 0.3, Double.NaN)), delta);
+
+        // reported coverage
+        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.7, 0.1)), delta);
+        // bad coverage
+        assertEquals(0.2, shardManager.rangeSpanned(mockedTable(0.5, 0.7, 0.0)), delta);
+        assertEquals(0.2, shardManager.rangeSpanned(mockedTable(0.5, 0.7, -1)), delta);
+
+        // correction over coverage
+        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.3, 0.5, 1e-50)), delta);
     }
 
     @Test
@@ -93,13 +102,22 @@ public class ShardManagerTest
         assertEquals(total, shardManager.rangeSpanned(range(0.0, 1.0)), delta);
 
 
-        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.8)), delta);
+        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.8, Double.NaN)), delta);
 
         // single-partition correction
-        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.3, 0.3)), delta);
+        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.3, 0.3, Double.NaN)), delta);
         // out-of-local-range correction
-        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.6, 0.7)), delta);
-        assertEquals(0.001, shardManager.rangeSpanned(mockedTable(0.6, 0.701)), delta);
+        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.6, 0.7, Double.NaN)), delta);
+        assertEquals(0.001, shardManager.rangeSpanned(mockedTable(0.6, 0.701, Double.NaN)), delta);
+
+        // reported coverage
+        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.7, 0.1)), delta);
+        // bad coverage
+        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.8, 0.0)), delta);
+        assertEquals(0.1, shardManager.rangeSpanned(mockedTable(0.5, 0.8, -1)), delta);
+
+        // correction over coverage, no recalculation
+        assertEquals(1.0, shardManager.rangeSpanned(mockedTable(0.5, 0.8, 1e-50)), delta);
     }
 
     Token tokenAt(double pos)
@@ -112,11 +130,12 @@ public class ShardManagerTest
         return new Range<>(tokenAt(start), tokenAt(end));
     }
 
-    CompactionSSTable mockedTable(double start, double end)
+    CompactionSSTable mockedTable(double start, double end, double reportedCoverage)
     {
         CompactionSSTable mock = Mockito.mock(CompactionSSTable.class);
         Mockito.when(mock.getFirst()).thenReturn(tokenAt(start).minKeyBound());
         Mockito.when(mock.getLast()).thenReturn(tokenAt(end).minKeyBound());
+        Mockito.when(mock.tokenSpaceCoverage()).thenReturn(reportedCoverage);
         return mock;
     }
 
