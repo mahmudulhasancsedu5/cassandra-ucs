@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Arrays;
+import java.util.Collection;
 
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
@@ -39,6 +40,11 @@ public class ShardManager
 
     private final Token[] shardBoundaries;
     final SortedLocalRanges localRanges;
+
+    public ShardManager(Collection<Token> shardBoundaries, SortedLocalRanges localRanges)
+    {
+        this(shardBoundaries.toArray(new Token[shardBoundaries.size()]), localRanges);
+    }
 
     public ShardManager(Token[] shardBoundaries, SortedLocalRanges localRanges)
     {

@@ -68,7 +68,6 @@ import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.unified.AdaptiveController;
 import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.db.compaction.unified.CostsCalculator;
@@ -382,7 +381,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 ? new AdaptiveController(MonotonicClock.preciseTime,
                                                          new SimulatedEnvironment(counters, valueSize), Ws[0],
                                                          new double[] { o },
-                                                         datasetSizeGB << 10,  // MB
+                                                         datasetSizeGB << 13,  // MB, leave some room
                                                          numShards,
                                                          sstableSize >> 20, // MB
                                                          0,
@@ -399,7 +398,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 : new StaticController(new SimulatedEnvironment(counters, valueSize),
                                                        Ws,
                                                        new double[] { o },
-                                                       datasetSizeGB << 10,  // MB
+                                                       datasetSizeGB << 13,  // MB
                                                        numShards,
                                                        sstableSize >> 20,
                                                        0,
@@ -420,8 +419,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
 
         private CsvWriter(String fileName) throws IOException
         {
-            this.updateWriter =  new OutputStreamWriter(Files.newOutputStream(Paths.get(logDirectory, fileName + ".csv"), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE));
-            this.averagesWriter =  new OutputStreamWriter(Files.newOutputStream(Paths.get(logDirectory, fileName + "-avg.csv"), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE));
+            this.updateWriter =  new OutputStreamWriter(Files.newOutputStream(Paths.get(logDirectory, fileName + ".csv"), StandardOpenOption.CREATE, StandardOpenOption.WRITE));
+            this.averagesWriter =  new OutputStreamWriter(Files.newOutputStream(Paths.get(logDirectory, fileName + "-avg.csv"), StandardOpenOption.CREATE, StandardOpenOption.WRITE));
             this.headerWritten = false;
         }
 
@@ -1430,7 +1429,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
 
             // The minimum sstable size and the compaction boundaries as dictated by the strategy
             long minSStableSize = strategy.getController().getMinSstableSizeBytes();
-            ShardManager boundaries = strategy.getShardBoundaries();
+            ShardManager boundaries = strategy.getShardManager();
 
             // If we didn't have a minimum sstable size, each shard would get an sstable segment of this size and the number of
             // sstables would be the number of shards, but because we have a minimum sstable size, we need to put a cap of minSStableSize
@@ -1462,6 +1461,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
 
                 SSTableReader sstable = mockSSTable(0, bytesOnDisk, timestamp, 0, first, last, 0, true, null, 0);
                 when(sstable.keyCardinalityEstimator()).thenReturn(cardinality);
+                when(sstable.estimatedKeys()).thenReturn(keyCount);
                 sstables.add(sstable);
 
                 min = boundaries.get(max).getToken().nextValidToken();

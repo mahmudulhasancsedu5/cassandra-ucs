@@ -48,11 +48,8 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
     final Controller controller;
     final DiskBoundaries diskBoundaries;
 
-    final ShardManager shardManager;
-
-    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries, List<Token> shardBoundaries, SortedLocalRanges localRanges)
+    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries)
     {
-        shardManager = new ShardManager(shardBoundaries.toArray(new Token[shardBoundaries.size()]), localRanges);
         this.controller = controller;
         this.diskBoundaries = diskBoundaries;
 
@@ -60,30 +57,12 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
 
         ret.add(RepairEquivClassSplitter.INSTANCE);
 
-        if (diskBoundaries.getPositions() != null)
+        if (diskBoundaries.getNumBoundaries() > 1)
         {
-            // The shard boundaries must also split on disks. Verify it.
-            assert new HashSet<>(shardBoundaries).containsAll(diskBoundaries.getPositions());
-        }
-        else if (diskBoundaries.getNumBoundaries() > 1)
-        {
-            // We end up here if there are multiple disks, but not assigned according to token range.
             ret.add(new DiskIndexEquivClassSplitter());
         }
 
-        if (shardBoundaries.size() > 1)
-            ret.add(new ShardEquivClassSplitter());
-
         classSplitters = ret.toArray(new EquivClassSplitter[0]);
-    }
-
-    public ArenaSelector nonShardingSelector()
-    {
-        return new ArenaSelector(controller,
-                                 diskBoundaries,
-                                 diskBoundaries.getPositions() == null ? Collections.EMPTY_LIST
-                                                                       : diskBoundaries.getPositions(),
-                                 shardManager.localRanges);
     }
 
     @Override
@@ -100,11 +79,6 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
         return Arrays.stream(classSplitters)
                      .map(e -> e.name(t))
                      .collect(Collectors.joining("-"));
-    }
-
-    public int shardFor(PartitionPosition pos)
-    {
-        return shardManager.shardFor(pos);
     }
 
     /**
@@ -147,41 +121,6 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
                 return "unrepaired";
             else
                 return "pending_repair_" + ssTableReader.getPendingRepair();
-        }
-    }
-
-    /**
-     * Return the shard for an sstable, which may be fixed to zero for L0 sstables if shards are disabled on L0
-     */
-    public int shardFor(CompactionSSTable ssTableReader)
-    {
-        // If shards on L0 are disabled and the size of the sstable is less than the max L0 size, always pick the fist shard
-        if (!controller.areL0ShardsEnabled() && shardManager.density(ssTableReader) < controller.getMaxL0Density())
-            return 0;
-
-        return shardManager.shardFor(ssTableReader.getFirst());
-    }
-
-    /**
-     * Split sstables by their shard. If the data set size is larger than the shard size in the compaction options,
-     * then we create an equivalence class based by shard. Each sstable ends up in a shard based on their first
-     * key. Each shard is calculated by splitting the local token ranges into a number of shards, where the number
-     * of shards is calculated as ceil(data_size / shard size);
-     *
-     * Shard boundaries also split the sstables that reside on different disks.
-     */
-    private final class ShardEquivClassSplitter implements EquivClassSplitter
-    {
-        @Override
-        public int compare(CompactionSSTable a, CompactionSSTable b)
-        {
-            return Integer.compare(shardFor(a), shardFor(b));
-        }
-
-        @Override
-        public String name(CompactionSSTable ssTableReader)
-        {
-            return "shard_" + shardFor(ssTableReader);
         }
     }
 

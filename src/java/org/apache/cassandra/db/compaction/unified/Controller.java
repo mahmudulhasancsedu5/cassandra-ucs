@@ -176,6 +176,13 @@ public abstract class Controller
     @Nullable protected volatile CostsCalculator calculator;
     @Nullable private volatile Metrics metrics;
 
+    public enum OverlapInclusionMethod
+    {
+        NONE, SINGLE, TRANSITIVE;
+    }
+
+    private final OverlapInclusionMethod overlapInclusionMethod = OverlapInclusionMethod.TRANSITIVE;
+
     Controller(MonotonicClock clock,
                Environment env,
                double[] survivalFactors,
@@ -833,6 +840,26 @@ public abstract class Controller
     public Random random()
     {
         return ThreadLocalRandom.current();
+    }
+
+    /**
+     * Return the overlap inclusion method to use when combining overlap sections into a bucket. For example, with
+     * SSTables A(0, 5), B(2, 9), C(6, 12), D(10, 12) whose overlap sections calculation returns [AB, BC, CD],
+     *   - NONE means no sections are to be merged. AB, BC and CD will be separate buckets, compactions AB, BC and CD
+     *     will be added separately, thus some SSTables will be partially used / single-source compacted, likely
+     *     to be recompacted again with the next selected bucket.
+     *   - SINGLE means only overlaps of the sstables in the selected bucket will be added. AB+BC will be one bucket,
+     *     and CD will be another (as BC is already used). A middle ground of sorts, should reduce overcompaction but
+     *     still has some.
+     *   - TRANSITIVE means a transitive closure of overlapping sstables will be selected. AB+BC+CD will be in the same
+     *     bucket, selected compactions will apply to all overlapping sstables and no overcompaction will be done, at
+     *     the cost of reduced compaction parallelism and increased length of the operation.
+     * TRANSITIVE is the default and makes most sense. NONE is a closer approximation to operation of legacy UCS.
+     * The option is exposed for experimentation.
+     */
+    public OverlapInclusionMethod overlapInclusionMethod()
+    {
+        return overlapInclusionMethod;
     }
 
     public static int[] parseScalingParameters(String str)
