@@ -53,6 +53,7 @@ public interface CompactionSSTable
     Comparator<CompactionSSTable> maxTimestampDescending = (o1, o2) -> Long.compare(o2.getMaxTimestamp(), o1.getMaxTimestamp());
     Comparator<CompactionSSTable> maxTimestampAscending = (o1, o2) -> Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp());
     Comparator<CompactionSSTable> firstKeyComparator = (o1, o2) -> o1.getFirst().compareTo(o2.getFirst());
+    Comparator<CompactionSSTable> lastKeyComparator = (o1, o2) -> o1.getLast().compareTo(o2.getLast());
     Ordering<CompactionSSTable> firstKeyOrdering = Ordering.from(firstKeyComparator);
     Comparator<CompactionSSTable> sizeComparator = (o1, o2) -> Long.compare(o1.onDiskLength(), o2.onDiskLength());
     Comparator<CompactionSSTable> idComparator = (o1, o2) -> SSTableIdFactory.COMPARATOR.compare(o1.getId(), o2.getId());

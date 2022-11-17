@@ -34,7 +34,7 @@ import org.apache.cassandra.utils.FBUtilities;
  */
 public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
 {
-    private static final Collection<String> HEADER = ImmutableList.copyOf(Iterables.concat(ImmutableList.of("Bucket", "W", "Min Density", "Max Density"),
+    private static final Collection<String> HEADER = ImmutableList.copyOf(Iterables.concat(ImmutableList.of("Level", "W", "Min Density", "Max Density", "Overlap"),
                                                                                            CompactionAggregateStatistics.HEADER));
 
     private static final long serialVersionUID = 3695927592357345266L;
@@ -54,6 +54,9 @@ public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
     /** The maximum density for an SSTable run that belongs to this bucket */
     private final double maxDensityBytes;
 
+    /** The maximum number of overlapping sstables in the shard */
+    private final int maxOverlap;
+
     /** The name of the shard */
     private final String shard;
 
@@ -63,6 +66,7 @@ public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
                                 int scalingParameter,
                                 double minDensityBytes,
                                 double maxDensityBytes,
+                                int maxOverlap,
                                 String shard)
     {
         super(base);
@@ -72,6 +76,7 @@ public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
         this.scalingParameter = scalingParameter;
         this.minDensityBytes = minDensityBytes;
         this.maxDensityBytes = maxDensityBytes;
+        this.maxOverlap = maxOverlap;
         this.shard = shard;
     }
 
@@ -132,6 +137,8 @@ public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
         data.add(Controller.printScalingParameter(scalingParameter));
         data.add(FBUtilities.prettyPrintBinary(minDensityBytes, "B", " "));
         data.add(FBUtilities.prettyPrintBinary(maxDensityBytes, "B", " "));
+
+        data.add(Integer.toString(maxOverlap));
 
         data.addAll(super.data());
 
