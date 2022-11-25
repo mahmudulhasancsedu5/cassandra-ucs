@@ -102,6 +102,8 @@ public class AdaptiveController extends Controller
                               long expiredSSTableCheckFrequency,
                               boolean ignoreOverlapsInExpirationCheck,
                               boolean l0ShardsEnabled,
+                              int baseShardCount,
+                              double targetSStableSize,
                               OverlapInclusionMethod overlapInclusionMethod,
                               int intervalSec,
                               int minScalingParameter,
@@ -110,9 +112,21 @@ public class AdaptiveController extends Controller
                               int minCost,
                               int maxAdaptiveCompactions)
     {
-        super(clock, env, survivalFactors, dataSetSizeMB, numShards, minSstableSizeMB, flushSizeOverrideMB,
-              maxSpaceOverhead, maxSSTablesToCompact, expiredSSTableCheckFrequency,
-              ignoreOverlapsInExpirationCheck, l0ShardsEnabled, overlapInclusionMethod);
+        super(clock,
+              env,
+              survivalFactors,
+              dataSetSizeMB,
+              numShards,
+              minSstableSizeMB,
+              flushSizeOverrideMB,
+              maxSpaceOverhead,
+              maxSSTablesToCompact,
+              expiredSSTableCheckFrequency,
+              ignoreOverlapsInExpirationCheck,
+              l0ShardsEnabled,
+              baseShardCount,
+              targetSStableSize,
+              overlapInclusionMethod);
 
         this.scalingParameters = scalingParameters;
         this.previousScalingParameters = previousScalingParameters;
@@ -135,6 +149,8 @@ public class AdaptiveController extends Controller
                                   long expiredSSTableCheckFrequency,
                                   boolean ignoreOverlapsInExpirationCheck,
                                   boolean l0ShardsEnabled,
+                                  int baseShardCount,
+                                  double targetSSTableSize,
                                   OverlapInclusionMethod overlapInclusionMethod,
                                   Map<String, String> options)
     {
@@ -151,7 +167,26 @@ public class AdaptiveController extends Controller
         int minCost = options.containsKey(MIN_COST) ? Integer.parseInt(options.get(MIN_COST)) : DEFAULT_MIN_COST;
         int maxAdaptiveCompactions = options.containsKey(MAX_ADAPTIVE_COMPACTIONS) ? Integer.parseInt(options.get(MAX_ADAPTIVE_COMPACTIONS)) : DEFAULT_MAX_ADAPTIVE_COMPACTIONS;
 
-        return new AdaptiveController(MonotonicClock.preciseTime, env, scalingParameters, previousScalingParameters, survivalFactors, dataSetSizeMB, numShards, minSstableSizeMB, flushSizeOverrideMB, maxSpaceOverhead, maxSSTablesToCompact, expiredSSTableCheckFrequency, ignoreOverlapsInExpirationCheck, l0ShardsEnabled, overlapInclusionMethod, intervalSec, minScalingParameter, maxScalingParameter, threshold, minCost, maxAdaptiveCompactions);
+        return new AdaptiveController(MonotonicClock.preciseTime,
+                                      env,
+                                      scalingParameters, previousScalingParameters,
+                                      survivalFactors,
+                                      dataSetSizeMB,
+                                      numShards,
+                                      minSstableSizeMB,
+                                      flushSizeOverrideMB,
+                                      maxSpaceOverhead,
+                                      maxSSTablesToCompact,
+                                      expiredSSTableCheckFrequency,
+                                      ignoreOverlapsInExpirationCheck,
+                                      l0ShardsEnabled,
+                                      baseShardCount,
+                                      targetSSTableSize,
+                                      overlapInclusionMethod,
+                                      intervalSec,
+                                      minScalingParameter, maxScalingParameter,
+                                      threshold,
+                                      minCost, maxAdaptiveCompactions);
     }
 
     public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException

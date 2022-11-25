@@ -258,8 +258,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                       header,
                                       indexGroups,
                                       lifecycleNewTracker,
-                                      controller.getMinSstableSizeBytes(),
-                                      getShardManager());
+                                      getShardManager().boundaries(controller.getNumShards(realm.metrics().flushSizeOnDisk().get())));
     }
 
     /**
@@ -270,10 +269,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      */
     private CompactionTask createCompactionTask(LifecycleTransaction transaction, int gcBefore)
     {
-        if (controller.getNumShards() <= 1)
-            return new CompactionTask(realm, transaction, gcBefore, false, this);
-
-        return new UnifiedCompactionTask(realm, this, transaction, gcBefore, controller.getMinSstableSizeBytes(), getShardManager());
+        return new UnifiedCompactionTask(realm, this, transaction, gcBefore, getShardManager());
     }
 
     private void maybeUpdateSelector()
@@ -288,12 +284,19 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
             DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
             SortedLocalRanges localRanges = currentBoundaries.getLocalRanges();
-            List<Token> diskBoundaries = currentBoundaries.getPositions();
-            shardManager = new ShardManager(computeShardBoundaries(localRanges,
-                                                                   diskBoundaries,
-                                                                   controller.getNumShards(),
-                                                                   realm.getPartitioner()),
-                                            localRanges);
+            // this should only happen in tests that change partitioners, but we don't want UCS to throw
+            // where other strategies work even if the situations are unrealistic.
+            if (localRanges.getRanges().isEmpty() || !localRanges.getRanges()
+                                                                 .get(0)
+                                                                 .range()
+                                                      .left
+                                                      .getPartitioner()
+                                                      .equals(realm.getPartitioner()))
+                localRanges = new SortedLocalRanges(realm,
+                                                    localRanges.getRingVersion(),
+                                                    null);
+            // FIXME: somehow deal with disk boundaries and splitter not present, and remove method below
+            shardManager = new ShardManager(localRanges);
             arenaSelector = new ArenaSelector(controller, currentBoundaries);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.
@@ -718,9 +721,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             }
 
 
-            int shardsSpanned = shardsSpanned(pick);
-            for (int i = 0; i < shardsSpanned; ++i)  // put an entry for each spanned shard
-                list.addInt(aggregateIndex);
+            list.addInt(aggregateIndex);
         }
         if (list.isEmpty() && expired.isEmpty())
             return ImmutableList.of();
@@ -784,13 +785,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             aggregates.add(pending.get(i));
 
         return aggregates;
-    }
-
-    private int shardsSpanned(CompactionPick pick)
-    {
-        PartitionPosition min = pick.sstables().stream().map(CompactionSSTable::getFirst).min(Ordering.natural()).get();
-        PartitionPosition max = pick.sstables().stream().map(CompactionSSTable::getLast).max(Ordering.natural()).get();
-        return shardManager.shardFor(max) - shardManager.shardFor(min) + 1;
     }
 
     @Override

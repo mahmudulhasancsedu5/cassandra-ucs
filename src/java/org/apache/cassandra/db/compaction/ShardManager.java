@@ -18,8 +18,8 @@
 
 package org.apache.cassandra.db.compaction;
 
-import java.util.Arrays;
-import java.util.Collection;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
@@ -38,34 +38,25 @@ public class ShardManager
      */
     static final double MINIMUM_TOKEN_COVERAGE = Math.scalb(1.0, -48);
 
-    private final Token[] shardBoundaries;
     final SortedLocalRanges localRanges;
 
-    public ShardManager(Collection<Token> shardBoundaries, SortedLocalRanges localRanges)
-    {
-        this(shardBoundaries.toArray(new Token[shardBoundaries.size()]), localRanges);
-    }
+    // Staring positions for the local token ranges, in covered token range. The last number defines the total token
+    // shared owned by the node.
+    double[] localRangePositions;
 
-    public ShardManager(Token[] shardBoundaries, SortedLocalRanges localRanges)
+    public ShardManager(SortedLocalRanges localRanges)
     {
-        this.shardBoundaries = shardBoundaries;
         this.localRanges = localRanges;
-    }
-
-    public int shardFor(Token token)
-    {
-        int pos = Arrays.binarySearch(shardBoundaries, token);
-        return pos >= 0 ? pos : -pos - 1;   // boundaries are end-inclusive
-    }
-
-    /**
-     * Returns the shard where this key belongs. Shards are given by their end boundaries (i.e. shard 0 covers the space
-     * between minimum and shardBoundaries[0], shard 1 is between shardBoundaries[0] and shardBoundaries[1]), thus
-     * finding the index of the first bigger boundary gives the index of the covering shard.
-     */
-    public int shardFor(PartitionPosition key)
-    {
-        return shardFor(key.getToken());
+        double position = 0;
+        final List<Splitter.WeightedRange> ranges = localRanges.getRanges();
+        localRangePositions = new double[ranges.size()];
+        for (int i = 0; i < localRangePositions.length; ++i)
+        {
+            Range<Token> range = ranges.get(i).range();
+            double span = range.left.size(range.right);
+            position += span;
+            localRangePositions[i] = position;
+        }
     }
 
     /**
@@ -101,24 +92,6 @@ public class ShardManager
         return rangeSizeNonWrapping(tableRange);
     }
 
-    public double rangeSpannedInShard(CompactionSSTable rdr, int shardIdx)
-    {
-        Range<Token> shardSpan = shardSpan(shardIdx);
-        Range<Token> tableRange = coveringRange(rdr.getFirst(), rdr.getLast());
-        final Range<Token> tableInShardRange = shardSpan.intersectionNonWrapping(tableRange);
-        if (tableInShardRange == null)
-            return 0;
-        return rangeSizeNonWrapping(tableInShardRange);
-    }
-
-    public Range<Token> shardSpan(int shardIdx)
-    {
-        if (shardIdx == 0)
-            return new Range<>(shardBoundaries[0].minValue(), shardBoundaries[0]);
-        else
-            return new Range<>(shardBoundaries[shardIdx - 1], shardBoundaries[shardIdx]);
-    }
-
     public double rangeSizeNonWrapping(Range<Token> tableRange)
     {
         double size = 0;
@@ -130,6 +103,11 @@ public class ShardManager
             size += ix.left.size(ix.right);
         }
         return size;
+    }
+
+    public static Range<Token> coveringRange(CompactionSSTable sstable)
+    {
+        return coveringRange(sstable.getFirst(), sstable.getLast());
     }
 
     private static Range<Token> coveringRange(PartitionPosition first, PartitionPosition last)
@@ -155,13 +133,143 @@ public class ShardManager
         return Double.compare(density(a), density(b));
     }
 
-    public int size()
+    /**
+     * Estimate the density of the sstable that will be the result of compacting the given sources.
+     */
+    public double calculateCombinedDensity(Set<? extends CompactionSSTable> sstables)
     {
-        return shardBoundaries.length;
+        if (sstables.isEmpty())
+            return 0;
+        long onDiskLength = 0;
+        PartitionPosition min = null;
+        PartitionPosition max = null;
+        for (CompactionSSTable sstable : sstables)
+        {
+            onDiskLength += sstable.onDiskLength();
+            min = min == null || min.compareTo(sstable.getFirst()) > 0 ? sstable.getFirst() : min;
+            max = max == null || max.compareTo(sstable.getLast()) < 0 ? sstable.getLast() : max;
+        }
+        double span = rangeSpanned(min, max);
+        if (span >= MINIMUM_TOKEN_COVERAGE)
+            return onDiskLength / span;
+        else
+            return onDiskLength;
     }
 
-    public Token get(int index)
+    public double localSpaceCoverage()
     {
-        return shardBoundaries[index];
+        return localRangePositions[localRangePositions.length - 1];
+    }
+
+    /**
+     * Construct a boundary/shard iterator for the given number of shards.
+     */
+    public BoundaryIterator boundaries(int count)
+    {
+        return new BoundaryIterator(count);
+    }
+
+    public class BoundaryIterator
+    {
+        private final double rangeStep;
+        private final int count;
+        private int pos;
+        private int currentRange;
+        private Token currentStart;
+        private Token currentEnd;   // null for the last shard
+
+        public BoundaryIterator(int count)
+        {
+            this.count = count;
+            rangeStep = localSpaceCoverage() / count;
+            currentStart = localRanges.getRanges().get(0).left();
+            currentRange = 0;
+            pos = 1;
+            if (pos == count)
+                currentEnd = null;
+            else
+                currentEnd = getEndToken(rangeStep * pos);
+        }
+
+        private Token getEndToken(double toPos)
+        {
+            double left = currentRange > 0 ? localRangePositions[currentRange - 1] : 0;
+            double right = localRangePositions[currentRange];
+            while (toPos > right)
+            {
+                left = right;
+                right = localRangePositions[++currentRange];
+            }
+
+            final Range<Token> range = localRanges.getRanges().get(currentRange).range();
+            return currentStart.getPartitioner().split(range.left, range.right, (toPos - left) / (right - left));
+        }
+
+        public Token shardStart()
+        {
+            return currentStart;
+        }
+
+        public Token shardEnd()
+        {
+            return currentEnd;
+        }
+
+        public Range<Token> shardSpan()
+        {
+            return new Range<>(currentStart, currentEnd != null ? currentEnd : currentStart.minValue());
+        }
+
+        public double shardSpanSize()
+        {
+            return rangeStep;
+        }
+
+        /**
+         * Advance to the given token (e.g. before writing a key). Returns true if this resulted in advancing to a new
+         * shard, and false otherwise.
+         */
+        public boolean advanceTo(Token nextToken)
+        {
+            if (currentEnd == null || nextToken.compareTo(currentEnd) < 0)
+                return false;
+            do
+            {
+                currentStart = currentEnd;
+                if (++pos == count)
+                    currentEnd = null;
+                else
+                    currentEnd = getEndToken(rangeStep * pos);
+            }
+            while (!(currentEnd == null || nextToken.compareTo(currentEnd) < 0));
+            return true;
+        }
+
+        public int count()
+        {
+            return count;
+        }
+
+        /**
+         * Returns the fraction of the given token range's coverage that falls within this shard.
+         * E.g. if the span covers two shards exactly and the current shard is one of them, it will return 0.5.
+         */
+        public double fractionInShard(Range<Token> targetSpan)
+        {
+            Range<Token> shardSpan = shardSpan();
+            Range<Token> covered = targetSpan.intersectionNonWrapping(shardSpan);
+            if (covered == null)
+                return 0;
+            if (covered == targetSpan)
+                return 1;
+            double inShardSize = covered == shardSpan ? shardSpanSize() : ShardManager.this.rangeSpanned(covered);
+            double totalSize = ShardManager.this.rangeSpanned(targetSpan);
+            return inShardSize / totalSize;
+        }
+
+        public double rangeSpanned(PartitionPosition first, PartitionPosition last)
+        {
+            return ShardManager.this.rangeSpanned(first, last);
+        }
     }
 }

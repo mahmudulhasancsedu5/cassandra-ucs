@@ -118,7 +118,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards(anyDouble())).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -198,7 +198,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
 
         Controller controller = Mockito.mock(Controller.class);
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards(anyDouble())).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -348,7 +348,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                                                        Double.MAX_VALUE,
                                                                        numBuckets);
 
-        int numArenas = strategy.getController().getNumShards();
+        int numArenas = strategy.getController().getNumShards(1);
         // Without limiting oversized compactions kicking in, we expect one compaction per shard, otherwise we expect
         // a fraction of the number of all shards, proportional to the max allowed space amplification fraction.
         int expectedCompactionTasks = triggerOversizedLimiting
@@ -437,7 +437,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(numShards);
+        when(controller.getNumShards(anyDouble())).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getMaxSpaceOverhead()).thenReturn(1.0);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minSstableSizeBytes);
@@ -564,7 +564,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         // and also when they do
         assertEquals(0, strategy.getNextBackgroundTasks(FBUtilities.nowInSeconds()).size());
 
-        for (int remaining = strategy.getController().getNumShards() - Math.min(maxThroughput, maxCount);
+        for (int remaining = strategy.getController().getNumShards(1) - Math.min(maxThroughput, maxCount);
              remaining > 0;
              --remaining)
         {
@@ -596,7 +596,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(numShards);
+        when(controller.getNumShards(anyDouble())).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getMaxSpaceOverhead()).thenReturn(maxSpaceOverhead);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minSstableSizeBytes);
@@ -976,7 +976,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getMaxL0Density()).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
-        when(controller.getNumShards()).thenReturn(shards.size());
+        when(controller.getNumShards(anyDouble())).thenReturn(shards.size());
         when(controller.areL0ShardsEnabled()).thenReturn(l0ShardsEnabled);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
@@ -1120,7 +1120,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(numShards);
+        when(controller.getNumShards(anyDouble())).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -1158,7 +1158,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards(anyDouble())).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -1288,7 +1288,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(numShards);
+        when(controller.getNumShards(anyDouble())).thenReturn(numShards);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -1343,7 +1343,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getFanout(anyInt())).thenCallRealMethod();
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards((any()))).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
@@ -1422,7 +1422,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getThreshold(anyInt())).thenCallRealMethod();
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards(anyDouble())).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1);
@@ -1490,7 +1490,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.getMinSstableSizeBytes()).thenReturn(minimalSizeBytes);
         when(controller.getSurvivalFactor(anyInt())).thenReturn(1.0);
-        when(controller.getNumShards()).thenReturn(1);
+        when(controller.getNumShards(anyDouble())).thenReturn(1);
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minimalSizeBytes);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can

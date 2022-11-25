@@ -54,6 +54,8 @@ public class StaticController extends Controller
                             long expiredSSTableCheckFrequency,
                             boolean ignoreOverlapsInExpirationCheck,
                             boolean l0ShardsEnabled,
+                            int baseShardCount,
+                            double targetSStableSize,
                             OverlapInclusionMethod overlapInclusionMethod)
     {
         super(MonotonicClock.preciseTime,
@@ -68,6 +70,8 @@ public class StaticController extends Controller
               expiredSSTableCheckFrequency,
               ignoreOverlapsInExpirationCheck,
               l0ShardsEnabled,
+              baseShardCount,
+              targetSStableSize,
               overlapInclusionMethod);
         this.scalingParameters = scalingParameters;
     }
@@ -83,6 +87,8 @@ public class StaticController extends Controller
                                   long expiredSSTableCheckFrequency,
                                   boolean ignoreOverlapsInExpirationCheck,
                                   boolean l0ShardsEnabled,
+                                  int baseShardCount,
+                                  double targetSStableSize,
                                   OverlapInclusionMethod overlapInclusionMethod,
                                   Map<String, String> options)
     {
@@ -103,6 +109,8 @@ public class StaticController extends Controller
                                     expiredSSTableCheckFrequency,
                                     ignoreOverlapsInExpirationCheck,
                                     l0ShardsEnabled,
+                                    baseShardCount,
+                                    targetSStableSize,
                                     overlapInclusionMethod);
     }
 

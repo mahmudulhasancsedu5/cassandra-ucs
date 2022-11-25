@@ -65,12 +65,8 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     private final SerializationHeader header;
     private final Collection<Index.Group> indexGroups;
     private final LifecycleNewTracker lifecycleNewTracker;
-    private final long minSstableSizeInBytes;
-    private final ShardManager boundaries;
+    private final ShardManager.BoundaryIterator boundaries;
     private final SSTableWriter[] writers;
-    private final int estimatedSSTables;
-    private int currentBoundary;
-
     private int currentWriter;
 
     public ShardedMultiWriter(CompactionRealm realm,
@@ -83,8 +79,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
                               SerializationHeader header,
                               Collection<Index.Group> indexGroups,
                               LifecycleNewTracker lifecycleNewTracker,
-                              long minSstableSizeInBytes,
-                              ShardManager boundaries)
+                              ShardManager.BoundaryIterator boundaries)
     {
         this.realm = realm;
         this.descriptor = descriptor;
@@ -96,12 +91,9 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         this.header = header;
         this.indexGroups = indexGroups;
         this.lifecycleNewTracker = lifecycleNewTracker;
-        this.minSstableSizeInBytes = minSstableSizeInBytes;
         this.boundaries = boundaries;
-        this.writers = new SSTableWriter[Math.max(boundaries.size(), 1)]; // at least one
-        this.estimatedSSTables = (int) Math.max(1, Math.ceil(realm.metrics().flushSizeOnDisk().get() / minSstableSizeInBytes));
+        this.writers = new SSTableWriter[this.boundaries.count()]; // at least one
 
-        this.currentBoundary = 0;
         this.currentWriter = 0;
         this.writers[currentWriter] = createWriter(descriptor);
     }
@@ -115,7 +107,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     private SSTableWriter createWriter(Descriptor desc)
     {
         return SSTableWriter.create(desc,
-                                    forSplittingKeysBy(estimatedSSTables),
+                                    forSplittingKeysBy(boundaries.count()),
                                     repairedAt,
                                     pendingRepair,
                                     isTransient,
@@ -135,23 +127,11 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     {
         DecoratedKey key = partition.partitionKey();
 
-        boolean boundaryCrossed = false;
-        /*
-        The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
-        we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
-        We can assume that the last boundary is the maximum and thus don't need to check against it.
-         */
-        while (currentBoundary < boundaries.size() - 1 && key.getToken().compareTo(boundaries.get(currentBoundary)) >= 0)
+        if (boundaries.advanceTo(key.getToken())
+            && (currentWriter != 0 || writers[0].getFilePointer() > 0))
         {
-            currentBoundary++;
-            if (!boundaryCrossed)
-                boundaryCrossed = true;
-        }
-
-        if (boundaryCrossed && writers[currentWriter].getEstimatedOnDiskBytesWritten() >= minSstableSizeInBytes)
-        {
-            logger.debug("Switching writer at boundary {}/{} index {}/{}, with size {} for {}.{}",
-                         key.getToken(), boundaries.get(currentBoundary-1), currentBoundary-1, currentWriter,
+            logger.debug("Switching writer at boundary {}/{} index {}, with size {} for {}.{}",
+                         key.getToken(), boundaries.shardStart(), currentWriter,
                          FBUtilities.prettyPrintMemory(writers[currentWriter].getFilePointer()),
                          realm.getKeyspaceName(), realm.getTableName());
 
@@ -168,6 +148,8 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         for (SSTableWriter writer : writers)
             if (writer != null)
             {
+                // Note: the size for inner writers can be taken to be boundaries.shardSpanSize(), but the first and last
+                // writers should deal with partial coverage.
                 assert (writer.first != null);
                 writer.setTokenSpaceCoverage(boundaries.rangeSpanned(writer.first, writer.last));
                 sstables.add(writer.finish(repairedAt, maxDataAge, openResult));

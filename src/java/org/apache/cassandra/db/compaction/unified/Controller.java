@@ -49,6 +49,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.metrics.DefaultNameFactory;
 import org.apache.cassandra.metrics.MetricNameFactory;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MonotonicClock;
 
 import static org.apache.cassandra.metrics.CassandraMetricsRegistry.Metrics;
@@ -61,6 +62,7 @@ public abstract class Controller
     protected static final Logger logger = LoggerFactory.getLogger(Controller.class);
     private static final ConcurrentMap<TableMetadata, Controller.Metrics> allMetrics = new ConcurrentHashMap<>();
 
+    //TODO: Remove some options, add deprecation messages
     static final String PREFIX = "unified_compaction.";
 
     /** The data size in GB, it will be assumed that the node will have on disk roughly this size of data when it
@@ -106,6 +108,12 @@ public abstract class Controller
     static final double DEFAULT_MAX_SPACE_OVERHEAD = Double.parseDouble(System.getProperty(PREFIX + MAX_SPACE_OVERHEAD_OPTION, "0.2"));
     static final double MAX_SPACE_OVERHEAD_LOWER_BOUND = 0.01;
     static final double MAX_SPACE_OVERHEAD_UPPER_BOUND = 1.0;
+
+    static final String BASE_SHARD_COUNT_OPTION = "base_shard_count";
+    static public final int DEFAULT_BASE_SHARD_COUNT = Integer.parseInt(System.getProperty(PREFIX + BASE_SHARD_COUNT_OPTION, "4"));
+
+    static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
+    static public final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
 
     /**
      * This parameter is intended to modify the shape of the LSM by taking into account the survival ratio of data, for now it is fixed to one.
@@ -157,7 +165,11 @@ public abstract class Controller
     private final static Pattern SCALING_PARAMETER_PATTERN = Pattern.compile("(N)|L(\\d+)|T(\\d+)|([+-]?\\d+)");
     private final static String SCALING_PARAMETER_PATTERN_SIMPLIFIED = SCALING_PARAMETER_PATTERN.pattern()
                                                                                                 .replaceAll("[()]", "")
+
                                                                                                 .replaceAll("\\\\d", "[0-9]");
+
+    /** The maximum splitting factor for shards. The maximum number of shards is this number multiplied by the base count. */
+    static final double MAX_SHARD_SPLIT = 1048576;
 
     public enum OverlapInclusionMethod
     {
@@ -189,6 +201,10 @@ public abstract class Controller
     protected final boolean ignoreOverlapsInExpirationCheck;
     protected final boolean l0ShardsEnabled;
 
+    protected final int baseShardCount;
+
+    protected final double targetSSTableSizeMin;
+
     @Nullable protected volatile CostsCalculator calculator;
     @Nullable private volatile Metrics metrics;
 
@@ -206,6 +222,8 @@ public abstract class Controller
                long expiredSSTableCheckFrequency,
                boolean ignoreOverlapsInExpirationCheck,
                boolean l0ShardsEnabled,
+               int baseShardCount,
+               double targetSStableSize,
                OverlapInclusionMethod overlapInclusionMethod)
     {
         this.clock = clock;
@@ -218,6 +236,8 @@ public abstract class Controller
         this.flushSizeOverrideMB = flushSizeOverrideMB;
         this.currentFlushSize = flushSizeOverrideMB << 20;
         this.expiredSSTableCheckFrequency = TimeUnit.MILLISECONDS.convert(expiredSSTableCheckFrequency, TimeUnit.SECONDS);
+        this.baseShardCount = baseShardCount;
+        this.targetSSTableSizeMin = targetSStableSize * Math.sqrt(0.5);
         this.overlapInclusionMethod = overlapInclusionMethod;
 
         double maxSpaceOverheadLowerBound = 1.0d / numShards;
@@ -288,9 +308,25 @@ public abstract class Controller
     /**
      * @return the number of shards according to the dataset and shard sizes set by the user
      */
-    public int getNumShards()
+    public int getNumShards(double density)
     {
-        return numShards;
+        // How many we would have to aim for the target size.
+        double count = density / (targetSSTableSizeMin * baseShardCount);
+        if (count > MAX_SHARD_SPLIT)
+            count = MAX_SHARD_SPLIT;
+        assert !(count < 0);    // Must be positive, 0 or NaN, which should translate to baseShardCount
+
+        // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
+        // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
+        // already applied in targetSSTableSizeMin.
+        // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
+        int shards = baseShardCount * Integer.highestOneBit((int) count | 1);
+        logger.info("Shard count {} for density {}, {} times target {}",
+                    shards,
+                    FBUtilities.prettyPrintBinary(density, "B", " "),
+                    density / targetSSTableSizeMin,
+                    FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
+        return shards;
     }
 
     /**
@@ -598,6 +634,12 @@ public abstract class Controller
         boolean l0ShardsEnabled = options.containsKey(L0_SHARDS_ENABLED_OPTION)
                                   ? Boolean.parseBoolean(options.get(L0_SHARDS_ENABLED_OPTION))
                                   : DEFAULT_L0_SHARDS_ENABLED;
+        int baseShardCount = options.containsKey(BASE_SHARD_COUNT_OPTION)
+                             ? Integer.parseInt(options.get(BASE_SHARD_COUNT_OPTION))
+                             : DEFAULT_BASE_SHARD_COUNT;
+        double targetSStableSize = options.containsKey(TARGET_SSTABLE_SIZE_OPTION)
+                                   ? FBUtilities.parseHumanReadable(options.get(TARGET_SSTABLE_SIZE_OPTION), null, "B")
+                                   : DEFAULT_TARGET_SSTABLE_SIZE;
 
         // Multiple data directories normally indicate multiple disks and we cannot compact sstables together if they belong to
         // different disks (or else loosing a disk may result in resurrected data due to lost tombstones). Because UCS sharding
@@ -629,6 +671,8 @@ public abstract class Controller
                                                 expiredSSTableCheckFrequency,
                                                 ignoreOverlapsInExpirationCheck,
                                                 l0ShardsEnabled,
+                                                baseShardCount,
+                                                targetSStableSize,
                                                 overlapInclusionMethod,
                                                 options)
                : StaticController.fromOptions(env,
@@ -642,6 +686,8 @@ public abstract class Controller
                                               expiredSSTableCheckFrequency,
                                               ignoreOverlapsInExpirationCheck,
                                               l0ShardsEnabled,
+                                              baseShardCount,
+                                              targetSStableSize,
                                               overlapInclusionMethod,
                                               options);
     }
@@ -802,6 +848,43 @@ public abstract class Controller
         {
             throw new ConfigurationException(String.format(booleanParseErr,
                                                            ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION, s));
+        }
+
+        s = options.remove(BASE_SHARD_COUNT_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                int numShards = Integer.parseInt(s);
+                if (numShards <= 0)
+                    throw new ConfigurationException(String.format(nonPositiveErr,
+                                                                   BASE_SHARD_COUNT_OPTION,
+                                                                   numShards));
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ConfigurationException(String.format(intParseErr, s, BASE_SHARD_COUNT_OPTION), e);
+            }
+        }
+
+        s = options.remove(TARGET_SSTABLE_SIZE_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                long targetSSTableSize = (long) FBUtilities.parseHumanReadable(s, null, "B");
+                if (targetSSTableSize <= 0)
+                    throw new ConfigurationException(String.format(nonPositiveErr,
+                                                                   TARGET_SSTABLE_SIZE_OPTION,
+                                                                   s));
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ConfigurationException(String.format("%s is not a valid size in bytes: %s",
+                                                               TARGET_SSTABLE_SIZE_OPTION,
+                                                               e.getMessage()),
+                                                 e);
+            }
         }
 
         s = options.remove(OVERLAP_INCLUSION_METHOD_OPTION);

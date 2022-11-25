@@ -126,7 +126,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
         UnifiedCompactionStrategy unifiedCompactionStrategy = (UnifiedCompactionStrategy) strategy;
         Controller controller = unifiedCompactionStrategy.getController();
         assertEquals((long) dataSetSizeGB << 30, controller.getDataSetSizeBytes());
-        assertEquals(numShards, controller.getNumShards());
+        assertEquals(numShards, controller.getNumShards(1));
         assertEquals((long) minSstableSizeMB << 20, controller.getMinSstableSizeBytes());
 
         assertTrue(unifiedCompactionStrategy.getController() instanceof StaticController);
@@ -169,7 +169,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
 
         AdaptiveController controller = (AdaptiveController) unifiedCompactionStrategy.getController();
         assertEquals((long) dataSetSizeGB << 30, controller.getDataSetSizeBytes());
-        assertEquals(numShards, controller.getNumShards());
+        assertEquals(numShards, controller.getNumShards(1));
         assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
         assertEquals(-6, controller.getMinScalingParameter());
         assertEquals(16, controller.getMaxScalingParameter());

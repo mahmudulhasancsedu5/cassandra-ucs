@@ -44,50 +44,33 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 {
     protected final static Logger logger = LoggerFactory.getLogger(ShardedCompactionWriter.class);
 
-    private final long minSstableSizeInBytes;
-    private final ShardManager boundaries;
-    private final double survivalRatio;
+    private final double uniqueKeyRatio;
 
-    private int currentIndex;
+    private final ShardManager.BoundaryIterator boundaries;
 
     public ShardedCompactionWriter(CompactionRealm realm,
                                    Directories directories,
                                    LifecycleTransaction txn,
                                    Set<SSTableReader> nonExpiredSSTables,
                                    boolean keepOriginals,
-                                   long minSstableSizeInBytes,
-                                   ShardManager boundaries)
+                                   ShardManager.BoundaryIterator boundaries)
     {
         super(realm, directories, txn, nonExpiredSSTables, keepOriginals);
 
-        this.minSstableSizeInBytes = minSstableSizeInBytes;
         this.boundaries = boundaries;
-        this.currentIndex = 0;
         long totalKeyCount = nonExpiredSSTables.stream()
                                                .mapToLong(SSTableReader::estimatedKeys)
                                                .sum();
-        this.survivalRatio = 1.0 * SSTableReader.getApproximateKeyCount(nonExpiredSSTables) / totalKeyCount;
+        this.uniqueKeyRatio = 1.0 * SSTableReader.getApproximateKeyCount(nonExpiredSSTables) / totalKeyCount;
     }
 
     @Override
     protected boolean shouldSwitchWriterInCurrentLocation(DecoratedKey key)
     {
-        boolean boundaryCrossed = false;
-        /*
-        The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
-        we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
-        Boundaries are end-inclusive.
-         */
-        while (currentIndex < boundaries.size() && key.getToken().compareTo(boundaries.get(currentIndex)) >= 0)
+        if (boundaries.advanceTo(key.getToken()) && sstableWriter.currentWriter().getFilePointer() > 0)
         {
-            currentIndex++;
-            boundaryCrossed = true;
-        }
-
-        if (boundaryCrossed && sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten() >= minSstableSizeInBytes)
-        {
-            logger.debug("Switching writer at boundary {}/{} index {}, with size {} for {}.{}",
-                         key.getToken(), boundaries.get(currentIndex-1), currentIndex-1,
+            logger.debug("Switching writer at boundary {}/{}, with size {} for {}.{}",
+                         key.getToken(), boundaries.shardStart(),
                          FBUtilities.prettyPrintMemory(sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten()),
                          realm.getKeyspaceName(), realm.getTableName());
             return true;
@@ -100,11 +83,11 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     @SuppressWarnings("resource")
     protected SSTableWriter sstableWriter(Directories.DataDirectory directory, Token diskBoundary)
     {
-        while (diskBoundary != null && currentIndex < boundaries.size() && diskBoundary.compareTo(boundaries.get(currentIndex)) < 0)
-            currentIndex++;
+        if (diskBoundary != null)
+            boundaries.advanceTo(diskBoundary);
 
         return SSTableWriter.create(realm.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
-                                    shardAdjustedKeyCount(currentIndex, boundaries, minSstableSizeInBytes, nonExpiredSSTables, survivalRatio),
+                                    shardAdjustedKeyCount(boundaries, nonExpiredSSTables, uniqueKeyRatio),
                                     minRepairedAt,
                                     pendingRepair,
                                     isTransient,
@@ -115,32 +98,15 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
                                     txn);
     }
 
-    private long shardAdjustedKeyCount(int shardIdx,
-                                       ShardManager boundaries,
-                                       long minSstableSizeInBytes,
-                                       Set<SSTableReader> sstables,
-                                       double survivalRatio)
+    private static long shardAdjustedKeyCount(ShardManager.BoundaryIterator boundaries,
+                                              Set<SSTableReader> sstables,
+                                              double survivalRatio)
     {
-        // Note: computationally non-trivial.
-        long shardAdjustedSize = 0;
+        // Note: computationally non-trivial; can be optimized if we save start/stop shards and size per table.
         long shardAdjustedKeyCount = 0;
 
-        for (int i = shardIdx; i < boundaries.size(); i++)
-        {
-            for (CompactionSSTable sstable : sstables)
-            {
-                double inShardSize = boundaries.rangeSpannedInShard(sstable, i);
-                if (inShardSize == 0)
-                    continue;   // to avoid NaNs on totalSize == 0
-                double totalSize = boundaries.rangeSpanned(sstable);
-                // calculating manually instead of calling ArenaSelector.shardAdjustedSize to save 1 call to ArenaSelector.shardsSpanned
-                shardAdjustedSize += sstable.onDiskLength() * inShardSize / totalSize;
-                shardAdjustedKeyCount += sstable.estimatedKeys() * inShardSize / totalSize;
-            }
-
-            if (shardAdjustedSize > minSstableSizeInBytes)
-                break;
-        }
+        for (CompactionSSTable sstable : sstables)
+            shardAdjustedKeyCount += sstable.estimatedKeys() * boundaries.fractionInShard(ShardManager.coveringRange(sstable));
 
         return Math.round(shardAdjustedKeyCount * survivalRatio);
     }

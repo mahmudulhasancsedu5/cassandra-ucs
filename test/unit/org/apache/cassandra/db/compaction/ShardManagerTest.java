@@ -56,7 +56,7 @@ public class ShardManagerTest
     public void testRangeSpannedFullOwnership()
     {
         weightedRanges.add(new Splitter.WeightedRange(1.0, new Range<>(minimumToken, minimumToken)));
-        ShardManager shardManager = new ShardManager(shardTokens(), localRanges);
+        ShardManager shardManager = new ShardManager(localRanges);
 
         // sanity check
         assertEquals(0.4, tokenAt(0.1).size(tokenAt(0.5)), delta);
@@ -91,7 +91,7 @@ public class ShardManagerTest
         weightedRanges.add(new Splitter.WeightedRange(1.0, new Range<>(tokenAt(0.98), tokenAt(1.0))));
         double total = weightedRanges.stream().mapToDouble(wr -> wr.range().left.size(wr.range().right)).sum();
 
-        ShardManager shardManager = new ShardManager(shardTokens(), localRanges);
+        ShardManager shardManager = new ShardManager(localRanges);
 
         // sanity check
         assertEquals(0.4, tokenAt(0.1).size(tokenAt(0.5)), delta);
