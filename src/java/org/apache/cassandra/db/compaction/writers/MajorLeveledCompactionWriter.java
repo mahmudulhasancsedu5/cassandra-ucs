@@ -93,12 +93,12 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     }
 
     @Override
-    public void switchCompactionWriter(Directories.DataDirectory location)
+    public void switchCompactionWriter(Directories.DataDirectory location, DecoratedKey nextKey)
     {
         averageEstimatedKeysPerSSTable = Math.round(((double) averageEstimatedKeysPerSSTable * sstablesWritten + partitionsWritten) / (sstablesWritten + 1));
         partitionsWritten = 0;
         sstablesWritten = 0;
-        super.switchCompactionWriter(location);
+        super.switchCompactionWriter(location, nextKey);
     }
 
     @Override

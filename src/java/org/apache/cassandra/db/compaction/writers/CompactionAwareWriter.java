@@ -187,7 +187,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
             return;
 
         if (shouldSwitchWriterInCurrentLocation(key))
-            switchCompactionWriter(currentDirectory);
+            switchCompactionWriter(currentDirectory, key);
     }
 
     /**
@@ -201,7 +201,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
             if (locationIndex < 0)
             {
                 Directories.DataDirectory defaultLocation = getWriteDirectory(nonExpiredSSTables, getExpectedWriteSize());
-                switchCompactionWriter(defaultLocation);
+                switchCompactionWriter(defaultLocation, key);
                 locationIndex = 0;
                 return true;
             }
@@ -217,7 +217,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         Directories.DataDirectory newLocation = locations.get(locationIndex);
         if (prevIdx >= 0)
             logger.debug("Switching write location from {} to {}", locations.get(prevIdx), newLocation);
-        switchCompactionWriter(newLocation);
+        switchCompactionWriter(newLocation, key);
         return true;
     }
 
@@ -229,17 +229,16 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     /**
      * Implementations of this method should finish the current sstable writer and start writing to this directory.
-     *
+     * <p>
      * Called once before starting to append and then whenever we see a need to start writing to another directory.
+     *
      * @param directory
+     * @param nextKey
      */
-    protected void switchCompactionWriter(Directories.DataDirectory directory)
+    protected void switchCompactionWriter(Directories.DataDirectory directory, DecoratedKey nextKey)
     {
         currentDirectory = directory;
-        Token diskBoundary = diskBoundaries != null && locationIndex > 0
-                             ? diskBoundaries.get(locationIndex - 1)
-                             : null;
-        sstableWriter.switchWriter(sstableWriter(directory, diskBoundary));
+        sstableWriter.switchWriter(sstableWriter(directory, nextKey.getToken()));
     }
 
     @SuppressWarnings("resource")

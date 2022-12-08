@@ -67,11 +67,13 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     @Override
     protected boolean shouldSwitchWriterInCurrentLocation(DecoratedKey key)
     {
-        if (boundaries.advanceTo(key.getToken()) && sstableWriter.currentWriter().getFilePointer() > 0)
+        final long uncompressedBytesWritten = sstableWriter.currentWriter().getFilePointer();
+        if (boundaries.advanceTo(key.getToken()) && uncompressedBytesWritten > 0)
         {
-            logger.debug("Switching writer at boundary {}/{}, with size {} for {}.{}",
+            logger.debug("Switching writer at boundary {}/{} index {}, with uncompressed size {} for {}.{}",
                          key.getToken(), boundaries.shardStart(),
-                         FBUtilities.prettyPrintMemory(sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten()),
+                         boundaries.shardIndex(),
+                         FBUtilities.prettyPrintMemory(uncompressedBytesWritten),
                          realm.getKeyspaceName(), realm.getTableName());
             return true;
         }
@@ -112,13 +114,13 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     }
 
     @Override
-    protected void switchCompactionWriter(Directories.DataDirectory directory)
+    protected void switchCompactionWriter(Directories.DataDirectory directory, DecoratedKey nextKey)
     {
         final SSTableWriter currentWriter = sstableWriter.currentWriter();
         // Note: the size for inner writers can be taken to be boundaries.shardSpanSize(), but the first and last
         // writers should deal with partial coverage.
         if (currentWriter != null)
             currentWriter.setTokenSpaceCoverage(boundaries.rangeSpanned(currentWriter.first, currentWriter.last));
-        super.switchCompactionWriter(directory);
+        super.switchCompactionWriter(directory, nextKey);
     }
 }

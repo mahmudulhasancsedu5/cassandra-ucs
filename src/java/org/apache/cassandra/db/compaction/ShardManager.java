@@ -271,5 +271,10 @@ public class ShardManager
         {
             return ShardManager.this.rangeSpanned(first, last);
         }
+
+        public int shardIndex()
+        {
+            return pos;
+        }
     }
 }
