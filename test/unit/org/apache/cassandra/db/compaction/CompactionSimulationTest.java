@@ -210,6 +210,9 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     @Option(name= {"-l0-shards-enabed"}, description = "Whether to use shards on L0, true by default")
     boolean l0ShardsEnabled = true;
 
+    @Option(name= {"-overlap-inclusion-method"}, description = "Overlap inclusion method, NONE, SINGLE or TRANSITIVE")
+    Controller.OverlapInclusionMethod overlapInclusionMethod = Controller.OverlapInclusionMethod.TRANSITIVE;
+
     @BeforeClass
     public static void setUpClass()
     {
@@ -390,6 +393,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          expiredSSTableCheckFrequency,
                                                          ignoreOverlaps,
                                                          l0ShardsEnabled,
+                                                         overlapInclusionMethod,
                                                          updateTimeSec,
                                                          minW,
                                                          maxW,
@@ -406,7 +410,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        0,
                                                        expiredSSTableCheckFrequency,
                                                        ignoreOverlaps,
-                                                       l0ShardsEnabled);
+                                                       l0ShardsEnabled,
+                                                       overlapInclusionMethod);
 
         return new UnifiedCompactionStrategy(strategyFactory, controller);
     }
