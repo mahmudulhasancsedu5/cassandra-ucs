@@ -53,7 +53,8 @@ public class StaticController extends Controller
                             int maxSSTablesToCompact,
                             long expiredSSTableCheckFrequency,
                             boolean ignoreOverlapsInExpirationCheck,
-                            boolean l0ShardsEnabled)
+                            boolean l0ShardsEnabled,
+                            OverlapInclusionMethod overlapInclusionMethod)
     {
         super(MonotonicClock.preciseTime,
               env,
@@ -66,7 +67,8 @@ public class StaticController extends Controller
               maxSSTablesToCompact,
               expiredSSTableCheckFrequency,
               ignoreOverlapsInExpirationCheck,
-              l0ShardsEnabled);
+              l0ShardsEnabled,
+              overlapInclusionMethod);
         this.scalingParameters = scalingParameters;
     }
 
@@ -81,6 +83,7 @@ public class StaticController extends Controller
                                   long expiredSSTableCheckFrequency,
                                   boolean ignoreOverlapsInExpirationCheck,
                                   boolean l0ShardsEnabled,
+                                  OverlapInclusionMethod overlapInclusionMethod,
                                   Map<String, String> options)
     {
         int[] scalingParameters;
@@ -99,7 +102,8 @@ public class StaticController extends Controller
                                     maxSSTablesToCompact,
                                     expiredSSTableCheckFrequency,
                                     ignoreOverlapsInExpirationCheck,
-                                    l0ShardsEnabled);
+                                    l0ShardsEnabled,
+                                    overlapInclusionMethod);
     }
 
     public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException

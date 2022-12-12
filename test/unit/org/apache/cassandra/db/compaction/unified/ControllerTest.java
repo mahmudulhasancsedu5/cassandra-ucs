@@ -125,6 +125,8 @@ public abstract class ControllerTest
         options.putIfAbsent(Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION, Boolean.toString(allowOverlaps));
         options.putIfAbsent(Controller.EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_OPTION, Long.toString(checkFrequency));
 
+        options.putIfAbsent(Controller.OVERLAP_INCLUSION_METHOD_OPTION, Controller.OverlapInclusionMethod.SINGLE.toString().toLowerCase());
+
         Controller.validateOptions(options);
 
         Controller controller = Controller.fromOptions(cfs, options);
@@ -139,6 +141,7 @@ public abstract class ControllerTest
         for (int i = 0; i < 5; i++) // simulate 5 levels
             assertEquals(Controller.DEFAULT_SURVIVAL_FACTOR, controller.getSurvivalFactor(i), epsilon);
         assertNull(controller.getCalculator());
+        assertEquals(Controller.OverlapInclusionMethod.SINGLE, controller.overlapInclusionMethod());
 
         return controller;
     }
@@ -154,6 +157,8 @@ public abstract class ControllerTest
 
         options.putIfAbsent(Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION, Boolean.toString(allowOverlaps));
         options.putIfAbsent(Controller.EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_OPTION, Long.toString(checkFrequency));
+
+        options.putIfAbsent(Controller.OVERLAP_INCLUSION_METHOD_OPTION, Controller.OverlapInclusionMethod.SINGLE.toString().toLowerCase());
 
         options = Controller.validateOptions(options);
         assertTrue(options.toString(), options.isEmpty());

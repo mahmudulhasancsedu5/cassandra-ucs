@@ -37,10 +37,26 @@ import static org.mockito.Mockito.when;
 
 public class StaticControllerTest extends ControllerTest
 {
-    static final int[] Ws = new int[] { 30, 2, -6};
+    static final int[] Ws = new int[] { 30, 2, 0, -6};
 
     @Test
     public void testFromOptions()
+    {
+        Map<String, String> options = new HashMap<>();
+        String wStr = Arrays.stream(Ws).mapToObj(Controller::printScalingParameter).collect(Collectors.joining(","));
+        options.put(StaticController.STATIC_SCALING_PARAMETERS_OPTION, wStr);
+
+        Controller controller = testFromOptions(false, options);
+        assertTrue(controller instanceof StaticController);
+
+        for (int i = 0; i < Ws.length; i++)
+            assertEquals(Ws[i], controller.getScalingParameter(i));
+
+        assertEquals(Ws[Ws.length-1], controller.getScalingParameter(Ws.length));
+    }
+
+    @Test
+    public void testFromOptionsIntegers()
     {
         Map<String, String> options = new HashMap<>();
         Map<String, String> options2 = new HashMap<>();
@@ -108,21 +124,21 @@ public class StaticControllerTest extends ControllerTest
     @Test
     public void testStartShutdown()
     {
-        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED);
+        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED, Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
         super.testStartShutdown(controller);
     }
 
     @Test
     public void testShutdownNotStarted()
     {
-        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED);
+        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED, Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
         super.testShutdownNotStarted(controller);
     }
 
     @Test(expected = IllegalStateException.class)
     public void testStartAlreadyStarted()
     {
-        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED);
+        StaticController controller = new StaticController(env, Ws, Controller.DEFAULT_SURVIVAL_FACTORS, dataSizeGB << 10, numShards, sstableSizeMB, 0, Controller.DEFAULT_MAX_SPACE_OVERHEAD, 0, Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, Controller.DEFAULT_L0_SHARDS_ENABLED, Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
         super.testStartAlreadyStarted(controller);
     }
 

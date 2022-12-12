@@ -16,6 +16,7 @@
 
 package org.apache.cassandra.db.compaction.unified;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,6 +159,21 @@ public abstract class Controller
                                                                                                 .replaceAll("[()]", "")
                                                                                                 .replaceAll("\\\\d", "[0-9]");
 
+    public enum OverlapInclusionMethod
+    {
+        NONE, SINGLE, TRANSITIVE;
+    }
+
+    /**
+     * Overlap inclusion method. NONE for participating sstables only (not recommended), SINGLE to only include sstables
+     * that overlap with participating (LCS-like, higher concurrency during upgrades but some double compaction),
+     * TRANSITIVE to include overlaps of overlaps (likely to trigger whole level compactions, safest).
+     */
+    final static String OVERLAP_INCLUSION_METHOD_OPTION = "overlap_inclusion_method";
+    final static OverlapInclusionMethod DEFAULT_OVERLAP_INCLUSION_METHOD =
+        OverlapInclusionMethod.valueOf(System.getProperty(PREFIX + OVERLAP_INCLUSION_METHOD_OPTION,
+                                                          OverlapInclusionMethod.TRANSITIVE.toString()).toUpperCase());
+
     protected final MonotonicClock clock;
     protected final Environment env;
     protected final double[] survivalFactors;
@@ -176,12 +192,7 @@ public abstract class Controller
     @Nullable protected volatile CostsCalculator calculator;
     @Nullable private volatile Metrics metrics;
 
-    public enum OverlapInclusionMethod
-    {
-        NONE, SINGLE, TRANSITIVE;
-    }
-
-    private final OverlapInclusionMethod overlapInclusionMethod = OverlapInclusionMethod.TRANSITIVE;
+    protected final OverlapInclusionMethod overlapInclusionMethod;
 
     Controller(MonotonicClock clock,
                Environment env,
@@ -194,7 +205,8 @@ public abstract class Controller
                int maxSSTablesToCompact,
                long expiredSSTableCheckFrequency,
                boolean ignoreOverlapsInExpirationCheck,
-               boolean l0ShardsEnabled)
+               boolean l0ShardsEnabled,
+               OverlapInclusionMethod overlapInclusionMethod)
     {
         this.clock = clock;
         this.env = env;
@@ -206,6 +218,7 @@ public abstract class Controller
         this.flushSizeOverrideMB = flushSizeOverrideMB;
         this.currentFlushSize = flushSizeOverrideMB << 20;
         this.expiredSSTableCheckFrequency = TimeUnit.MILLISECONDS.convert(expiredSSTableCheckFrequency, TimeUnit.SECONDS);
+        this.overlapInclusionMethod = overlapInclusionMethod;
 
         double maxSpaceOverheadLowerBound = 1.0d / numShards;
         if (maxSpaceOverhead < maxSpaceOverheadLowerBound)
@@ -600,6 +613,10 @@ public abstract class Controller
                                    ? DEFAULT_SURVIVAL_FACTORS
                                    : new double[] { DEFAULT_SURVIVAL_FACTOR / realm.getKeyspaceReplicationStrategy().getReplicationFactor().allReplicas, DEFAULT_SURVIVAL_FACTOR };
 
+        OverlapInclusionMethod overlapInclusionMethod = options.containsKey(OVERLAP_INCLUSION_METHOD_OPTION)
+                                                        ? OverlapInclusionMethod.valueOf(options.get(OVERLAP_INCLUSION_METHOD_OPTION).toUpperCase())
+                                                        : DEFAULT_OVERLAP_INCLUSION_METHOD;
+
         return adaptive
                ? AdaptiveController.fromOptions(env,
                                                 survivalFactors,
@@ -612,6 +629,7 @@ public abstract class Controller
                                                 expiredSSTableCheckFrequency,
                                                 ignoreOverlapsInExpirationCheck,
                                                 l0ShardsEnabled,
+                                                overlapInclusionMethod,
                                                 options)
                : StaticController.fromOptions(env,
                                               survivalFactors,
@@ -624,6 +642,7 @@ public abstract class Controller
                                               expiredSSTableCheckFrequency,
                                               ignoreOverlapsInExpirationCheck,
                                               l0ShardsEnabled,
+                                              overlapInclusionMethod,
                                               options);
     }
 
@@ -783,6 +802,21 @@ public abstract class Controller
         {
             throw new ConfigurationException(String.format(booleanParseErr,
                                                            ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION, s));
+        }
+
+        s = options.remove(OVERLAP_INCLUSION_METHOD_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                OverlapInclusionMethod.valueOf(s.toUpperCase());
+            }
+            catch (IllegalArgumentException e)
+            {
+                throw new ConfigurationException(String.format("Invalid overlap inclusion method %s. The valid options are %s.",
+                                                               s,
+                                                               Arrays.toString(OverlapInclusionMethod.values())));
+            }
         }
 
         return adaptive ? AdaptiveController.validateOptions(options) : StaticController.validateOptions(options);
