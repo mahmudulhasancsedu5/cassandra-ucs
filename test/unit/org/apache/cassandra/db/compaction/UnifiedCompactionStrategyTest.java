@@ -710,7 +710,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                                repaired,
                                                pendingRepair,
                                                0));
-                first = first.increaseSlightly();
+                first = first.nextValidToken();
             }
         });
 
@@ -1244,7 +1244,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                              false,
                                              pendingRepair,
                                              ttl));
-                first = first.increaseSlightly();
+                first = first.nextValidToken();
             }
 
             for (int i = 0; i < num; i++)
@@ -1260,7 +1260,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                              false,
                                              null,
                                              ttl));
-                first = first.increaseSlightly();
+                first = first.nextValidToken();
             }
 
             for (int i = 0; i < num; i++)
@@ -1276,7 +1276,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                              true,
                                              null,
                                              ttl));
-                first = first.increaseSlightly();
+                first = first.nextValidToken();
             }
         });
         return mockSSTables;
@@ -1488,7 +1488,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                                              pendingRepair,
                                              ttl
                 ));
-                first = first.increaseSlightly();
+                first = first.nextValidToken();
             }
         });
         return mockSSTables;
