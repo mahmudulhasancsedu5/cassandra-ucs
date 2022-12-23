@@ -84,7 +84,7 @@ public class BaseCompactionStrategyTest
     DiskBoundaries diskBoundaries;
 
     // Returned by diskBoundaries.getPositions() and modified by UnifiedCompactionStrategyTest
-    protected List<PartitionPosition> diskBoundaryPositions = null;
+    protected List<Token> diskBoundaryPositions = null;
 
     int diskIndexes = 0;
 

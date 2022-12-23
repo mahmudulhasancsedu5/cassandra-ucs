@@ -321,11 +321,11 @@ public abstract class Controller
         // already applied in targetSSTableSizeMin.
         // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
         int shards = baseShardCount * Integer.highestOneBit((int) count | 1);
-        logger.info("Shard count {} for density {}, {} times target {}",
-                    shards,
-                    FBUtilities.prettyPrintBinary(density, "B", " "),
-                    density / targetSSTableSizeMin,
-                    FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
+        logger.debug("Shard count {} for density {}, {} times target {}",
+                     shards,
+                     FBUtilities.prettyPrintBinary(density, "B", " "),
+                     density / targetSSTableSizeMin,
+                     FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
         return shards;
     }
 
@@ -922,18 +922,7 @@ public abstract class Controller
 
     public double getMaxLevelDensity(int index, double minSize)
     {
-        int fanout = getFanout(index);
-        double survivalFactor = getSurvivalFactor(index);
-        double baseSize = minSize;
-        if (minSize == 0)
-            baseSize = getBaseSstableSize(fanout);
-
-        return Math.floor(baseSize * fanout * survivalFactor);
-    }
-
-    public double getMaxL0Density()
-    {
-        return getMaxLevelDensity(0, 0);
+        return Math.floor(minSize * getFanout(index) * getSurvivalFactor(index));
     }
 
     public double maxThroughput()

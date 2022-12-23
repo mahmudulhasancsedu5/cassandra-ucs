@@ -248,6 +248,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                        Collection<Index.Group> indexGroups,
                                                        LifecycleNewTracker lifecycleNewTracker)
     {
+        ShardManager shardManager = getShardManager();
+        double flushDensity = realm.metrics().flushSizeOnDisk().get() / shardManager.localSpaceCoverage();
+        ShardManager.BoundaryIterator boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
         return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,
@@ -258,7 +261,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                       header,
                                       indexGroups,
                                       lifecycleNewTracker,
-                                      getShardManager().boundaries(controller.getNumShards(realm.metrics().flushSizeOnDisk().get())));
+                                      boundaries);
     }
 
     /**
@@ -877,9 +880,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     // used by CNDB to deserialize aggregates
-    public Level getBucket(int index, long min)
+    public Level getBucket(int index, long min, long max)
     {
-        return new Level(controller, index, min);
+        return new Level(controller, index, min, max);
     }
 
     /**
@@ -913,8 +916,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             List<Level> levels = new ArrayList<>(MAX_LEVELS);
             shard.sstables.sort(shardManager::compareByDensity);
 
+            double maxSize = controller.getMaxLevelDensity(0, controller.getBaseSstableSize(controller.getFanout(0)) / shardManager.localSpaceCoverage());
             int index = 0;
-            Level level = new Level(controller, index, 0);
+            Level level = new Level(controller, index, 0, maxSize);
             for (CompactionSSTable candidate : shard.sstables)
             {
                 final double size = shardManager.density(candidate);
@@ -929,7 +933,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
                 while (true)
                 {
-                    level = new Level(controller, ++index, level.max);
+                    ++index;
+                    double minSize = maxSize;
+                    maxSize = controller.getMaxLevelDensity(index, minSize);
+                    level = new Level(controller, index, minSize, maxSize);
                     if (size < level.max)
                     {
                         level.add(candidate);
@@ -1118,7 +1125,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         double avg = 0; // avg size of sstables in this level
         int maxOverlap = -1; // maximum number of overlapping sstables
 
-        Level(Controller controller, int index, double minSize)
+        Level(Controller controller, int index, double minSize, double maxSize)
         {
             this.index = index;
             this.survivalFactor = controller.getSurvivalFactor(index);
@@ -1127,7 +1134,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             this.threshold = controller.getThreshold(index);
             this.sstables = new ArrayList<>(threshold);
             this.min = minSize;
-            this.max = controller.getMaxLevelDensity(index, this.min);
+            this.max = maxSize;
         }
 
         public Collection<CompactionSSTable> getSSTables()
