@@ -65,6 +65,16 @@ local_read_size_fail_threshold: 8192KiB
 row_index_read_size_warn_threshold: 4096KiB
 row_index_read_size_fail_threshold: 8192KiB
 
+sstable_formats:
+    - class_name: org.apache.cassandra.io.sstable.format.big.BigFormat
+      parameters:
+          id: 0
+          name: big
+    - class_name: org.apache.cassandra.io.sstable.format.bti.BtiFormat
+      parameters:
+          id: 1
+          name: bti
+
 memtable:
     configurations:
         skiplist:

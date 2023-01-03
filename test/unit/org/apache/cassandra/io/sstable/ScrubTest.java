@@ -88,6 +88,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.io.sstable.format.big.BigFormat.Components;
+import org.apache.cassandra.io.sstable.format.bti.BtiFormat;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
@@ -269,10 +270,13 @@ public class ScrubTest
         assertOrderedAll(cfs, scrubResult.goodPartitions);
     }
 
-    private File sstableIndexPath(SSTableReader reader)
+    private List<File> sstableIndexPaths(SSTableReader reader)
     {
         if (reader.descriptor.getFormat() == BigFormat.getInstance())
-            return reader.descriptor.fileFor(Components.PRIMARY_INDEX);
+            return Arrays.asList(reader.descriptor.fileFor(BigFormat.Components.PRIMARY_INDEX));
+        if (reader.descriptor.getFormat() == BtiFormat.getInstance())
+            return Arrays.asList(reader.descriptor.fileFor(BtiFormat.Components.PARTITION_INDEX),
+                                 reader.descriptor.fileFor(BtiFormat.Components.ROW_INDEX));
         else
             throw Util.testMustBeImplementedForSSTableFormat();
     }
@@ -296,7 +300,7 @@ public class ScrubTest
     {
         // overwrite a part of the index with garbage
         testCorruptionInSmallFile((sstable, keys) ->
-                                  overrideWithGarbage(sstableIndexPath(sstable),
+                                  overrideWithGarbage(sstableIndexPaths(sstable).get(0),
                                                       5,
                                                       6,
                                                       (byte) 0x7A),
@@ -309,7 +313,7 @@ public class ScrubTest
     {
         // overwrite the whole index with garbage
         testCorruptionInSmallFile((sstable, keys) ->
-                                  overrideWithGarbage(sstableIndexPath(sstable),
+                                  overrideWithGarbage(sstableIndexPaths(sstable).get(0),
                                                       0,
                                                       60,
                                                       (byte) 0x7A),
@@ -327,7 +331,7 @@ public class ScrubTest
                                                           ByteBufferUtil.bytes(keys[2]),
                                                           ByteBufferUtil.bytes(keys[3]),
                                                           (byte) 0x7A);
-                                      overrideWithGarbage(sstableIndexPath(sstable),
+                                      overrideWithGarbage(sstableIndexPaths(sstable).get(0),
                                                           5,
                                                           6,
                                                           (byte) 0x7A);
@@ -400,7 +404,13 @@ public class ScrubTest
         performScrub(cfs, false, true, false, 2);
 
         // check data is still there
-        assertOrderedAll(cfs, 4);
+        if (sstable.descriptor.getFormat() == BigFormat.getInstance())
+            assertOrderedAll(cfs, 4);
+        else if (sstable.descriptor.getFormat() == BtiFormat.getInstance())
+            // For Trie format we won't be able to recover the damaged partition key (partion index doesn't store the whole key)
+            assertOrderedAll(cfs, 3);
+        else
+            throw Util.testMustBeImplementedForSSTableFormat();
     }
 
     @Test
@@ -445,7 +455,7 @@ public class ScrubTest
         assertOrderedAll(cfs, 10);
 
         for (SSTableReader sstable : cfs.getLiveSSTables())
-            assertTrue(sstableIndexPath(sstable).tryDelete());
+            sstableIndexPaths(sstable).forEach(File::tryDelete);
 
         performScrub(cfs, false, true, false, 2);
 
@@ -459,7 +469,7 @@ public class ScrubTest
     {
         // Run only for Big Table format because Big Table Format does not complain if partitions are given in invalid
         // order. Legacy SSTables with out-of-order partitions exist in production systems and must be corrected
-        // by scrubbing.
+        // by scrubbing. The trie index format does not permit such partitions.
 
         Assume.assumeTrue(BigFormat.isDefault());
 

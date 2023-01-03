@@ -123,10 +123,11 @@ public class DescriptorTest
     @Test
     public void validateNames()
     {
+        String version = SSTableFormat.Type.current().info.getLatestVersion().getVersion();
         String name = SSTableFormat.Type.current().name;
-        String[] fileNames = { "ma-1-" + name + "-Data.db",
+        String[] fileNames = { version + "-1-" + name + "-Data.db",
                                // 2ndary index
-                               ".idx1" + File.pathSeparator() + "ma-1-" + name + "-Data.db",
+                               ".idx1" + File.pathSeparator() + version + "-1-" + name + "-Data.db",
                                };
 
         for (String fileName : fileNames)

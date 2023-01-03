@@ -73,6 +73,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReaderWithFilter;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.io.sstable.format.big.BigFormat.Components;
 import org.apache.cassandra.io.sstable.format.big.IndexSummaryComponent;
+import org.apache.cassandra.io.sstable.format.bti.BtiFormat;
 import org.apache.cassandra.io.sstable.indexsummary.IndexSummarySupport;
 import org.apache.cassandra.io.sstable.keycache.KeyCache;
 import org.apache.cassandra.io.sstable.keycache.KeyCacheSupport;
@@ -84,7 +85,7 @@ import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.assertj.core.api.Assertions;
+import org.apache.cassandra.utils.PageAware;
 
 import static java.lang.String.format;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
@@ -181,7 +182,7 @@ public class SSTableReaderTest
     public void testSpannedIndexPositions() throws IOException
     {
         int originalMaxSegmentSize = MmappedRegions.MAX_SEGMENT_SIZE;
-        MmappedRegions.MAX_SEGMENT_SIZE = 40; // each index entry is ~11 bytes, so this will generate lots of segments
+        MmappedRegions.MAX_SEGMENT_SIZE = PageAware.PAGE_SIZE;
 
         try
         {
@@ -189,7 +190,7 @@ public class SSTableReaderTest
             partitioner = store.getPartitioner();
 
             // insert a bunch of data and compact to a single sstable
-            for (int j = 0; j < 100; j += 2)
+            for (int j = 0; j < 10000; j += 2)
             {
                 new RowUpdateBuilder(store.metadata(), j, String.valueOf(j))
                 .clustering("0")
@@ -202,7 +203,7 @@ public class SSTableReaderTest
 
             // check that all our keys are found correctly
             SSTableReader sstable = store.getLiveSSTables().iterator().next();
-            for (int j = 0; j < 100; j += 2)
+            for (int j = 0; j < 10000; j += 2)
             {
                 DecoratedKey dk = Util.dk(String.valueOf(j));
                 FileDataInput file = sstable.getFileDataInput(sstable.getPosition(dk, SSTableReader.Operator.EQ));
@@ -211,7 +212,7 @@ public class SSTableReaderTest
             }
 
             // check no false positives
-            for (int j = 1; j < 110; j += 2)
+            for (int j = 1; j < 11000; j += 2)
             {
                 DecoratedKey dk = Util.dk(String.valueOf(j));
                 assert sstable.getPosition(dk, SSTableReader.Operator.EQ) < 0;
@@ -433,21 +434,21 @@ public class SSTableReaderTest
         assertEquals(2, sstable.getFilterTracker().getTruePositiveCount());
         assertEquals(1, sstable.getFilterTracker().getTrueNegativeCount());
         assertEquals(0, sstable.getFilterTracker().getFalsePositiveCount());
-        // non-existing key is rejected by sstable keys range check
+        // non-existing key is rejected by sstable keys range check, if performed, otherwise it's a false positive
         sstable.getPosition(k(99), SSTableReader.Operator.EQ);
         assertEquals(2, sstable.getFilterTracker().getTruePositiveCount());
         assertEquals(1, sstable.getFilterTracker().getTrueNegativeCount());
-        assertEquals(0, sstable.getFilterTracker().getFalsePositiveCount());
+        long fpCount = sstable.getFilterTracker().getFalsePositiveCount();
         // non-existing key is rejected by index interval check
         sstable.getPosition(k(14), SSTableReader.Operator.EQ);
         assertEquals(2, sstable.getFilterTracker().getTruePositiveCount());
         assertEquals(1, sstable.getFilterTracker().getTrueNegativeCount());
-        assertEquals(1, sstable.getFilterTracker().getFalsePositiveCount());
+        assertEquals(fpCount + 1, sstable.getFilterTracker().getFalsePositiveCount());
         // non-existing key is rejected by index lookup check
         sstable.getPosition(k(807), SSTableReader.Operator.EQ);
         assertEquals(2, sstable.getFilterTracker().getTruePositiveCount());
         assertEquals(1, sstable.getFilterTracker().getTrueNegativeCount());
-        assertEquals(2, sstable.getFilterTracker().getFalsePositiveCount());
+        assertEquals(fpCount + 2, sstable.getFilterTracker().getFalsePositiveCount());
     }
 
     @Test
@@ -499,6 +500,8 @@ public class SSTableReaderTest
 
         if (BigFormat.isDefault())
             checkOpenedBigTable(ks, cf, store, desc);
+        else if (BtiFormat.isDefault())
+            checkOpenedBtiTable(ks, cf, store, desc);
         else
             throw Util.testMustBeImplementedForSSTableFormat();
     }
@@ -608,6 +611,97 @@ public class SSTableReaderTest
         }
     }
 
+    private static void checkOpenedBtiTable(String ks, String cf, ColumnFamilyStore store, Descriptor desc) throws Exception
+    {
+        executeInternal(format("ALTER TABLE \"%s\".\"%s\" WITH bloom_filter_fp_chance = 0.3", ks, cf));
+
+        File bloomFile = desc.fileFor(Components.FILTER);
+        long bloomModified = bloomFile.lastModified();
+
+        TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
+
+        // Offline tests
+        // check that bloomfilter is not regenerated
+        SSTableReader target = SSTableReader.openNoValidation(store, desc, store.metadata);
+        try
+        {
+            assertEquals(bloomModified, bloomFile.lastModified());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+
+        // check that bloomfilter is not regenerated and BF=AlwaysPresent when filter component is missing
+        Set<Component> components = desc.discoverComponents();
+        components.remove(Components.FILTER);
+        target = SSTableReader.openNoValidation(desc, components, store);
+        try
+        {
+            assertEquals(bloomModified, bloomFile.lastModified());
+            assertEquals(0, ((SSTableReaderWithFilter) target).getFilterOffHeapSize());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+
+        // #### online tests ####
+        // check that bloomfilter is not regenerated when SSTable is opened and BFFP has been changed
+        TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
+        target = SSTableReader.open(store, desc, store.metadata);
+        try
+        {
+            assertEquals(bloomModified, bloomFile.lastModified());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+
+        // check that bloomfilter is recreated when it doesn't exist
+        components = desc.discoverComponents();
+        components.remove(Components.FILTER);
+
+        target = SSTableReader.open(store, desc, components, store.metadata);
+        try
+        {
+            assertTrue("Bloomfilter was not recreated", bloomModified < bloomFile.lastModified());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+
+        bloomModified = bloomFile.lastModified();
+        TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
+
+        components.add(Components.FILTER);
+        target = SSTableReader.open(store, desc, components, store.metadata);
+        try
+        {
+            assertEquals(bloomModified, bloomFile.lastModified());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+
+        // check that bloomfilter is not recreated when the INDEX is missing
+        components.remove(BtiFormat.Components.PARTITION_INDEX);
+
+        target = SSTableReader.open(store, desc, components, store.metadata, false, false);
+        try
+        {
+            TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
+            assertEquals(bloomModified, bloomFile.lastModified());
+        }
+        finally
+        {
+            target.selfRef().close();
+        }
+    }
+
     @Test
     public void testLoadingSummaryUsesCorrectPartitioner() throws Exception
     {
@@ -662,7 +756,8 @@ public class SSTableReaderTest
         {
             try (ISSTableScanner scanner = s.getScanner(new Range<>(t(0), t(1))))
             {
-                Assertions.assertThat(scanner).isInstanceOf(EmptySSTableScanner.class);
+                // Make sure no data is returned and nothing fails for non-intersecting range.
+                assertFalse(scanner.hasNext());
                 foundScanner = true;
             }
         }

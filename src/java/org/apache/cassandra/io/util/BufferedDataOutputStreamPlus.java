@@ -162,12 +162,12 @@ public class BufferedDataOutputStreamPlus extends DataOutputStreamPlus
     }
 
     @Override
-    public void writeBytes(long register, int bytes) throws IOException
+    public void writeMostSignificantBytes(long register, int bytes) throws IOException
     {
         assert buffer != null : "Attempt to use a closed data output";
         if (buffer.remaining() < Long.BYTES)
         {
-            super.writeBytes(register, bytes);
+            super.writeMostSignificantBytes(register, bytes);
         }
         else
         {

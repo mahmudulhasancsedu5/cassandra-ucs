@@ -18,3 +18,16 @@
 # Note: this attaches at the end of cassandra.yaml, where the memtable configuration setting must be.
         default:
             inherits: trie
+
+# Change the default SSTable format to BTI.
+# Note: This can also be achieved by passing -Dcassandra.sstable.format.default=bti
+sstable_formats:
+  - class_name: org.apache.cassandra.io.sstable.format.bti.BtiFormat
+    parameters:
+      id: 1
+      name: bti
+  - class_name: org.apache.cassandra.io.sstable.format.big.BigFormat
+    parameters:
+      id: 0
+      name: big
+

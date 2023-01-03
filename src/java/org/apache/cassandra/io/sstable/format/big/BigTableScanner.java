@@ -41,7 +41,6 @@ import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
-import org.apache.cassandra.io.sstable.EmptySSTableScanner;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
@@ -92,11 +91,6 @@ public class BigTableScanner implements ISSTableScanner
 
     public static ISSTableScanner getScanner(BigTableReader sstable, Collection<Range<Token>> tokenRanges)
     {
-        // We want to avoid allocating a SSTableScanner if the range don't overlap the sstable (#5249)
-        List<SSTableReader.PartitionPositionBounds> positions = sstable.getPositionsForRanges(tokenRanges);
-        if (positions.isEmpty())
-            return new EmptySSTableScanner(sstable);
-
         return getScanner(sstable, makeBounds(sstable, tokenRanges).iterator());
     }
 
@@ -345,11 +339,15 @@ public class BigTableScanner implements ISSTableScanner
 
                 /*
                  * For a given partition key, we want to avoid hitting the data
-                 * file unless we're explicitely asked to. This is important
+                 * file unless we're explicitly asked to. This is important
                  * for PartitionRangeReadCommand#checkCacheFilter.
                  */
                 return new LazilyInitializedUnfilteredRowIterator(currentKey)
                 {
+                    // Store currentEntry reference during object instantiation as later (during initialize) the
+                    // reference may point to a different entry.
+                    private final RowIndexEntry rowIndexEntry = currentEntry;
+
                     protected UnfilteredRowIterator initializeIterator()
                     {
 
@@ -360,7 +358,7 @@ public class BigTableScanner implements ISSTableScanner
                         {
                             if (dataRange == null)
                             {
-                                dfile.seek(currentEntry.position);
+                                dfile.seek(rowIndexEntry.position);
                                 startScan = dfile.getFilePointer();
                                 ByteBufferUtil.skipShortLength(dfile); // key
                                 return SSTableIdentityIterator.create(sstable, dfile, partitionKey());
@@ -371,7 +369,7 @@ public class BigTableScanner implements ISSTableScanner
                             }
 
                             ClusteringIndexFilter filter = dataRange.clusteringIndexFilter(partitionKey());
-                            return sstable.rowIterator(dfile, partitionKey(), currentEntry, filter.getSlices(BigTableScanner.this.metadata()), columns, filter.isReversed());
+                            return sstable.rowIterator(dfile, partitionKey(), rowIndexEntry, filter.getSlices(BigTableScanner.this.metadata()), columns, filter.isReversed());
                         }
                         catch (CorruptSSTableException | IOException e)
                         {

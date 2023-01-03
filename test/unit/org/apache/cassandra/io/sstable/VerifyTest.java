@@ -63,6 +63,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReaderWithFilter;
 import org.apache.cassandra.io.sstable.format.SortedTableVerifier.RangeOwnHelper;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.io.sstable.format.big.BigFormat.Components;
+import org.apache.cassandra.io.sstable.format.bti.BtiFormat;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileInputStreamPlus;
 import org.apache.cassandra.io.util.FileUtils;
@@ -552,8 +553,12 @@ public class VerifyTest
     @Test
     public void testVerifyIndex() throws IOException
     {
-        Assume.assumeTrue(BigFormat.isDefault());
-        testBrokenComponentHelper(Components.PRIMARY_INDEX);
+        if (BigFormat.isDefault())
+            testBrokenComponentHelper(BigFormat.Components.PRIMARY_INDEX);
+        else if (BtiFormat.isDefault())
+            testBrokenComponentHelper(BtiFormat.Components.PARTITION_INDEX);
+        else
+            throw Util.testMustBeImplementedForSSTableFormat();
     }
 
     @Test

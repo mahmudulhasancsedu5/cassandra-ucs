@@ -51,11 +51,15 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.io.sstable.format.big.BigFormat.Components;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
+import org.apache.cassandra.io.sstable.format.bti.BtiFormat;
+import org.apache.cassandra.io.sstable.format.bti.BtiTableReader;
+import org.apache.cassandra.io.sstable.format.bti.PartitionIndex;
 import org.apache.cassandra.io.sstable.indexsummary.IndexSummary;
 import org.apache.cassandra.io.sstable.keycache.KeyCache;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
+import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
@@ -63,6 +67,7 @@ import org.apache.cassandra.io.util.Memory;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FilterFactory;
+import org.apache.cassandra.utils.Throwables;
 
 import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
 
@@ -163,6 +168,14 @@ public class MockSchema
 
     public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, ColumnFamilyStore cfs, int minLocalDeletionTime, long timestamp)
     {
+        try (DataOutputStreamPlus out = tempFile.newOutputStream(File.WriteMode.OVERWRITE))
+        {
+            out.write(new byte[10]);
+        }
+        catch (IOException ex)
+        {
+            throw Throwables.throwAsUncheckedException(ex);
+        }
         SSTableFormat<?, ?> format = SSTableFormat.Type.current().info;
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -196,8 +209,9 @@ public class MockSchema
                 SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
                 MetadataCollector collector = new MetadataCollector(cfs.metadata().comparator);
                 collector.update(new DeletionTime(timestamp, minLocalDeletionTime));
-    BufferDecoratedKey first = readerBounds(firstToken);
-            BufferDecoratedKey last = readerBounds(lastToken);            StatsMetadata metadata = (StatsMetadata) collector.sstableLevel(level)
+                BufferDecoratedKey first = readerBounds(firstToken);
+                BufferDecoratedKey last = readerBounds(lastToken);
+                StatsMetadata metadata = (StatsMetadata) collector.sstableLevel(level)
                                                                   .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, UNREPAIRED_SSTABLE, null, false, header, first.retainable().getKey().slice(), last.retainable().getKey().slice())
                                                                   .get(MetadataType.STATS);
                 BigTableReader reader = new BigTableReader.Builder(descriptor).setComponents(components)
@@ -213,6 +227,55 @@ public class MockSchema
                                                                               .setFirst(first)
                                                                               .setLast(last)
                                                                               .setKeyCache(cfs.metadata().params.caching.cacheKeys ? new KeyCache(CacheService.instance.keyCache) : KeyCache.NO_CACHE)
+                                                                              .build(cfs, false, false);
+                if (!keepRef)
+                    reader.selfRef().release();
+                return reader;
+            }
+        }
+        else if (format == BtiFormat.instance)
+        {
+            Set<Component> components = ImmutableSet.of(Components.DATA, BtiFormat.Components.PARTITION_INDEX, BtiFormat.Components.ROW_INDEX, Components.FILTER, Components.TOC);
+            for (Component component : components)
+            {
+                File file = descriptor.fileFor(component);
+                file.createFileIfNotExists();
+            }
+            // .complete() with size to make sstable.onDiskLength work
+            try (FileHandle fileHandle = new FileHandle.Builder(tempFile).bufferSize(size).withLengthOverride(size).complete())
+            {
+                if (size > 0)
+                {
+                    try
+                    {
+                        File file = descriptor.fileFor(Components.DATA);
+                        Util.setFileLength(file, size);
+                    }
+                    catch (IOException e)
+                    {
+                        throw new RuntimeException(e);
+                    }
+                }
+                SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
+                MetadataCollector collector = new MetadataCollector(cfs.metadata().comparator);
+                collector.update(new DeletionTime(timestamp, minLocalDeletionTime));
+                BufferDecoratedKey first = readerBounds(firstToken);
+                BufferDecoratedKey last = readerBounds(lastToken);
+                StatsMetadata metadata = (StatsMetadata) collector.sstableLevel(level)
+                                                                  .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, UNREPAIRED_SSTABLE, null, false, header, first.retainable().getKey(), last.retainable().getKey())
+                                                                  .get(MetadataType.STATS);
+                BtiTableReader reader = new BtiTableReader.Builder(descriptor).setComponents(components)
+                                                                              .setTableMetadataRef(cfs.metadata)
+                                                                              .setDataFile(fileHandle.sharedCopy())
+                                                                              .setPartitionIndex(new PartitionIndex(fileHandle.sharedCopy(), 0, 0, readerBounds(firstToken), readerBounds(lastToken)))
+                                                                              .setRowIndexFile(fileHandle.sharedCopy())
+                                                                              .setFilter(FilterFactory.AlwaysPresent)
+                                                                              .setMaxDataAge(1L)
+                                                                              .setStatsMetadata(metadata)
+                                                                              .setOpenReason(SSTableReader.OpenReason.NORMAL)
+                                                                              .setSerializationHeader(header)
+                                                                              .setFirst(readerBounds(firstToken))
+                                                                              .setLast(readerBounds(lastToken))
                                                                               .build(cfs, false, false);
                 if (!keepRef)
                     reader.selfRef().release();
