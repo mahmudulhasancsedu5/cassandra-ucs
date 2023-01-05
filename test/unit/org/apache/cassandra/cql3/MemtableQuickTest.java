@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.cql3;
 
+import java.util.Collection;
 import java.util.List;
 
 import com.google.common.collect.ImmutableList;
@@ -27,9 +28,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.apache.cassandra.Util;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.utils.concurrent.Refs;
 
 import static org.apache.cassandra.db.ColumnFamilyStore.FlushReason.UNIT_TESTS;
 
@@ -139,12 +143,24 @@ public class MemtableQuickTest extends CQLTester
         result = execute("SELECT * FROM " + table);
         assertRowCount(result, rowsPerPartition * (partitions - deletedPartitions) - deletedRows);
 
-        if (!cfs.getLiveSSTables().isEmpty())
+        try (Refs<SSTableReader> refs = new Refs())
         {
+            Collection<SSTableReader> sstables = cfs.getLiveSSTables();
+            if (sstables.isEmpty()) // persistent memtables won't flush
+            {
+                assert cfs.streamFromMemtable();
+                cfs.writeAndAddMemtableRanges(null,
+                                              () -> ImmutableList.of(new Range(Util.testPartitioner().getMinimumToken().minKeyBound(),
+                                                                               Util.testPartitioner().getMinimumToken().minKeyBound())),
+                                              refs);
+                sstables = refs;
+                Assert.assertTrue(cfs.getLiveSSTables().isEmpty());
+            }
+
             // make sure the row counts are correct in both the metadata as well as the cardinality estimator
             // (see STAR-1826)
             long totalPartitions = 0;
-            for (SSTableReader sstable : cfs.getLiveSSTables())
+            for (SSTableReader sstable : sstables)
             {
                 long sstableKeys = sstable.estimatedKeys();
                 long cardinality = sstable.keyCardinalityEstimator().cardinality();
@@ -153,6 +169,6 @@ public class MemtableQuickTest extends CQLTester
                 totalPartitions += sstableKeys;
             }
             Assert.assertEquals((double) partitions, (double) totalPartitions, partitions * 0.1);
-        }   // else the flush didn't actually occur, there are no sstables to check
+        }
     }
 }
