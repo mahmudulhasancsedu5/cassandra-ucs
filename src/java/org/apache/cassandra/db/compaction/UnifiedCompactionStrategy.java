@@ -33,12 +33,13 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BiPredicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Ordering;
 import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +47,6 @@ import org.slf4j.LoggerFactory;
 import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
@@ -81,7 +81,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     private static final Logger logger = LoggerFactory.getLogger(UnifiedCompactionStrategy.class);
 
     static final int MAX_LEVELS = 32;   // This is enough for a few petabytes of data (with the worst case fan factor
-                                        // at W=0 this leaves room for 2^32 sstables, presumably of at least 1MB each).
+    // at W=0 this leaves room for 2^32 sstables, presumably of at least 1MB each).
+
+    private static final Pattern SCALING_PARAMETER_PATTERN = Pattern.compile("(N)|L(\\d+)|T(\\d+)|([+-]?\\d+)");
+    private static final String SCALING_PARAMETER_PATTERN_SIMPLIFIED = SCALING_PARAMETER_PATTERN.pattern()
+                                                                                                .replaceAll("[()]", "")
+
+                                                                                                .replace("\\d", "[0-9]");
 
     private final Controller controller;
 
@@ -115,6 +121,49 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     public static Map<String, String> validateOptions(Map<String, String> options) throws ConfigurationException
     {
         return Controller.validateOptions(CompactionStrategyOptions.validateOptions(options));
+    }
+
+    public static int fanoutFromScalingParameter(int W)
+    {
+        return W < 0 ? 2 - W : 2 + W; // see formula in design doc
+    }
+
+    public static int thresholdFromScalingParameter(int W)
+    {
+        return W <= 0 ? 2 : 2 + W; // see formula in design doc
+    }
+
+    public static int parseScalingParameter(String value)
+    {
+        Matcher m = SCALING_PARAMETER_PATTERN.matcher(value);
+        if (!m.matches())
+            throw new ConfigurationException("Scaling parameter " + value + " must match " + SCALING_PARAMETER_PATTERN_SIMPLIFIED);
+
+        if (m.group(1) != null)
+            return 0;
+        else if (m.group(2) != null)
+            return 2 - atLeast2(Integer.parseInt(m.group(2)), value);
+        else if (m.group(3) != null)
+            return atLeast2(Integer.parseInt(m.group(3)), value) - 2;
+        else
+            return Integer.parseInt(m.group(4));
+    }
+
+    private static int atLeast2(int value, String str)
+    {
+        if (value < 2)
+            throw new ConfigurationException("Fan factor cannot be lower than 2 in " + str);
+        return value;
+    }
+
+    public static String printScalingParameter(int W)
+    {
+        if (W < 0)
+            return "L" + Integer.toString(2 - W);
+        else if (W > 0)
+            return "T" + Integer.toString(W + 2);
+        else
+            return "N";
     }
 
     @Override

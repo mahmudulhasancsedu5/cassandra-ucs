@@ -27,8 +27,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -104,22 +102,22 @@ public abstract class Controller
      * tier) compaction, while on the other hand limiting such compactions too much might lead to compaction lagging
      * behind, higher read amplification, and other problems of that nature.
      */
-    static public final String MAX_SPACE_OVERHEAD_OPTION = "max_space_overhead";
+    public static final String MAX_SPACE_OVERHEAD_OPTION = "max_space_overhead";
     static final double DEFAULT_MAX_SPACE_OVERHEAD = Double.parseDouble(System.getProperty(PREFIX + MAX_SPACE_OVERHEAD_OPTION, "0.2"));
     static final double MAX_SPACE_OVERHEAD_LOWER_BOUND = 0.01;
     static final double MAX_SPACE_OVERHEAD_UPPER_BOUND = 1.0;
 
     static final String BASE_SHARD_COUNT_OPTION = "base_shard_count";
-    static public final int DEFAULT_BASE_SHARD_COUNT = Integer.parseInt(System.getProperty(PREFIX + BASE_SHARD_COUNT_OPTION, "4"));
+    public static final int DEFAULT_BASE_SHARD_COUNT = Integer.parseInt(System.getProperty(PREFIX + BASE_SHARD_COUNT_OPTION, "4"));
 
     static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
-    static public final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
+    public static final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
 
     /**
      * This parameter is intended to modify the shape of the LSM by taking into account the survival ratio of data, for now it is fixed to one.
      */
     static final double DEFAULT_SURVIVAL_FACTOR = Double.parseDouble(System.getProperty(PREFIX + "survival_factor", "1"));
-    final static double[] DEFAULT_SURVIVAL_FACTORS = new double[] { DEFAULT_SURVIVAL_FACTOR };
+    static final double[] DEFAULT_SURVIVAL_FACTORS = new double[] { DEFAULT_SURVIVAL_FACTOR };
 
     /**
      * Either true or false. This parameter determines which controller will be used.
@@ -154,19 +152,14 @@ public abstract class Controller
      * - the arena selector disregards the first token of L0 sstables, placing
      *   them all in a unique shard.
      */
-    final static String L0_SHARDS_ENABLED_OPTION = "l0_shards_enabled";
-    final static boolean DEFAULT_L0_SHARDS_ENABLED = System.getProperty(PREFIX + L0_SHARDS_ENABLED_OPTION) == null
+    static final String L0_SHARDS_ENABLED_OPTION = "l0_shards_enabled";
+    static final boolean DEFAULT_L0_SHARDS_ENABLED = System.getProperty(PREFIX + L0_SHARDS_ENABLED_OPTION) == null
                                                      || Boolean.getBoolean(PREFIX + L0_SHARDS_ENABLED_OPTION);
 
     /**
      * True if L0 data may be coming from different replicas.
      */
-    public final static String SHARED_STORAGE = "shared_storage";
-    private final static Pattern SCALING_PARAMETER_PATTERN = Pattern.compile("(N)|L(\\d+)|T(\\d+)|([+-]?\\d+)");
-    private final static String SCALING_PARAMETER_PATTERN_SIMPLIFIED = SCALING_PARAMETER_PATTERN.pattern()
-                                                                                                .replaceAll("[()]", "")
-
-                                                                                                .replaceAll("\\\\d", "[0-9]");
+    public static final String SHARED_STORAGE = "shared_storage";
 
     /** The maximum splitting factor for shards. The maximum number of shards is this number multiplied by the base count. */
     static final double MAX_SHARD_SPLIT = 1048576;
@@ -181,8 +174,8 @@ public abstract class Controller
      * that overlap with participating (LCS-like, higher concurrency during upgrades but some double compaction),
      * TRANSITIVE to include overlaps of overlaps (likely to trigger whole level compactions, safest).
      */
-    final static String OVERLAP_INCLUSION_METHOD_OPTION = "overlap_inclusion_method";
-    final static OverlapInclusionMethod DEFAULT_OVERLAP_INCLUSION_METHOD =
+    static final String OVERLAP_INCLUSION_METHOD_OPTION = "overlap_inclusion_method";
+    static final OverlapInclusionMethod DEFAULT_OVERLAP_INCLUSION_METHOD =
         OverlapInclusionMethod.valueOf(System.getProperty(PREFIX + OVERLAP_INCLUSION_METHOD_OPTION,
                                                           OverlapInclusionMethod.TRANSITIVE.toString()).toUpperCase());
 
@@ -286,23 +279,19 @@ public abstract class Controller
     public abstract int getMaxAdaptiveCompactions();
 
     public int getFanout(int index) {
-        int scalingParameter = getScalingParameter(index);
-        return scalingParameter < 0 ? 2 - scalingParameter : 2 + scalingParameter; // see formula in design doc
-    }
-
-    public int getPreviousFanout(int index) {
-        int scalingParameter = getPreviousScalingParameter(index);
-        return scalingParameter < 0 ? 2 - scalingParameter : 2 + scalingParameter; // see formula in design doc
+        return UnifiedCompactionStrategy.fanoutFromScalingParameter(getScalingParameter(index));
     }
 
     public int getThreshold(int index) {
-        int scalingParameter = getScalingParameter(index);
-        return scalingParameter < 0 ? 2 : getFanout(index); // see formula in design doc
+        return UnifiedCompactionStrategy.thresholdFromScalingParameter(getScalingParameter(index));
+    }
+
+    public int getPreviousFanout(int index) {
+        return UnifiedCompactionStrategy.fanoutFromScalingParameter(getPreviousScalingParameter(index));
     }
 
     public int getPreviousThreshold(int index) {
-        int scalingParameter = getPreviousScalingParameter(index);
-        return scalingParameter < 0 ? 2 : getPreviousFanout(index); // see formula in design doc
+        return UnifiedCompactionStrategy.thresholdFromScalingParameter(getPreviousScalingParameter(index));
     }
 
     /**
@@ -310,7 +299,8 @@ public abstract class Controller
      */
     public int getNumShards(double density)
     {
-        // How many we would have to aim for the target size.
+        // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
+        // the result is a multiple of it by multiplying back below.
         double count = density / (targetSSTableSizeMin * baseShardCount);
         if (count > MAX_SHARD_SPLIT)
             count = MAX_SHARD_SPLIT;
@@ -533,8 +523,8 @@ public abstract class Controller
         double o = getSurvivalFactor(0);
         long m = getFlushSizeBytes();
 
-        int F = scalingParameter < 0 ? 2 - scalingParameter : 2 + scalingParameter;
-        int T = scalingParameter < 0 ? 2 : F;
+        int F = UnifiedCompactionStrategy.fanoutFromScalingParameter(scalingParameter);
+        int T = UnifiedCompactionStrategy.thresholdFromScalingParameter(scalingParameter);
         int maxIndex = maxBucketIndex(length, F);
 
         int ret = 0;
@@ -563,7 +553,7 @@ public abstract class Controller
         double o = getSurvivalFactor(0);
         long m = getFlushSizeBytes();
 
-        int F = scalingParameter < 0 ? 2 - scalingParameter : 2 + scalingParameter;
+        int F = UnifiedCompactionStrategy.fanoutFromScalingParameter(scalingParameter);
         int maxIndex = maxBucketIndex(length, F);
 
         int ret = 0;
@@ -989,34 +979,11 @@ public abstract class Controller
         for (int i = 0; i < vals.length; i++)
         {
             String value = vals[i].trim();
-            int W = parseScalingParameter(value);
+            int W = UnifiedCompactionStrategy.parseScalingParameter(value);
             ret[i] = W;
         }
 
         return ret;
-    }
-
-    public static int parseScalingParameter(String value)
-    {
-        Matcher m = SCALING_PARAMETER_PATTERN.matcher(value);
-        if (!m.matches())
-            throw new ConfigurationException("Scaling parameter " + value + " must match " + SCALING_PARAMETER_PATTERN_SIMPLIFIED);
-
-        if (m.group(1) != null)
-            return 0;
-        else if (m.group(2) != null)
-            return 2 - atLeast2(Integer.parseInt(m.group(2)), value);
-        else if (m.group(3) != null)
-            return atLeast2(Integer.parseInt(m.group(3)), value) - 2;
-        else
-            return Integer.parseInt(m.group(4));
-    }
-
-    private static int atLeast2(int value, String str)
-    {
-        if (value < 2)
-            throw new ConfigurationException("Fan factor cannot be lower than 2 in " + str);
-        return value;
     }
 
     public static String printScalingParameters(int[] parameters)
@@ -1025,21 +992,11 @@ public abstract class Controller
         int i;
         for (i = 0; i < parameters.length - 1; ++i)
         {
-            builder.append(printScalingParameter(parameters[i]));
+            builder.append(UnifiedCompactionStrategy.printScalingParameter(parameters[i]));
             builder.append(", ");
         }
-        builder.append(printScalingParameter(parameters[i]));
+        builder.append(UnifiedCompactionStrategy.printScalingParameter(parameters[i]));
         return builder.toString();
-    }
-
-    public static String printScalingParameter(int W)
-    {
-        if (W < 0)
-            return "L" + Integer.toString(2 - W);
-        else if (W > 0)
-            return "T" + Integer.toString(W + 2);
-        else
-            return "N";
     }
 
     public List<CompactionAggregate.UnifiedAggregate> maybeSort(List<CompactionAggregate.UnifiedAggregate> pending)

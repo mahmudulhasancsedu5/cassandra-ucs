@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 import com.google.common.collect.ImmutableList;
 import org.junit.Test;
 
+import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.ReplicationFactor;
 
@@ -57,7 +58,7 @@ public class StaticControllerTest extends ControllerTest
     private static void addOptions(boolean useIntegers, Map<String, String> options)
     {
         String wStr = Arrays.stream(Ws)
-                            .mapToObj(useIntegers ? Integer::toString : Controller::printScalingParameter)
+                            .mapToObj(useIntegers ? Integer::toString : UnifiedCompactionStrategy::printScalingParameter)
                             .collect(Collectors.joining(","));
         options.put(StaticController.STATIC_SCALING_PARAMETERS_OPTION, wStr);
     }

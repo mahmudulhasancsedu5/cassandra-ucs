@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -134,7 +133,7 @@ public class UnifiedCompactionStatistics extends CompactionAggregateStatistics
     {
         List<String> data = new ArrayList<>(HEADER.size());
         data.add(Integer.toString(bucket()));
-        data.add(Controller.printScalingParameter(scalingParameter));
+        data.add(UnifiedCompactionStrategy.printScalingParameter(scalingParameter));
         data.add(FBUtilities.prettyPrintBinary(minDensityBytes, "B", " "));
         data.add(FBUtilities.prettyPrintBinary(maxDensityBytes, "B", " "));
 

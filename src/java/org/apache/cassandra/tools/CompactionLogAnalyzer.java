@@ -50,7 +50,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.compaction.unified.Controller;
+import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.utils.FBUtilities;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -139,7 +139,7 @@ public class CompactionLogAnalyzer
     }
 
 
-    final static Pattern CSVNamePattern = Pattern.compile("compaction-(\\w+)-(.*?)-(.*?)(-(.*))?\\.csv");
+    static final Pattern CSVNamePattern = Pattern.compile("compaction-(\\w+)-([^-]*)-([^-]*)(-([^.]*))?\\.csv");
     private static final String fullDateFormatter = "yyyy-MM-dd' 'HH:mm:ss.SSS";
 
     static int reportResolutionInMs;
@@ -205,7 +205,7 @@ public class CompactionLogAnalyzer
         String[] sizes = data[sizesIndex].split("/");
         dp.totalBytes = parseHumanReadableSize(sizes[0]);
         dp.remainingReadBytes = dp.totalBytes - parseHumanReadableSize(sizes[1]);
-        dp.scalingParameter = Controller.parseScalingParameter(data[Windex]);
+        dp.scalingParameter = UnifiedCompactionStrategy.parseScalingParameter(data[Windex]);
         if (overlapIndex >= 0)
         {
             dp.overlap = Integer.parseInt(data[overlapIndex]);

@@ -33,25 +33,26 @@ The strategy is based on two observations:
 
 UCS groups sstables in levels based on the logarithm of the sstable density, with
 the fanout factor $f$ as the base of the logarithm, and with each level triggering a compaction as soon as it has
-$t$ sstables. The choice of the parameters $f$ and $t$, and of a minimum sstable size, determines the behaviour
-of the strategy. This allows users to choose a levelled strategy by setting $t=2$, or a tiered strategy by choosing 
-$t=f$. Because the two options are mutually exclusive, meet at $f=2$ and form a space of options for choosing different 
-ratios of read amplification (RA) vs write amplification (WA) (where levelled compaction improves reads at the expense 
-of writes and approaches a sorted array as $f$ increases, and tiered compaction favors writes at the expense of reads 
-and approaches an unsorted log as $f$ increases), we combine the two parameters into one integer value, $w$, and set 
-them to be:
+$t$ overlapping sstables. The choice of the parameters $f$ and $t$, and of a minimum sstable size, determines the
+behaviour of the strategy. This allows users to choose a levelled strategy by setting $t=2$, or a tiered strategy by
+choosing $t=f$. Because the two options are mutually exclusive, meet at $f=2$ and form a space of options for choosing
+different ratios of read amplification (RA) vs write amplification (WA) (where levelled compaction improves reads at
+the expense of writes and approaches a sorted array as $f$ increases, and tiered compaction favors writes at the
+expense of reads and approaches an unsorted log as $f$ increases), we combine the two parameters into one integer
+value, $w$, and set them to be:
 
 * If $w < 0$ then $f = 2 - w$ and $t = 2$. This means leveled compactions, high WA but low RA.
   We write this as L*f* (e.g. L10 for $w = -8$).
-* If $w > 0$ then set $f = 2 + w$ and $t = f$. This means tiered compactions, low WA but high RA.
+* If $w > 0$ then $f = 2 + w$ and $t = f$. This means tiered compactions, low WA but high RA.
   We write this as T*f* (e.g. T4 for $w = 2$).
 * If $w = 0$ then $f = t = 2$. This is the middle ground, leveled and tiered compactions behave identically.
   We write this as N.
 
-Further, because levels can choose different values of $w$, levels can behave differently. For example level
-zero could behave like STCS but higher levels could behave more and more like LCS.
+Further, UCS permits the value of $w$ to be defined separately for each level, and thus levels can have different
+behaviours. For example level zero could use tiered compaction (STCS-like) but higher levels could switch to levelled
+(LCS-like) with increasing levels of read optimization.
 
-The strategy splits sstables at specific shard boundaries whose number grows with the density of the sstable, and
+The strategy splits sstables at specific shard boundaries whose number grows with the density of an sstable, and
 uses the non-overlap between sstables created by this splitting to be able to perform compactions concurrently. 
 
 ## Size-based levels
@@ -59,25 +60,28 @@ uses the non-overlap between sstables created by this splitting to be able to pe
 Let's ignore density and splitting for a while and explore more closely how sstables are grouped into levels if
 they are never split.
 
-For a fixed fanout factor, given:
+For a fixed fanout factor $f$ and a memtable flush size $m$, calculated as the average size of the runs of sstables
+written when a memtable is flushed and intended to form a base of the hierarchy where all newly-flushed sstables end
+up, the level $L$ for an sstable of size $s$ is calculated as follows:
 
-- the fanout factor $f$
-- the memtable flush size $m$ (i.e. the average size of the runs of sstables written when a memtable is flushed)
-
-then the level $L$ for an sstable of size $s$ is calculated as follows:
-
-$$ L = \left \lfloor \log_F {\frac s m} \right \rfloor = \left \lfloor \frac{\ln s - \ln m}{\ln F}\right \rfloor$$
+$$
+L = 
+\begin{cases}
+\left \lfloor \log_f {\frac s m} \right \rfloor & \text{if } s \ge m \\
+0 & \text{otherwise}
+\end{cases}
+$$
 
 This means that sstables are assigned to levels as follows:
 
-|Level| Min sstable size | Max sstable size  |
-|---|-----------------|-------------------|
-|0| 0               | $m \cdot f$       |
-|1| $m \cdot f$     | $m \cdot f^2$     |
-|2| $m \cdot f^2$   | $m \cdot f^3$     |
-|3| $m \cdot f^3$   | $m \cdot f^4$     |
-|...| ...             | ...             |
-|N| $m \cdot f^n$   | $m \cdot f^{n+1}$ |
+| Level | Min sstable size | Max sstable size  |
+|-------|-----------------|-------------------|
+| 0     | 0               | $m \cdot f$       |
+| 1     | $m \cdot f$     | $m \cdot f^2$     |
+| 2     | $m \cdot f^2$   | $m \cdot f^3$     |
+| 3     | $m \cdot f^3$   | $m \cdot f^4$     |
+| ...   | ...             | ...             |
+| n     | $m \cdot f^n$   | $m \cdot f^{n+1}$ |
 
 If we define $t$ as the number of sstables in a level that triggers a compaction, then:
 
@@ -111,23 +115,45 @@ that range from:
 * tiered compaction ( $t=f$ ) with high $f$ &mdash; very high number of sstables, low read efficiency and low write cost,
   moving closer to an unsorted log as $f$ increases.
 
+This can be easily generalised to varying fan factors, by replacing the exponentiation with the product of the fan 
+factors for all lower levels:
+
+| Level | Min sstable size            | Max sstable size                  |
+|-------|-----------------------------|-----------------------------------|
+| 0     | 0                           | $m \cdot f_0$                     |
+| 1     | $m \cdot f_0$               | $m \cdot f_0 \cdot f_1$           |
+| 2     | $m \cdot f_0 \cdot f_1$     | $m \cdot f_0 \cdot f_1 \cdot f_2$ |
+| ...   | ...                         | ...                               |
+| n     | $m \cdot \prod_{i < n} f_i$ | $m \cdot \prod_{i\le n} f_i$      |
+
+
 ## Density levelling
 
-If we replace the size $s$ in the previous paragraph with the density measure, all formulae and conclusions remain
-valid. However, we can now split the output at arbitrary points and still make use of the results. For example, 
-if we start a T4 level with four sstables that cover 1/10 of the token space and compact them, splitting the output
-into four sstables, the resulting sstables (provided no overwrite/deletion) will be of the same size, but will now 
-cover 1/40 of the token share each. As a result, they will now be interpreted to be four times as dense and thus
-fall on the next level of the hierarchy. If the split points are fixed, when the next level receives sufficiently
-many sstables, we can start 4 compactions concurrently.
+If we replace the size $s$ in the previous paragraph with the density measure $d = s / v$ where $v$ is the fraction of 
+the token space that the sstable covers, all formulae and conclusions remain valid. However, we can now split the 
+output at arbitrary points and still make use of the results. For example, if we start with four sstables each spanning 
+a shard that covers 1/10 of the token space on a T4 level and compact them, splitting the output equally into four 
+sstables, the resulting sstables (provided no overwrite/deletion) will be of the same size as the input sstables, but 
+will now cover 1/40 of the token share each. As a result, they will now be interpreted to be four times as dense and 
+thus fall on the next level of the hierarchy (recall that the upper density limit for a level is $f$ times the lower). 
+If we can ensure that the split points are fixed (see below), when this repeats enough times for the next level to 
+receive sufficiently many sstables, we can start 4 independent compactions concurrently.
 
-It is important to account for locally-owned token share when calculating density. Because vnodes mean that the local
+It is important to account for locally-owned token share when calculating $v$. Because vnodes mean that the local
 token ownership of a node is not contiguous, the difference between the first and last token is not sufficient to
 calculate token share &mdash; any non-locally-owned ranges must be excluded.
 
 Using the density measure allows us to control the size of sstables through sharding, as well as to execute
-compactions in parallel. It also allows UCS to understand the levelling structure of STCS (where size grows with
-each level) and LCS (where token share shrinks with each level).
+compactions in parallel. With size levelling we could achieve parallelisation by pre-splitting the data in a fixed
+number of compaction arenas (e.g. by using the data directories mechanism), but this requires the number of shards to be 
+predetermined and equal for all levels of the hierarchy, which still permits sstables to become too small or too large.
+Large sstables complicate streaming and repair and increase the duration of compaction operations, pinning resources to 
+long-running operations and making it more likely that too many sstables will accumulate on lower levels of the 
+hierarchy.
+
+Density levelling permits a much wider variety of splitting options including ones where the size of sstables can 
+be kept close to a selected target, and also allows UCS to understand the levelling structure of STCS (where size grows 
+with each level) as well as LCS (where token share shrinks with each level).
 
 ## Sharding
 
@@ -157,34 +183,41 @@ More precisely, the user specifies two sharding parameters:
 - base shard count $b$
 - target sstable size $t$
 
-At the start of every compaction, we estimate the density of the output $d$ > 0 and calculate a number of shards
-$s$ to be
+At the start of every compaction, we estimate the density of the output $d$ and calculate a number of shards
+$S$ to split the local token space into to be
 
-$$s = b\cdot \max\left(2^{\left \lfloor \log_2 {\frac {d\sqrt 2} {tb}}\right \rfloor}, 1 \right)$$
+$$
+S = 
+\begin{cases}
+2^{\mathrm{round}\left( \log_2 \left( {\frac d t \cdot \frac 1 b}\right)\right)} \cdot b 
+  & \text{if } d \ge tb\\
+b & \text{otherwise}
+\end{cases}
+$$
 
-That is, we divide the density by a target minimum size and round this down to a power-of-two multiple of $b$.
-We then generate $s$ - 1 boundaries that split the local token space equally into $s$ shards, and split the result
-of the compaction on these boundaries to form a separate sstable for each shard. The target minimum size is obtained
-by dividing $t$ by $\sqrt 2$, to make the produced densities fall between $t/\sqrt 2$ and $t\cdot \sqrt 2$.
+That is, we divide the density by the target size and round this to a power-of-two multiple of $b$.
+We then generate $S - 1$ boundaries that split the local token space equally into $S$ shards, and split the result
+of the compaction on these boundaries to form a separate sstable for each shard. This aims to produce sstable sizes that 
+fall between $t/\sqrt 2$ and $t\cdot \sqrt 2$.
 
-For example, for a target size of 100MiB and 4 base shards, a 200 MiB memtable will be split in four L0 shards of
-roughly 50 MiB each, because $\log_2 \frac{200 \cdot \sqrt 2}{4 \cdot 100} < 0$ and thus we get the minimum of 4
-shards. If in one of these shards we end up with 4 of these 50 MiB sstables, the
-estimated density of the output would be 800 MiB $({4 \cdot 50 \mathrm{MiB}} / {0.25})$, which results in a target ratio
-of $\frac{800 \cdot \sqrt 2}{4 \cdot 100} = 2^{1.5}$, whose base-2 logarithm rounded down is 1, resulting in 8 shards
-for the whole local token space, thus 2 for the 1/4 span that the compaction covers. Assuming no overwrites and
-deletions, the resulting sstables will be of size 100 MiB, token share 1/8 and density 800 MiB.
+For example, for a target sstable size of 100MiB and 4 base shards, a 200 MiB memtable will be split in four L0 shards 
+of roughly 50 MiB each, because ${\frac{200}{100} \cdot \frac 1 4} < 1$ and thus we get
+the minimum of 4 shards, each spanning 1/4 of the token space. If in one of these shards we compact 6 of these 50 MiB 
+sstables, the estimated density of the output would be 1200 MiB $({6 \cdot 50 \mathrm{MiB}} / (1/4))$, which results in 
+a target ratio of $\frac{1200}{100} \cdot \frac 1 4 = 2^{\log_2 3}$, rounded to $2^2 \cdot 4$ shards for the whole 
+local token space, thus 4 for the 1/4 span that the compaction covers. Assuming no overwrites and
+deletions, the resulting sstables will be of size 75 MiB, token share 1/16 and density 1200 MiB.
 
 This sharding mechanism is independent of the compaction specification.
 
 ## Choosing sstables to compact
 
 The density levelling lets us separate sstables in levels defined by the compaction configuration's fan factors.
-However, unlike in the simple size-based levelling case, we cannot use the number of sstables on a level as a trigger
-as many of these sstables may be non-overlapping, i.e. not making read queries less efficient. To deal with this,
-take advantage of sharding to perform multiple compactions on a level concurrently, and reduce the size of individual
-compaction operations, we also need to separate non-overlapping sections in different buckets, and decide what to do
-based on the number of overlapping sstables in a bucket.
+However, unlike in the size levelling case where sstables are expected to cover the full token space, we cannot use the 
+number of sstables on a level as a trigger as many of these sstables may be non-overlapping, i.e. not making read 
+queries less efficient. To deal with this, take advantage of sharding to perform multiple compactions on a level 
+concurrently, and reduce the size of individual compaction operations, we also need to separate non-overlapping 
+sections in different buckets, and decide what to do based on the number of overlapping sstables in a bucket.
 
 To do this, we first form a minimal list of overlap sets that satisfy the following requirements:
 
@@ -196,7 +229,7 @@ The second condition can also be rephrased to say that for any point in the toke
 that contains all sstables whose range covers that point. In other words, the overlap sets give us the maximum number
 of sstables that need to be consulted to read any key, i.e. the read amplification that our trigger $t$ aims to
 control. We don't calculate or store the exact spans the overlapping sets cover, only the participating sstables.
-The sets can be obtained in $O(n\ln n)$ time.
+The sets can be obtained in $O(n\log n)$ time.
 
 For example, if sstables A, B, C and D cover, respectively, tokens 0-3, 2-7, 6-9 and 1-8, the overlap sets we compute
 are ABD and BCD. A and C don't overlap, so they must be in separate sets. A, B and D overlap at token 2 and must thus
@@ -227,7 +260,8 @@ all older ones are also included to maintain time order.
 
 ## Selecting compactions to run
 
-Because of sharding, UCS can do more compactions in parallel. However, it will often not use all available compaction threads.
+Because of sharding, UCS can do more compactions in parallel. However, it will often not use all available compaction 
+threads.
 
 The reason for this is that UCS splits the available compaction threads equally among the levels of the compaction 
 hierarchy. For example, if there are 16 compaction threads and we have no other work to do but compact the highest
@@ -235,12 +269,17 @@ level 5, we can only use up to $\lceil 16/6 \rceil = 3$ threads to do compaction
 risk starving the lower levels of resources, which can result in sstables accumulating on level 0 for as long as that
 compaction takes, which can be a very long time, and breaking our read amplification expectations.
 
-In theory each level requires an equal amount of processing resources: for tiered compaction, every piece of data that
-enters the system goes through one compaction for each level, and for leveled - through $f-1$. Because of this UCS
-reserves an equal number of compaction threads for each level, and assign tasks to the remainder of threads randomly.
+In theory, with a fixed compaction parameter each level requires an equal amount of processing resources: for tiered 
+compaction, every piece of data that enters the system goes through one compaction for each level, and for leveled -
+through $f-1$. Because of this UCS reserves an equal number of compaction threads for each level, and assign tasks to 
+the remainder of threads randomly.
 
 Make sure the number of compaction threads is greater than the number of expected levels to ensure compaction runs 
 smoothly.
+
+TODO: Revisit this and related code, required resources are proportional to a level's WA; density sharding should make
+this much less of a problem.
+
 
 ## Differences with STCS and LCS
 
@@ -293,7 +332,7 @@ this solution suits UCS-leveled, but not UCS-tiered and is thus not general enou
 splitting the run on specific boundaries selected before the compaction starts based on a file's density. As the
 boundaries for a specific density are also boundaries for the next ones, whenever we select sstables to compact some
 shard boundaries are shared, which guarantees that we can efficiently select higher-density sstables that exactly match
-the size of the lower-density ones.
+the span of the lower-density ones.
 
 ## Configuration
 
@@ -314,14 +353,17 @@ UCS accepts these compaction strategy parameters:
   <br/>The default value is T4, matching the default STCS behaviour with threshold 4. To use an equivalent of LCS with
   the default fan factor 10, use L10.
 
-* **target_sstable_size**. The target sstable size, specified as a human-friendly size in bytes (e.g. 100 MiB =
+* **target_sstable_size**. The target sstable size $t$, specified as a human-friendly size in bytes (e.g. 100 MiB =
   $100\cdot 2^{20}$ B or (10 MB = 10,000,000 B)). The strategy will split data in shards that aim to produce sstables
   of size between $t / \sqrt 2$ and $t \cdot \sqrt 2$.
+  <br/>Smaller sstables improve streaming and repair, and make compactions shorter. On the other hand, each sstable 
+  on disk has a non-trivial in-memory footprint that also affects garbage collection times.
+  <br/>Increase this if the memory pressure from the number of sstables in the system becomes too high.
   <br/>The default value is 1 GiB.
 
-* **base_shard_count**. The minimum number of shards, used for the smallest density levels. This gives the minimum
-  compaction concurrency for the lowest levels. A low number would result in larger L0 sstables but may limit the
-  overall maximum write throughput (as every piece of data has to go through L0).
+* **base_shard_count**. The minimum number of shards $b$, used for levels with the smallest density. This gives the 
+  minimum compaction concurrency for the lowest levels. A low number would result in larger L0 sstables but may limit
+  the overall maximum write throughput (as every piece of data has to go through L0).
   <br/>The default value is 4.
 
 * **expired_sstable_check_frequency_seconds**. Determines how often to check for expired SSTables.

@@ -274,7 +274,7 @@ public class ShardManager
 
         public int shardIndex()
         {
-            return pos;
+            return pos - 1;
         }
     }
 }
