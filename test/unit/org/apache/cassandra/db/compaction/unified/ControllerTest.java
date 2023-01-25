@@ -31,6 +31,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.compaction.CompactionStrategyOptions;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -92,6 +93,12 @@ public abstract class ControllerTest
     @Mock
     AbstractReplicationStrategy replicationStrategy;
 
+    @Mock
+    DiskBoundaries boundaries;
+
+    protected String keyspaceName = "TestKeyspace";
+    protected int numDirectories = 1;
+
     @BeforeClass
     public static void setUpClass()
     {
@@ -109,6 +116,9 @@ public abstract class ControllerTest
         when(metadata.toString()).thenReturn("");
         when(replicationStrategy.getReplicationFactor()).thenReturn(ReplicationFactor.fullOnly(3));
         when(cfs.getKeyspaceReplicationStrategy()).thenReturn(replicationStrategy);
+        when(cfs.getKeyspaceName()).thenAnswer(invocation -> keyspaceName);
+        when(cfs.getDiskBoundaries()).thenReturn(boundaries);
+        when(boundaries.getNumBoundaries()).thenAnswer(invocation -> numDirectories);
 
         when(executorService.scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.class))).thenReturn(fut);
 

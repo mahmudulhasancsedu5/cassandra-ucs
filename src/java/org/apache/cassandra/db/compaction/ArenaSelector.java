@@ -18,20 +18,11 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.unified.Controller;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Splitter;
-import org.apache.cassandra.dht.Token;
 
 /**
  * Arena selector, used by UnifiedCompactionStrategy to distribute SSTables to separate compaction arenas.
@@ -39,8 +30,6 @@ import org.apache.cassandra.dht.Token;
  * This is used to:
  * - ensure that sstables that should not be compacted together (e.g. repaired with unrepaired) are separated
  * - ensure that each disk's sstables are compacted separately
- * - implement compaction shards, subsections of the token space which compact separately for improved parallelism
- *   and compaction overheads.
  */
 public class ArenaSelector implements Comparator<CompactionSSTable>
 {

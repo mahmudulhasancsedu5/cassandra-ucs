@@ -123,14 +123,14 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         return Controller.validateOptions(CompactionStrategyOptions.validateOptions(options));
     }
 
-    public static int fanoutFromScalingParameter(int W)
+    public static int fanoutFromScalingParameter(int w)
     {
-        return W < 0 ? 2 - W : 2 + W; // see formula in design doc
+        return w < 0 ? 2 - w : 2 + w; // see formula in design doc
     }
 
-    public static int thresholdFromScalingParameter(int W)
+    public static int thresholdFromScalingParameter(int w)
     {
-        return W <= 0 ? 2 : 2 + W; // see formula in design doc
+        return w <= 0 ? 2 : 2 + w; // see formula in design doc
     }
 
     public static int parseScalingParameter(String value)
@@ -156,12 +156,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         return value;
     }
 
-    public static String printScalingParameter(int W)
+    public static String printScalingParameter(int w)
     {
-        if (W < 0)
-            return "L" + Integer.toString(2 - W);
-        else if (W > 0)
-            return "T" + Integer.toString(W + 2);
+        if (w < 0)
+            return "L" + Integer.toString(2 - w);
+        else if (w > 0)
+            return "T" + Integer.toString(w + 2);
         else
             return "N";
     }
@@ -1467,10 +1467,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             {
                 // We need to pick the compactions in such a way that the result of doing them all spreads the data in
                 // a similar way to how compaction would lay them if it was able to keep up. This means:
-                // - for tiered compaction (W >= 0), compact in sets of as many as required to get to a level.
-                //   for example, for W=2 and 55 sstables, do 3 compactions of 16 sstables, 1 of 4, and leave the other 3 alone
-                // - for levelled compaction (W < 0), compact all that would reach a level.
-                //   for W=-2 and 55, this means one compaction of 48, one of 4, and one of 3 sstables.
+                // - for tiered compaction (w >= 0), compact in sets of as many as required to get to a level.
+                //   for example, for w=2 and 55 sstables, do 3 compactions of 16 sstables, 1 of 4, and leave the other 3 alone
+                // - for levelled compaction (w < 0), compact all that would reach a level.
+                //   for w=-2 and 55, this means one compaction of 48, one of 4, and one of 3 sstables.
                 List<CompactionPick> picks = layoutCompactions(controller, maxSSTablesToCompact);
                 // Out of the set of necessary compactions, choose the one to run randomly. This gives a better
                 // distribution among levels and should result in more compactions running in parallel in a big data
@@ -1522,11 +1522,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (step > maxOverlap || step > maxSSTablesToCompact)
                 return 0;
 
-            int W = controller.getScalingParameter(level);
-            int F = controller.getFanout(level);
+            int w = controller.getScalingParameter(level);
+            int f = controller.getFanout(level);
             int pos = layoutCompactions(controller,
                                         level + 1,
-                                        step * F,
+                                        step * f,
                                         maxSSTablesToCompact,
                                         list);
 
@@ -1535,7 +1535,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             // and deletions).
             // For tiered compaction we will select batches of this many.
             int pickSize = step;
-            if (W < 0)
+            if (w < 0)
             {
                 // For levelled compaction all the sstables that would reach this level need to be compacted to one,
                 // so select the highest multiple of step that is available, but make sure we don't do a compaction

@@ -46,6 +46,7 @@ import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.metrics.DefaultNameFactory;
 import org.apache.cassandra.metrics.MetricNameFactory;
+import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MonotonicClock;
@@ -108,6 +109,13 @@ public abstract class Controller
     static final double MAX_SPACE_OVERHEAD_UPPER_BOUND = 1.0;
 
     static final String BASE_SHARD_COUNT_OPTION = "base_shard_count";
+    /**
+     * Default base shard count, used when a base count is not explicitly supplied. This value applies as long as the
+     * table is not a system one, and directories are not defined.
+     *
+     * For others a base count of 1 is used as system tables are usually small and do not need as much compaction
+     * parallelism, while having directories defined provides for parallelism in a different way.
+     */
     public static final int DEFAULT_BASE_SHARD_COUNT = Integer.parseInt(System.getProperty(PREFIX + BASE_SHARD_COUNT_OPTION, "4"));
 
     static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
@@ -624,9 +632,20 @@ public abstract class Controller
         boolean l0ShardsEnabled = options.containsKey(L0_SHARDS_ENABLED_OPTION)
                                   ? Boolean.parseBoolean(options.get(L0_SHARDS_ENABLED_OPTION))
                                   : DEFAULT_L0_SHARDS_ENABLED;
-        int baseShardCount = options.containsKey(BASE_SHARD_COUNT_OPTION)
-                             ? Integer.parseInt(options.get(BASE_SHARD_COUNT_OPTION))
-                             : DEFAULT_BASE_SHARD_COUNT;
+
+        int baseShardCount;
+        if (options.containsKey(BASE_SHARD_COUNT_OPTION))
+        {
+            baseShardCount = Integer.parseInt(options.get(BASE_SHARD_COUNT_OPTION));
+        }
+        else
+        {
+            if (SchemaConstants.isSystemKeyspace(realm.getKeyspaceName()) || realm.getDiskBoundaries().getNumBoundaries() > 1)
+                baseShardCount = 1;
+            else
+                baseShardCount = DEFAULT_BASE_SHARD_COUNT;
+        }
+
         double targetSStableSize = options.containsKey(TARGET_SSTABLE_SIZE_OPTION)
                                    ? FBUtilities.parseHumanReadable(options.get(TARGET_SSTABLE_SIZE_OPTION), null, "B")
                                    : DEFAULT_TARGET_SSTABLE_SIZE;

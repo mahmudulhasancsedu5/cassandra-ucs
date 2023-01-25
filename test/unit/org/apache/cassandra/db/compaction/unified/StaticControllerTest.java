@@ -28,6 +28,7 @@ import org.junit.Test;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.ReplicationFactor;
+import org.apache.cassandra.schema.SchemaConstants;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
@@ -324,5 +325,33 @@ public class StaticControllerTest extends ControllerTest
         controller = testFromOptions(false, options);
         assertTrue(controller instanceof StaticController);
         assertEquals(Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION, controller.getIgnoreOverlapsInExpirationCheck());
+    }
+
+    @Test
+    public void testBaseShardCountDefault()
+    {
+        Map<String, String> options = new HashMap<>();
+        Controller controller = Controller.fromOptions(cfs, options);
+        assertEquals(Controller.DEFAULT_BASE_SHARD_COUNT, controller.baseShardCount);
+
+        String prevKS = keyspaceName;
+        try
+        {
+            keyspaceName = SchemaConstants.SYSTEM_KEYSPACE_NAME;
+            controller = controller.fromOptions(cfs, options);
+            assertEquals(1, controller.baseShardCount);
+        }
+        finally
+        {
+            keyspaceName = prevKS;
+        }
+
+        numDirectories = 3;
+        controller = controller.fromOptions(cfs, options);
+        assertEquals(1, controller.baseShardCount);
+
+        numDirectories = 1;
+        controller = controller.fromOptions(cfs, options);
+        assertEquals(Controller.DEFAULT_BASE_SHARD_COUNT, controller.baseShardCount);
     }
 }

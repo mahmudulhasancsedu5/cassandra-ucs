@@ -40,8 +40,10 @@ public class ShardManager
 
     final SortedLocalRanges localRanges;
 
-    // Staring positions for the local token ranges, in covered token range. The last number defines the total token
-    // shared owned by the node.
+    /**
+     * Staring positions for the local token ranges, in covered token range. The last number defines the total token
+     * share owned by the node.
+     */
     double[] localRangePositions;
 
     public ShardManager(SortedLocalRanges localRanges)
