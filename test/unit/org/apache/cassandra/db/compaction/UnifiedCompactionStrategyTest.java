@@ -49,10 +49,12 @@ import org.junit.runners.Parameterized;
 import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.db.compaction.unified.UnifiedCompactionTask;
+import org.apache.cassandra.db.memtable.ShardBoundaries;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Range;
@@ -1001,62 +1003,48 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
     public void testShardBoundaries()
     {
         // no shards
-        testShardBoundaries(ints(100), 1, 1, ints(10, 50));
+        testShardBoundaries(ints(), 1, 1, ints(10, 50));
         // split on disks at minimum
-        testShardBoundaries(ints(30, 100), 1, 2, ints(10, 50));
-        testShardBoundaries(ints(20, 30, 40, 50, 100), 1, 5, ints(10, 51, 61, 70));
+        testShardBoundaries(ints(30), 1, 2, ints(10, 50));
+        testShardBoundaries(ints(20, 30, 40, 50), 1, 5, ints(10, 51, 61, 70));
 
         // no disks
-        testShardBoundaries(ints(30, 100), 2, 1, ints(10, 50));
-        testShardBoundaries(ints(20, 30, 40, 50, 100), 5, 1, ints(10, 51, 61, 70));
+        testShardBoundaries(ints(30), 2, 1, ints(10, 50));
+        testShardBoundaries(ints(20, 30, 40, 50), 5, 1, ints(10, 51, 61, 70));
 
         // split
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 80, 100), 9, 3, ints(0, 90));
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90, 100), 9, 3, ints(0, 51, 61, 100));
-        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90, 100), 9, 3, ints(0, 49, 59, 100));
-        testShardBoundaries(ints(12, 23, 33, 45, 56, 70, 80, 90, 100), 9, 3, ints(0, 9, 11, 20, 21, 39, 41, 50, 51, 60, 64, 68, 68, 100));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 80), 3, 3, ints(0, 90));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90), 3, 3, ints(0, 51, 61, 100));
+        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90), 3, 3, ints(0, 49, 59, 100));
+        testShardBoundaries(ints(12, 23, 33, 45, 56, 70, 80, 90), 3, 3, ints(0, 9, 11, 20, 21, 39, 41, 50, 51, 60, 64, 68, 68, 100));
 
         // uneven
-        testShardBoundaries(ints(11, 22, 33, 42, 50, 58, 67, 78, 89, 100), 10, 3, ints(0, 100));
-        testShardBoundaries(ints(8, 17, 25, 38, 50, 58, 67, 75, 88, 100), 10, 4, ints(0, 100));
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 80, 90, 100), 10, 5, ints(0, 100));
-        testShardBoundaries(ints(8, 17, 33, 42, 50, 58, 67, 83, 92, 100), 10, 6, ints(0, 100));
-        testShardBoundaries(ints(14, 21, 29, 43, 50, 57, 71, 79, 86, 100), 10, 7, ints(0, 100));
-        testShardBoundaries(ints(13, 19, 25, 38, 50, 63, 69, 75, 88, 100), 10, 8, ints(0, 100));
-        testShardBoundaries(ints(11, 22, 33, 44, 50, 56, 67, 78, 89, 100), 10, 9, ints(0, 100));
-
-        // uneven again, where x0 are the disk boundaries and the others are inserted shard boundaries
-        testShardBoundaries(ints(3, 7, 10, 13, 15, 18, 20, 23, 27, 100), 10, 3, ints(0, 30));
-        testShardBoundaries(ints(3, 7, 10, 15, 20, 23, 27, 30, 35, 100), 10, 4, ints(0, 40));
-        testShardBoundaries(ints(5, 10, 15, 20, 25, 30, 35, 40, 45, 100), 10, 5, ints(0, 50));
-        testShardBoundaries(ints(5, 10, 20, 25, 30, 35, 40, 50, 55, 100), 10, 6, ints(0, 60));
-        testShardBoundaries(ints(10, 15, 20, 30, 35, 40, 50, 55, 60, 100), 10, 7, ints(0, 70));
-        testShardBoundaries(ints(10, 15, 20, 30, 40, 50, 55, 60, 70, 100), 10, 8, ints(0, 80));
-        testShardBoundaries(ints(10, 20, 30, 40, 45, 50, 60, 70, 80, 100), 10, 9, ints(0, 90));
+        testShardBoundaries(ints(8, 16, 24, 32, 42, 52, 62, 72, 79, 86, 93), 4, ints(32, 72, 100), ints(0, 100));
+        testShardBoundaries(ints(1, 2, 3, 4, 6, 8, 10, 12, 34, 56, 78), 4, ints(4, 12, 100), ints(0, 100));
     }
 
     @Test
     public void testShardBoundariesWraparound()
     {
         // no shards
-        testShardBoundaries(ints(100), 1, 1, ints(50, 10));
+        testShardBoundaries(ints(), 1, 1, ints(50, 10));
         // split on disks at minimum
-        testShardBoundaries(ints(70, 100), 1, 2, ints(50, 10));
-        testShardBoundaries(ints(10, 20, 30, 70, 100), 1, 5, ints(91, 31, 61, 71));
+        testShardBoundaries(ints(70), 1, 2, ints(50, 10));
+        testShardBoundaries(ints(10, 20, 30, 70), 1, 5, ints(91, 31, 61, 71));
         // no disks
-        testShardBoundaries(ints(70, 100), 2, 1, ints(50, 10));
-        testShardBoundaries(ints(10, 20, 30, 70, 100), 5, 1, ints(91, 31, 61, 71));
+        testShardBoundaries(ints(70), 2, 1, ints(50, 10));
+        testShardBoundaries(ints(10, 20, 30, 70), 5, 1, ints(91, 31, 61, 71));
         // split
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 90, 100), 9, 3, ints(81, 71));
-        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90, 100), 9, 3, ints(51, 41));
-        testShardBoundaries(ints(10, 30, 40, 50, 60, 70, 80, 90, 100), 9, 3, ints(21, 11));
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 90, 100), 9, 3, ints(89, 79));
-        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90, 100), 9, 3, ints(59, 49));
-        testShardBoundaries(ints(10, 30, 40, 50, 60, 70, 80, 90, 100), 9, 3, ints(29, 19));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 90), 3, 3, ints(81, 71));
+        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90), 3, 3, ints(51, 41));
+        testShardBoundaries(ints(10, 30, 40, 50, 60, 70, 80, 90), 3, 3, ints(21, 11));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 60, 70, 90), 3, 3, ints(89, 79));
+        testShardBoundaries(ints(10, 20, 30, 40, 60, 70, 80, 90), 3, 3, ints(59, 49));
+        testShardBoundaries(ints(10, 30, 40, 50, 60, 70, 80, 90), 3, 3, ints(29, 19));
 
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90, 100), 9, 3, ints(91, 51, 61, 91));
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90, 100), 9, 3, ints(21, 51, 61, 21));
-        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90, 100), 9, 3, ints(71, 51, 61, 71));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90), 3, 3, ints(91, 51, 61, 91));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90), 3, 3, ints(21, 51, 61, 21));
+        testShardBoundaries(ints(10, 20, 30, 40, 50, 70, 80, 90), 3, 3, ints(71, 51, 61, 71));
     }
 
     private int[] ints(int... values)
@@ -1073,13 +1061,38 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         SortedLocalRanges sortedRanges = SortedLocalRanges.forTesting(realm, ranges);
 
         List<Token> diskBoundaries = sortedRanges.split(numDisks);
-
-        int[] result = UnifiedCompactionStrategy.computeShardBoundaries(sortedRanges, diskBoundaries, numShards, partitioner)
-                                                .stream()
-                                                .mapToInt(this::fromToken)
-                                                .toArray();
-
+        int[] result = getShardBoundaries(expected, numShards, diskBoundaries, sortedRanges);
         Assert.assertArrayEquals("Disks " + numDisks + " shards " + numShards + " expected " + Arrays.toString(expected) + " was " + Arrays.toString(result), expected, result);
+    }
+
+    private void testShardBoundaries(int[] expected, int numShards, int[] diskPositions, int[] rangeBounds)
+    {
+        IPartitioner partitioner = Murmur3Partitioner.instance;
+        List<Splitter.WeightedRange> ranges = new ArrayList<>();
+        for (int i = 0; i < rangeBounds.length; i += 2)
+            ranges.add(new Splitter.WeightedRange(1.0, new Range<>(getToken(rangeBounds[i + 0]), getToken(rangeBounds[i + 1]))));
+        SortedLocalRanges sortedRanges = SortedLocalRanges.forTesting(realm, ranges);
+
+        List<Token> diskBoundaries = Arrays.stream(diskPositions).mapToObj(this::getToken).collect(Collectors.toList());
+        int[] result = getShardBoundaries(expected, numShards, diskBoundaries, sortedRanges);
+        Assert.assertArrayEquals("Disks " + Arrays.toString(diskPositions) + " shards " + numShards + " expected " + Arrays.toString(expected) + " was " + Arrays.toString(result), expected, result);
+    }
+
+    private int[] getShardBoundaries(int[] expected, int numShards, List<Token> diskBoundaries, SortedLocalRanges sortedRanges)
+    {
+        DiskBoundaries db = Mockito.mock(DiskBoundaries.class);
+        when(db.getLocalRanges()).thenReturn(sortedRanges);
+        when(db.getPositions()).thenReturn(diskBoundaries);
+
+        final ShardIterator shardIterator = ShardManager.create(db, partitioner)
+                                                        .boundaries(numShards);
+        IntArrayList list = new IntArrayList();
+        for (int i = 0; i < 100; ++i)
+        {
+            if (shardIterator.advanceTo(getToken(i)))
+                list.addInt(fromToken(shardIterator.shardStart()));
+        }
+        return list.toIntArray();
     }
 
     private Token getToken(int x)

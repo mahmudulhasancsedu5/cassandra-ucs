@@ -1458,7 +1458,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
             IPartitioner partitioner = minToken.getPartitioner();
 
             int shards = strategy.getController().getNumShards(valueSize * numEntries / minToken.size(maxToken));
-            ShardManager.BoundaryIterator boundaries = strategy.getShardManager().boundaries(shards);
+            ShardIterator boundaries = strategy.getShardManager().boundaries(shards);
 
             int numSStables = 0;
             boundaries.advanceTo(minToken);

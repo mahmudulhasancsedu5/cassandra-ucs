@@ -299,7 +299,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     {
         ShardManager shardManager = getShardManager();
         double flushDensity = realm.metrics().flushSizeOnDisk().get() / shardManager.localSpaceCoverage();
-        ShardManager.BoundaryIterator boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
+        ShardIterator boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
         return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,
@@ -335,126 +335,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 return; // another thread beat us to the update
 
             DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
-            SortedLocalRanges localRanges = currentBoundaries.getLocalRanges();
-            // this should only happen in tests that change partitioners, but we don't want UCS to throw
-            // where other strategies work even if the situations are unrealistic.
-            if (localRanges.getRanges().isEmpty() || !localRanges.getRanges()
-                                                                 .get(0)
-                                                                 .range()
-                                                      .left
-                                                      .getPartitioner()
-                                                      .equals(realm.getPartitioner()))
-                localRanges = new SortedLocalRanges(realm,
-                                                    localRanges.getRingVersion(),
-                                                    null);
-            // FIXME: somehow deal with disk boundaries and splitter not present, and remove method below
-            shardManager = new ShardManager(localRanges);
+            shardManager = ShardManager.create(currentBoundaries, realm.getPartitioner());
             arenaSelector = new ArenaSelector(controller, currentBoundaries);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.
         }
-    }
-
-    /**
-     * We want to split the local token range in shards, aiming for close to equal share for each shard.
-     * If there are no disk boundaries, we just split the token space equally, but if multiple disks have been defined
-     * (each with its own share of the local range), we can't have shards spanning disk boundaries. This means that
-     * shards need to be selected within the disk's portion of the local ranges.
-     *
-     * As an example of what this means, consider a 3-disk node and 10 shards. The range is split equally between
-     * disks, but we can only split shards within a disk range, thus we end up with 6 shards taking 1/3*1/3=1/9 of the
-     * token range, and 4 smaller shards taking 1/3*1/4=1/12 of the token range.
-     */
-    @VisibleForTesting
-    static List<Token> computeShardBoundaries(SortedLocalRanges localRanges,
-                                              List<Token> diskBoundaries,
-                                              int numShards,
-                                              IPartitioner partitioner)
-    {
-        Optional<Splitter> splitter = partitioner.splitter();
-        if (diskBoundaries != null && !splitter.isPresent())
-            return diskBoundaries;
-        else if (!splitter.isPresent()) // C* 2i case, just return 1 boundary at min token
-            return ImmutableList.of(partitioner.getMinimumToken());
-
-        // this should only happen in tests that change partitioners, but we don't want UCS to throw
-        // where other strategies work even if the situations are unrealistic.
-        if (localRanges.getRanges().isEmpty() || !localRanges.getRanges()
-                                                             .get(0)
-                                                             .range()
-                                                             .left
-                                                             .getPartitioner()
-                                                             .equals(partitioner))
-            localRanges = new SortedLocalRanges(localRanges.getRealm(),
-                                                localRanges.getRingVersion(),
-                                                null);
-
-        if (diskBoundaries == null || diskBoundaries.size() <= 1)
-            return localRanges.split(numShards);
-
-        if (numShards <= diskBoundaries.size())
-            return diskBoundaries;
-
-        return splitPerDiskRanges(localRanges,
-                                  diskBoundaries,
-                                  getRangesTotalSize(localRanges.getRanges()),
-                                  numShards,
-                                  splitter.get());
-    }
-
-    /**
-     * Split the per-disk ranges and generate the required number of shard boundaries.
-     * This works by accumulating the size after each disk's share, multiplying by shardNum/totalSize and rounding to
-     * produce an integer number of total shards needed by the disk boundary, which in turns defines how many need to be
-     * added for this disk.
-     *
-     * For example, for a total size of 1, 2 disks (each of 0.5 share) and 3 shards, this will:
-     * -process disk 1:
-     * -- calculate 1/2 as the accumulated size
-     * -- map this to 3/2 and round to 2 shards
-     * -- split the disk's ranges into two equally-sized shards
-     * -process disk 2:
-     * -- calculate 1 as the accumulated size
-     * -- map it to 3 and round to 3 shards
-     * -- assign the disk's ranges to one shard
-     *
-     * The resulting shards will not be of equal size and this works best if the disk shares are distributed evenly
-     * (which the current code always ensures).
-     */
-    private static List<Token> splitPerDiskRanges(SortedLocalRanges localRanges,
-                                                  List<Token> diskBoundaries,
-                                                  double totalSize,
-                                                  int numArenas,
-                                                  Splitter splitter)
-    {
-        double perArena = totalSize / numArenas;
-        List<Token> shardBoundaries = new ArrayList<>(numArenas);
-        double processedSize = 0;
-        Token left = diskBoundaries.get(0).getPartitioner().getMinimumToken();
-        for (Token boundary : diskBoundaries)
-        {
-            Token right = boundary.getToken();
-            List<Splitter.WeightedRange> disk = localRanges.subrange(new Range<>(left, right));
-
-            processedSize += getRangesTotalSize(disk);
-            int targetCount = (int) Math.round(processedSize / perArena);
-            List<Token> splits = splitter.splitOwnedRanges(Math.max(targetCount - shardBoundaries.size(), 1), disk, Splitter.SplitType.ALWAYS_SPLIT).boundaries;
-            shardBoundaries.addAll(splits);
-            // The splitting always results in maxToken as the last boundary. Replace it with the disk's upper bound.
-            shardBoundaries.set(shardBoundaries.size() - 1, boundary);
-
-            left = right;
-        }
-        assert shardBoundaries.size() == numArenas;
-        return shardBoundaries;
-    }
-
-    private static double getRangesTotalSize(List<Splitter.WeightedRange> ranges)
-    {
-        double totalSize = 0;
-        for (Splitter.WeightedRange range : ranges)
-            totalSize += range.left().size(range.right());
-        return totalSize;
     }
 
     @VisibleForTesting

@@ -17,7 +17,6 @@
 package org.apache.cassandra.db.compaction.unified;
 
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Random;
 
 import org.junit.AfterClass;
@@ -32,9 +31,9 @@ import org.apache.cassandra.db.compaction.CompactionController;
 import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.compaction.ShardManager;
+import org.apache.cassandra.db.compaction.ShardManagerNoDisks;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
-import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.service.StorageService;
@@ -126,7 +125,7 @@ public class ShardedCompactionWriterTest extends CQLTester
 
         LifecycleTransaction txn = cfs.getTracker().tryModify(cfs.getLiveSSTables(), OperationType.COMPACTION);
 
-        ShardManager boundaries = new ShardManager(SortedLocalRanges.forTestingFull(cfs));
+        ShardManager boundaries = new ShardManagerNoDisks(SortedLocalRanges.forTestingFull(cfs));
         ShardedCompactionWriter writer = new ShardedCompactionWriter(cfs, cfs.getDirectories(), txn, txn.originals(), false, boundaries.boundaries(numShards));
 
         int rows = compact(cfs, txn, writer);

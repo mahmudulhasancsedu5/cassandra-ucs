@@ -56,12 +56,12 @@ public class ShardManagerTest
     public void testRangeSpannedFullOwnership()
     {
         weightedRanges.add(new Splitter.WeightedRange(1.0, new Range<>(minimumToken, minimumToken)));
-        ShardManager shardManager = new ShardManager(localRanges);
+        ShardManager shardManager = new ShardManagerNoDisks(localRanges);
 
         // sanity check
         assertEquals(0.4, tokenAt(0.1).size(tokenAt(0.5)), delta);
 
-        assertEquals(0.5, shardManager.rangeSizeNonWrapping(range(0.2, 0.7)), delta);
+        assertEquals(0.5, shardManager.rangeSpanned(range(0.2, 0.7)), delta);
         assertEquals(0.2, shardManager.rangeSpanned(range(0.3, 0.5)), delta);
 
         assertEquals(0.2, shardManager.rangeSpanned(mockedTable(0.5, 0.7, Double.NaN)), delta);
@@ -91,12 +91,12 @@ public class ShardManagerTest
         weightedRanges.add(new Splitter.WeightedRange(1.0, new Range<>(tokenAt(0.98), tokenAt(1.0))));
         double total = weightedRanges.stream().mapToDouble(wr -> wr.range().left.size(wr.range().right)).sum();
 
-        ShardManager shardManager = new ShardManager(localRanges);
+        ShardManager shardManager = new ShardManagerNoDisks(localRanges);
 
         // sanity check
         assertEquals(0.4, tokenAt(0.1).size(tokenAt(0.5)), delta);
 
-        assertEquals(0.15, shardManager.rangeSizeNonWrapping(range(0.2, 0.7)), delta);
+        assertEquals(0.15, shardManager.rangeSpanned(range(0.2, 0.7)), delta);
         assertEquals(0.15, shardManager.rangeSpanned(range(0.3, 0.5)), delta);
         assertEquals(0.0, shardManager.rangeSpanned(range(0.5, 0.7)), delta);
         assertEquals(total, shardManager.rangeSpanned(range(0.0, 1.0)), delta);

@@ -29,7 +29,7 @@ import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
 import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.compaction.CompactionRealm;
-import org.apache.cassandra.db.compaction.ShardManager;
+import org.apache.cassandra.db.compaction.ShardIterator;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.index.Index;
@@ -65,7 +65,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     private final SerializationHeader header;
     private final Collection<Index.Group> indexGroups;
     private final LifecycleNewTracker lifecycleNewTracker;
-    private final ShardManager.BoundaryIterator boundaries;
+    private final ShardIterator boundaries;
     private final SSTableWriter[] writers;
     private int currentWriter;
 
@@ -79,7 +79,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
                               SerializationHeader header,
                               Collection<Index.Group> indexGroups,
                               LifecycleNewTracker lifecycleNewTracker,
-                              ShardManager.BoundaryIterator boundaries)
+                              ShardIterator boundaries)
     {
         this.realm = realm;
         this.descriptor = descriptor;
