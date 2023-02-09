@@ -557,7 +557,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (expiredCheck)
             {
                 expired = arena.getExpiredSSTables(gcBefore, controller.getIgnoreOverlapsInExpirationCheck());
-                if (logger.isTraceEnabled() && expired.size() > 0)
+                if (logger.isTraceEnabled() && !expired.isEmpty())
                     logger.trace("Expiration check for arena {} found {} fully expired SSTables", arena.name(), expired.size());
             }
             else
