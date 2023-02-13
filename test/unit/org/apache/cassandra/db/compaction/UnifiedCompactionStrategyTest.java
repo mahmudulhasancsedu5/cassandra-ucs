@@ -1099,11 +1099,10 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
             ranges.add(new Splitter.WeightedRange(1.0, new Range<>(getToken(rangeBounds[i + 0]), getToken(rangeBounds[i + 1]))));
         SortedLocalRanges sortedRanges = SortedLocalRanges.forTesting(realm, ranges);
 
-        List<PartitionPosition> diskBoundaries = sortedRanges.split(numDisks);
+        List<Token> diskBoundaries = sortedRanges.split(numDisks);
 
         int[] result = UnifiedCompactionStrategy.computeShardBoundaries(sortedRanges, diskBoundaries, numShards, partitioner)
                                                 .stream()
-                                                .map(PartitionPosition::getToken)
                                                 .mapToInt(this::fromToken)
                                                 .toArray();
 

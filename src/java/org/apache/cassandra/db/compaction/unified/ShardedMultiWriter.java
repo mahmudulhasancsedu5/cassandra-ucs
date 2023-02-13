@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
 import org.apache.cassandra.db.commitlog.IntervalSet;
@@ -32,6 +33,7 @@ import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
@@ -140,7 +142,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
         we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
          */
-        while (currentBoundary < boundaries.size() && key.compareTo(boundaries.get(currentBoundary)) >= 0)
+        while (currentBoundary < boundaries.size() && key.getToken().compareTo(boundaries.get(currentBoundary)) >= 0)
         {
             currentBoundary++;
             if (!boundaryCrossed)

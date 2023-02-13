@@ -154,8 +154,8 @@ public class MemtableIndex
     {
         RangeConcatIterator.Builder builder = RangeConcatIterator.builder();
 
-        int startShard = boundaries.getShardFor(keyRange.left);
-        int endShard = keyRange.right.isMinimum() ? boundaries.shardCount() - 1 : boundaries.getShardFor(keyRange.right);
+        int startShard = boundaries.getShardForToken(keyRange.left.getToken());
+        int endShard = keyRange.right.isMinimum() ? boundaries.shardCount() - 1 : boundaries.getShardForToken(keyRange.right.getToken());
         for (int shard  = startShard; shard <= endShard; ++shard)
         {
             assert rangeIndexes[shard] != null;

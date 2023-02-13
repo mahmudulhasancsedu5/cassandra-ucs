@@ -41,13 +41,19 @@ public class ShardManager
      */
     static final double MINIMUM_TOKEN_COVERAGE = Math.scalb(1.0, -48);
 
-    private final PartitionPosition[] shardBoundaries;
+    private final Token[] shardBoundaries;
     final SortedLocalRanges localRanges;
 
-    public ShardManager(PartitionPosition[] shardBoundaries, SortedLocalRanges localRanges)
+    public ShardManager(Token[] shardBoundaries, SortedLocalRanges localRanges)
     {
         this.shardBoundaries = shardBoundaries;
         this.localRanges = localRanges;
+    }
+
+    public int shardFor(Token token)
+    {
+        int pos = Arrays.binarySearch(shardBoundaries, token);
+        return pos >= 0 ? pos : -pos - 1;   // boundaries are end-inclusive
     }
 
     /**
@@ -57,9 +63,7 @@ public class ShardManager
      */
     public int shardFor(PartitionPosition key)
     {
-        int pos = Arrays.binarySearch(shardBoundaries, key);
-        assert pos < 0;
-        return -pos - 1;
+        return shardFor(key.getToken());
     }
 
     /**
@@ -98,9 +102,9 @@ public class ShardManager
     public Range<Token> shardSpan(int shardIdx)
     {
         if (shardIdx == 0)
-            return new Range<>(shardBoundaries[0].minValue().getToken(), shardBoundaries[0].getToken());
+            return new Range<>(shardBoundaries[0].minValue(), shardBoundaries[0]);
         else
-            return new Range<>(shardBoundaries[shardIdx - 1].getToken(), shardBoundaries[shardIdx].getToken());
+            return new Range<>(shardBoundaries[shardIdx - 1], shardBoundaries[shardIdx]);
     }
 
     public double rangeSizeNonWrapping(Range<Token> tableRange)
@@ -144,7 +148,7 @@ public class ShardManager
         return shardBoundaries.length;
     }
 
-    public PartitionPosition get(int index)
+    public Token get(int index)
     {
         return shardBoundaries[index];
     }

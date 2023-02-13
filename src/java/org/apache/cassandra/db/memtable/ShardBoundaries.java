@@ -25,7 +25,6 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.Token;
 
 /**
@@ -38,7 +37,7 @@ import org.apache.cassandra.dht.Token;
  */
 public class ShardBoundaries
 {
-    private static final PartitionPosition[] EMPTY_TOKEN_ARRAY = new PartitionPosition[0];
+    private static final Token[] EMPTY_TOKEN_ARRAY = new Token[0];
 
     // Special boundaries that map all tokens to one shard.
     // These boundaries will be used in either of these cases:
@@ -47,17 +46,17 @@ public class ShardBoundaries
     // - the keyspace is local system keyspace
     public static final ShardBoundaries NONE = new ShardBoundaries(EMPTY_TOKEN_ARRAY, -1);
 
-    private final PartitionPosition[] boundaries;
+    private final Token[] boundaries;
     public final long ringVersion;
 
     @VisibleForTesting
-    public ShardBoundaries(PartitionPosition[] boundaries, long ringVersion)
+    public ShardBoundaries(Token[] boundaries, long ringVersion)
     {
         this.boundaries = boundaries;
         this.ringVersion = ringVersion;
     }
 
-    public ShardBoundaries(List<PartitionPosition> boundaries, long ringVersion)
+    public ShardBoundaries(List<Token> boundaries, long ringVersion)
     {
         this(boundaries.toArray(EMPTY_TOKEN_ARRAY), ringVersion);
     }
@@ -69,17 +68,7 @@ public class ShardBoundaries
     {
         for (int i = 0; i < boundaries.length; i++)
         {
-            if (tk.compareTo(boundaries[i].getToken()) < 0)
-                return i;
-        }
-        return boundaries.length;
-    }
-
-    public int getShardFor(PartitionPosition pp)
-    {
-        for (int i = 0; i < boundaries.length; i++)
-        {
-            if (pp.compareTo(boundaries[i]) <= 0)
+            if (tk.compareTo(boundaries[i]) <= 0)   // boundaries are end-inclusive
                 return i;
         }
         return boundaries.length;

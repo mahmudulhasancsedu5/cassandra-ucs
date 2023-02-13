@@ -23,13 +23,13 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.CompactionRealm;
 import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -76,8 +76,9 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
         /*
         The comparison to detect a boundary is costly, but if we only do this when the size is above the threshold,
         we may detect a boundary change in the middle of a shard and split sstables at the wrong place.
+        Boundaries are end-inclusive.
          */
-        while (currentIndex < boundaries.size() && key.compareTo(boundaries.get(currentIndex)) >= 0)
+        while (currentIndex < boundaries.size() && key.getToken().compareTo(boundaries.get(currentIndex)) >= 0)
         {
             currentIndex++;
             boundaryCrossed = true;
@@ -97,7 +98,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
     @Override
     @SuppressWarnings("resource")
-    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, PartitionPosition diskBoundary)
+    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, Token diskBoundary)
     {
         while (diskBoundary != null && currentIndex < boundaries.size() && diskBoundary.compareTo(boundaries.get(currentIndex)) < 0)
             currentIndex++;

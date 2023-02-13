@@ -24,7 +24,6 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
@@ -121,20 +120,20 @@ public class ShardManagerTest
         return mock;
     }
 
-    private PartitionPosition[] shardTokens()
+    private Token[] shardTokens()
     {
-        PartitionPosition[] shards = new PartitionPosition[]
-                                     {
-                                     tokenAt(0.1).maxKeyBound(),
-                                     tokenAt(0.25).maxKeyBound(),
-                                     tokenAt(0.3).maxKeyBound(),
-                                     tokenAt(0.33).maxKeyBound(),
-                                     tokenAt(0.34).maxKeyBound(),
-                                     tokenAt(0.4).maxKeyBound(),
-                                     tokenAt(0.7).maxKeyBound(),
-                                     tokenAt(0.9).maxKeyBound(),
-                                     minimumToken.minKeyBound()
-                                     };
+        Token[] shards = new Token[]
+                         {
+                         tokenAt(0.1),
+                         tokenAt(0.25),
+                         tokenAt(0.3),
+                         tokenAt(0.33),
+                         tokenAt(0.34),
+                         tokenAt(0.4),
+                         tokenAt(0.7),
+                         tokenAt(0.9),
+                         minimumToken
+                         };
         return shards;
     }
 }

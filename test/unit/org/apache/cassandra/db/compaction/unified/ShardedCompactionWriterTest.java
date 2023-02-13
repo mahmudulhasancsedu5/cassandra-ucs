@@ -27,7 +27,6 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.CompactionController;
 import org.apache.cassandra.db.compaction.CompactionIterator;
@@ -35,6 +34,7 @@ import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.ScannerList;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.service.StorageService;
@@ -128,7 +128,7 @@ public class ShardedCompactionWriterTest extends CQLTester
         long inputSize = txn.originals().iterator().next().onDiskLength();
         int minSSTableSize = (int) (((double) inputSize / numShards) * minSSTableSizeRatio);
 
-        ShardManager boundaries = new ShardManager(cfs.getLocalRanges().split(numShards).toArray(new PartitionPosition[0]),
+        ShardManager boundaries = new ShardManager(cfs.getLocalRanges().split(numShards).toArray(new Token[0]),
                                                    SortedLocalRanges.forTestingFull(cfs));
         ShardedCompactionWriter writer = new ShardedCompactionWriter(cfs, cfs.getDirectories(), txn, txn.originals(), false, minSSTableSize, boundaries);
 

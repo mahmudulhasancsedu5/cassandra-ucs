@@ -50,9 +50,9 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
 
     final ShardManager shardManager;
 
-    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries, List<PartitionPosition> shardBoundaries, SortedLocalRanges localRanges)
+    public ArenaSelector(Controller controller, DiskBoundaries diskBoundaries, List<Token> shardBoundaries, SortedLocalRanges localRanges)
     {
-        shardManager = new ShardManager(shardBoundaries.toArray(new PartitionPosition[shardBoundaries.size()]), localRanges);
+        shardManager = new ShardManager(shardBoundaries.toArray(new Token[shardBoundaries.size()]), localRanges);
         this.controller = controller;
         this.diskBoundaries = diskBoundaries;
 

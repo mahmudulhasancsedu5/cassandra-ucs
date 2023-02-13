@@ -295,10 +295,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
             DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
             SortedLocalRanges localRanges = currentBoundaries.getLocalRanges();
-            List<PartitionPosition> shardBoundaries = computeShardBoundaries(localRanges,
-                                                                             currentBoundaries.getPositions(),
-                                                                             controller.getNumShards(),
-                                                                             realm.getPartitioner());
+            List<Token> shardBoundaries = computeShardBoundaries(localRanges,
+                                                                 currentBoundaries.getPositions(),
+                                                                 controller.getNumShards(),
+                                                                 realm.getPartitioner());
             arenaSelector = new ArenaSelector(controller, currentBoundaries, shardBoundaries, localRanges);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.
@@ -316,16 +316,16 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      * token range, and 4 smaller shards taking 1/3*1/4=1/12 of the token range.
      */
     @VisibleForTesting
-    static List<PartitionPosition> computeShardBoundaries(SortedLocalRanges localRanges,
-                                                          List<PartitionPosition> diskBoundaries,
-                                                          int numShards,
-                                                          IPartitioner partitioner)
+    static List<Token> computeShardBoundaries(SortedLocalRanges localRanges,
+                                              List<Token> diskBoundaries,
+                                              int numShards,
+                                              IPartitioner partitioner)
     {
         Optional<Splitter> splitter = partitioner.splitter();
         if (diskBoundaries != null && !splitter.isPresent())
             return diskBoundaries;
         else if (!splitter.isPresent()) // C* 2i case, just return 1 boundary at min token
-            return ImmutableList.of(partitioner.getMinimumToken().minKeyBound());
+            return ImmutableList.of(partitioner.getMinimumToken());
 
         // this should only happen in tests that change partitioners, but we don't want UCS to throw
         // where other strategies work even if the situations are unrealistic.
@@ -337,9 +337,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                              .equals(partitioner))
             localRanges = new SortedLocalRanges(localRanges.getRealm(),
                                                 localRanges.getRingVersion(),
-                                                ImmutableList.of(new Splitter.WeightedRange(1.0,
-                                                                                            new Range<>(partitioner.getMinimumToken(),
-                                                                                                        partitioner.getMaximumToken()))));
+                                                null);
 
         if (diskBoundaries == null || diskBoundaries.size() <= 1)
             return localRanges.split(numShards);
@@ -373,17 +371,17 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      * The resulting shards will not be of equal size and this works best if the disk shares are distributed evenly
      * (which the current code always ensures).
      */
-    private static List<PartitionPosition> splitPerDiskRanges(SortedLocalRanges localRanges,
-                                                              List<PartitionPosition> diskBoundaries,
-                                                              double totalSize,
-                                                              int numShards,
-                                                              Splitter splitter)
+    private static List<Token> splitPerDiskRanges(SortedLocalRanges localRanges,
+                                                  List<Token> diskBoundaries,
+                                                  double totalSize,
+                                                  int numShards,
+                                                  Splitter splitter)
     {
         double perShard = totalSize / numShards;
-        List<PartitionPosition> shardBoundaries = new ArrayList<>(numShards);
+        List<Token> shardBoundaries = new ArrayList<>(numShards);
         double processedSize = 0;
-        Token left = diskBoundaries.get(0).getToken().getPartitioner().getMinimumToken();
-        for (PartitionPosition boundary : diskBoundaries)
+        Token left = diskBoundaries.get(0).getPartitioner().getMinimumToken();
+        for (Token boundary : diskBoundaries)
         {
             Token right = boundary.getToken();
             List<Splitter.WeightedRange> disk = localRanges.subrange(new Range<>(left, right));
@@ -391,7 +389,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             processedSize += getRangesTotalSize(disk);
             int targetCount = (int) Math.round(processedSize / perShard);
             List<Token> splits = splitter.splitOwnedRanges(Math.max(targetCount - shardBoundaries.size(), 1), disk, Splitter.SplitType.ALWAYS_SPLIT).boundaries;
-            shardBoundaries.addAll(Collections2.transform(splits, Token::maxKeyBound));
+            shardBoundaries.addAll(splits);
             // The splitting always results in maxToken as the last boundary. Replace it with the disk's upper bound.
             shardBoundaries.set(shardBoundaries.size() - 1, boundary);
 
