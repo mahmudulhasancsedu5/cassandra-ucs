@@ -79,44 +79,19 @@ public class ShardedCompactionWriterTest extends CQLTester
         // assuming evenly distributed data, it should split at each boundary and so we should end up with numShards sstables
         int numShards = 5;
         int rowCount = 5000;
-        double minSSTableSizeRatio = 0.5;
-        testShardedCompactionWriter(numShards, rowCount, minSSTableSizeRatio, numShards, true);
+        testShardedCompactionWriter(numShards, rowCount, numShards, true);
     }
 
-    @Test
-    public void testOneSSTableOnly() throws Throwable
-    {
-        // If we set the minSSTableSize ratio to the number of shards 5, because this gets multiplied by the shard size to give
-        // the min sstable size, then it should ignore all boundaries because it won't reach the minimum sstable size until the
-        // end of the last shard and so we should end up with 1 sstable
-        int numShards = 5;
-        int rowCount = 5000;
-        double minSSTableSizeRatio = 5;
-        testShardedCompactionWriter(numShards, rowCount, minSSTableSizeRatio, 1, true);
-    }
-
-    @Test
-    public void testThreeSSTables() throws Throwable
-    {
-        // If we set the minSSTableSize ratio to 2, because this gets multiplied by the shard size to give
-        // the min sstable size, then it should merge 2 shards together assuming evenly distributed data
-        // and so we should end up with 3 sstables (numShards / 2)
-        int numShards = 6;
-        int rowCount = 5000;
-        double minSSTableSizeRatio = 2;
-        testShardedCompactionWriter(numShards, rowCount, minSSTableSizeRatio, 3, true);
-    }
 
     @Test
     public void testMultipleInputSSTables() throws Throwable
     {
         int numShards = 3;
         int rowCount = 5000;
-        double minSSTableSizeRatio = 2;
-        testShardedCompactionWriter(numShards, rowCount, minSSTableSizeRatio, numShards, false);
+        testShardedCompactionWriter(numShards, rowCount, numShards, false);
     }
 
-    private void testShardedCompactionWriter(int numShards, int rowCount, double minSSTableSizeRatio, int numOutputSSTables, boolean majorCompaction) throws Throwable
+    private void testShardedCompactionWriter(int numShards, int rowCount, int numOutputSSTables, boolean majorCompaction) throws Throwable
     {
         ColumnFamilyStore cfs = getColumnFamilyStore();
         cfs.disableAutoCompaction();

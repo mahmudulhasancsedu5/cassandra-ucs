@@ -238,7 +238,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     protected void switchCompactionWriter(Directories.DataDirectory directory, DecoratedKey nextKey)
     {
         currentDirectory = directory;
-        sstableWriter.switchWriter(sstableWriter(directory, nextKey.getToken()));
+        sstableWriter.switchWriter(sstableWriter(directory, nextKey != null ? nextKey.getToken() : null));
     }
 
     @SuppressWarnings("resource")

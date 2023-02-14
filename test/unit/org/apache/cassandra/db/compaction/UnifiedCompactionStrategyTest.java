@@ -679,13 +679,12 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         sstables.forEach((size, num) -> {
             Token first = min.getPartitioner().split(min, max, 0.01);
             Token last = min.getPartitioner().split(min, max, 0.99);
-            // The density will be somewhat bigger than requested. This is helpful, as it ensures F * size takes the
-            // size to the next level.
+            double tokenSpan = first.size(last);
 
             for (int i = 0; i < num; i++)
             {
                 arena.sstables.add(mockSSTable(0,
-                                               size,
+                                               (long) (size * tokenSpan * 1.01),    // adjust slightly bigger to avoid rounding issues
                                                System.currentTimeMillis(),
                                                0.0,
                                                new BufferDecoratedKey(first, bb),
@@ -1216,7 +1215,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         Token max = partitioner.getMaximumToken();
         ByteBuffer bb = ByteBuffer.allocate(0);
         sstablesMap.forEach((size, num) -> {
-            Token first = min.getPartitioner().split(min, max, 0.01 + random.nextDouble() * 0.98);
+            Token first = min.getPartitioner().split(min, max, 0.01);
 
             for (int i = 0; i < num; i++)
             {
@@ -1460,7 +1459,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         int ttl = 0;
         UUID pendingRepair = null;
         sstablesMap.forEach((size, num) -> {
-            Token first = min.getPartitioner().split(min, max, 0.01 + random.nextDouble() * 0.98);
+            Token first = min.getPartitioner().split(min, max, 0.01);
 
             for (int i = 0; i < num; i++)
             {

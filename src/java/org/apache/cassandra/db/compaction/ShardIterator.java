@@ -18,9 +18,12 @@
 
 package org.apache.cassandra.db.compaction;
 
+import java.util.Set;
+
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 
 public interface ShardIterator
 {
@@ -49,4 +52,13 @@ public interface ShardIterator
     double rangeSpanned(PartitionPosition first, PartitionPosition last);
 
     int shardIndex();
+
+    default long shardAdjustedKeyCount(Set<SSTableReader> sstables)
+    {
+        // Note: computationally non-trivial; can be optimized if we save start/stop shards and size per table.
+        long shardAdjustedKeyCount = 0;
+        for (CompactionSSTable sstable : sstables)
+            shardAdjustedKeyCount += sstable.estimatedKeys() * fractionInShard(ShardManager.coveringRange(sstable));
+        return shardAdjustedKeyCount;
+    }
 }

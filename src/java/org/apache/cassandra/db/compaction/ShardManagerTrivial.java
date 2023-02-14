@@ -18,10 +18,13 @@
 
 package org.apache.cassandra.db.compaction;
 
+import java.util.Set;
+
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 
 public class ShardManagerTrivial implements ShardManager
 {
@@ -36,6 +39,21 @@ public class ShardManagerTrivial implements ShardManager
     public double rangeSpanned(Range<Token> tableRange)
     {
         return 1;
+    }
+
+    @Override
+    public double rangeSpanned(CompactionSSTable rdr)
+    {
+        return 1;
+    }
+
+    @Override
+    public double calculateCombinedDensity(Set<? extends CompactionSSTable> sstables)
+    {
+        double totalSize = 0;
+        for (CompactionSSTable sstable : sstables)
+            totalSize += sstable.onDiskLength();
+        return totalSize;
     }
 
     @Override
@@ -98,6 +116,15 @@ public class ShardManagerTrivial implements ShardManager
         public int shardIndex()
         {
             return 0;
+        }
+
+        @Override
+        public long shardAdjustedKeyCount(Set<SSTableReader> sstables)
+        {
+            long shardAdjustedKeyCount = 0;
+            for (CompactionSSTable sstable : sstables)
+                shardAdjustedKeyCount += sstable.estimatedKeys();
+            return shardAdjustedKeyCount;
         }
     };
 

@@ -106,12 +106,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
                                               double survivalRatio)
     {
         // Note: computationally non-trivial; can be optimized if we save start/stop shards and size per table.
-        long shardAdjustedKeyCount = 0;
-
-        for (CompactionSSTable sstable : sstables)
-            shardAdjustedKeyCount += sstable.estimatedKeys() * boundaries.fractionInShard(ShardManager.coveringRange(sstable));
-
-        return Math.round(shardAdjustedKeyCount * survivalRatio);
+        return Math.round(boundaries.shardAdjustedKeyCount(sstables) * survivalRatio);
     }
 
     @Override
