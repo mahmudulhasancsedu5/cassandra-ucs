@@ -283,7 +283,7 @@ public class CompactionStrategyManagerTest
 
         for (int i = 0; i < numDir; i++)
         {
-            int key = 100 * i;
+            int key = 100 * i + 1;  // key must not fall on boundary where it would be taken to belong to previous disk
             transientRepairs.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
             pendingRepair.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
             unrepaired.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
@@ -400,7 +400,7 @@ public class CompactionStrategyManagerTest
     {
         int index = 0;
         int firstKey = Integer.parseInt(new String(ByteBufferUtil.getArray(reader.first.getKey())));
-        while (boundaries[index] <= firstKey)
+        while (boundaries[index] < firstKey)
             index++;
         logger.debug("Index for SSTable {} on boundary {} is {}", reader.descriptor.id, Arrays.toString(boundaries), index);
         return index;

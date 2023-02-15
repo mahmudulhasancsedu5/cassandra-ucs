@@ -22,6 +22,7 @@ import java.util.Random;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.apache.cassandra.cql3.CQLTester;
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.service.StorageService;
 
@@ -118,4 +119,21 @@ public class ShardedMultiWriterTest extends CQLTester
         }
     }
 
+    @Override
+    public UntypedResultSet execute(String query, Object... values) throws Throwable
+    {
+        return super.executeFormattedQuery(formatQuery(KEYSPACE_PER_TEST, query), values);
+    }
+
+    @Override
+    public String createTable(String query)
+    {
+        return super.createTable(KEYSPACE_PER_TEST, query);
+    }
+
+    @Override
+    public ColumnFamilyStore getCurrentColumnFamilyStore()
+    {
+        return super.getCurrentColumnFamilyStore(KEYSPACE_PER_TEST);
+    }
 }
