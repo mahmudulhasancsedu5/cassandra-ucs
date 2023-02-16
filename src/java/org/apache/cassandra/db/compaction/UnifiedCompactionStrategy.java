@@ -319,9 +319,21 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      * @return either a normal compaction task, if there are no shards, or a sharded compaction task that in turn will
      * create a sharded compaction writer.
      */
-    private CompactionTask createCompactionTask(LifecycleTransaction transaction, int gcBefore)
+    private UnifiedCompactionTask createCompactionTask(LifecycleTransaction transaction, int gcBefore)
     {
         return new UnifiedCompactionTask(realm, this, transaction, gcBefore, getShardManager());
+    }
+
+    @Override
+    protected UnifiedCompactionTask createCompactionTask(final int gcBefore, LifecycleTransaction txn, boolean isMaximal, boolean splitOutput)
+    {
+        return createCompactionTask(txn, gcBefore);
+    }
+
+    @Override
+    public UnifiedCompactionTask createCompactionTask(LifecycleTransaction txn, final int gcBefore, long maxSSTableBytes)
+    {
+        return createCompactionTask(txn, gcBefore);
     }
 
     private void maybeUpdateSelector()
