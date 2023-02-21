@@ -130,10 +130,4 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
             return "disk_" + diskBoundaries.getDiskIndexFromKey(ssTableReader);
         }
     }
-
-
-    // TODO - missing equivalence classes:
-
-    // - by time window to emulate TWCS, in this case only the latest shard will use size based buckets, the older
-    //   shards will get major compactions
 }

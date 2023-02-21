@@ -170,9 +170,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     public Collection<Collection<CompactionSSTable>> groupSSTablesForAntiCompaction(Collection<? extends CompactionSSTable> sstablesToGroup)
     {
         Collection<Collection<CompactionSSTable>> groups = new ArrayList<>();
-        for (Arena shard : getCompactionArenas(sstablesToGroup, false))
+        for (Arena arena : getCompactionArenas(sstablesToGroup, false))
         {
-            groups.addAll(super.groupSSTablesForAntiCompaction(shard.sstables));
+            groups.addAll(super.groupSSTablesForAntiCompaction(arena.sstables));
         }
 
         return groups;
@@ -801,14 +801,14 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     Collection<Arena> getCompactionArenas(Collection<? extends CompactionSSTable> sstables,
-                                          Predicate<CompactionSSTable> compactinoFilter,
+                                          Predicate<CompactionSSTable> compactionFilter,
                                           ArenaSelector arenaSelector,
                                           boolean filterUnsuitable)
     {
         Map<CompactionSSTable, Arena> shardsBySSTables = new TreeMap<>(arenaSelector);
         Set<? extends CompactionSSTable> compacting = realm.getCompactingSSTables();
         for (CompactionSSTable sstable : sstables)
-            if (!filterUnsuitable || compactinoFilter.test(sstable) && !compacting.contains(sstable))
+            if (!filterUnsuitable || compactionFilter.test(sstable) && !compacting.contains(sstable))
                 shardsBySSTables.computeIfAbsent(sstable, t -> new Arena(arenaSelector, realm))
                       .add(sstable);
 

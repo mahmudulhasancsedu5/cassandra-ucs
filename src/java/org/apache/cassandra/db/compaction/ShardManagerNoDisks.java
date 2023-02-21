@@ -58,12 +58,12 @@ public class ShardManagerNoDisks implements ShardManager
         return rangeSizeNonWrapping(tableRange);
     }
 
-    double rangeSizeNonWrapping(Range<Token> tableRange)
+    private double rangeSizeNonWrapping(Range<Token> tableRange)
     {
         double size = 0;
         for (Splitter.WeightedRange range : localRanges.getRanges())
         {
-            Range<Token> ix = range.range().intersectionNonWrapping(tableRange);
+            Range<Token> ix = range.range().intersectionNonWrapping(tableRange); // local and table ranges are non-wrapping
             if (ix == null)
                 continue;
             size += ix.left.size(ix.right);

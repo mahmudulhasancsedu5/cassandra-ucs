@@ -350,8 +350,8 @@ UCS accepts these compaction strategy parameters:
   expense of making reads more difficult.
   <br/>N is the middle ground that has the features of levelled (one sstable run per level) as well as tiered (one
   compaction to be promoted to the next level) and a fan factor of 2. This can also be specified as T2 or L2.
-  <br/>The default value is T4, matching the default STCS behaviour with threshold 4. To use an equivalent of LCS with
-  the default fan factor 10, use L10.
+  <br/>The default value is T4, matching the default STCS behaviour with threshold 4. To select an equivalent of LCS 
+  with its default fan factor 10, use L10.
 
 * **target_sstable_size**. The target sstable size $t$, specified as a human-friendly size in bytes (e.g. 100 MiB =
   $100\cdot 2^{20}$ B or (10 MB = 10,000,000 B)). The strategy will split data in shards that aim to produce sstables
@@ -364,7 +364,7 @@ UCS accepts these compaction strategy parameters:
 * **base_shard_count**. The minimum number of shards $b$, used for levels with the smallest density. This gives the 
   minimum compaction concurrency for the lowest levels. A low number would result in larger L0 sstables but may limit
   the overall maximum write throughput (as every piece of data has to go through L0).
-  <br/>The default value is 4.
+  <br/>The default value is 4 (1 for system tables, or when multiple data locations are defined).
 
 * **expired_sstable_check_frequency_seconds**. Determines how often to check for expired SSTables.
   <br/>The default value is 10 minutes.
