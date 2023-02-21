@@ -27,7 +27,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeMap;
@@ -48,7 +47,6 @@ import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
 import org.apache.cassandra.db.commitlog.IntervalSet;
 import org.apache.cassandra.db.compaction.unified.Controller;
@@ -56,10 +54,6 @@ import org.apache.cassandra.db.compaction.unified.ShardedMultiWriter;
 import org.apache.cassandra.db.compaction.unified.UnifiedCompactionTask;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
-import org.apache.cassandra.dht.IPartitioner;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Splitter;
-import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
@@ -181,11 +175,11 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public synchronized CompactionTasks getUserDefinedTasks(Collection<? extends CompactionSSTable> sstables, int gcBefore)
     {
-        // The tasks need to be split by repair status and disk, but we permit cross-shard user compactions.
-        // See also getMaximalTasks below.
+        // The tasks need to be split by repair status and disk, but otherwise we must assume the user knows what they
+        // are doing.
         List<AbstractCompactionTask> tasks = new ArrayList<>();
-        for (Arena shard : getCompactionArenas(sstables, arenaSelector, true))
-            tasks.addAll(super.getUserDefinedTasks(shard.sstables, gcBefore));
+        for (Arena arena : getCompactionArenas(sstables, true))
+            tasks.addAll(super.getUserDefinedTasks(arena.sstables, gcBefore));
         return CompactionTasks.create(tasks);
     }
 
@@ -193,21 +187,47 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     public synchronized CompactionTasks getMaximalTasks(int gcBefore, boolean splitOutput)
     {
         maybeUpdateSelector();
-        // The tasks need to be split by repair status and disk, but we perform the maximal compaction across all shards.
-        // The result will be split across shards, but the operation cannot be parallelized and does require 100% extra
-        // space to complete.
-        // The reason for this is to ensure that shard-spanning sstables get compacted with everything they overlap with.
-        // For example, if an sstable on L0 covers shards 0 to 3, a sharded maximal compaction will compact that with
-        // higher-level sstables in shard 0 and will leave a low-level sstable containing the non-shard-0 data from that
-        // L0 sstable. This is a non-expected and non-desirable outcome.
+        // The tasks are split by repair status and disk, as well as in non-overlapping sections to enable some
+        // parallelism (to the amount that L0 sstables are split, i.e. at least base_shard_count). The result will be
+        // split across shards according to its density. Depending on the parallelism, the operation may require up to
+        // 100% extra space to complete.
         List<AbstractCompactionTask> tasks = new ArrayList<>();
-        for (Arena shard : getCompactionArenas(realm.getLiveSSTables(), arenaSelector, true))
+        for (Arena arena : getCompactionArenas(realm.getLiveSSTables(), true))
         {
-            LifecycleTransaction txn = realm.tryModify(shard.sstables, OperationType.COMPACTION);
-            if (txn != null)
-                tasks.add(createCompactionTask(gcBefore, txn, true, splitOutput));
+            List<Set<CompactionSSTable>> nonOverlapping = splitInNonOverlappingSets(arena.sstables);
+            for (Set<CompactionSSTable> set : nonOverlapping)
+            {
+                LifecycleTransaction txn = realm.tryModify(set, OperationType.COMPACTION);
+                if (txn != null)
+                    tasks.add(createCompactionTask(gcBefore, txn, true, splitOutput));
+            }
         }
         return CompactionTasks.create(tasks);
+    }
+
+    private static List<Set<CompactionSSTable>> splitInNonOverlappingSets(List<CompactionSSTable> sstables)
+    {
+        List<Set<CompactionSSTable>> overlapSets = constructOverlapSets(sstables,
+                                                                        UnifiedCompactionStrategy::startsAfter,
+                                                                        CompactionSSTable.firstKeyComparator,
+                                                                        CompactionSSTable.lastKeyComparator);
+        Set<CompactionSSTable> group = overlapSets.get(0);
+        List<Set<CompactionSSTable>> groups = new ArrayList<>();
+        for (int i = 1; i < overlapSets.size(); ++i)
+        {
+            Set<CompactionSSTable> current = overlapSets.get(i);
+            if (Sets.intersection(current, group).isEmpty())
+            {
+                groups.add(group);
+                group = current;
+            }
+            else
+            {
+                group.addAll(current);
+            }
+        }
+        groups.add(group);
+        return groups;
     }
 
     @Override
@@ -787,16 +807,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         return getCompactionArenas(sstables,
                                    CompactionSSTable::isSuitableForCompaction,
                                    this.arenaSelector,
-                                   filterUnsuitable);
-    }
-
-    Collection<Arena> getCompactionArenas(Collection<? extends CompactionSSTable> sstables,
-                                          ArenaSelector arenaSelector,
-                                          boolean filterUnsuitable)
-    {
-        return getCompactionArenas(sstables,
-                                   CompactionSSTable::isSuitableForCompaction,
-                                   arenaSelector,
                                    filterUnsuitable);
     }
 

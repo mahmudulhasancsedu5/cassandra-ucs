@@ -50,11 +50,9 @@ import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.db.compaction.unified.UnifiedCompactionTask;
-import org.apache.cassandra.db.memtable.ShardBoundaries;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Range;
@@ -1788,5 +1786,39 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
 
         Collection<String> pulled = UnifiedCompactionStrategy.MultiSetBucket.pullLastWithOverlapLimit(allObjectsSorted, overlapSets, limit);
         return pulled.stream().sorted().collect(Collectors.joining());
+    }
+
+    @Test
+    public void testMaximalSelection()
+    {
+        Set<SSTableReader> allSSTables = new HashSet<>();
+        allSSTables.addAll(mockNonOverlappingSSTables(10, 0, 100 << 20));
+        allSSTables.addAll(mockNonOverlappingSSTables(15, 1, 200 << 20));
+        allSSTables.addAll(mockNonOverlappingSSTables(25, 2, 400 << 20));
+        dataTracker.addInitialSSTables(allSSTables);
+
+        Controller controller = Mockito.mock(Controller.class);
+        UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
+
+        CompactionTasks tasks = strategy.getMaximalTasks(0, false);
+        assertEquals(5, tasks.size());  // 5 (gcd of 10,15,25) common boundaries
+        for (AbstractCompactionTask task : tasks)
+        {
+            Set<SSTableReader> compacting = task.getTransaction().originals();
+            assertEquals(2 + 3 + 5, compacting.size()); // count / gcd sstables of each level
+            assertEquals((2 * 100L + 3 * 200 + 5 * 400) << 20, compacting.stream().mapToLong(CompactionSSTable::onDiskLength).sum());
+
+            // None of the selected sstables may intersect any in any other set.
+            for (AbstractCompactionTask task2 : tasks)
+            {
+                if (task == task2)
+                    continue;
+
+                Set<SSTableReader> compacting2 = task2.getTransaction().originals();
+                for (SSTableReader r1 : compacting)
+                    for (SSTableReader r2 : compacting2)
+                        assertTrue(r1 + " intersects " + r2, r1.getFirst().compareTo(r2.getLast()) > 0 || r1.getLast().compareTo(r2.getFirst()) < 0);
+            }
+        }
     }
 }

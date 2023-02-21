@@ -290,28 +290,25 @@ public class BaseCompactionStrategyTest
         if (!partitioner.splitter().isPresent())
             throw new IllegalStateException(String.format("Cannot split ranges with current partitioner %s", partitioner));
 
-        Range<Token> range = new Range<>(partitioner.getMinimumToken(), partitioner.getMaximumToken());
-        Splitter.WeightedRange weightedRange = new Splitter.WeightedRange(1.0, range);
-        Splitter splitter = partitioner.splitter().get();
-        List<Token> boundaries = splitter.splitOwnedRanges(numSSTables,
-                                                           ImmutableList.of(weightedRange),
-                                                           Splitter.SplitType.ALWAYS_SPLIT)
-                                 .boundaries;
-        boundaries.add(0, partitioner.getMinimumToken());
         ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
 
         long timestamp = System.currentTimeMillis();
         List<SSTableReader> sstables = new ArrayList<>(numSSTables);
         for (int i = 0; i < numSSTables; i++)
         {
-            DecoratedKey first = new BufferDecoratedKey(boundaries.get(i).nextValidToken(), emptyBuffer);
-            DecoratedKey last =  new BufferDecoratedKey(boundaries.get(i+1), emptyBuffer);
+            DecoratedKey first = new BufferDecoratedKey(boundary(numSSTables, i).nextValidToken(), emptyBuffer);
+            DecoratedKey last =  new BufferDecoratedKey(boundary(numSSTables, i+1), emptyBuffer);
             sstables.add(mockSSTable(level, bytesOnDisk, timestamp, 0., first, last));
 
             timestamp+=10;
         }
 
         return sstables;
+    }
+
+    private Token boundary(int numSSTables, int i)
+    {
+        return partitioner.split(partitioner.getMinimumToken(), partitioner.getMaximumToken(), i * 1.0 / numSSTables);
     }
 
     CompactionProgress mockCompletedCompactionProgress(Set<SSTableReader> compacting, UUID id)
