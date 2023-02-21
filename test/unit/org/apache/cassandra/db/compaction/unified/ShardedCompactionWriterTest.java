@@ -111,8 +111,11 @@ public class ShardedCompactionWriterTest extends CQLTester
         long totalBFSize = cfs.getLiveSSTables().stream().map(SSTableReader::getBloomFilterSerializedSize).mapToLong(Long::longValue).sum();
         assert totalBFSize > 16 * numOutputSSTables : "Bloom Filter is empty"; // 16 is the size of empty bloom filter
         for (SSTableReader rdr : cfs.getLiveSSTables())
+        {
             assertEquals((double) rdr.onDiskLength() / totalOnDiskLength,
                          (double) rdr.getBloomFilterSerializedSize() / totalBFSize, 0.1);
+            assertEquals(1.0 / numOutputSSTables, rdr.tokenSpaceCoverage(), 0.05);
+        }
 
         validateData(cfs, rowCount);
         cfs.truncateBlocking();

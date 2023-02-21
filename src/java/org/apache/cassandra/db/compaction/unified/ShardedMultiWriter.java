@@ -148,10 +148,7 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         for (SSTableWriter writer : writers)
             if (writer != null)
             {
-                // Note: the size for inner writers can be taken to be boundaries.shardSpanSize(), but the first and last
-                // writers should deal with partial coverage.
-                assert (writer.first != null);
-                writer.setTokenSpaceCoverage(boundaries.rangeSpanned(writer.first, writer.last));
+                boundaries.applyTokenSpaceCoverage(writer);
                 sstables.add(writer.finish(repairedAt, maxDataAge, openResult));
             }
         return sstables;
@@ -163,7 +160,10 @@ public class ShardedMultiWriter implements SSTableMultiWriter
         List<SSTableReader> sstables = new ArrayList<>(writers.length);
         for (SSTableWriter writer : writers)
             if (writer != null)
+            {
+                boundaries.applyTokenSpaceCoverage(writer);
                 sstables.add(writer.finish(openResult));
+            }
         return sstables;
     }
 
@@ -252,7 +252,10 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     {
         for (SSTableWriter writer : writers)
             if (writer != null)
+            {
+                boundaries.applyTokenSpaceCoverage(writer);
                 writer.prepareToCommit();
+            }
     }
 
     @Override

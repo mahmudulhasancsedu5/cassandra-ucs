@@ -25,9 +25,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.CompactionRealm;
-import org.apache.cassandra.db.compaction.CompactionSSTable;
 import org.apache.cassandra.db.compaction.ShardIterator;
-import org.apache.cassandra.db.compaction.ShardManager;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.Token;
@@ -110,13 +108,9 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     }
 
     @Override
-    protected void switchCompactionWriter(Directories.DataDirectory directory, DecoratedKey nextKey)
+    protected void doPrepare()
     {
-        final SSTableWriter currentWriter = sstableWriter.currentWriter();
-        // Note: the size for inner writers can be taken to be boundaries.shardSpanSize(), but the first and last
-        // writers should deal with partial coverage.
-        if (currentWriter != null)
-            currentWriter.setTokenSpaceCoverage(boundaries.rangeSpanned(currentWriter.first, currentWriter.last));
-        super.switchCompactionWriter(directory, nextKey);
+        sstableWriter.forEachWriter(boundaries::applyTokenSpaceCoverage);
+        super.doPrepare();
     }
 }

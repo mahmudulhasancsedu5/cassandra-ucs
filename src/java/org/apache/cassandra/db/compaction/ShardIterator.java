@@ -24,6 +24,7 @@ import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.SSTableWriter;
 
 public interface ShardIterator
 {
@@ -60,5 +61,11 @@ public interface ShardIterator
         for (CompactionSSTable sstable : sstables)
             shardAdjustedKeyCount += sstable.estimatedKeys() * fractionInShard(ShardManager.coveringRange(sstable));
         return shardAdjustedKeyCount;
+    }
+
+    default void applyTokenSpaceCoverage(SSTableWriter writer)
+    {
+        if (writer.first != null)
+            writer.setTokenSpaceCoverage(rangeSpanned(writer.first, writer.last));
     }
 }
