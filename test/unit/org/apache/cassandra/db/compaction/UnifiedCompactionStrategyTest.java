@@ -1600,7 +1600,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
             "NPQ",
             "RST",
         };
-        List<String> allOverlaps = getAllOverlaps(input);
+        List<String> allOverlaps = getAllOverlaps(input, false);
         assertEquals(Arrays.asList(allOverlapsManual), allOverlaps);
 
         List<String> subsumed = subsumeContainedNeighbours(allOverlaps);
@@ -1643,25 +1643,28 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                 input[j] = (new Interval<>(start, start + 1 + random.nextInt(range - start), Character.toString(c++)));
             }
 
-            List<String> expected = subsumeContainedNeighbours(getAllOverlaps(input));
+            boolean endInclusive = rand.nextBoolean();
+            List<String> expected = subsumeContainedNeighbours(getAllOverlaps(input, endInclusive));
 
-            List<Set<Interval<Integer, String>>> overlaps = UnifiedCompactionStrategy.constructOverlapSets(Arrays.asList(input),
-                                                                                                           (x, y) -> x.min >= y.max,
-                                                                                                           Comparator.comparingInt(x -> x.min),
-                                                                                                           Comparator.comparingInt(x -> x.max));
+            List<Set<Interval<Integer, String>>> overlaps =
+                UnifiedCompactionStrategy.constructOverlapSets(Arrays.asList(input),
+                                                               endInclusive ? (x, y) -> x.min > y.max
+                                                                            : (x, y) -> x.min >= y.max,
+                                                               Comparator.comparingInt(x -> x.min),
+                                                               Comparator.comparingInt(x -> x.max));
             List<String> result = mapOverlapSetsToStrings(overlaps);
             assertEquals("Input " + Arrays.asList(input), expected, result);
         }
     }
 
-    private static List<String> getAllOverlaps(Interval<Integer, String>[] input)
+    private static List<String> getAllOverlaps(Interval<Integer, String>[] input, boolean endInclusive)
     {
         int min = Arrays.stream(input).mapToInt(x -> x.min).min().getAsInt();
         int max = Arrays.stream(input).mapToInt(x -> x.max).max().getAsInt();
         List<String> allOverlaps = new ArrayList<>();
         IntStream.range(min, max)
                  .mapToObj(i -> Arrays.stream(input)
-                                      .filter(iv -> i >= iv.min && i < iv.max)
+                                      .filter(iv -> i >= iv.min && (i < iv.max || endInclusive && i == iv.max))
                                       .map(iv -> iv.data)
                                       .collect(Collectors.joining()))
                  .reduce(null, (prev, curr) -> {
@@ -1707,6 +1710,62 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         for (int i = 0; i < a.length(); ++i)
             as.add(a.charAt(i));
         return as;
+    }
+
+
+    @Test
+    public void testAssignOverlapsIntoBuckets()
+    {
+        String[] sets = new String[]{
+        "ABCD",
+        "ADE",
+        "EF",
+        "HI",
+        "LN",
+        "NO",
+        "NPQ",
+        "RST",
+        };
+        String[] none3 = new String[]{
+        "ABCD",
+        "ADE",
+        "NPQ",
+        "RST",
+        };
+        String[] single3 = new String[]{
+        "ABCDE",
+        "LNOPQ",
+        "RST",
+        };
+        String[] transitive3 = new String[]{
+        "ABCDEF",
+        "LNOPQ",
+        "RST",
+        };
+
+        List<Set<Character>> input = Arrays.stream(sets).map(UnifiedCompactionStrategyTest::asSet).collect(Collectors.toList());
+        List<String> actual;
+
+        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.NONE, input, this::makeBucket);
+        assertEquals(Arrays.asList(none3), actual);
+
+        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.SINGLE, input, this::makeBucket);
+        assertEquals(Arrays.asList(single3), actual);
+
+        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.TRANSITIVE, input, this::makeBucket);
+        assertEquals(Arrays.asList(transitive3), actual);
+
+    }
+
+    private String makeBucket(List<Set<Character>> sets, int startIndex, int endIndex)
+    {
+        Set<Character> bucket = new HashSet<>();
+        for (int i = startIndex; i < endIndex; ++i)
+            bucket.addAll(sets.get(i));
+        return bucket.stream()
+                     .sorted()
+                     .map(x -> x.toString())
+                     .collect(Collectors.joining());
     }
 
     @Test
