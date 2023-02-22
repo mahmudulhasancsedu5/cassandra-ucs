@@ -20,6 +20,8 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.dht.Range;
@@ -31,8 +33,9 @@ public class ShardManagerNoDisks implements ShardManager
     final SortedLocalRanges localRanges;
 
     /**
-     * Staring positions for the local token ranges, in covered token range. The last number defines the total token
-     * share owned by the node.
+     * Ending positions for the local token ranges, in covered token range; in other words, the accumulated share of
+     * the local ranges up and including the given index.
+     * The last number defines the total token share owned by the node.
      */
     final double[] localRangePositions;
 
@@ -78,9 +81,9 @@ public class ShardManagerNoDisks implements ShardManager
     }
 
     @Override
-    public ShardIterator boundaries(int count)
+    public ShardIterator boundaries(int shardCount)
     {
-        return new BoundaryIterator(count);
+        return new BoundaryIterator(shardCount);
     }
 
     public class BoundaryIterator implements ShardIterator
@@ -90,6 +93,7 @@ public class ShardManagerNoDisks implements ShardManager
         private int nextShardIndex;
         private int currentRange;
         private Token currentStart;
+        @Nullable
         private Token currentEnd;   // null for the last shard
 
         public BoundaryIterator(int count)

@@ -77,7 +77,7 @@ public interface ShardManager
     /**
      * Construct a boundary/shard iterator for the given number of shards.
      */
-    ShardIterator boundaries(int count);
+    ShardIterator boundaries(int shardCount);
 
     static Range<Token> coveringRange(CompactionSSTable sstable)
     {

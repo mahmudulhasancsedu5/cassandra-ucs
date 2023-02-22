@@ -21,6 +21,8 @@ package org.apache.cassandra.db.compaction;
 import java.util.Collections;
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.dht.Range;
@@ -30,7 +32,7 @@ import org.apache.cassandra.dht.Token;
 public class ShardManagerDiskAware extends ShardManagerNoDisks
 {
     /**
-     * Staring positions for the local token ranges, in covered token range. The last number defines the total token
+     * Positions for the disk boundaries, in covered token range. The last number defines the total token
      * share owned by the node.
      */
     private final double[] diskBoundaryPositions;
@@ -77,9 +79,9 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
     /**
      * Construct a boundary/shard iterator for the given number of shards.
      */
-    public ShardIterator boundaries(int count)
+    public ShardIterator boundaries(int shardCount)
     {
-        return new BoundaryIteratorDiskAware(count);
+        return new BoundaryIteratorDiskAware(shardCount);
     }
 
     public class BoundaryIteratorDiskAware implements ShardIterator
@@ -91,6 +93,7 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
         private int nextShardIndex;
         private int currentRange;
         private Token currentStart;
+        @Nullable
         private Token currentEnd;   // null for the last shard
 
         public BoundaryIteratorDiskAware(int countPerDisk)

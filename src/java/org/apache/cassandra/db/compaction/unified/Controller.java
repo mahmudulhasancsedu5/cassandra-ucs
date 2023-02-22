@@ -120,6 +120,7 @@ public abstract class Controller
 
     static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
     public static final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
+    static final double MIN_TARGET_SSTABLE_SIZE = 1L << 20;
 
     /**
      * This parameter is intended to modify the shape of the LSM by taking into account the survival ratio of data, for now it is fixed to one.
@@ -303,7 +304,10 @@ public abstract class Controller
     }
 
     /**
-     * @return the number of shards according to the dataset and shard sizes set by the user
+     * Calculate the number of shards to split the local token space in for the given sstable density.
+     * This is calculated as a power-of-two multiple of baseShardCount, so that the expected size of resulting sstables
+     * is between targetSSTableSizeMin and 2*targetSSTableSizeMin (in other words, sqrt(0.5) * targetSSTableSize and
+     * sqrt(2) * targetSSTableSize), with a minimum of baseShardCount shards for smaller sstables.
      */
     public int getNumShards(double density)
     {
@@ -882,10 +886,11 @@ public abstract class Controller
             try
             {
                 long targetSSTableSize = (long) FBUtilities.parseHumanReadable(s, null, "B");
-                if (targetSSTableSize <= 0)
-                    throw new ConfigurationException(String.format(nonPositiveErr,
+                if (targetSSTableSize < MIN_TARGET_SSTABLE_SIZE)
+                    throw new ConfigurationException(String.format("%s %s is not acceptable, size must be at least %s",
                                                                    TARGET_SSTABLE_SIZE_OPTION,
-                                                                   s));
+                                                                   s,
+                                                                   FBUtilities.prettyPrintBinary(MIN_TARGET_SSTABLE_SIZE, "B", "")));
             }
             catch (NumberFormatException e)
             {

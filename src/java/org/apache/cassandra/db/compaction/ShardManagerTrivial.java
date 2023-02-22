@@ -129,7 +129,7 @@ public class ShardManagerTrivial implements ShardManager
     };
 
     @Override
-    public ShardIterator boundaries(int count)
+    public ShardIterator boundaries(int shardCount)
     {
         return iterator;
     }
