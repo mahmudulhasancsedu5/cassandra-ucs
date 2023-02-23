@@ -66,6 +66,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
     @Override
     protected boolean shouldSwitchWriterInCurrentLocation(DecoratedKey key)
     {
+        // If we have written anything and cross a shard boundary, switch to a new writer.
         final long uncompressedBytesWritten = sstableWriter.currentWriter().getFilePointer();
         if (boundaries.advanceTo(key.getToken()) && uncompressedBytesWritten > 0)
         {

@@ -127,12 +127,13 @@ public class ShardedMultiWriter implements SSTableMultiWriter
     {
         DecoratedKey key = partition.partitionKey();
 
-        final long uncompressedSize = writers[currentWriter].getFilePointer();
-        if (boundaries.advanceTo(key.getToken()) && uncompressedSize > 0)
+        // If we have written anything and cross a shard boundary, switch to a new writer.
+        final long currentUncompressedSize = writers[currentWriter].getFilePointer();
+        if (boundaries.advanceTo(key.getToken()) && currentUncompressedSize > 0)
         {
             logger.debug("Switching writer at boundary {}/{} index {}, with uncompressed size {} for {}.{}",
                          key.getToken(), boundaries.shardStart(), currentWriter,
-                         FBUtilities.prettyPrintMemory(uncompressedSize),
+                         FBUtilities.prettyPrintMemory(currentUncompressedSize),
                          realm.getKeyspaceName(), realm.getTableName());
 
             writers[++currentWriter] = createWriter();
