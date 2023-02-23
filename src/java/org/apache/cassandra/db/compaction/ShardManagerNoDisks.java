@@ -47,8 +47,7 @@ public class ShardManagerNoDisks implements ShardManager
         localRangePositions = new double[ranges.size()];
         for (int i = 0; i < localRangePositions.length; ++i)
         {
-            Range<Token> range = ranges.get(i).range();
-            double span = range.left.size(range.right);
+            double span = ranges.get(i).size();
             position += span;
             localRangePositions[i] = position;
         }
@@ -69,7 +68,7 @@ public class ShardManagerNoDisks implements ShardManager
             Range<Token> ix = range.range().intersectionNonWrapping(tableRange); // local and table ranges are non-wrapping
             if (ix == null)
                 continue;
-            size += ix.left.size(ix.right);
+            size += ix.left.size(ix.right) * range.weight();
         }
         return size;
     }

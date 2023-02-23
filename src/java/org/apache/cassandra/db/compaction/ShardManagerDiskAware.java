@@ -55,12 +55,13 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
         for (int i = 0; i < localRangePositions.length; ++i)
         {
             Range<Token> range = ranges.get(i).range();
+            double weight = ranges.get(i).weight();
             double span = localRangePositions[i] - position;
 
             Token diskBoundary = diskBoundaries.get(diskIndex);
             while (diskIndex < diskBoundaryPositions.length - 1 && (range.right.isMinimum() || diskBoundary.compareTo(range.right) < 0))
             {
-                double leftPart = range.left.size(diskBoundary);
+                double leftPart = range.left.size(diskBoundary) * weight;
                 if (leftPart > span)    // if the boundary falls on left or before it
                     leftPart = 0;
                 diskBoundaryPositions[diskIndex] = position + leftPart;
