@@ -25,7 +25,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.compaction.CompactionRealm;
-import org.apache.cassandra.db.compaction.ShardIterator;
+import org.apache.cassandra.db.compaction.ShardTracker;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.Token;
@@ -45,14 +45,14 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
     private final double uniqueKeyRatio;
 
-    private final ShardIterator boundaries;
+    private final ShardTracker boundaries;
 
     public ShardedCompactionWriter(CompactionRealm realm,
                                    Directories directories,
                                    LifecycleTransaction txn,
                                    Set<SSTableReader> nonExpiredSSTables,
                                    boolean keepOriginals,
-                                   ShardIterator boundaries)
+                                   ShardTracker boundaries)
     {
         super(realm, directories, txn, nonExpiredSSTables, keepOriginals);
 
@@ -82,10 +82,10 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
 
     @Override
     @SuppressWarnings("resource")
-    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, Token diskBoundary)
+    protected SSTableWriter sstableWriter(Directories.DataDirectory directory, Token nextKey)
     {
-        if (diskBoundary != null)
-            boundaries.advanceTo(diskBoundary);
+        if (nextKey != null)
+            boundaries.advanceTo(nextKey);
 
         return SSTableWriter.create(realm.newSSTableDescriptor(getDirectories().getLocationForDisk(directory)),
                                     shardAdjustedKeyCount(boundaries, nonExpiredSSTables, uniqueKeyRatio),
@@ -99,7 +99,7 @@ public class ShardedCompactionWriter extends CompactionAwareWriter
                                     txn);
     }
 
-    private static long shardAdjustedKeyCount(ShardIterator boundaries,
+    private static long shardAdjustedKeyCount(ShardTracker boundaries,
                                               Set<SSTableReader> sstables,
                                               double survivalRatio)
     {

@@ -20,6 +20,7 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.PartitionPosition;
@@ -39,10 +40,11 @@ public interface ShardManager
      */
     static final double MINIMUM_TOKEN_COVERAGE = Math.scalb(1.0, -48);
 
-    static ShardManager create(DiskBoundaries diskBoundaries, IPartitioner partitioner)
+    static ShardManager create(DiskBoundaries diskBoundaries)
     {
         List<Token> diskPositions = diskBoundaries.getPositions();
         SortedLocalRanges localRanges = diskBoundaries.getLocalRanges();
+        IPartitioner partitioner = localRanges.getRealm().getPartitioner();
         // this should only happen in tests that change partitioners, but we don't want UCS to throw
         // where other strategies work even if the situations are unrealistic.
         if (localRanges.getRanges().isEmpty() || !localRanges.getRanges()
@@ -76,8 +78,12 @@ public interface ShardManager
 
     /**
      * Construct a boundary/shard iterator for the given number of shards.
+     *
+     * Note: This does not offer a method of listing the shard boundaries it generates, just to advance to the
+     * corresponding one for a given token.  The only usage for listing is currently in tests. Should a need for this
+     * arise, see {@link CompactionSimulationTest} for a possible implementation.
      */
-    ShardIterator boundaries(int shardCount);
+    ShardTracker boundaries(int shardCount);
 
     static Range<Token> coveringRange(CompactionSSTable sstable)
     {

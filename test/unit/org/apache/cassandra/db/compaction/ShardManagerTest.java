@@ -38,6 +38,8 @@ import org.apache.cassandra.dht.Token;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 
 public class ShardManagerTest
@@ -310,13 +312,13 @@ public class ShardManagerTest
         when(db.getLocalRanges()).thenReturn(sortedRanges);
         when(db.getPositions()).thenReturn(diskBoundaries);
 
-        final ShardIterator shardIterator = ShardManager.create(db, partitioner)
-                                                        .boundaries(numShards);
+        final ShardTracker shardTracker = ShardManager.create(db)
+                                                      .boundaries(numShards);
         IntArrayList list = new IntArrayList();
         for (int i = 0; i < 100; ++i)
         {
-            if (shardIterator.advanceTo(getToken(i)))
-                list.addInt(fromToken(shardIterator.shardStart()));
+            if (shardTracker.advanceTo(getToken(i)))
+                list.addInt(fromToken(shardTracker.shardStart()));
         }
         return list.toIntArray();
     }
@@ -329,5 +331,37 @@ public class ShardManagerTest
     private int fromToken(Token t)
     {
         return (int) Math.round(partitioner.getMinimumToken().size(t) * 100.0);
+    }
+
+    @Test
+    public void testRangeEnds()
+    {
+        CompactionRealm realm = Mockito.mock(CompactionRealm.class);
+        when(realm.getPartitioner()).thenReturn(partitioner);
+        SortedLocalRanges sortedRanges = SortedLocalRanges.forTestingFull(realm);
+
+        for (int numDisks = 1; numDisks <= 3; ++numDisks)
+        {
+            List<Token> diskBoundaries = sortedRanges.split(numDisks);
+            DiskBoundaries db = Mockito.mock(DiskBoundaries.class);
+            when(db.getLocalRanges()).thenReturn(sortedRanges);
+            when(db.getPositions()).thenReturn(diskBoundaries);
+
+            ShardManager shardManager = ShardManager.create(db);
+            for (int numShards = 1; numShards <= 3; ++numShards)
+            {
+                ShardTracker iterator = shardManager.boundaries(numShards);
+                iterator.advanceTo(partitioner.getMinimumToken());
+
+                int count = 1;
+                for (Token end = iterator.shardEnd(); end != null; end = iterator.shardEnd())
+                {
+                    assertFalse(iterator.advanceTo(end));
+                    assertTrue(iterator.advanceTo(end.nextValidToken()));
+                    ++count;
+                }
+                assertEquals(numDisks * numShards, count);
+            }
+        }
     }
 }

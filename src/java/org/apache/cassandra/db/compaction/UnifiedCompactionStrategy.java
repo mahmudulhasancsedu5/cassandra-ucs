@@ -319,7 +319,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     {
         ShardManager shardManager = getShardManager();
         double flushDensity = realm.metrics().flushSizeOnDisk().get() / shardManager.localSpaceCoverage();
-        ShardIterator boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
+        ShardTracker boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
         return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,
@@ -366,7 +366,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 return; // another thread beat us to the update
 
             DiskBoundaries currentBoundaries = realm.getDiskBoundaries();
-            shardManager = ShardManager.create(currentBoundaries, realm.getPartitioner());
+            shardManager = ShardManager.create(currentBoundaries);
             arenaSelector = new ArenaSelector(controller, currentBoundaries);
             // Note: this can just as well be done without the synchronization (races would be benign, just doing some
             // redundant work). For the current usages of this blocking is fine and expected to perform no worse.

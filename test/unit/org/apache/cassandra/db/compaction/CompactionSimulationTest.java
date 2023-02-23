@@ -1458,7 +1458,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
             IPartitioner partitioner = minToken.getPartitioner();
 
             int shards = strategy.getController().getNumShards(valueSize * numEntries / minToken.size(maxToken));
-            ShardIterator boundaries = strategy.getShardManager().boundaries(shards);
+            ShardTracker boundaries = strategy.getShardManager().boundaries(shards);
 
             int numSStables = 0;
             boundaries.advanceTo(minToken);
@@ -1467,7 +1467,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                 ++numSStables;
                 if (boundaries.shardEnd() == null || boundaries.shardEnd().compareTo(maxToken) > 0)
                     break;
-                boundaries.advanceTo(boundaries.shardEnd());
+                boundaries.advanceTo(boundaries.shardEnd().nextValidToken());
             }
 
             boundaries = strategy.getShardManager().boundaries(shards);
@@ -1498,7 +1498,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
 
                 if (boundaries.shardEnd() == null || boundaries.shardEnd().compareTo(maxToken) > 0)
                     break;
-                boundaries.advanceTo(boundaries.shardEnd());
+                boundaries.advanceTo(boundaries.shardEnd().nextValidToken());
             }
 
             counters.numWritten.addAndGet(numEntries);

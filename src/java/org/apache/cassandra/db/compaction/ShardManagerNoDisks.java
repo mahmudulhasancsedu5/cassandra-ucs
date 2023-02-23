@@ -80,12 +80,12 @@ public class ShardManagerNoDisks implements ShardManager
     }
 
     @Override
-    public ShardIterator boundaries(int shardCount)
+    public ShardTracker boundaries(int shardCount)
     {
-        return new BoundaryIterator(shardCount);
+        return new BoundaryTracker(shardCount);
     }
 
-    public class BoundaryIterator implements ShardIterator
+    public class BoundaryTracker implements ShardTracker
     {
         private final double rangeStep;
         private final int count;
@@ -95,7 +95,7 @@ public class ShardManagerNoDisks implements ShardManager
         @Nullable
         private Token currentEnd;   // null for the last shard
 
-        public BoundaryIterator(int count)
+        public BoundaryTracker(int count)
         {
             this.count = count;
             rangeStep = localSpaceCoverage() / count;
@@ -137,7 +137,8 @@ public class ShardManagerNoDisks implements ShardManager
         @Override
         public Range<Token> shardSpan()
         {
-            return new Range<>(currentStart, currentEnd != null ? currentEnd : currentStart.minValue());
+            return new Range<>(currentStart, currentEnd != null ? currentEnd
+                                                                : currentStart.getPartitioner().getMinimumToken());
         }
 
         @Override
@@ -149,7 +150,7 @@ public class ShardManagerNoDisks implements ShardManager
         @Override
         public boolean advanceTo(Token nextToken)
         {
-            if (currentEnd == null || nextToken.compareTo(currentEnd) < 0)
+            if (currentEnd == null || nextToken.compareTo(currentEnd) <= 0)
                 return false;
             do
             {
@@ -159,7 +160,7 @@ public class ShardManagerNoDisks implements ShardManager
                 else
                     currentEnd = getEndToken(rangeStep * nextShardIndex);
             }
-            while (!(currentEnd == null || nextToken.compareTo(currentEnd) < 0));
+            while (!(currentEnd == null || nextToken.compareTo(currentEnd) <= 0));
             return true;
         }
 
@@ -176,6 +177,9 @@ public class ShardManagerNoDisks implements ShardManager
             Range<Token> covered = targetSpan.intersectionNonWrapping(shardSpan);
             if (covered == null)
                 return 0;
+            // If one of the ranges is completely subsumed in the other, intersectionNonWrapping returns that range.
+            // We take advantage of this in the shortcuts below (note that if they are equal but not the same, the
+            // path below will still return the expected result).
             if (covered == targetSpan)
                 return 1;
             double inShardSize = covered == shardSpan ? shardSpanSize() : ShardManagerNoDisks.this.rangeSpanned(covered);

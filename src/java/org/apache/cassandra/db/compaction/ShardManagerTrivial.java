@@ -62,7 +62,7 @@ public class ShardManagerTrivial implements ShardManager
         return 1;
     }
 
-    ShardIterator iterator = new ShardIterator()
+    ShardTracker iterator = new ShardTracker()
     {
         @Override
         public Token shardStart()
@@ -129,7 +129,7 @@ public class ShardManagerTrivial implements ShardManager
     };
 
     @Override
-    public ShardIterator boundaries(int shardCount)
+    public ShardTracker boundaries(int shardCount)
     {
         return iterator;
     }

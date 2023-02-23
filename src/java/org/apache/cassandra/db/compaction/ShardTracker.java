@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Set;
+import javax.annotation.Nullable;
 
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.Range;
@@ -26,10 +27,11 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 
-public interface ShardIterator
+public interface ShardTracker
 {
     Token shardStart();
 
+    @Nullable
     Token shardEnd();
 
     Range<Token> shardSpan();

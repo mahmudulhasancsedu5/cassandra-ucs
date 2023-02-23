@@ -74,18 +74,17 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
         }
         diskBoundaryPositions[diskIndex] = position;
         assert diskIndex + 1 == diskBoundaryPositions.length : "Disk boundaries are not within local ranges";
-        // TODO: write unit test on the whole class
     }
 
     /**
      * Construct a boundary/shard iterator for the given number of shards.
      */
-    public ShardIterator boundaries(int shardCount)
+    public ShardTracker boundaries(int shardCount)
     {
-        return new BoundaryIteratorDiskAware(shardCount);
+        return new BoundaryTrackerDiskAware(shardCount);
     }
 
-    public class BoundaryIteratorDiskAware implements ShardIterator
+    public class BoundaryTrackerDiskAware implements ShardTracker
     {
         private final int countPerDisk;
         private double shardStep;
@@ -97,7 +96,7 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
         @Nullable
         private Token currentEnd;   // null for the last shard
 
-        public BoundaryIteratorDiskAware(int countPerDisk)
+        public BoundaryTrackerDiskAware(int countPerDisk)
         {
             this.countPerDisk = countPerDisk;
             currentStart = localRanges.getRanges().get(0).left();
@@ -156,13 +155,14 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
             if (diskIndex < 0)
             {
                 int search = Collections.binarySearch(diskBoundaries, nextToken);
-                if (search < 0) // TODO recheck what to do on equal
+                if (search < 0)
                     search = -1 - search;
+                // otherwise (on equal) we are good as ranges are end-inclusive
                 enterDisk(search);
                 setEndToken();
             }
 
-            if (currentEnd == null || nextToken.compareTo(currentEnd) < 0)
+            if (currentEnd == null || nextToken.compareTo(currentEnd) <= 0)
                 return false;
             do
             {
@@ -174,7 +174,7 @@ public class ShardManagerDiskAware extends ShardManagerNoDisks
 
                 setEndToken();
             }
-            while (!(currentEnd == null || nextToken.compareTo(currentEnd) < 0));
+            while (!(currentEnd == null || nextToken.compareTo(currentEnd) <= 0));
             return true;
         }
 
