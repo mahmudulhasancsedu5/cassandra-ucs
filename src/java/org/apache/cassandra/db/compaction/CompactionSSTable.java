@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.db.compaction;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -30,7 +29,7 @@ import com.google.common.collect.Ordering;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -72,7 +71,7 @@ public interface CompactionSSTable
     /**
      * @return the bounds spanned by this sstable, from first to last keys.
      */
-    AbstractBounds<Token> getBounds();
+    Bounds<Token> getBounds();
 
     /**
      * @return the length in bytes of the on disk size for this SSTable. For compressed files, this is not the same
