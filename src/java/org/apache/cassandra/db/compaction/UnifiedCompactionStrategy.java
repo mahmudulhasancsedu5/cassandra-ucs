@@ -335,8 +335,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         Set<SSTableReader> expired = maybeGetExpiredSSTables(gcBefore, suitable);
         suitable.removeAll(expired);
 
-        List<CompactionPick> perLevel = getPerLevelCompactionPicks(suitable, context);
-        if (perLevel.isEmpty())
+        CompactionPick selected = chooseCompactionPick(suitable, context);
+        estimatedRemainingTasks = context.estimatedRemainingTasks;
+        if (selected == null)
         {
             if (expired.isEmpty())
                 return null;
@@ -344,12 +345,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 return new CompactionPick(-1, expired);
         }
 
-        // Select one by randomly choosing a level. This is not optimal because higher levels will have long lists of
-        // tasks to do, while lower ones will intermittently propose. However, as long as a piece of work appears on
-        // a lower level, it will be presented until it is selected, and thus the unfairness will be only temporary.
-        final CompactionPick selected = perLevel.get(controller.random().nextInt(perLevel.size()));
         selected.addAll(expired);
-        estimatedRemainingTasks = context.estimatedRemainingTasks;
         return selected;
     }
 
@@ -376,17 +372,27 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         return expired;
     }
 
-    private List<CompactionPick> getPerLevelCompactionPicks(List<SSTableReader> suitable, SelectionContext context)
+    private CompactionPick chooseCompactionPick(List<SSTableReader> suitable, SelectionContext context)
     {
-        List<CompactionPick> pending = new ArrayList<>();
+        // Select the level with the highest overlap; if multiple match, choose one of them randomly.
+        int maxOverlap = -1;
+        int matchingCount = 0;
+        CompactionPick selected = null;
         for (Level level : formLevels(suitable))
         {
             CompactionPick pick = level.getCompactionPick(context);
-            if (pick != null)
-                pending.add(pick);
+            int levelOverlap = level.maxOverlap;
+            if (levelOverlap > maxOverlap)
+            {
+                maxOverlap = levelOverlap;
+                matchingCount = 1;
+                selected = pick;
+            }
+            else if (levelOverlap == maxOverlap && controller.random().nextInt(++matchingCount) == 0)
+                selected = pick;
         }
 
-        return pending;
+        return selected;
     }
 
     @Override
@@ -594,6 +600,8 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 return null;    // nothing crosses the threshold in this level, nothing to do
 
             int estimatedRemainingTasks = 0;
+            int overlapMatchingCount = 0;
+            Bucket selectedBucket = null;
             Controller controller = context.controller;
             for (Bucket bucket : buckets)
             {
@@ -601,18 +609,19 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 // calculate the number of tasks we would do in normal operation, even though we may compact in bigger
                 // chunks when we are late.
                 estimatedRemainingTasks += bucket.maxOverlap / threshold;
+                // Select the bucket with the highest overlap; if multiple match, choose one of them randomly.
+                if (bucket.maxOverlap == maxOverlap && controller.random().nextInt(++overlapMatchingCount) == 0)
+                    selectedBucket = bucket;
             }
             context.estimatedRemainingTasks += estimatedRemainingTasks;
+            assert selectedBucket != null;
 
             if (logger.isDebugEnabled())
                 logger.debug("Level {} sstables {} max overlap {} buckets with compactions {} tasks {}",
                              index, sstables.size(), maxOverlap, buckets.size(), estimatedRemainingTasks);
 
-            // We can have just one pick in each level. Picking a fixed one may cause us to neglect parts of
-            // the token space, so choose one uniformly randomly.
-            int selectedBucket = controller.random().nextInt(buckets.size());
-            CompactionPick selected = buckets.get(selectedBucket).constructPick(controller);
-            assert selected != null;
+            // We can have just one pick in each level. Pick the one with the highest overlap.
+            CompactionPick selected = selectedBucket.constructPick(controller);
 
             if (logger.isTraceEnabled())
                 logger.trace("Returning compaction pick with selected compaction {}",
