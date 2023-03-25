@@ -374,9 +374,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
     private CompactionPick chooseCompactionPick(List<SSTableReader> suitable, SelectionContext context)
     {
-        // Select the level with the highest overlap; if multiple match, choose one of them randomly.
+        // Select the level with the highest overlap; when multiple levels have the same overlap, prefer the lower one
+        // (i.e. reduction of RA for bigger token coverage).
+        // TODO: adjust doc
         int maxOverlap = -1;
-        int matchingCount = 0;
         CompactionPick selected = null;
         for (Level level : formLevels(suitable))
         {
@@ -385,11 +386,8 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (levelOverlap > maxOverlap)
             {
                 maxOverlap = levelOverlap;
-                matchingCount = 1;
                 selected = pick;
             }
-            else if (levelOverlap == maxOverlap && controller.random().nextInt(++matchingCount) == 0)
-                selected = pick;
         }
 
         return selected;
@@ -740,63 +738,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             int maxSSTablesToCompact = Math.max(fanout, controller.maxSSTablesToCompact());
 
             assert count >= threshold;
-            if (count <= fanout)
-            {
-                /**
-                 * Happy path. We are not late or (for levelled) we are only so late that a compaction now will
-                 * have the same effect as doing levelled compactions one by one. Compact all. We do not cap
-                 * this pick at maxSSTablesToCompact due to an assumption that maxSSTablesToCompact is much
-                 * greater than F. See {@link Controller#MAX_SSTABLES_TO_COMPACT_OPTION} for more details.
-                 */
+            if (count <= maxSSTablesToCompact)
                 return new CompactionPick(index, allSSTablesSorted);
-            }
-            else if (count <= fanout * controller.getFanout(index + 1) || maxSSTablesToCompact == fanout)
-            {
-                // Compaction is a bit late, but not enough to jump levels via layout compactions. We need a special
-                // case to cap compaction pick at maxSSTablesToCompact.
-                if (count <= maxSSTablesToCompact)
-                    return new CompactionPick(index, allSSTablesSorted);
 
-                return new CompactionPick(index, pullOldestSSTables(maxSSTablesToCompact));
-            }
-            else
-            {
-                // We may, however, have accumulated a lot more than T if compaction is very late.
-                // In this case we pick a compaction in such a way that the result of doing it spreads the data in
-                // a similar way to how compaction would lay them if it was able to keep up. This means:
-                // - for tiered compaction (w >= 0), compact in sets of as many as required to get to a level.
-                //   for example, for w=2 and 55 sstables, pick a compaction of 16 sstables (on the next calls, given no
-                //   new files, 2 more of 16, 1 of 4, and leaving the other 3 sstables alone).
-                // - for levelled compaction (w < 0), compact all that would reach a level.
-                //   for w=-2 and 55, this means pick a compaction of 48 (on the next calls, given no new files, one of
-                //   4, and one of 3 sstables).
-                return new CompactionPick(index, pullOldestSSTables(selectPickSize(controller, maxSSTablesToCompact)));
-            }
-        }
-
-        private int selectPickSize(Controller controller, int maxSSTablesToCompact)
-        {
-            int pickSize;
-            int fanout = level.fanout;
-            int nextStep = fanout;
-            int index = level.index;
-            int limit = Math.min(maxSSTablesToCompact, maxOverlap);
-            do
-            {
-                pickSize = nextStep;
-                fanout = controller.getFanout(++index);
-                nextStep *= fanout;
-            }
-            while (nextStep <= limit);
-
-            if (level.scalingParameter < 0)
-            {
-                // For levelled compaction all the sstables that would reach this level need to be compacted to one,
-                // so select the highest multiple of step that fits.
-                pickSize *= limit / pickSize;
-                assert pickSize > 0;
-            }
-            return pickSize;
+            return new CompactionPick(index, pullOldestSSTables(maxSSTablesToCompact));
         }
 
         /**
