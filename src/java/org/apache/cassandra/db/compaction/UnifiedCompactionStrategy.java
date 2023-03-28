@@ -595,7 +595,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         {
             List<Bucket> buckets = getBuckets(context);
             if (buckets == null)
+            {
+                if (logger.isDebugEnabled())
+                    logger.debug("Level {} sstables {} max overlap {} buckets with compactions {} tasks {}",
+                                 index, sstables.size(), maxOverlap, 0, 0);
                 return null;    // nothing crosses the threshold in this level, nothing to do
+            }
 
             int estimatedRemainingTasks = 0;
             int overlapMatchingCount = 0;
