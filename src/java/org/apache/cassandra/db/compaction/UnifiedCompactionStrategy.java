@@ -342,7 +342,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (expired.isEmpty())
                 return null;
             else
-                return new CompactionPick(-1, expired);
+                return new CompactionPick(-1, -1, expired);
         }
 
         selected.addAll(expired);
@@ -389,6 +389,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 selected = pick;
             }
         }
+        if (logger.isDebugEnabled() && selected != null)
+            logger.debug("Selected compaction on level {} overlap {} sstables {}",
+                         selected.level, selected.overlap, selected.size());
 
         return selected;
     }
@@ -744,9 +747,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
             assert count >= threshold;
             if (count <= maxSSTablesToCompact)
-                return new CompactionPick(index, allSSTablesSorted);
+                return new CompactionPick(index,  count, allSSTablesSorted);
 
-            return new CompactionPick(index, pullOldestSSTables(maxSSTablesToCompact));
+            return new CompactionPick(index, maxSSTablesToCompact, pullOldestSSTables(maxSSTablesToCompact));
         }
 
         /**
@@ -792,11 +795,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     static class CompactionPick extends ArrayList<SSTableReader>
     {
         final int level;
+        final int overlap;
 
-        CompactionPick(int level, Collection<SSTableReader> sstables)
+        CompactionPick(int level, int overlap, Collection<SSTableReader> sstables)
         {
             super(sstables);
             this.level = level;
+            this.overlap = overlap;
         }
     }
 
