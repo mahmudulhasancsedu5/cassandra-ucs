@@ -196,9 +196,9 @@ public abstract class TrieNode
 
     final int ordinal;
 
-    static final PayloadOnly PAYLOAD_ONLY = new PayloadOnly();
+    static final TrieNode PAYLOAD_ONLY = new PayloadOnly();
 
-    static class PayloadOnly extends TrieNode
+    static private class PayloadOnly extends TrieNode
     {
         // byte flags
         // var payload
@@ -273,10 +273,10 @@ public abstract class TrieNode
         }
     }
 
-    static final Single SINGLE_8 = new Single(2, 1);
-    static final Single SINGLE_16 = new Single(4, 2);
+    static final TrieNode SINGLE_8 = new Single(2, 1);
+    static final TrieNode SINGLE_16 = new Single(4, 2);
 
-    static class Single extends TrieNode
+    static private class Single extends TrieNode
     {
         // byte flags
         // byte transition
@@ -356,9 +356,9 @@ public abstract class TrieNode
     }
 
 
-    static final Single SINGLE_NOPAYLOAD_4 = new SingleNoPayload4(1);
+    static final TrieNode SINGLE_NOPAYLOAD_4 = new SingleNoPayload4(1);
 
-    static class SingleNoPayload4 extends Single
+    static private class SingleNoPayload4 extends Single
     {
         // 4-bit type ordinal
         // 4-bit target delta
@@ -413,9 +413,9 @@ public abstract class TrieNode
         }
     }
 
-    static final Single SINGLE_NOPAYLOAD_12 = new SingleNoPayload12(3);
+    static final TrieNode SINGLE_NOPAYLOAD_12 = new SingleNoPayload12(3);
 
-    static class SingleNoPayload12 extends Single
+    static private class SingleNoPayload12 extends Single
     {
         // 4-bit type ordinal
         // 12-bit target delta
@@ -486,12 +486,12 @@ public abstract class TrieNode
         }
     }
 
-    static final Sparse SPARSE_8 = new Sparse(5, 1);
-    static final Sparse SPARSE_16 = new Sparse(7, 2);
-    static final Sparse SPARSE_24 = new Sparse(8, 3);
-    static final Sparse SPARSE_40 = new Sparse(9, 5);
+    static final TrieNode SPARSE_8 = new Sparse(5, 1);
+    static final TrieNode SPARSE_16 = new Sparse(7, 2);
+    static final TrieNode SPARSE_24 = new Sparse(8, 3);
+    static final TrieNode SPARSE_40 = new Sparse(9, 5);
 
-    static class Sparse extends TrieNode
+    static private class Sparse extends TrieNode
     {
         // byte flags
         // byte count (<= 255)
@@ -600,9 +600,9 @@ public abstract class TrieNode
         }
     }
 
-    static final Sparse12 SPARSE_12 = new Sparse12(6);
+    static final TrieNode SPARSE_12 = new Sparse12(6);
 
-    static class Sparse12 extends Sparse
+    static private class Sparse12 extends Sparse
     {
         // byte flags
         // byte count (<= 255)
@@ -669,12 +669,12 @@ public abstract class TrieNode
         }
     }
 
-    static final Dense DENSE_16 = new Dense(11, 2);
-    static final Dense DENSE_24 = new Dense(12, 3);
-    static final Dense DENSE_32 = new Dense(13, 4);
-    static final Dense DENSE_40 = new Dense(14, 5);
+    static final TrieNode DENSE_16 = new Dense(11, 2);
+    static final TrieNode DENSE_24 = new Dense(12, 3);
+    static final TrieNode DENSE_32 = new Dense(13, 4);
+    static final TrieNode DENSE_40 = new Dense(14, 5);
 
-    static class Dense extends TrieNode
+    static private class Dense extends TrieNode
     {
         // byte flags
         // byte start
@@ -807,9 +807,9 @@ public abstract class TrieNode
         }
     }
 
-    static final Dense12 DENSE_12 = new Dense12(10);
+    static final TrieNode DENSE_12 = new Dense12(10);
 
-    static class Dense12 extends Dense
+    static private class Dense12 extends Dense
     {
         // byte flags
         // byte start
@@ -878,9 +878,9 @@ public abstract class TrieNode
         }
     }
 
-    static final LongDense LONG_DENSE = new LongDense(15);
+    static final TrieNode LONG_DENSE = new LongDense(15);
 
-    static class LongDense extends Dense
+    static private class LongDense extends Dense
     {
         // byte flags
         // byte start
@@ -972,6 +972,7 @@ public abstract class TrieNode
                                                      SPARSE_8, SPARSE_12, SPARSE_16, SPARSE_24, SPARSE_40,
                                                      DENSE_12, DENSE_16, DENSE_24, DENSE_32, DENSE_40,
                                                      LONG_DENSE }; // Catch-all
+
     // We can't fit all types * all sizes in 4 bits, so we use a selection. When we don't have a matching instance
     // we just use something more general that can do its job.
     // The arrays below must have corresponding types for all sizes specified by the singles row.
