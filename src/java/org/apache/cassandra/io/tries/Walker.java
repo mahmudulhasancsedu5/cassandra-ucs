@@ -27,8 +27,8 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
- * Thread-unsafe trie walking helper. This is analogous to RandomAccessReader for tries -- takes an on-disk trie
- * accessible via a supplied Rebufferer and lets user seek to nodes and work with them.
+ * Thread-unsafe trie walking helper. This is analogous to {@link org.apache.cassandra.io.util.RandomAccessReader} for
+ * tries -- takes an on-disk trie accessible via a supplied Rebufferer and lets user seek to nodes and work with them.
  * <p>
  * Assumes data was written using page-aware builder and thus no node crosses a page and thus a buffer boundary.
  */

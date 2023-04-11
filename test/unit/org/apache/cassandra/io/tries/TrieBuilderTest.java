@@ -30,7 +30,7 @@ import static org.junit.Assert.assertEquals;
 public class TrieBuilderTest extends AbstractTrieTestBase
 {
     @Test
-    public void testPartialBuild_Apollo1148() throws IOException
+    public void testPartialBuild_DB1148() throws IOException
     {
         DataOutputBuffer buf = new DataOutputBufferPaged();
         IncrementalTrieWriter<Integer> builder = IncrementalTrieWriter.open(serializer, buf);
