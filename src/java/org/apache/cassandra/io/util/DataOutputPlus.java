@@ -165,7 +165,6 @@ public interface DataOutputPlus extends DataOutput
 
     /**
      * Pad this page with 0s to move on to the next.
-     * @throws IOException
      */
     default void padToPageBoundary() throws IOException
     {

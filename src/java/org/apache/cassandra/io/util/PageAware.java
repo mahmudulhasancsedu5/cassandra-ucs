@@ -56,6 +56,17 @@ public final class PageAware
     }
 
     /**
+     * Calculate the number of bytes left in this page.
+     * Equivalent to pageLimit(position) - position.
+     * <p>
+     * When the argument is equal to a page boundary, returns PAGE_SIZE.
+     */
+    public static int bytesLeftInPage(long dstPos)
+    {
+        return PAGE_SIZE - (int) (dstPos & (PAGE_SIZE - 1));
+    }
+
+    /**
      * Calculate the number of pages that fit in the given size, rounded up to a page if the size is not an exact multiple.
      *
      * @param size the size that needs to cover a number of pages
@@ -87,6 +98,7 @@ public final class PageAware
     {
         long position = dest.position();
         long bytesLeft = padded(position) - position;
+        // bytesLeft is provably within [0, pageSize - 1]
         dest.write(EmptyPage.EMPTY_PAGE, 0, (int) bytesLeft);
     }
 

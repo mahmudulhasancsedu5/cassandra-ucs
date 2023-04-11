@@ -20,6 +20,7 @@ package org.apache.cassandra.io.util;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Random;
 
 import org.junit.Test;
 
@@ -42,6 +43,22 @@ public class PageAwareTest
         assertEquals(2 * PAGE_SIZE, PageAware.pageLimit(PAGE_SIZE + PAGE_SIZE / 3));
         assertEquals(2 * PAGE_SIZE, PageAware.pageLimit(PAGE_SIZE + PAGE_SIZE - 1));
         assertEquals(2 * PAGE_SIZE, PageAware.pageLimit(PAGE_SIZE + 1));
+    }
+
+    @Test
+    public void bytesLeftInPage()
+    {
+        assertEquals(PAGE_SIZE, PageAware.bytesLeftInPage(0));
+        assertEquals(PAGE_SIZE, PageAware.bytesLeftInPage(PAGE_SIZE));
+        assertEquals(PAGE_SIZE, PageAware.bytesLeftInPage(2 * PAGE_SIZE));
+
+        assertEquals(PAGE_SIZE - (PAGE_SIZE / 3), PageAware.bytesLeftInPage(PAGE_SIZE / 3));
+        assertEquals(1, PageAware.bytesLeftInPage(PAGE_SIZE - 1));
+        assertEquals(PAGE_SIZE - 1, PageAware.bytesLeftInPage(1));
+
+        assertEquals(PAGE_SIZE - (PAGE_SIZE / 3), PageAware.bytesLeftInPage(PAGE_SIZE + PAGE_SIZE / 3));
+        assertEquals(1, PageAware.bytesLeftInPage(PAGE_SIZE + PAGE_SIZE - 1));
+        assertEquals(PAGE_SIZE - 1, PageAware.bytesLeftInPage(PAGE_SIZE + 1));
     }
 
     @Test
@@ -143,6 +160,22 @@ public class PageAwareTest
             out.flush();
 
             assertEquals(expectedBuf.rewind(), out.asNewBuffer());
+        }
+    }
+
+    @Test
+    public void randomizedTest()
+    {
+        Random rand = new Random();
+        for (int i = 0; i < 100000; ++i)
+        {
+            long pos = rand.nextLong() & ((1L << rand.nextInt(64)) - 1);    // positive long with random length
+            long pageStart = (pos / PAGE_SIZE) * PAGE_SIZE;
+            long pageLimit = pageStart + PAGE_SIZE;
+            assertEquals(pageLimit, PageAware.pageLimit(pos));
+            assertEquals(pageStart, PageAware.pageStart(pos));
+            assertEquals(pageLimit - pos, PageAware.bytesLeftInPage(pos));
+            assertEquals(pos == pageStart ? pageStart : pageLimit, PageAware.padded(pos));
         }
     }
 }

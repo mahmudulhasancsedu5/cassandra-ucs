@@ -282,9 +282,7 @@ public class SequentialWriter extends BufferedDataOutputStreamPlus implements Tr
     @Override
     public int bytesLeftInPage()
     {
-        long position = position();
-        long bytesLeft = PageAware.pageLimit(position) - position;
-        return (int) bytesLeft;
+        return PageAware.bytesLeftInPage(position());
     }
 
     @Override
