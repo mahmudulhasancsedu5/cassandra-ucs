@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io.util;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -24,7 +24,10 @@ import java.math.BigInteger;
 import org.apache.commons.io.EndianUtils;
 import org.junit.Test;
 
-import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.utils.ByteArrayUtil;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Generators;
+import org.apache.cassandra.utils.Throwables;
 
 import static org.junit.Assert.assertEquals;
 import static org.quicktheories.QuickTheory.qt;

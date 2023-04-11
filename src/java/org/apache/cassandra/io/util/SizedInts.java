@@ -16,12 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io.util;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-
-import org.apache.cassandra.io.util.DataOutputPlus;
 
 /**
  * Utility class for sizing, writing and reading ints with length stored separately.

@@ -28,7 +28,7 @@ import org.apache.cassandra.io.tries.TrieSerializer;
 import org.apache.cassandra.io.tries.Walker;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.io.util.FileHandle;
-import org.apache.cassandra.utils.SizedInts;
+import org.apache.cassandra.io.util.SizedInts;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 /**

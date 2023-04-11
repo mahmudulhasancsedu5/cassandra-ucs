@@ -15,11 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io.util;
 
 import java.io.IOException;
-
-import org.apache.cassandra.io.util.DataOutputPlus;
 
 public final class PageAware
 {

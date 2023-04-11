@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.utils.SizedInts;
+import org.apache.cassandra.io.util.SizedInts;
 
 /**
  * Trie node types and manipulation mechanisms. The main purpose of this is to allow for handling tries directly as

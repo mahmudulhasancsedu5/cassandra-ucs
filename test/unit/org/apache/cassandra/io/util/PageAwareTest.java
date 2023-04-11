@@ -16,16 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io.util;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import org.junit.Test;
 
-import org.apache.cassandra.io.util.DataOutputBuffer;
-
-import static org.apache.cassandra.utils.PageAware.PAGE_SIZE;
+import static org.apache.cassandra.io.util.PageAware.PAGE_SIZE;
 import static org.junit.Assert.assertEquals;
 
 public class PageAwareTest
