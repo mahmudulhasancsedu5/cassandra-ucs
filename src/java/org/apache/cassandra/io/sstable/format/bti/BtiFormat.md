@@ -233,7 +233,7 @@ building an efficient read-only on-disk data structure.
 
 For more formal information about the concept and applications of tries
 and finite state automata, try [Introduction to Automata Theory,
-Languages, and Computation](https://books.google.bg/books?id=dVipBwAAQBAJ).
+Languages, and Computation](https://books.google.com/books?id=dVipBwAAQBAJ).
 There are many variations of the concept, and of the implementation of
 states and transitions that can be put to use to achieve even further
 efficiency gains; some of these will be detailed below.

@@ -78,7 +78,7 @@ class SSTableIterator extends AbstractSSTableIterator<AbstractRowIndexEntry>
     private class ForwardIndexedReader extends ForwardReader
     {
         private final RowIndexReader indexReader;
-        long basePosition;
+        private final long basePosition;
 
         private ForwardIndexedReader(AbstractRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
         {

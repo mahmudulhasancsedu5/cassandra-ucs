@@ -96,11 +96,11 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
      */
     private class ReverseReader extends AbstractReader
     {
-        LongStack rowOffsets = new LongStack();
+        final LongStack rowOffsets = new LongStack();
         RangeTombstoneMarker blockOpenMarker, blockCloseMarker;
-        Unfiltered next = null;
-        boolean foundLessThan;
-        long startPos = -1;
+        private Unfiltered next = null;
+        private boolean foundLessThan;
+        private long startPos = -1;
 
         private ReverseReader(FileDataInput file, boolean shouldCloseFile)
         {
@@ -236,10 +236,10 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
     private class ReverseIndexedReader extends ReverseReader
     {
         private RowIndexReverseIterator indexReader;
-        final TrieIndexEntry indexEntry;
-        long basePosition;
-        Slice currentSlice;
-        long currentBlockStart;
+        private final TrieIndexEntry indexEntry;
+        private final long basePosition;
+        private Slice currentSlice;
+        private long currentBlockStart;
 
         public ReverseIndexedReader(AbstractRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
         {

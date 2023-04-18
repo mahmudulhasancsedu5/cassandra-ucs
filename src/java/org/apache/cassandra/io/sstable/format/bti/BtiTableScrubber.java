@@ -76,9 +76,9 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
         {
             return sstable.scrubPartitionsIterator();
         }
-        catch (IOException e)
+        catch (Throwable t)
         {
-            outputHandler.warn("Index is unreadable.");
+            outputHandler.warn(t, "Index is unreadable, scrubbing will continue without index.");
         }
         return null;
     }
@@ -140,8 +140,9 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
                     catch (Throwable th)
                     {
                         throwIfFatal(th);
-                        outputHandler.warn(th, "Failed to advance to the next index position. Index is corrupted. " +
-                                               "Continuing without the index. Last position read is %d.",
+                        outputHandler.warn(th,
+                                           "Failed to advance to the next index position. Index is corrupted. " +
+                                           "Continuing without the index. Last position read is %d.",
                                            indexIterator.dataPosition());
                         indexIterator.close();
                         indexIterator = null;

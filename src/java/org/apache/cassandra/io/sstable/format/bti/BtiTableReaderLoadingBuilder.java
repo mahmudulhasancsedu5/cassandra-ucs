@@ -99,24 +99,15 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
                 builder.setFilter(loadFilter(validationMetadata));
             boolean rebuildFilter = filterNeeded && builder.getFilter() == null;
 
-            if (descriptor.version.hasKeyRange())
-            {
-                IPartitioner partitioner = tableMetadataRef.getLocal().partitioner;
-                builder.setFirst(partitioner.decorateKey(builder.getStatsMetadata().firstKey));
-                builder.setLast(partitioner.decorateKey(builder.getStatsMetadata().lastKey));
-            }
-
             if (builder.getComponents().contains(Components.PARTITION_INDEX) && builder.getComponents().contains(Components.ROW_INDEX) && rebuildFilter)
             {
-                @SuppressWarnings("resource")
+                @SuppressWarnings({ "resource", "RedundantSuppression" })
                 IFilter filter = buildBloomFilter(statsComponent.statsMetadata());
 
                 if (filter != null)
                 {
                     builder.setFilter(filter);
-
-                    if (online)
-                        FilterComponent.save(filter, descriptor, false);
+                    FilterComponent.save(filter, descriptor, false);
                 }
             }
 
@@ -126,11 +117,21 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
             if (builder.getComponents().contains(Components.ROW_INDEX))
                 builder.setRowIndexFile(rowIndexFileBuilder().complete());
 
+            if (descriptor.version.hasKeyRange() && builder.getStatsMetadata() != null)
+            {
+                IPartitioner partitioner = tableMetadataRef.getLocal().partitioner;
+                builder.setFirst(partitioner.decorateKey(builder.getStatsMetadata().firstKey));
+                builder.setLast(partitioner.decorateKey(builder.getStatsMetadata().lastKey));
+            }
+
             if (builder.getComponents().contains(Components.PARTITION_INDEX))
             {
                 builder.setPartitionIndex(openPartitionIndex(builder.getFilter().isInformative()));
-                builder.setFirst(builder.getPartitionIndex().firstKey());
-                builder.setLast(builder.getPartitionIndex().lastKey());
+                if (builder.getFirst() == null || builder.getLast() == null)
+                {
+                    builder.setFirst(builder.getPartitionIndex().firstKey());
+                    builder.setLast(builder.getPartitionIndex().lastKey());
+                }
             }
 
             try (CompressionMetadata compressionMetadata = CompressionInfoComponent.maybeLoad(descriptor, components))

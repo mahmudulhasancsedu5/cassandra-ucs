@@ -72,8 +72,6 @@ import static org.apache.cassandra.utils.concurrent.SharedCloseable.sharedCopyOr
  */
 public class BtiTableReader extends SSTableReaderWithFilter
 {
-    private static final Logger logger = LoggerFactory.getLogger(BtiTableReader.class);
-
     private final FileHandle rowIndexFile;
     private final PartitionIndex partitionIndex;
 

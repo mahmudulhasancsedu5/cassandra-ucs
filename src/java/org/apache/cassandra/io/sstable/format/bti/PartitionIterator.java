@@ -48,7 +48,7 @@ class PartitionIterator extends PartitionIndex.IndexPosIterator implements KeyRe
     private DecoratedKey nextKey;
     private TrieIndexEntry nextEntry;
 
-    @SuppressWarnings("resource")
+    @SuppressWarnings({ "resource", "RedundantSuppression" })
     static PartitionIterator create(PartitionIndex partitionIndex, IPartitioner partitioner, FileHandle rowIndexFile, FileHandle dataFile,
                                     PartitionPosition left, int inclusiveLeft, PartitionPosition right, int exclusiveRight) throws IOException
     {
@@ -99,7 +99,7 @@ class PartitionIterator extends PartitionIndex.IndexPosIterator implements KeyRe
     }
 
     private PartitionIterator(PartitionIndex partitionIndex, IPartitioner partitioner, FileHandle rowIndexFile, FileHandle dataFile,
-                              PartitionPosition left, PartitionPosition right, int exclusiveRight) throws IOException
+                              PartitionPosition left, PartitionPosition right, int exclusiveRight)
     {
         super(partitionIndex, left, right);
         this.partitionIndex = partitionIndex;
