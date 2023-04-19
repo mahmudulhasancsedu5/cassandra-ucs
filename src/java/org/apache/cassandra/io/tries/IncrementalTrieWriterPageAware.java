@@ -245,8 +245,13 @@ implements IncrementalTrieWriter<VALUE>
             node.branchSize = sz;
         }
 
-        // The sizing below will use the branch size calculated above. Since that can change on out-of-page in branch,
-        // we need to recalculate the size if either flag is set.
+        return finishRecalcTotalSize(node, nodePosition);
+    }
+
+    int finishRecalcTotalSize(Node<VALUE> node, long nodePosition)
+    {
+        // The sizing below will use the branch size calculated by caller. Since that can change on out-of-page in
+        // branch, we need to recalculate the size if either flag is set.
         if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
             node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
 
@@ -260,6 +265,11 @@ implements IncrementalTrieWriter<VALUE>
             if (child.filePos == -1)
                 child.filePos = write(child);
 
+        return finishWrite(node, nodePosition);
+    }
+
+    long finishWrite(Node<VALUE> node, long nodePosition) throws IOException
+    {
         nodePosition += node.branchSize;
         assert dest.position() == nodePosition
                 : "Expected node position to be " + nodePosition + " but got " + dest.position() + " after writing children.\n" + dumpNode(node, dest.position());
@@ -329,7 +339,17 @@ implements IncrementalTrieWriter<VALUE>
             }
         }
 
-        long nodePosition = dest.position() + baseOffset;
+        return finishWritePartial(node, dest, baseOffset, startPosition, childrenToClear);
+    }
+
+    long finishWritePartial(Node<VALUE> node,
+                            DataOutputPlus out,
+                            long baseOffset,
+                            long startPosition,
+                            List<Node<VALUE>> childrenToClear)
+    throws IOException
+    {
+        long nodePosition = out.position() + baseOffset;
 
         if (node.hasOutOfPageInBranch)
         {
@@ -338,13 +358,13 @@ implements IncrementalTrieWriter<VALUE>
             node.branchSize = (int) (nodePosition - startPosition);
         }
 
-        serializer.write(dest, node, nodePosition);
+        serializer.write(out, node, nodePosition);
 
         if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
         {
             // Update the node size with what we have just seen. It's a better approximation for later fitting
             // calculations.
-            long endPosition = dest.position() + baseOffset;
+            long endPosition = out.position() + baseOffset;
             node.nodeSize = (int) (endPosition - nodePosition);
         }
 

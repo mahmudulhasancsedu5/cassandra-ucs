@@ -67,12 +67,15 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
             node.branchSize = sz;
         }
 
-        // The sizing below will use the branch size calculated above. Since that can change on out-of-page in branch,
-        // we need to recalculate the size if either flag is set.
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
+        return finishRecalcTotalSize(node, nodePosition);
+    }
 
-        return node.branchSize + node.nodeSize;
+    private int recalcTotalSizeRecursiveOnHeap(Node<VALUE> node, long nodePosition) throws IOException
+    {
+        if (node.hasOutOfPageInBranch)
+            new RecalcTotalSizeRecursion(node, null, nodePosition).process();
+
+        return finishRecalcTotalSize(node, nodePosition);
     }
 
     @Override
@@ -93,16 +96,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
                     child.filePos = writeRecursiveOnHeap(child);
             }
 
-        nodePosition += node.branchSize;
-        assert dest.position() == nodePosition
-                : "Expected node position to be " + nodePosition + " but got " + dest.position() + " after writing children.\n" + dumpNode(node, dest.position());
-
-        serializer.write(dest, node, nodePosition);
-
-        assert dest.position() == nodePosition + node.nodeSize
-               || dest.paddedPosition() == dest.position() // For PartitionIndexTest.testPointerGrowth where position may jump on page boundaries.
-                : "Expected node position to be " + (nodePosition + node.nodeSize) + " but got " + dest.position() + " after writing node, nodeSize " + node.nodeSize + ".\n" + dumpNode(node, nodePosition);
-        return nodePosition;
+        return finishWrite(node, nodePosition);
     }
 
     @Override
@@ -128,39 +122,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
             }
         }
 
-        long nodePosition = dest.position() + baseOffset;
-
-        if (node.hasOutOfPageInBranch)
-        {
-            // Update the branch size with the size of what we have just written. This may be used by the node's
-            // maxPositionDelta, and it's a better approximation for later fitting calculations.
-            node.branchSize = (int) (nodePosition - startPosition);
-        }
-
-        serializer.write(dest, node, nodePosition);
-
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-        {
-            // Update the node size with what we have just seen. It's a better approximation for later fitting
-            // calculations.
-            long endPosition = dest.position() + baseOffset;
-            node.nodeSize = (int) (endPosition - nodePosition);
-        }
-
-        for (Node<VALUE> child : childrenToClear)
-            child.filePos = -1;
-        return nodePosition;
-    }
-
-    private int recalcTotalSizeRecursiveOnHeap(Node<VALUE> node, long nodePosition) throws IOException
-    {
-        if (node.hasOutOfPageInBranch)
-            new RecalcTotalSizeRecursion(node, null, nodePosition).process();
-
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
-
-        return node.branchSize + node.nodeSize;
+        return finishWritePartial(node, dest, baseOffset, startPosition, childrenToClear);
     }
 
     private long writeRecursiveOnHeap(Node<VALUE> node) throws IOException
@@ -281,16 +243,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         void completeChild(Node<VALUE> child)
         {
             // This will be called for nodes that were recursively processed as well as the ones that weren't.
-
-            // The sizing below will use the branch size calculated above. Since that can change on out-of-page in branch,
-            // we need to recalculate the size if either flag is set.
-            if (child.hasOutOfPageChildren || child.hasOutOfPageInBranch)
-            {
-                long childPosition = this.nodePosition + sz;
-                child.nodeSize = serializer.sizeofNode(child, childPosition + child.branchSize);
-            }
-
-            sz += child.branchSize + child.nodeSize;
+            sz += finishRecalcTotalSize(child, this.nodePosition + sz);
         }
     }
 
@@ -316,17 +269,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         @Override
         void complete() throws IOException
         {
-            nodePosition = nodePosition + node.branchSize;
-            assert dest.position() == nodePosition
-                    : "Expected node position to be " + nodePosition + " but got " + dest.position() + " after writing children.\n" + dumpNode(node, dest.position());
-
-            serializer.write(dest, node, nodePosition);
-
-            assert dest.position() == nodePosition + node.nodeSize
-                   || dest.paddedPosition() == dest.position() // For PartitionIndexTest.testPointerGrowth where position may jump on page boundaries.
-                    : "Expected node position to be " + (nodePosition + node.nodeSize) + " but got " + dest.position() + " after writing node, nodeSize " + node.nodeSize + ".\n" + dumpNode(node, nodePosition);
-
-            node.filePos = nodePosition;
+            node.filePos = finishWrite(node, nodePosition);
         }
     }
 
@@ -370,29 +313,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         @Override
         void complete() throws IOException
         {
-            long nodePosition = dest.position() + baseOffset;
-
-            if (node.hasOutOfPageInBranch)
-            {
-                // Update the branch size with the size of what we have just written. This may be used by the node's
-                // maxPositionDelta, and it's a better approximation for later fitting calculations.
-                node.branchSize = (int) (nodePosition - startPosition);
-            }
-
-            serializer.write(dest, node, nodePosition);
-
-            if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-            {
-                // Update the node size with what we have just seen. It's a better approximation for later fitting
-                // calculations.
-                long endPosition = dest.position() + baseOffset;
-                node.nodeSize = (int) (endPosition - nodePosition);
-            }
-
-            for (Node<VALUE> child : childrenToClear)
-                child.filePos = -1;
-
-            node.filePos = nodePosition;
+            node.filePos = finishWritePartial(node, dest, baseOffset, startPosition, childrenToClear);
         }
     }
 }

@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.function.BiFunction;
 
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
@@ -44,14 +45,31 @@ import static org.junit.Assert.assertNull;
 public class WalkerTest extends AbstractTrieTestBase
 {
     @Parameterized.Parameter(0)
-    public Class<? extends IncrementalTrieWriter> writerClass;
+    public TestClass writerClass;
+
+    enum TestClass
+    {
+        SIMPLE(IncrementalTrieWriterSimple::new),
+        PAGE_AWARE(IncrementalTrieWriterPageAware::new),
+        PAGE_AWARE_DEEP_ON_STACK((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 256)),
+        PAGE_AWARE_DEEP_ON_HEAP((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 0)),
+        PAGE_AWARE_DEEP_MIXED((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 2));
+
+        final BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter> constructor;
+        TestClass(BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter> constructor)
+        {
+            this.constructor = constructor;
+        }
+    }
 
     @Parameterized.Parameters(name = "{index}: trie writer class={0}")
     public static Collection<Object[]> data()
     {
-        return Arrays.asList(new Object[]{ IncrementalTrieWriterSimple.class },
-                             new Object[]{ IncrementalTrieWriterPageAware.class },
-                             new Object[]{ IncrementalDeepTrieWriterPageAware.class });
+        return Arrays.asList(new Object[]{ TestClass.SIMPLE },
+                             new Object[]{ TestClass.PAGE_AWARE },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_ON_STACK },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_ON_HEAP },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_MIXED });
     }
 
     @Test
@@ -247,21 +265,6 @@ public class WalkerTest extends AbstractTrieTestBase
 
     private IncrementalTrieWriter<Integer> newTrieWriter(TrieSerializer<Integer, DataOutputPlus> serializer, DataOutputPlus out)
     {
-        if (writerClass == IncrementalTrieWriterSimple.class)
-        {
-            return new IncrementalTrieWriterSimple<>(serializer, out);
-        }
-        else if (writerClass == IncrementalTrieWriterPageAware.class)
-        {
-            return new IncrementalTrieWriterPageAware<>(serializer, out);
-        }
-        else if (writerClass == IncrementalDeepTrieWriterPageAware.class)
-        {
-            return new IncrementalDeepTrieWriterPageAware<>(serializer, out, 4);
-        }
-        else
-        {
-            throw new AssertionError("Unknown writer class " + writerClass.getName());
-        }
+        return writerClass.constructor.apply(serializer, out);
     }
 }
