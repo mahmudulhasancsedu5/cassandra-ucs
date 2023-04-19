@@ -127,7 +127,7 @@ public class BigTableScanner extends SSTableScanner<BigTableReader, RowIndexEntr
         return new BigScanningIterator();
     }
 
-    protected class BigScanningIterator extends BaseKeyScanningIterator
+    protected class BigScanningIterator extends SSTableScanner<BigTableReader, RowIndexEntry, BigTableScanner.BigScanningIterator>.BaseKeyScanningIterator
     {
         private DecoratedKey nextKey;
         private RowIndexEntry nextEntry;
