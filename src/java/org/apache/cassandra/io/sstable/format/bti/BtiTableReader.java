@@ -383,15 +383,15 @@ public class BtiTableReader extends SSTableReaderWithFilter
                                              boolean reversed,
                                              SSTableReadsListener listener)
     {
-        return iterator(null, key, getExactPosition(key, listener, true), slices, selectedColumns, reversed);
+        return rowIterator(null, key, getExactPosition(key, listener, true), slices, selectedColumns, reversed);
     }
 
-    public UnfilteredRowIterator iterator(FileDataInput dataFileInput,
-                                          DecoratedKey key,
-                                          TrieIndexEntry indexEntry,
-                                          Slices slices,
-                                          ColumnFilter selectedColumns,
-                                          boolean reversed)
+    public UnfilteredRowIterator rowIterator(FileDataInput dataFileInput,
+                                             DecoratedKey key,
+                                             TrieIndexEntry indexEntry,
+                                             Slices slices,
+                                             ColumnFilter selectedColumns,
+                                             boolean reversed)
     {
         if (indexEntry == null)
             return UnfilteredRowIterators.noRowsIterator(metadata(), key, Rows.EMPTY_STATIC_ROW, DeletionTime.LIVE, reversed);
