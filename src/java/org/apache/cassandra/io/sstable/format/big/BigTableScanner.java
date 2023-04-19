@@ -134,17 +134,17 @@ public class BigTableScanner implements ISSTableScanner
 
     private static AbstractBounds<PartitionPosition> fullRange(SSTableReader sstable)
     {
-        return new Bounds<PartitionPosition>(sstable.first, sstable.last);
+        return new Bounds<>(sstable.first, sstable.last);
     }
 
     private static void addRange(SSTableReader sstable, AbstractBounds<PartitionPosition> requested, List<AbstractBounds<PartitionPosition>> boundsList)
     {
-        if (requested instanceof Range && ((Range) requested).isWrapAround())
+        if (requested instanceof Range && ((Range<?>) requested).isWrapAround())
         {
             if (requested.right.compareTo(sstable.first) >= 0)
             {
                 // since we wrap, we must contain the whole sstable prior to stopKey()
-                Boundary<PartitionPosition> left = new Boundary<PartitionPosition>(sstable.first, true);
+                Boundary<PartitionPosition> left = new Boundary<>(sstable.first, true);
                 Boundary<PartitionPosition> right;
                 right = requested.rightBoundary();
                 right = minRight(right, sstable.last, true);
@@ -154,7 +154,7 @@ public class BigTableScanner implements ISSTableScanner
             if (requested.left.compareTo(sstable.last) <= 0)
             {
                 // since we wrap, we must contain the whole sstable after dataRange.startKey()
-                Boundary<PartitionPosition> right = new Boundary<PartitionPosition>(sstable.last, true);
+                Boundary<PartitionPosition> right = new Boundary<>(sstable.last, true);
                 Boundary<PartitionPosition> left;
                 left = requested.leftBoundary();
                 left = maxLeft(left, sstable.first, true);
@@ -164,13 +164,13 @@ public class BigTableScanner implements ISSTableScanner
         }
         else
         {
-            assert requested.left.compareTo(requested.right) <= 0 || requested.right.isMinimum();
+            assert !AbstractBounds.strictlyWrapsAround(requested.left, requested.right);
             Boundary<PartitionPosition> left, right;
             left = requested.leftBoundary();
             right = requested.rightBoundary();
             left = maxLeft(left, sstable.first, true);
             // apparently isWrapAround() doesn't count Bounds that extend to the limit (min) as wrapping
-            right = requested.right.isMinimum() ? new Boundary<PartitionPosition>(sstable.last, true)
+            right = requested.right.isMinimum() ? new Boundary<>(sstable.last, true)
                                                 : minRight(right, sstable.last, true);
             if (!isEmpty(left, right))
                 boundsList.add(AbstractBounds.bounds(left, right));
@@ -285,11 +285,16 @@ public class BigTableScanner implements ISSTableScanner
         private RowIndexEntry nextEntry;
         private DecoratedKey currentKey;
         private RowIndexEntry currentEntry;
+        private LazilyInitializedUnfilteredRowIterator currentRowIterator;
 
         protected UnfilteredRowIterator computeNext()
         {
             try
             {
+                if (currentRowIterator != null && currentRowIterator.isOpen() && currentRowIterator.hasNext())
+                    throw new IllegalStateException("The UnfilteredRowIterator returned by the last call to next() was initialized: " +
+                                                    "it must be closed before calling hasNext() or next() again.");
+
                 if (nextEntry == null)
                 {
                     do
@@ -339,15 +344,11 @@ public class BigTableScanner implements ISSTableScanner
 
                 /*
                  * For a given partition key, we want to avoid hitting the data
-                 * file unless we're explicitly asked to. This is important
+                 * file unless we're explicitely asked to. This is important
                  * for PartitionRangeReadCommand#checkCacheFilter.
                  */
-                return new LazilyInitializedUnfilteredRowIterator(currentKey)
+                return currentRowIterator = new LazilyInitializedUnfilteredRowIterator(currentKey)
                 {
-                    // Store currentEntry reference during object instantiation as later (during initialize) the
-                    // reference may point to a different entry.
-                    private final RowIndexEntry rowIndexEntry = currentEntry;
-
                     protected UnfilteredRowIterator initializeIterator()
                     {
 
@@ -358,7 +359,7 @@ public class BigTableScanner implements ISSTableScanner
                         {
                             if (dataRange == null)
                             {
-                                dfile.seek(rowIndexEntry.position);
+                                dfile.seek(currentEntry.position);
                                 startScan = dfile.getFilePointer();
                                 ByteBufferUtil.skipShortLength(dfile); // key
                                 return SSTableIdentityIterator.create(sstable, dfile, partitionKey());
@@ -369,7 +370,7 @@ public class BigTableScanner implements ISSTableScanner
                             }
 
                             ClusteringIndexFilter filter = dataRange.clusteringIndexFilter(partitionKey());
-                            return sstable.rowIterator(dfile, partitionKey(), rowIndexEntry, filter.getSlices(BigTableScanner.this.metadata()), columns, filter.isReversed());
+                            return sstable.rowIterator(dfile, partitionKey(), currentEntry, filter.getSlices(BigTableScanner.this.metadata()), columns, filter.isReversed());
                         }
                         catch (CorruptSSTableException | IOException e)
                         {

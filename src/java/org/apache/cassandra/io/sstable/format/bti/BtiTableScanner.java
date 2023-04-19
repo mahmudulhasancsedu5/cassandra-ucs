@@ -110,7 +110,7 @@ public class BtiTableScanner implements ISSTableScanner
         this.listener = listener;
     }
 
-    public static List<AbstractBounds<PartitionPosition>> makeBounds(SSTableReader sstable, Collection<Range<Token>> tokenRanges)
+    private static List<AbstractBounds<PartitionPosition>> makeBounds(SSTableReader sstable, Collection<Range<Token>> tokenRanges)
     {
         List<AbstractBounds<PartitionPosition>> boundsList = new ArrayList<>(tokenRanges.size());
         for (Range<Token> range : Range.normalize(tokenRanges))
@@ -118,14 +118,14 @@ public class BtiTableScanner implements ISSTableScanner
         return boundsList;
     }
 
-    static List<AbstractBounds<PartitionPosition>> makeBounds(SSTableReader sstable, DataRange dataRange)
+    private static List<AbstractBounds<PartitionPosition>> makeBounds(SSTableReader sstable, DataRange dataRange)
     {
         List<AbstractBounds<PartitionPosition>> boundsList = new ArrayList<>(2);
         addRange(sstable, dataRange.keyRange(), boundsList);
         return boundsList;
     }
 
-    static AbstractBounds<PartitionPosition> fullRange(SSTableReader sstable)
+    private static AbstractBounds<PartitionPosition> fullRange(SSTableReader sstable)
     {
         return new Bounds<>(sstable.first, sstable.last);
     }
@@ -256,6 +256,10 @@ public class BtiTableScanner implements ISSTableScanner
 
         protected UnfilteredRowIterator computeNext()
         {
+            if (currentRowIterator != null && currentRowIterator.isOpen() && currentRowIterator.hasNext())
+                throw new IllegalStateException("The UnfilteredRowIterator returned by the last call to next() was initialized: " +
+                                                "it must be closed before calling hasNext() or next() again.");
+
             try
             {
                 while (true)
@@ -287,7 +291,7 @@ public class BtiTableScanner implements ISSTableScanner
                  * For a given partition key, we want to avoid hitting the data file unless we're explicitly asked.
                  * This is important for PartitionRangeReadCommand#checkCacheFilter.
                  */
-                currentRowIterator = new LazilyInitializedUnfilteredRowIterator(currentKey)
+                return currentRowIterator = new LazilyInitializedUnfilteredRowIterator(currentKey)
                 {
                     // Store currentEntry reference during object instantiation as later (during initialize) the
                     // reference may point to a different entry.
@@ -318,7 +322,6 @@ public class BtiTableScanner implements ISSTableScanner
                         }
                     }
                 };
-                return currentRowIterator;
             }
             catch (CorruptSSTableException | IOException e)
             {

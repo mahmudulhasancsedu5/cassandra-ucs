@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Consumer;
 
 import com.google.common.collect.Iterables;
 import org.junit.BeforeClass;
@@ -39,6 +40,7 @@ import org.apache.cassandra.db.Slices;
 import org.apache.cassandra.db.filter.ClusteringIndexSliceFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.Range;
@@ -52,6 +54,7 @@ import static org.apache.cassandra.dht.AbstractBounds.isEmpty;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class SSTableScannerTest
 {
@@ -455,5 +458,50 @@ public class SSTableScannerTest
 
         // this will currently fail
         assertScanContainsRanges(scanner, 205, 205);
+    }
+
+    private static void testRequestNextRowIteratorWithoutConsumingPrevious(Consumer<ISSTableScanner> consumer)
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(TABLE);
+        store.clearUnsafe();
+
+        // disable compaction while flushing
+        store.disableAutoCompaction();
+
+        insertRowWithKey(store.metadata(), 0);
+        store.forceBlockingFlush(ColumnFamilyStore.FlushReason.UNIT_TESTS);
+
+        assertEquals(1, store.getLiveSSTables().size());
+        SSTableReader sstable = store.getLiveSSTables().iterator().next();
+
+        try (ISSTableScanner scanner = sstable.getScanner();
+             UnfilteredRowIterator currentRowIterator = scanner.next())
+        {
+            assertTrue(currentRowIterator.hasNext());
+            try
+            {
+                consumer.accept(scanner);
+                fail("Should have thrown IllegalStateException");
+            }
+            catch (IllegalStateException e)
+            {
+                assertEquals("The UnfilteredRowIterator returned by the last call to next() was initialized: " +
+                             "it must be closed before calling hasNext() or next() again.",
+                             e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    public void testHasNextRowIteratorWithoutConsumingPrevious()
+    {
+        testRequestNextRowIteratorWithoutConsumingPrevious(ISSTableScanner::hasNext);
+    }
+
+    @Test
+    public void testNextRowIteratorWithoutConsumingPrevious()
+    {
+        testRequestNextRowIteratorWithoutConsumingPrevious(ISSTableScanner::next);
     }
 }

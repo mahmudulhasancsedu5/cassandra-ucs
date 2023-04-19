@@ -48,11 +48,6 @@ public abstract class LazilyInitializedUnfilteredRowIterator extends AbstractIte
             iterator = initializeIterator();
     }
 
-    public boolean initialized()
-    {
-        return iterator != null;
-    }
-
     public TableMetadata metadata()
     {
         maybeInit();
@@ -103,6 +98,14 @@ public abstract class LazilyInitializedUnfilteredRowIterator extends AbstractIte
     public void close()
     {
         if (iterator != null)
+        {
             iterator.close();
+            iterator = null;
+        }
+    }
+
+    public boolean isOpen()
+    {
+        return iterator != null;
     }
 }
