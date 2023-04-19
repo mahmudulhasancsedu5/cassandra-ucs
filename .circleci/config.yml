@@ -118,7 +118,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -207,7 +207,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -271,7 +271,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -380,7 +380,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -534,7 +534,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -619,7 +619,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -736,7 +736,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -808,7 +808,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -897,7 +897,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1006,7 +1006,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1096,7 +1096,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1213,7 +1213,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1302,7 +1302,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1419,7 +1419,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1528,7 +1528,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1636,7 +1636,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1726,7 +1726,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -1921,7 +1921,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2006,7 +2006,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2139,7 +2139,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2248,7 +2248,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2356,7 +2356,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2441,7 +2441,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2531,7 +2531,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2640,7 +2640,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2748,7 +2748,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2812,7 +2812,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -2929,7 +2929,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3001,7 +3001,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3119,7 +3119,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3251,7 +3251,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3383,7 +3383,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3516,7 +3516,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3633,7 +3633,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3747,7 +3747,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3864,7 +3864,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -3935,7 +3935,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4025,7 +4025,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4109,7 +4109,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4222,7 +4222,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4294,7 +4294,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4403,7 +4403,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4535,7 +4535,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4624,7 +4624,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4779,7 +4779,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4869,7 +4869,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -4958,7 +4958,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5075,7 +5075,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5184,7 +5184,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5292,7 +5292,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5382,7 +5382,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5490,7 +5490,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5580,7 +5580,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5697,7 +5697,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5830,7 +5830,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -5948,7 +5948,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6056,7 +6056,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6145,7 +6145,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6277,7 +6277,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6385,7 +6385,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6470,7 +6470,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6576,7 +6576,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6666,7 +6666,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6774,7 +6774,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6864,7 +6864,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -6954,7 +6954,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7044,7 +7044,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7153,7 +7153,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7243,7 +7243,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7327,7 +7327,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7444,7 +7444,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7561,7 +7561,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7651,7 +7651,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7758,7 +7758,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7843,7 +7843,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7927,7 +7927,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -7989,7 +7989,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8079,7 +8079,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8185,7 +8185,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8380,7 +8380,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8451,7 +8451,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8568,7 +8568,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8676,7 +8676,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8808,7 +8808,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -8925,7 +8925,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9031,7 +9031,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9139,7 +9139,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9228,7 +9228,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9300,7 +9300,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9362,7 +9362,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9468,7 +9468,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9558,7 +9558,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9690,7 +9690,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9779,7 +9779,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
@@ -9883,7 +9883,7 @@ jobs:
     - REPEATED_UTESTS_STRESS_COUNT: 500
     - REPEATED_SIMULATOR_DTESTS: null
     - REPEATED_SIMULATOR_DTESTS_COUNT: 500
-    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest,org.apache.cassandra.distributed.test.SnapshotsTest,org.apache.cassandra.distributed.test.SSTableIdGenerationTest,org.apache.cassandra.distributed.test.OversizedMutationTest,org.apache.cassandra.distributed.test.JVMStabilityInspectorThrowableTest,org.apache.cassandra.distributed.test.IPMembershipTest,org.apache.cassandra.distributed.test.HintsDisabledTest,org.apache.cassandra.distributed.test.FrozenUDTTest,org.apache.cassandra.distributed.test.ColumnMaskTest
+    - REPEATED_JVM_DTESTS: org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithUnknownTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureInTheMiddleWithEOFTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionTimeoutTest,org.apache.cassandra.distributed.test.streaming.StreamFailureLogsFailureDueToSessionFailedTest,org.apache.cassandra.distributed.test.streaming.BoundExceptionTest
     - REPEATED_JVM_DTESTS_COUNT: 500
     - REPEATED_JVM_UPGRADE_DTESTS: null
     - REPEATED_JVM_UPGRADE_DTESTS_COUNT: 500
