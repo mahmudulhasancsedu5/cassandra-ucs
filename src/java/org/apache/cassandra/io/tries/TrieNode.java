@@ -51,6 +51,9 @@ import org.apache.cassandra.io.util.SizedInts;
  * bits cannot carry a payload.
  * <p>
  * This class is effectively an enumeration; abstract class permits instances to extend each other and reuse code.
+ * <p>
+ * See {@code org/apache/cassandra/io/sstable/format/bti/BtiFormat.md} for a description of the mechanisms of writing
+ * and reading an on-disk trie.
  */
 public abstract class TrieNode
 {

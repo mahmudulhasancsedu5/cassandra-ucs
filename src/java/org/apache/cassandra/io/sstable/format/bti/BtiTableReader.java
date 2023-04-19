@@ -166,7 +166,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
             }
         }
 
-        throw new UnsupportedOperationException("Unsupported op: " + operator);
+        throw new IllegalArgumentException("Invalid op: " + operator);
     }
 
     /**

@@ -27,6 +27,9 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
  * Common interface for incremental trie writers. Incremental writers take sorted input to construct a trie file while
  * buffering only limited amount of data.
  * The writing itself is done by some node serializer passed on construction time.
+ * <p>
+ * See {@code org/apache/cassandra/io/sstable/format/bti/BtiFormat.md} for a description of the mechanisms of writing
+ * and reading an on-disk trie.
  */
 public interface IncrementalTrieWriter<VALUE> extends AutoCloseable
 {

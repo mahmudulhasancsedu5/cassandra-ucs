@@ -32,7 +32,8 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  * (this pointer will be discarded too when the parent node is completed). This ensures that a very limited amount of
  * data is kept in memory at all times.
  * <p>
- * Note: This class is currently unused and stands only as form of documentation for {@link IncrementalTrieWriterPageAware}.
+ * Note: This class is currently unused (but tested) and stands only as form of documentation for
+ * {@link IncrementalTrieWriterPageAware}.
  */
 public class IncrementalTrieWriterSimple<VALUE>
         extends IncrementalTrieWriterBase<VALUE, DataOutputPlus, IncrementalTrieWriterSimple.Node<VALUE>>

@@ -22,7 +22,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
- * Thread-unsafe value iterator for on-disk tries. Uses the assumptions of Walker.
+ * Thread-unsafe value iterator for on-disk tries. Uses the assumptions of {@link Walker}.
  */
 public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Walker<CONCRETE>
 {

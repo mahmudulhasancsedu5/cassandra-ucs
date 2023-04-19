@@ -876,8 +876,6 @@ public class ByteBufferUtil
      * If false, the position of the input is undefined.
      * <p>
      * The matched buffer is unchanged
-     *
-     * @throws IOException
      */
     public static boolean equalsWithShortLength(FileDataInput in, ByteBuffer toMatch) throws IOException
     {

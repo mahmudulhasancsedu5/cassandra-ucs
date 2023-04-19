@@ -1,5 +1,22 @@
-Big Trie-Indexed (BTI) SSTable format
--------------------------------------
+<!---
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+# Big Trie-Indexed (BTI) SSTable format
 
 This document describes the BTI SSTable format, which is introduced to
 Cassandra with [CEP-25](https://cwiki.apache.org/confluence/display/CASSANDRA/CEP-25%3A+Trie-indexed+SSTable+format).
@@ -360,7 +377,7 @@ graph TD
     Node_a --"s"--> Node_as((( )))
   Node_  --"n"--> Node_n((( )))
   end
-  
+
   subgraph p4 [ ]
   Node_  --"o"--> Node_o(( ))
     Node_o --"f"--> Node_of((( )))
@@ -632,7 +649,7 @@ historically operated on blocks of rows rather than indexing every row
 in the partition. This is a concern we also have with the trie-based
 index, thus we also index blocks of rows (by default, a block of rows
 that is at least 16kb in size &mdash; this will be called the index
-_granularity_ below, specified by the `column_index_size_in_kb`
+_granularity_ below, specified by the `column_index_size`
 `cassandra.yaml` parameter).
 
 Our row index implementation thus creates a map from clustering keys or
@@ -777,6 +794,7 @@ what the format needs.
 ## SSTable format implementation
 
 The two indexes are implemented, respectively, by [`PartitionIndex`](PartitionIndex.java)
+/[`PartitionIndexBuilder`](PartitionIndexBuilder.java)
 and [`RowIndexReader`](RowIndexReader.java)/[`RowIndexWriter`](RowIndexWriter.java). 
 The format implementation extends the filtered
 base class and follows the structure of the BIG implementation, where
@@ -791,7 +809,8 @@ Implemented in [`TrieNode.java`](../../../tries/TrieNode.java)
 Nodes start with four bits of node type, followed by 4 payload bits
 (_pb_), which are 0 if the node has no associated payload; otherwise the
 node type gives an option to compute the starting position for the
-payload (_ppos_). The layout of the node depends on its type.
+payload (_ppos_) from the starting position of the node (_npos_).
+The layout of the node depends on its type.
 
 `PAYLOAD_ONLY` nodes:
 
@@ -799,7 +818,7 @@ payload (_ppos_). The layout of the node depends on its type.
 
 -   4 payload bits
 
--   payload if _pb_ &ne; 0, _ppos_ is _node_ + 1
+-   payload if _pb_ &ne; 0, _ppos_ is _npos_ + 1
 
 `SINGLE_NOPAYLOAD_4` and `SINGLE_NOPAYLOAD_12` nodes:
 
@@ -823,7 +842,7 @@ payload (_ppos_). The layout of the node depends on its type.
 
 -   8/16 pointer bits
 
--   payload if _pb_ &ne; 0, _ppos_ is _node_ + 3/4
+-   payload if _pb_ &ne; 0, _ppos_ is _npos_ + 3/4
 
 `SPARSE_8/12/16/24/40`:
 
@@ -837,7 +856,7 @@ payload (_ppos_). The layout of the node depends on its type.
 
 -   8/12/16/24/40 bits per child, the pointers
 
--   payload if _pb_ &ne; 0, _ppos_ is _node_ + 2 + (2/2.5/3/4/6)*(_child
+-   payload if _pb_ &ne; 0, _ppos_ is _npos_ + 2 + (2/2.5/3/4/6)*(_child
     count_) (rounded up)
 
 `DENSE_12/16/24/32/40/LONG`:
@@ -848,34 +867,34 @@ payload (_ppos_). The layout of the node depends on its type.
 
 -   8 bit start byte value
 
--   8 bit length-1
+-   8 bit _length_-1
 
--   length * 12/16/24/32/40/64 bits per child, the pointers
+-   _length_ * 12/16/24/32/40/64 bits per child, the pointers
 
--   payload if _pb_ &ne; 0, _ppos_ is _node_ + 3 + (1.5/2/3/4/5/8)*(_length_)
+-   payload if _pb_ &ne; 0, _ppos_ is _npos_ + 3 + (1.5/2/3/4/5/8)*(_length_)
     (rounded up)
 
-This is the space taken by each node type (CS stands for child span,
-i.e. largest - smallest + 1, CC is child count):
+This is the space taken by each node type (_CS_ stands for child span,
+i.e. largest - smallest + 1, _CC_ is child count):
 
-|Type                 |Size in bytes excl. payload |Size for 1 child|Size for 9 dense children (01-08, 10)|Size for 10 sparse children (01 + i*10)|Why the type is needed          |
-|:--------------------|:-------------|---------------:|-------------------:|-------------------:|:-------------------------------|
-|`PAYLOAD_ONLY`       |1             | -              | -                  | -                  |  Leaves dominate the trie      |
-|`SINGLE_NOPAYLOAD_4` |2             |2               | -                  | -                  |  Single-transition chains      |
-|`SINGLE_8`           |3             |3               | -                  | -                  |  Payload within chain          |
-|`SPARSE_8`           |2 + CC * 2    |4               | 20                 | 22                 |  Most common type after leaves |
-|`SINGLE_NOPAYLOAD_12`|3             |3               | -                  | -                  |  12 bits cover all in-page transitions    | 
-|`SPARSE_12`          |2 + CC * 2.5  |5               | 25                 | 27                 |  Size of sparse is proportional to number of children |
-|`DENSE_12`           |3 + CS * 1.5  |5               | 18                 | 140                |  Lookup in dense is faster, size smaller if few holes    | 
-|`SINGLE_16`          |4             |4               | -                  | -                  |                                |    
-|`SPARSE_16`          |2 + CC * 3    |5               | 29                 | 32                 |                                |     
-|`DENSE_16`           |3 + CS * 2    |5               | 23                 | 185                |                                |     
-|`SPARSE_24`          |2 + CC * 4    |6               | 38                 | 42                 |                                |     
-|`DENSE_24`           |3 + CS * 3    |6               | 33                 | 276                |                                |     
-|`DENSE_32`           |3 + CS * 4    |7               | 43                 | 367                |  Nodes with big subtrees are usually dense   | 
-|`SPARSE_40`          |2 + CC * 6    |8               | 56                 | 62                 |                                |     
-|`DENSE_40`           |3 + CS * 5    |8               | 53                 | 458                |                                |     
-|`DENSE_LONG`         |3 + CS * 8    |11              | 83                 | 731                |  Catch-all                     |
+|Type                 | Size in bytes excl. payload |Size for 1 child|Size for 9 dense children (01-08, 10)|Size for 10 sparse children (01 + i*10)|Why the type is needed          |
+|:--------------------|:----------------------------|---------------:|-------------------:|-------------------:|:-------------------------------|
+|`PAYLOAD_ONLY`       | 1                           | -              | -                  | -                  |  Leaves dominate the trie      |
+|`SINGLE_NOPAYLOAD_4` | 2                           |2               | -                  | -                  |  Single-transition chains      |
+|`SINGLE_8`           | 3                           |3               | -                  | -                  |  Payload within chain          |
+|`SPARSE_8`           | 2 + _CC_ * 2                |4               | 20                 | 22                 |  Most common type after leaves |
+|`SINGLE_NOPAYLOAD_12`| 3                           |3               | -                  | -                  |  12 bits cover all in-page transitions    | 
+|`SPARSE_12`          | 2 + _CC_ * 2.5              |5               | 25                 | 27                 |  Size of sparse is proportional to number of children |
+|`DENSE_12`           | 3 + _CS_ * 1.5              |5               | 18                 | 140                |  Lookup in dense is faster, size smaller if few holes    | 
+|`SINGLE_16`          | 4                           |4               | -                  | -                  |                                |    
+|`SPARSE_16`          | 2 + _CC_ * 3                |5               | 29                 | 32                 |                                |     
+|`DENSE_16`           | 3 + _CS_ * 2                |5               | 23                 | 185                |                                |     
+|`SPARSE_24`          | 2 + _CC_ * 4                |6               | 38                 | 42                 |                                |     
+|`DENSE_24`           | 3 + _CS_ * 3                |6               | 33                 | 276                |                                |     
+|`DENSE_32`           | 3 + _CS_ * 4                |7               | 43                 | 367                |  Nodes with big subtrees are usually dense   | 
+|`SPARSE_40`          | 2 + _CC_ * 6                |8               | 56                 | 62                 |                                |     
+|`DENSE_40`           | 3 + _CS_ * 5                |8               | 53                 | 458                |                                |     
+|`DENSE_LONG`         | 3 + _CS_ * 8                |11              | 83                 | 731                |  Catch-all                     |
 
 All pointers are stored as distances, and since all tries are written
 from the bottom up (and hence a child is always before the parent in the

@@ -31,6 +31,9 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
  * tries -- takes an on-disk trie accessible via a supplied Rebufferer and lets user seek to nodes and work with them.
  * <p>
  * Assumes data was written using page-aware builder and thus no node crosses a page and thus a buffer boundary.
+ * <p>
+ * See {@code org/apache/cassandra/io/sstable/format/bti/BtiFormat.md} for a description of the mechanisms of writing
+ * and reading an on-disk trie.
  */
 public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
 {
