@@ -20,9 +20,6 @@ package org.apache.cassandra.io.sstable.format.bti;
 import java.io.IOException;
 import java.util.function.Consumer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.io.tries.IncrementalTrieWriter;
 import org.apache.cassandra.io.tries.Walker;
@@ -33,10 +30,8 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 /**
  * Partition index builder: stores index or data positions in an incrementally built, page aware on-disk trie.
- *
- * Not to be used outside of package. Public only for IndexRewriter tool.
  */
-public class PartitionIndexBuilder implements AutoCloseable
+class PartitionIndexBuilder implements AutoCloseable
 {
     private final SequentialWriter writer;
     private final IncrementalTrieWriter<PartitionIndex.Payload> trieWriter;
@@ -125,7 +120,6 @@ public class PartitionIndexBuilder implements AutoCloseable
 
     }
 
-    private final static Logger logger = LoggerFactory.getLogger(PartitionIndexBuilder.class);
     /**
     * @param decoratedKey the key for this record
     * @param position the position to write with the record:

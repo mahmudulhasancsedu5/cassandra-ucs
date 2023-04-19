@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.io.sstable.format;
 
-import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -115,12 +114,6 @@ public abstract class SortedTableVerifier<R extends SSTableReaderWithFilter> imp
     public CompactionInfo.Holder getVerifyInfo()
     {
         return verifyInfo;
-    }
-
-    protected static void throwIfFatal(Throwable th)
-    {
-        if (th instanceof Error && !(th instanceof AssertionError || th instanceof IOError))
-            throw (Error) th;
     }
 
     protected void markAndThrow(Throwable cause)
@@ -301,8 +294,7 @@ public abstract class SortedTableVerifier<R extends SSTableReaderWithFilter> imp
                 }
                 catch (Throwable th)
                 {
-                    throwIfFatal(th);
-                    // check for null key below
+                    markAndThrow(th);
                 }
 
                 if (options.checkOwnsTokens && ownedRanges.size() > 0 && !(cfs.getPartitioner() instanceof LocalPartitioner))

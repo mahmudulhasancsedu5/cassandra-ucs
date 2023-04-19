@@ -43,6 +43,7 @@ import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Throwables;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<BtiTableReader, BtiTableReader.Builder>
@@ -88,7 +89,7 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
         {
             StatsComponent statsComponent = StatsComponent.load(descriptor, MetadataType.STATS, MetadataType.VALIDATION, MetadataType.HEADER);
             builder.setSerializationHeader(statsComponent.serializationHeader(builder.getTableMetadataRef().getLocal()));
-            assert !online || builder.getSerializationHeader() != null;
+            checkArgument(!online || builder.getSerializationHeader() != null);
 
             builder.setStatsMetadata(statsComponent.statsMetadata());
             ValidationMetadata validationMetadata = statsComponent.validationMetadata();
@@ -153,9 +154,6 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
 
         try (KeyReader keyReader = createKeyReader(statsMetadata))
         {
-            if (keyReader == null)
-                return null;
-
             bf = FilterFactory.getFilter(statsMetadata.totalRows, tableMetadataRef.getLocal().params.bloomFilterFpChance);
 
             while (!keyReader.isExhausted())

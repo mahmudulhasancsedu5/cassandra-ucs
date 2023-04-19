@@ -32,10 +32,10 @@ public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Wal
 
     static class IterationPosition
     {
-        long node;
+        final long node;
+        final int limit;
+        final IterationPosition prev;
         int childIndex;
-        int limit;
-        IterationPosition prev;
 
         IterationPosition(long node, int childIndex, int limit, IterationPosition prev)
         {

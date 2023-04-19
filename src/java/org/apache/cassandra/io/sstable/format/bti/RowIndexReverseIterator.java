@@ -60,11 +60,10 @@ class RowIndexReverseIterator extends ReverseValueIterator<RowIndexReverseIterat
         return info;
     }
 
+    // debug/test code
+    @SuppressWarnings("unused")
     public void dumpTrie(PrintStream out)
     {
-        dumpTrie(out, (buf, ppos, bits) -> {
-            IndexInfo ii = RowIndexReader.readPayload(buf, ppos, bits);
-            return String.format("pos %x %s", ii.offset, ii.openDeletion == null ? "" : ii.openDeletion);
-        });
+        dumpTrie(out, RowIndexReader::dumpRowIndexEntry);
     }
 }

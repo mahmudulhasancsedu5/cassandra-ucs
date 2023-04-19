@@ -172,15 +172,19 @@ public class RowIndexReader extends Walker<RowIndexReader>
 
     };
 
+    // debug/test code
     @SuppressWarnings("unused")
     public void dumpTrie(PrintStream out)
     {
-        dumpTrie(out, (buf, ppos, bits) -> {
-            IndexInfo ii = readPayload(buf, ppos, bits);
+        dumpTrie(out, RowIndexReader::dumpRowIndexEntry);
+    }
 
-            return ii != null
-                   ? String.format("pos %x %s", ii.offset, ii.openDeletion == null ? "" : ii.openDeletion)
-                   : "pos null";
-        });
+    static String dumpRowIndexEntry(ByteBuffer buf, int ppos, int bits)
+    {
+        IndexInfo ii = readPayload(buf, ppos, bits);
+
+        return ii != null
+               ? String.format("pos %x %s", ii.offset, ii.openDeletion == null ? "" : ii.openDeletion)
+               : "pos null";
     }
 }

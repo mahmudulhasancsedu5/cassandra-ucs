@@ -217,11 +217,6 @@ public class BtiTableScanner implements ISSTableScanner
         return ImmutableSet.of(sstable);
     }
 
-    public int level()
-    {
-        return sstable.getSSTableLevel();
-    }
-
     public TableMetadata metadata()
     {
         return sstable.metadata();

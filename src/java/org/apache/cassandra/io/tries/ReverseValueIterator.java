@@ -33,10 +33,10 @@ public class ReverseValueIterator<Concrete extends ReverseValueIterator<Concrete
 
     static class IterationPosition
     {
-        long node;
+        final long node;
+        final int limit;
+        final IterationPosition prev;
         int childIndex;
-        int limit;
-        IterationPosition prev;
 
         public IterationPosition(long node, int childIndex, int limit, IterationPosition prev)
         {

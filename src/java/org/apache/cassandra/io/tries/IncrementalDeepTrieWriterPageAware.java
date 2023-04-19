@@ -195,14 +195,14 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         /**
          * Make a child Recursion object for the given node and initialize it as necessary to continue processing
          * with it.
-         *
+         * <p>
          * May return null if the recursion does not need to continue inside the child branch.
          */
         abstract Recursion<NODE> makeChild(NODE child);
 
         /**
          * Complete the processing this Recursion object.
-         *
+         * <p>
          * Note: this method is not called for the nodes for which makeChild() returns null.
          */
         abstract void complete() throws IOException;
@@ -210,7 +210,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         /**
          * Complete processing of the given child (possibly retrieve data to apply to any accumulation performed
          * in this Recursion object).
-         *
+         * <p>
          * This is called when processing a child completes, including when recursion inside the child branch
          * is skipped by makeChild() returning null.
          */
@@ -219,7 +219,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
         /**
          * Recursive process, in depth-first order, the branch rooted at this recursion node.
-         *
+         * <p>
          * Returns this.
          */
         Recursion<NODE> process() throws IOException

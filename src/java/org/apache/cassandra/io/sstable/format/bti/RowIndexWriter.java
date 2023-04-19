@@ -31,7 +31,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
  * Preparer / writer of row index tries.
- *
+ * <p>
  * Uses IncrementalTrieWriter to build a trie of index section separators of the shortest possible length such that
  * prevMax < separator <= nextMin.
  */
