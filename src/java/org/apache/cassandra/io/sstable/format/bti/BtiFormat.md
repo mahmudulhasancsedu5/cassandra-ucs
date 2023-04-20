@@ -950,7 +950,7 @@ If a leaf node is reached, that node contains the following payload:
     -   _idxpos_ be the sign-extended integer value of length _pb_ at
         _ppos_
 
--   If _pb_ &ge; 8 (always the case in DSE 6 files), let
+-   If _pb_ &ge; 8 (always the case in Cassandra 5 files), let
 
     -   _hash_ be the byte at _ppos_
 
