@@ -50,136 +50,6 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         this(trieSerializer, dest, 64);
     }
 
-    @Override
-    protected int recalcTotalSize(Node<VALUE> node, long nodePosition) throws IOException
-    {
-        return recalcTotalSizeRecursiveOnStack(node, nodePosition, 0);
-    }
-
-    private int recalcTotalSizeRecursiveOnStack(Node<VALUE> node, long nodePosition, int depth) throws IOException
-    {
-        if (node.hasOutOfPageInBranch)
-        {
-            int sz = 0;
-            for (Node<VALUE> child : node.children)
-            {
-                if (depth < maxRecursionDepth)
-                    sz += recalcTotalSizeRecursiveOnStack(child, nodePosition + sz, depth + 1);
-                else
-                    sz += recalcTotalSizeRecursiveOnHeap(child, nodePosition + sz);
-            }
-            node.branchSize = sz;
-        }
-
-        // The sizing below will use the branch size calculated above. Since that can change on out-of-page in branch,
-        // we need to recalculate the size if either flag is set.
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
-
-        return node.branchSize + node.nodeSize;
-    }
-
-    @Override
-    protected long write(Node<VALUE> node) throws IOException
-    {
-        return writeRecursiveOnStack(node, 0);
-    }
-
-    private long writeRecursiveOnStack(Node<VALUE> node, int depth) throws IOException
-    {
-        long nodePosition = dest.position();
-        for (Node<VALUE> child : node.children)
-            if (child.filePos == -1)
-            {
-                if (depth < maxRecursionDepth)
-                    child.filePos = writeRecursiveOnStack(child, depth + 1);
-                else
-                    child.filePos = writeRecursiveOnHeap(child);
-            }
-
-        nodePosition += node.branchSize;
-        assert dest.position() == nodePosition
-                : "Expected node position to be " + nodePosition + " but got " + dest.position() + " after writing children.\n" + dumpNode(node, dest.position());
-
-        serializer.write(dest, node, nodePosition);
-
-        assert dest.position() == nodePosition + node.nodeSize
-               || dest.paddedPosition() == dest.position() // For PartitionIndexTest.testPointerGrowth where position may jump on page boundaries.
-                : "Expected node position to be " + (nodePosition + node.nodeSize) + " but got " + dest.position() + " after writing node, nodeSize " + node.nodeSize + ".\n" + dumpNode(node, nodePosition);
-        return nodePosition;
-    }
-
-    @Override
-    protected long writePartial(Node<VALUE> node, DataOutputPlus dest, long baseOffset) throws IOException
-    {
-        return writePartialRecursiveOnStack(node, dest, baseOffset, 0);
-    }
-
-    private long writePartialRecursiveOnStack(Node<VALUE> node, DataOutputPlus dest, long baseOffset, int depth) throws IOException
-    {
-        long startPosition = dest.position() + baseOffset;
-
-        List<Node<VALUE>> childrenToClear = new ArrayList<>();
-        for (Node<VALUE> child : node.children)
-        {
-            if (child.filePos == -1)
-            {
-                childrenToClear.add(child);
-                if (depth < maxRecursionDepth)
-                    child.filePos = writePartialRecursiveOnStack(child, dest, baseOffset, depth + 1);
-                else
-                    child.filePos = writePartialRecursiveOnHeap(child, dest, baseOffset);
-            }
-        }
-
-        long nodePosition = dest.position() + baseOffset;
-
-        if (node.hasOutOfPageInBranch)
-        {
-            // Update the branch size with the size of what we have just written. This may be used by the node's
-            // maxPositionDelta, and it's a better approximation for later fitting calculations.
-            node.branchSize = (int) (nodePosition - startPosition);
-        }
-
-        serializer.write(dest, node, nodePosition);
-
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-        {
-            // Update the node size with what we have just seen. It's a better approximation for later fitting
-            // calculations.
-            long endPosition = dest.position() + baseOffset;
-            node.nodeSize = (int) (endPosition - nodePosition);
-        }
-
-        for (Node<VALUE> child : childrenToClear)
-            child.filePos = -1;
-        return nodePosition;
-    }
-
-    private int recalcTotalSizeRecursiveOnHeap(Node<VALUE> node, long nodePosition) throws IOException
-    {
-        if (node.hasOutOfPageInBranch)
-            new RecalcTotalSizeRecursion(node, null, nodePosition).process();
-
-        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
-            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
-
-        return node.branchSize + node.nodeSize;
-    }
-
-    private long writeRecursiveOnHeap(Node<VALUE> node) throws IOException
-    {
-        return new WriteRecursion(node, null).process().node.filePos;
-    }
-
-    private long writePartialRecursiveOnHeap(Node<VALUE> node, DataOutputPlus dest, long baseOffset) throws IOException
-    {
-        new WritePartialRecursion(node, dest, baseOffset).process();
-        long pos = node.filePos;
-        node.filePos = -1;
-        return pos;
-    }
-
     /**
      * Simple framework for executing recursion using on-heap linked trace to avoid stack overruns.
      */
@@ -254,6 +124,46 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         }
     }
 
+    @Override
+    protected int recalcTotalSize(Node<VALUE> node, long nodePosition) throws IOException
+    {
+        return recalcTotalSizeRecursiveOnStack(node, nodePosition, 0);
+    }
+
+    private int recalcTotalSizeRecursiveOnStack(Node<VALUE> node, long nodePosition, int depth) throws IOException
+    {
+        if (node.hasOutOfPageInBranch)
+        {
+            int sz = 0;
+            for (Node<VALUE> child : node.children)
+            {
+                if (depth < maxRecursionDepth)
+                    sz += recalcTotalSizeRecursiveOnStack(child, nodePosition + sz, depth + 1);
+                else
+                    sz += recalcTotalSizeRecursiveOnHeap(child, nodePosition + sz);
+            }
+            node.branchSize = sz;
+        }
+
+        // The sizing below will use the branch size calculated above. Since that can change on out-of-page in branch,
+        // we need to recalculate the size if either flag is set.
+        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
+            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
+
+        return node.branchSize + node.nodeSize;
+    }
+
+    private int recalcTotalSizeRecursiveOnHeap(Node<VALUE> node, long nodePosition) throws IOException
+    {
+        if (node.hasOutOfPageInBranch)
+            new RecalcTotalSizeRecursion(node, null, nodePosition).process();
+
+        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
+            node.nodeSize = serializer.sizeofNode(node, nodePosition + node.branchSize);
+
+        return node.branchSize + node.nodeSize;
+    }
+
     class RecalcTotalSizeRecursion extends Recursion<Node<VALUE>>
     {
         final long nodePosition;
@@ -298,6 +208,41 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         }
     }
 
+    @Override
+    protected long write(Node<VALUE> node) throws IOException
+    {
+        return writeRecursiveOnStack(node, 0);
+    }
+
+    private long writeRecursiveOnStack(Node<VALUE> node, int depth) throws IOException
+    {
+        long nodePosition = dest.position();
+        for (Node<VALUE> child : node.children)
+            if (child.filePos == -1)
+            {
+                if (depth < maxRecursionDepth)
+                    child.filePos = writeRecursiveOnStack(child, depth + 1);
+                else
+                    child.filePos = writeRecursiveOnHeap(child);
+            }
+
+        nodePosition += node.branchSize;
+        assert dest.position() == nodePosition
+        : "Expected node position to be " + nodePosition + " but got " + dest.position() + " after writing children.\n" + dumpNode(node, dest.position());
+
+        serializer.write(dest, node, nodePosition);
+
+        assert dest.position() == nodePosition + node.nodeSize
+               || dest.paddedPosition() == dest.position() // For PartitionIndexTest.testPointerGrowth where position may jump on page boundaries.
+        : "Expected node position to be " + (nodePosition + node.nodeSize) + " but got " + dest.position() + " after writing node, nodeSize " + node.nodeSize + ".\n" + dumpNode(node, nodePosition);
+        return nodePosition;
+    }
+
+    private long writeRecursiveOnHeap(Node<VALUE> node) throws IOException
+    {
+        return new WriteRecursion(node, null).process().node.filePos;
+    }
+
     class WriteRecursion extends Recursion<Node<VALUE>>
     {
         long nodePosition;
@@ -332,6 +277,61 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
             node.filePos = nodePosition;
         }
+    }
+
+    @Override
+    protected long writePartial(Node<VALUE> node, DataOutputPlus dest, long baseOffset) throws IOException
+    {
+        return writePartialRecursiveOnStack(node, dest, baseOffset, 0);
+    }
+
+    private long writePartialRecursiveOnStack(Node<VALUE> node, DataOutputPlus dest, long baseOffset, int depth) throws IOException
+    {
+        long startPosition = dest.position() + baseOffset;
+
+        List<Node<VALUE>> childrenToClear = new ArrayList<>();
+        for (Node<VALUE> child : node.children)
+        {
+            if (child.filePos == -1)
+            {
+                childrenToClear.add(child);
+                if (depth < maxRecursionDepth)
+                    child.filePos = writePartialRecursiveOnStack(child, dest, baseOffset, depth + 1);
+                else
+                    child.filePos = writePartialRecursiveOnHeap(child, dest, baseOffset);
+            }
+        }
+
+        long nodePosition = dest.position() + baseOffset;
+
+        if (node.hasOutOfPageInBranch)
+        {
+            // Update the branch size with the size of what we have just written. This may be used by the node's
+            // maxPositionDelta, and it's a better approximation for later fitting calculations.
+            node.branchSize = (int) (nodePosition - startPosition);
+        }
+
+        serializer.write(dest, node, nodePosition);
+
+        if (node.hasOutOfPageChildren || node.hasOutOfPageInBranch)
+        {
+            // Update the node size with what we have just seen. It's a better approximation for later fitting
+            // calculations.
+            long endPosition = dest.position() + baseOffset;
+            node.nodeSize = (int) (endPosition - nodePosition);
+        }
+
+        for (Node<VALUE> child : childrenToClear)
+            child.filePos = -1;
+        return nodePosition;
+    }
+
+    private long writePartialRecursiveOnHeap(Node<VALUE> node, DataOutputPlus dest, long baseOffset) throws IOException
+    {
+        new WritePartialRecursion(node, dest, baseOffset).process();
+        long pos = node.filePos;
+        node.filePos = -1;
+        return pos;
     }
 
     class WritePartialRecursion extends Recursion<Node<VALUE>>
