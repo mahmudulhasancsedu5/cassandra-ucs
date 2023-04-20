@@ -51,12 +51,12 @@ public class WalkerTest extends AbstractTrieTestBase
     {
         SIMPLE(IncrementalTrieWriterSimple::new),
         PAGE_AWARE(IncrementalTrieWriterPageAware::new),
-        PAGE_AWARE_DEEP_ON_STACK((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 256)),
-        PAGE_AWARE_DEEP_ON_HEAP((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 0)),
-        PAGE_AWARE_DEEP_MIXED((serializer, dest) -> new IncrementalDeepTrieWriterPageAware(serializer, dest, 2));
+        PAGE_AWARE_DEEP_ON_STACK((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 256)),
+        PAGE_AWARE_DEEP_ON_HEAP((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 0)),
+        PAGE_AWARE_DEEP_MIXED((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 2));
 
-        final BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter> constructor;
-        TestClass(BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter> constructor)
+        final BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter<Integer>> constructor;
+        TestClass(BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter<Integer>> constructor)
         {
             this.constructor = constructor;
         }
@@ -90,13 +90,13 @@ public class WalkerTest extends AbstractTrieTestBase
 
         it.goMax(rootPos);
         assertEquals(7, it.payloadFlags());
-        assertEquals(TrieNode.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
+        assertEquals(TrieNode.Types.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
         assertEquals(1, it.nodeSize());
         assertFalse(it.hasChildren());
 
         it.goMin(rootPos);
         assertEquals(1, it.payloadFlags());
-        assertEquals(TrieNode.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
+        assertEquals(TrieNode.Types.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
         assertEquals(1, it.nodeSize());
         assertFalse(it.hasChildren());
 

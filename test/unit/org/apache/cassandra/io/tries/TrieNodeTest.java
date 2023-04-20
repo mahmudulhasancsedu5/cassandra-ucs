@@ -23,8 +23,6 @@ import java.util.Arrays;
 
 import org.junit.After;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.mockito.Mockito;
@@ -41,7 +39,6 @@ import static org.quicktheories.generators.SourceDSL.longs;
 @SuppressWarnings("unchecked")
 public class TrieNodeTest
 {
-    private final static Logger logger = LoggerFactory.getLogger(TrieNodeTest.class);
     private final SerializationNode<Integer> sn = Mockito.mock(SerializationNode.class);
     private final DataOutputBuffer out = new DataOutputBuffer();
 
@@ -56,7 +53,7 @@ public class TrieNodeTest
     public void testTypeFor0Children()
     {
         when(sn.childCount()).thenReturn(0);
-        assertSame(TrieNode.PAYLOAD_ONLY, TrieNode.typeFor(sn, 0));
+        assertSame(TrieNode.Types.PAYLOAD_ONLY, TrieNode.typeFor(sn, 0));
     }
 
     @Test
@@ -66,14 +63,14 @@ public class TrieNodeTest
         when(sn.payload()).thenReturn(null);
 
         qt().forAll(Generate.pick(Arrays.asList(
-                Pair.of(Ranges.BITS_4, TrieNode.SINGLE_NOPAYLOAD_4),
-                Pair.of(Ranges.BITS_8, TrieNode.SINGLE_8),
-                Pair.of(Ranges.BITS_12, TrieNode.SINGLE_NOPAYLOAD_12),
-                Pair.of(Ranges.BITS_16, TrieNode.SINGLE_16),
-                Pair.of(Ranges.BITS_24, TrieNode.DENSE_24),
-                Pair.of(Ranges.BITS_32, TrieNode.DENSE_32),
-                Pair.of(Ranges.BITS_40, TrieNode.DENSE_40),
-                Pair.of(Ranges.BITS_GT40, TrieNode.LONG_DENSE)
+                Pair.of(Ranges.BITS_4, TrieNode.Types.SINGLE_NOPAYLOAD_4),
+                Pair.of(Ranges.BITS_8, TrieNode.Types.SINGLE_8),
+                Pair.of(Ranges.BITS_12, TrieNode.Types.SINGLE_NOPAYLOAD_12),
+                Pair.of(Ranges.BITS_16, TrieNode.Types.SINGLE_16),
+                Pair.of(Ranges.BITS_24, TrieNode.Types.DENSE_24),
+                Pair.of(Ranges.BITS_32, TrieNode.Types.DENSE_32),
+                Pair.of(Ranges.BITS_40, TrieNode.Types.DENSE_40),
+                Pair.of(Ranges.BITS_GT40, TrieNode.Types.LONG_DENSE)
         )).flatMap(p -> longs().between(p._1.min, p._1.max).map(v -> Pair.of(v, p._2)))).check(p -> {
             when(sn.maxPositionDelta(0)).thenReturn(-p._1);
             return p._2 == TrieNode.typeFor(sn, 0);
@@ -87,14 +84,14 @@ public class TrieNodeTest
         when(sn.payload()).thenReturn(1);
 
         qt().forAll(Generate.pick(Arrays.asList(
-                Pair.of(Ranges.BITS_4, TrieNode.SINGLE_8),
-                Pair.of(Ranges.BITS_8, TrieNode.SINGLE_8),
-                Pair.of(Ranges.BITS_12, TrieNode.SINGLE_16),
-                Pair.of(Ranges.BITS_16, TrieNode.SINGLE_16),
-                Pair.of(Ranges.BITS_24, TrieNode.DENSE_24),
-                Pair.of(Ranges.BITS_32, TrieNode.DENSE_32),
-                Pair.of(Ranges.BITS_40, TrieNode.DENSE_40),
-                Pair.of(Ranges.BITS_GT40, TrieNode.LONG_DENSE)
+                Pair.of(Ranges.BITS_4, TrieNode.Types.SINGLE_8),
+                Pair.of(Ranges.BITS_8, TrieNode.Types.SINGLE_8),
+                Pair.of(Ranges.BITS_12, TrieNode.Types.SINGLE_16),
+                Pair.of(Ranges.BITS_16, TrieNode.Types.SINGLE_16),
+                Pair.of(Ranges.BITS_24, TrieNode.Types.DENSE_24),
+                Pair.of(Ranges.BITS_32, TrieNode.Types.DENSE_32),
+                Pair.of(Ranges.BITS_40, TrieNode.Types.DENSE_40),
+                Pair.of(Ranges.BITS_GT40, TrieNode.Types.LONG_DENSE)
         )).flatMap(p -> longs().between(p._1.min, p._1.max).map(v -> Pair.of(v, p._2)))).check(p -> {
             when(sn.maxPositionDelta(0)).thenReturn(-p._1);
             return p._2 == TrieNode.typeFor(sn, 0);
@@ -108,14 +105,14 @@ public class TrieNodeTest
         when(sn.payload()).thenReturn(null);
 
         qt().forAll(Generate.pick(Arrays.asList(
-                Pair.of(Ranges.BITS_4, TrieNode.DENSE_12),
-                Pair.of(Ranges.BITS_8, TrieNode.DENSE_12),
-                Pair.of(Ranges.BITS_12, TrieNode.DENSE_12),
-                Pair.of(Ranges.BITS_16, TrieNode.DENSE_16),
-                Pair.of(Ranges.BITS_24, TrieNode.DENSE_24),
-                Pair.of(Ranges.BITS_32, TrieNode.DENSE_32),
-                Pair.of(Ranges.BITS_40, TrieNode.DENSE_40),
-                Pair.of(Ranges.BITS_GT40, TrieNode.LONG_DENSE)
+                Pair.of(Ranges.BITS_4, TrieNode.Types.DENSE_12),
+                Pair.of(Ranges.BITS_8, TrieNode.Types.DENSE_12),
+                Pair.of(Ranges.BITS_12, TrieNode.Types.DENSE_12),
+                Pair.of(Ranges.BITS_16, TrieNode.Types.DENSE_16),
+                Pair.of(Ranges.BITS_24, TrieNode.Types.DENSE_24),
+                Pair.of(Ranges.BITS_32, TrieNode.Types.DENSE_32),
+                Pair.of(Ranges.BITS_40, TrieNode.Types.DENSE_40),
+                Pair.of(Ranges.BITS_GT40, TrieNode.Types.LONG_DENSE)
         )).flatMap(p -> longs().between(p._1.min, p._1.max).map(v -> Pair.of(v, p._2)))).check(p -> {
             when(sn.maxPositionDelta(0)).thenReturn(-p._1);
             return p._2 == TrieNode.typeFor(sn, 0);
@@ -125,11 +122,11 @@ public class TrieNodeTest
     @Test
     public void testPayloadOnlyNode() throws IOException
     {
-        TrieNode.PAYLOAD_ONLY.serialize(out, null, 1 | 4, 0);
+        TrieNode.Types.PAYLOAD_ONLY.serialize(out, null, 1 | 4, 0);
         out.flush();
 
         TrieNode node = TrieNode.at(out.asNewBuffer(), 0);
-        assertEquals(TrieNode.PAYLOAD_ONLY, node);
+        assertEquals(TrieNode.Types.PAYLOAD_ONLY, node);
         assertEquals(1 | 4, node.payloadFlags(out.asNewBuffer(), 0));
         assertEquals(1, node.payloadPosition(out.asNewBuffer(), 0));
         assertEquals(1, node.sizeofNode(null));
@@ -174,9 +171,9 @@ public class TrieNodeTest
     public void testSingle16Node() throws IOException
     {
         prepareSingleNode(-43210L);
-        TrieNode.SINGLE_16.serialize(out, sn, 1 | 4, 0);
+        TrieNode.Types.SINGLE_16.serialize(out, sn, 1 | 4, 0);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 0);
-        assertEquals(TrieNode.SINGLE_16, node);
+        assertEquals(TrieNode.Types.SINGLE_16, node);
         singleNodeAssertions(node, 1 | 4, 4, -43210);
     }
 
@@ -184,9 +181,9 @@ public class TrieNodeTest
     public void testSingleNoPayload4Node() throws IOException
     {
         prepareSingleNode(-7L);
-        TrieNode.SINGLE_NOPAYLOAD_4.serialize(out, sn, 0, 0);
+        TrieNode.Types.SINGLE_NOPAYLOAD_4.serialize(out, sn, 0, 0);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 0);
-        assertEquals(TrieNode.SINGLE_NOPAYLOAD_4, node);
+        assertEquals(TrieNode.Types.SINGLE_NOPAYLOAD_4, node);
         singleNodeAssertions(node, 0, 2, -7);
     }
 
@@ -194,9 +191,9 @@ public class TrieNodeTest
     public void testSingleNoPayload12Node() throws IOException
     {
         prepareSingleNode(-1234L);
-        TrieNode.SINGLE_NOPAYLOAD_12.serialize(out, sn, 0, 0);
+        TrieNode.Types.SINGLE_NOPAYLOAD_12.serialize(out, sn, 0, 0);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 0);
-        assertEquals(TrieNode.SINGLE_NOPAYLOAD_12, node);
+        assertEquals(TrieNode.Types.SINGLE_NOPAYLOAD_12, node);
         singleNodeAssertions(node, 0, 3, -1234L);
     }
 
@@ -256,9 +253,9 @@ public class TrieNodeTest
     public void testSparse16Node() throws IOException
     {
         prepareSparseNode(-43210L);
-        TrieNode.SPARSE_16.serialize(out, sn, 1 | 4, 6);
+        TrieNode.Types.SPARSE_16.serialize(out, sn, 1 | 4, 6);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 6);
-        assertEquals(TrieNode.SPARSE_16, node);
+        assertEquals(TrieNode.Types.SPARSE_16, node);
         sparseNodeAssertions(node, 1 | 4, 11, -43210L);
     }
 
@@ -266,9 +263,9 @@ public class TrieNodeTest
     public void testSparse12Node() throws IOException
     {
         prepareSparseNode(-1234L);
-        TrieNode.SPARSE_12.serialize(out, sn, 1 | 4, 6);
+        TrieNode.Types.SPARSE_12.serialize(out, sn, 1 | 4, 6);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 6);
-        assertEquals(TrieNode.SPARSE_12, node);
+        assertEquals(TrieNode.Types.SPARSE_12, node);
         sparseNodeAssertions(node, 1 | 4, 10, -1234L);
     }
 
@@ -300,9 +297,9 @@ public class TrieNodeTest
     public void testDense16Node() throws IOException
     {
         prepareDenseNode(-43210L);
-        TrieNode.DENSE_16.serialize(out, sn, 1 | 4, 6);
+        TrieNode.Types.DENSE_16.serialize(out, sn, 1 | 4, 6);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 6);
-        assertEquals(TrieNode.DENSE_16, node);
+        assertEquals(TrieNode.Types.DENSE_16, node);
         denseNodeAssertions(node, 1 | 4, 9, -43210L);
     }
 
@@ -310,9 +307,9 @@ public class TrieNodeTest
     public void testDense12Node() throws IOException
     {
         prepareDenseNode(-1234L);
-        TrieNode.DENSE_12.serialize(out, sn, 1 | 4, 6);
+        TrieNode.Types.DENSE_12.serialize(out, sn, 1 | 4, 6);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 6);
-        assertEquals(TrieNode.DENSE_12, node);
+        assertEquals(TrieNode.Types.DENSE_12, node);
         denseNodeAssertions(node, 1 | 4, 8, -1234L);
     }
 
@@ -320,9 +317,9 @@ public class TrieNodeTest
     public void testLongDenseNode() throws IOException
     {
         prepareDenseNode(-0x7ffffffffffffffL);
-        TrieNode.LONG_DENSE.serialize(out, sn, 1 | 4, 6);
+        TrieNode.Types.LONG_DENSE.serialize(out, sn, 1 | 4, 6);
         TrieNode node = TrieNode.at(out.asNewBuffer(), 6);
-        assertEquals(TrieNode.LONG_DENSE, node);
+        assertEquals(TrieNode.Types.LONG_DENSE, node);
         denseNodeAssertions(node, 1 | 4, 27, -0x7ffffffffffffffL);
     }
 
