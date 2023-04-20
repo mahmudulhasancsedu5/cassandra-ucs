@@ -241,7 +241,7 @@ implements ISSTableScanner
         return String.format("%s(dfile=%s sstable=%s)", getClass().getSimpleName(), dfile, sstable);
     }
 
-    protected abstract class BaseKeyScanningIterator extends AbstractIterator<UnfilteredRowIterator>
+    public abstract class BaseKeyScanningIterator extends AbstractIterator<UnfilteredRowIterator>
     {
         protected DecoratedKey currentKey;
         protected E currentEntry;
