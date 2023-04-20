@@ -877,7 +877,7 @@ public class ByteBufferUtil
      * <p>
      * The matched buffer is unchanged
      */
-    public static boolean equalsWithShortLength(FileDataInput in, ByteBuffer toMatch) throws IOException
+    public static boolean equalsWithShortLength(DataInput in, ByteBuffer toMatch) throws IOException
     {
         int length = readShortLength(in);
         if (length != toMatch.remaining())
@@ -889,5 +889,4 @@ public class ByteBufferUtil
 
         return true;
     }
-
 }
