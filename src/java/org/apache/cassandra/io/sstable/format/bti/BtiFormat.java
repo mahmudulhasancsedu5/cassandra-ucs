@@ -316,58 +316,22 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
     static class BtiVersion extends Version
     {
         public static final String current_version = "da";
-        public static final String earliest_supported_version = "ca";
+        public static final String earliest_supported_version = "da";
 
-        // aa (DSE 6.0): trie index format
-        // ab (DSE pre-6.8): ILLEGAL - handled as 'b' (predates 'ba'). Pre-GA "LABS" releases of DSE 6.8 used this
-        //                   sstable version.
-        // ac (DSE 6.0.11, 6.7.6): corrected sstable min/max clustering (DB-3691/CASSANDRA-14861)
-        // ad (DSE 6.0.14, 6.7.11): added hostId of the node from which the sstable originated (DB-4629)
-        // b  (DSE early 6.8 "LABS") has some of 6.8 features but not all
-        // ba (DSE 6.8): encrypted indices and metadata
-        //               new BloomFilter serialization format
-        //               add incremental NodeSync information to metadata
-        //               improved min/max clustering representation
-        //               presence marker for partition level deletions
-        // bb (DSE 6.8.5): added hostId of the node from which the sstable originated (DB-4629)
-        // versions aa-bz are not supported in OSS
-        // ca (DSE-DB aka Stargazer based on OSS 4.0): all OSS fields + all DSE fields in DSE serialization format
-        // da - same as ca but in OSS serialization format
+        // versions aa-cz are not supported in OSS
+        // da - initial OSS version of the BIT format, Cassandra 5.0
         // NOTE: when adding a new version, please add that to LegacySSTableTest, too.
 
         private final boolean isLatestVersion;
 
-        /**
-         * DB-2648/CASSANDRA-9067: DSE 6.8/OSS 4.0 bloom filter representation changed (bitset data is no longer stored
-         * as BIG_ENDIAN longs, which avoids some redundant bit twiddling).
-         */
         private final int correspondingMessagingVersion;
-
-        private final boolean hasOldBfFormat;
-        private final boolean hasAccurateMinMax;
-        private final boolean hasImprovedMinMax;
-        private final boolean hasKeyRange;
-        private final boolean hasPartitionLevelDeletionsPresenceMarker;
-        private final boolean hasOriginatingHostId;
 
         BtiVersion(String version)
         {
-            super(instance, version = mapAb(version));
+            super(instance, version);
 
             isLatestVersion = version.compareTo(current_version) == 0;
-            hasOldBfFormat = version.compareTo("b") < 0;
-            hasAccurateMinMax = version.compareTo("ac") >= 0;
-            hasOriginatingHostId = version.matches("(a[d-z])|(b[b-z])") || version.compareTo("ca") >= 0;
-            hasImprovedMinMax = version.compareTo("ba") >= 0;
-            hasKeyRange = version.compareTo("da") >= 0;
-            hasPartitionLevelDeletionsPresenceMarker = version.compareTo("ba") >= 0;
             correspondingMessagingVersion = MessagingService.VERSION_40;
-        }
-
-        // this is for the ab version which was used in the LABS, and then has been renamed to ba
-        private static String mapAb(String version)
-        {
-            return "ab".equals(version) ? "ba" : version;
         }
 
         @Override
@@ -376,7 +340,6 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
             return isLatestVersion;
         }
 
-        // this field is not present in DSE
         @Override
         public int correspondingMessagingVersion()
         {
@@ -407,11 +370,10 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
             return true;
         }
 
-        // this field is not present in DSE
         @Override
         public boolean hasIsTransient()
         {
-            return version.compareTo("ca") >= 0;
+            return true;
         }
 
         @Override
@@ -423,13 +385,13 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
         @Override
         public boolean hasOldBfFormat()
         {
-            return hasOldBfFormat;
+            return false;
         }
 
         @Override
         public boolean hasAccurateMinMax()
         {
-            return hasAccurateMinMax;
+            return true;
         }
 
         public boolean hasLegacyMinMax()
@@ -440,24 +402,24 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
         @Override
         public boolean hasOriginatingHostId()
         {
-            return hasOriginatingHostId;
+            return true;
         }
 
         @Override
         public boolean hasImprovedMinMax() {
-            return hasImprovedMinMax;
+            return true;
         }
 
         @Override
         public boolean hasPartitionLevelDeletionsPresenceMarker()
         {
-            return hasPartitionLevelDeletionsPresenceMarker;
+            return true;
         }
 
         @Override
         public boolean hasKeyRange()
         {
-            return hasKeyRange;
+            return true;
         }
 
         @Override
@@ -466,7 +428,6 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
             return version.compareTo(earliest_supported_version) >= 0 && version.charAt(0) <= current_version.charAt(0);
         }
 
-        // this field is not present in DSE
         @Override
         public boolean isCompatibleForStreaming()
         {
