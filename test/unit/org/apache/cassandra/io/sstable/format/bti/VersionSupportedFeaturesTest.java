@@ -34,13 +34,13 @@ public class VersionSupportedFeaturesTest extends AbstractTestVersionSupportedFe
     @Override
     protected Stream<String> getPendingRepairSupportedVersions()
     {
-        return range("aa", "zz");
+        return ALL_VERSIONS.stream();
     }
 
     @Override
     protected Stream<String> getPartitionLevelDeletionPresenceMarkerSupportedVersions()
     {
-        return Stream.concat(Stream.of("ab"), range("ba", "zz"));
+        return range("aa", "zz");
     }
 
     @Override
@@ -52,18 +52,18 @@ public class VersionSupportedFeaturesTest extends AbstractTestVersionSupportedFe
     @Override
     protected Stream<String> getImprovedMinMaxSupportedVersions()
     {
-        return Stream.concat(Stream.of("ab"), range("ba", "zz"));
+        return ALL_VERSIONS.stream();
     }
 
     @Override
     protected Stream<String> getKeyRangeSupportedVersions()
     {
-        return range("da", "zz");
+        return ALL_VERSIONS.stream();
     }
 
     @Override
     protected Stream<String> getOriginatingHostIdSupportedVersions()
     {
-        return Stream.concat(range("ad", "az"), range("bb", "zz"));
+        return ALL_VERSIONS.stream();
     }
 }

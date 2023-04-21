@@ -30,10 +30,10 @@ import org.assertj.core.api.Assertions;
 
 public abstract class AbstractTestVersionSupportedFeatures
 {
-    private static final List<String> ALL_VERSIONS = IntStream.rangeClosed('a', 'z')
-                                                              .mapToObj(i -> String.valueOf((char) i))
-                                                              .flatMap(first -> IntStream.rangeClosed('a', 'z').mapToObj(second -> first + (char) second))
-                                                              .collect(Collectors.toList());
+    protected static final List<String> ALL_VERSIONS = IntStream.rangeClosed('a', 'z')
+                                                                .mapToObj(i -> String.valueOf((char) i))
+                                                                .flatMap(first -> IntStream.rangeClosed('a', 'z').mapToObj(second -> first + (char) second))
+                                                                .collect(Collectors.toList());
 
     protected abstract Version getVersion(String v);
 
