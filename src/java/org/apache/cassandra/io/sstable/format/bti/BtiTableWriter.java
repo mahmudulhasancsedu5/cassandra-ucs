@@ -91,7 +91,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         TrieIndexEntry entry = TrieIndexEntry.create(partitionWriter.getInitialPosition(),
                                                      finishResult,
                                                      partitionLevelDeletion,
-                                                     partitionWriter.getRowIndexCount());
+                                                     partitionWriter.getRowIndexBlockCount());
         iwriter.append(key, entry);
         return entry;
     }

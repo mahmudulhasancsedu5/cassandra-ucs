@@ -821,7 +821,7 @@ public class RowIndexEntryTest extends CQLTester
                 };
             }
 
-            public int columnsIndexCount()
+            public int blockCount()
             {
                 return indexes.size();
             }

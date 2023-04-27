@@ -71,7 +71,7 @@ public class QueryWithIndexedSSTableTest extends CQLTester
             else if (sstable instanceof BtiTableReader)
             {
                 TrieIndexEntry indexEntry = ((BtiTableReader) sstable).getExactPosition(dk, SSTableReadsListener.NOOP_LISTENER, false);
-                hasIndexed |= indexEntry != null && indexEntry.columnsIndexCount() > 0;
+                hasIndexed |= indexEntry != null && indexEntry.blockCount() > 0;
             }
         }
         assert hasIndexed;

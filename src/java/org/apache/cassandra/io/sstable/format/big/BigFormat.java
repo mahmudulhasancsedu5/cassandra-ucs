@@ -44,7 +44,6 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.filter.BloomFilterMetrics;
 import org.apache.cassandra.io.sstable.format.AbstractSSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReaderLoadingBuilder;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.SortedTableScrubber;
@@ -218,20 +217,8 @@ public class BigFormat extends AbstractSSTableFormat<BigTableReader, BigTableWri
     @Override
     public IScrubber getScrubber(ColumnFamilyStore cfs, LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
-        Preconditions.checkArgument(cfs.metadata().equals(transaction.onlyOne().metadata()));
+        Preconditions.checkArgument(cfs.metadata().equals(transaction.onlyOne().metadata()), "SSTable metadata does not match current definition");
         return new BigTableScrubber(cfs, transaction, outputHandler, options);
-    }
-
-    @Override
-    public BigTableReader cast(SSTableReader sstr)
-    {
-        return (BigTableReader) sstr;
-    }
-
-    @Override
-    public BigTableWriter cast(SSTableWriter sstw)
-    {
-        return (BigTableWriter) sstw;
     }
 
     @Override
@@ -355,12 +342,6 @@ public class BigFormat extends AbstractSSTableFormat<BigTableReader, BigTableWri
         }
     }
 
-    // versions are denoted as [major][minor].  Minor versions must be forward-compatible:
-    // new fields are allowed in e.g. the metadata component, but fields can't be removed
-    // or have their size changed.
-    //
-    // Minor versions were introduced with version "hb" for Cassandra 1.0.3; prior to that,
-    // we always incremented the major version.
     static class BigVersion extends Version
     {
         public static final String current_version = "nc";

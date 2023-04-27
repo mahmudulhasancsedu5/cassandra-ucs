@@ -208,20 +208,8 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
     @Override
     public IScrubber getScrubber(ColumnFamilyStore cfs, LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
-        Preconditions.checkArgument(cfs.metadata().equals(transaction.onlyOne().metadata()));
+        Preconditions.checkArgument(cfs.metadata().equals(transaction.onlyOne().metadata()), "SSTable metadata does not match current definition");
         return new BtiTableScrubber(cfs, transaction, outputHandler, options);
-    }
-
-    @Override
-    public BtiTableReader cast(SSTableReader sstr)
-    {
-        return (BtiTableReader) sstr;
-    }
-
-    @Override
-    public BtiTableWriter cast(SSTableWriter sstw)
-    {
-        return (BtiTableWriter) sstw;
     }
 
     @Override
@@ -302,24 +290,20 @@ public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWri
         @Override
         public long estimateSize(SSTableWriter.SSTableSizeParameters parameters)
         {
-            return (long) ((parameters.partitionCount() // index entries
-                            + parameters.partitionCount() // keys in data file
+            return (long) ((parameters.partitionCount() * 8 // index entries
+                            + parameters.partitionKeysSize() // keys in data file
                             + parameters.dataSize()) // data
                            * 1.2); // bloom filter and row index overhead
         }
     }
 
-    // versions are denoted as [major][minor].  Minor versions must be forward-compatible:
-    // new fields are allowed in e.g. the metadata component, but fields can't be removed
-    // or have their size changed.
-    //
     static class BtiVersion extends Version
     {
         public static final String current_version = "da";
         public static final String earliest_supported_version = "da";
 
         // versions aa-cz are not supported in OSS
-        // da - initial OSS version of the BIT format, Cassandra 5.0
+        // da (5.0): initial version of the BIT format
         // NOTE: when adding a new version, please add that to LegacySSTableTest, too.
 
         private final boolean isLatestVersion;

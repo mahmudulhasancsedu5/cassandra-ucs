@@ -39,8 +39,8 @@ import org.apache.cassandra.io.util.SequentialWriter;
 class BtiFormatPartitionWriter extends SortedTablePartitionWriter
 {
     private final RowIndexWriter rowTrie;
-    private final int indexSize;
-    private int rowIndexCount;
+    private final int rowIndexBlockSize;
+    private int rowIndexBlockCount;
 
     BtiFormatPartitionWriter(SerializationHeader header,
                              ClusteringComparator comparator,
@@ -57,10 +57,10 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
                              SequentialWriter dataWriter,
                              SequentialWriter rowIndexWriter,
                              Version version,
-                             int indexSize)
+                             int rowIndexBlockSize)
     {
         super(header, dataWriter, version);
-        this.indexSize = indexSize;
+        this.rowIndexBlockSize = rowIndexBlockSize;
         this.rowTrie = new RowIndexWriter(comparator, rowIndexWriter);
     }
 
@@ -69,7 +69,7 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
     {
         super.reset();
         rowTrie.reset();
-        rowIndexCount = 0;
+        rowIndexBlockCount = 0;
     }
 
     @Override
@@ -78,7 +78,7 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
         super.addUnfiltered(unfiltered);
 
         // if we hit the column index size that we have to index after, go ahead and index it.
-        if (currentPosition() - startPosition >= indexSize)
+        if (currentPosition() - startPosition >= rowIndexBlockSize)
             addIndexBlock();
     }
 
@@ -92,33 +92,33 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
     {
         long endPosition = super.finish();
 
-        // the last row may have fallen on an index boundary already.  if not, index it explicitly.
-        if (rowIndexCount > 0 && firstClustering != null)
+        // the last row may have fallen on an index boundary already.  if not, index the last block explicitly.
+        if (rowIndexBlockCount > 0 && firstClustering != null)
             addIndexBlock();
 
-        if (rowIndexCount > 1)
+        if (rowIndexBlockCount > 1)
         {
             return rowTrie.complete(endPosition);
         }
         else
         {
-            // Otherwise we don't complete the trie. Even if we did write something (which shouldn't be the case as the
-            // first entry has an empty key and root isn't filled), that's not a problem.
+            // Otherwise we don't complete the trie as an index of one block adds no information and we are better off
+            // without a row index for such partitions. Even if we did write something to the file (which shouldn't be
+            // the case as the first entry has an empty key and root isn't filled), that's not a problem.
             return -1;
         }
     }
 
     protected void addIndexBlock() throws IOException
     {
-        IndexInfo cIndexInfo = new IndexInfo(startPosition,
-                                             startOpenMarker);
+        IndexInfo cIndexInfo = new IndexInfo(startPosition, startOpenMarker);
         rowTrie.add(firstClustering, lastClustering, cIndexInfo);
         firstClustering = null;
-        ++rowIndexCount;
+        ++rowIndexBlockCount;
     }
 
-    public int getRowIndexCount()
+    public int getRowIndexBlockCount()
     {
-        return rowIndexCount;
+        return rowIndexBlockCount;
     }
 }

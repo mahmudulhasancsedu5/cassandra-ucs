@@ -454,7 +454,7 @@ public class BigTableReader extends SSTableReaderWithFilter implements IndexSumm
 
         try (RowIndexEntry.IndexInfoRetriever onHeapRetriever = rowIndexEntry.openWithIndex(null))
         {
-            IndexInfo columns = onHeapRetriever.columnsIndex(isReversed ? rowIndexEntry.columnsIndexCount() - 1 : 0);
+            IndexInfo columns = onHeapRetriever.columnsIndex(isReversed ? rowIndexEntry.blockCount() - 1 : 0);
             ClusteringBound<?> bound = isReversed ? columns.lastName.asEndBound() : columns.firstName.asStartBound();
             UnfilteredRowIteratorWithLowerBound.assertBoundSize(bound, this);
             return bound.artificialLowerBound(isReversed);

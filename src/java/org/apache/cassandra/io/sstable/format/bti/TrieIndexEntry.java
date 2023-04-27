@@ -33,14 +33,14 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 public final class TrieIndexEntry extends AbstractRowIndexEntry
 {
     final long indexTrieRoot;
-    private final int rowIndexCount;
+    private final int rowIndexBlockCount;
     private final DeletionTime deletionTime;
 
-    TrieIndexEntry(long dataFilePosition, long indexTrieRoot, int rowIndexCount, DeletionTime deletionTime)
+    TrieIndexEntry(long dataFilePosition, long indexTrieRoot, int rowIndexBlockCount, DeletionTime deletionTime)
     {
         super(dataFilePosition);
         this.indexTrieRoot = indexTrieRoot;
-        this.rowIndexCount = rowIndexCount;
+        this.rowIndexBlockCount = rowIndexBlockCount;
         this.deletionTime = deletionTime;
     }
 
@@ -48,14 +48,14 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
     {
         super(position);
         this.indexTrieRoot = -1;
-        this.rowIndexCount = 0;
+        this.rowIndexBlockCount = 0;
         this.deletionTime = null;
     }
 
     @Override
-    public int columnsIndexCount()
+    public int blockCount()
     {
-        return rowIndexCount;
+        return rowIndexBlockCount;
     }
 
     @Override
@@ -84,10 +84,10 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
 
     public void serialize(DataOutputPlus indexFile, long basePosition) throws IOException
     {
-        assert indexTrieRoot != -1 && rowIndexCount > 0 && deletionTime != null;
+        assert indexTrieRoot != -1 && rowIndexBlockCount > 0 && deletionTime != null;
         indexFile.writeUnsignedVInt(position);
         indexFile.writeVInt(indexTrieRoot - basePosition);
-        indexFile.writeUnsignedVInt32(rowIndexCount);
+        indexFile.writeUnsignedVInt32(rowIndexBlockCount);
         DeletionTime.serializer.serialize(deletionTime, indexFile);
     }
 
@@ -98,9 +98,9 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
     public static TrieIndexEntry create(long dataStartPosition,
                                         long trieRoot,
                                         DeletionTime partitionLevelDeletion,
-                                        int rowIndexCount)
+                                        int rowIndexBlockCount)
     {
-        return new TrieIndexEntry(dataStartPosition, trieRoot, trieRoot == -1 ? 0 : rowIndexCount, partitionLevelDeletion);
+        return new TrieIndexEntry(dataStartPosition, trieRoot, trieRoot == -1 ? 0 : rowIndexBlockCount, partitionLevelDeletion);
     }
 
     public static TrieIndexEntry deserialize(DataInputPlus in, long basePosition) throws IOException
