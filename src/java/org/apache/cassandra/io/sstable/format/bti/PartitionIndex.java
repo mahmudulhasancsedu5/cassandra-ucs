@@ -48,18 +48,20 @@ import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 /**
  * This class holds the partition index as an on-disk trie mapping unique prefixes of decorated keys to:
- *     - data file position if the partition is small enough to not need an index
- *     - row index file position if the partition has a row index
- * plus
- *     - the last 8 bits of the key's filter hash which is used to filter out mismatched keys without reading the key
- *
+ * <ul>
+ *     <li>data file position if the partition is small enough to not need an index
+ *     <li>row index file position if the partition has a row index
+ * </ul>plus<ul>
+ *     <li>the last 8 bits of the key's filter hash which is used to filter out mismatched keys without reading the key
+ * </ul>
  * To avoid having to create an object to carry the result, the two are distinguished by sign. Direct-to-dfile entries
  * are recorded as ~position (~ instead of - to differentiate 0 in ifile from 0 in dfile).
- *
+ * <p>
  * In either case the contents of the file at this position start with a serialization of the key which can be used
  * to verify the correct key is found.
- *
- * To read the index one must obtain a thread-unsafe Reader or IndexPosIterator.
+ * <p>
+ * The indexes are created by {@link PartitionIndexBuilder}. To read the index one must obtain a thread-unsafe
+ * {@link Reader} or {@link IndexPosIterator}.
  */
 @VisibleForTesting
 public class PartitionIndex implements SharedCloseable
@@ -314,10 +316,13 @@ public class PartitionIndex implements SharedCloseable
             }
             // If that was not found, the closest greater value can be used instead, and we know that
             // it stands for a key greater than the argument.
-            if (greaterBranch == -1)
+            if (greaterBranch == NONE)
                 return null;
             goMin(greaterBranch);
             long indexPos = getCurrentIndexPos();
+            if (indexPos == NOT_FOUND)
+                return null;
+
             return acceptor.accept(indexPos, true, key);
         }
 
@@ -337,10 +342,12 @@ public class PartitionIndex implements SharedCloseable
             // Otherwise return the IndexInfo for the closest entry of the smaller branch (which is the max of lesserBranch).
             // Note (see prefixAndNeighbours): since we accept prefix matches above, at this point there cannot be another
             // prefix match that is closer than max(lesserBranch).
-            if (lesserBranch == -1)
+            if (lesserBranch == NONE)
                 return null;
             goMax(lesserBranch);
             indexPos = getCurrentIndexPos();
+            if (indexPos == NOT_FOUND)
+                return null;
 
             return acceptor.accept(indexPos, true, key);
         }

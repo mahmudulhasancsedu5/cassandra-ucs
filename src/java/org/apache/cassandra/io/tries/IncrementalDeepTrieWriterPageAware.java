@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.DataOutputPlus;
 
 /**
@@ -35,6 +37,7 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  * of each of the three implemented recursive operations. Removing this repetition can cause higher stack usage
  * and thus stack overflow failures.
  */
+@NotThreadSafe
 public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWriterPageAware<VALUE>
 {
     private final int maxRecursionDepth;

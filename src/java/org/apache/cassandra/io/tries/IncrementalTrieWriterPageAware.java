@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 
@@ -70,6 +72,7 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  * page size, and we can continue the process.
  * Since this was the root of the trie, the current page is padded and the remaining nodes 0, 5 are written.
  */
+@NotThreadSafe
 public class IncrementalTrieWriterPageAware<VALUE>
 extends IncrementalTrieWriterBase<VALUE, DataOutputPlus, IncrementalTrieWriterPageAware.Node<VALUE>>
 implements IncrementalTrieWriter<VALUE>

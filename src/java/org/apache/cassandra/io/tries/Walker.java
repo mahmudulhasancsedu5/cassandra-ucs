@@ -20,6 +20,8 @@ package org.apache.cassandra.io.tries;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.PageAware;
 import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.io.util.Rebufferer.BufferHolder;
@@ -35,8 +37,12 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
  * See {@code org/apache/cassandra/io/sstable/format/bti/BtiFormat.md} for a description of the mechanisms of writing
  * and reading an on-disk trie.
  */
+@NotThreadSafe
 public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
 {
+    /** Value used to indicate a branch (e.g. lesser/greaterBranch) does not exist. */
+    public static int NONE = TrieNode.NONE;
+
     private final Rebufferer source;
     protected final long root;
 
@@ -153,7 +159,7 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
         while (true)
         {
             long lastChild = lastTransition();
-            if (lastChild == -1)
+            if (lastChild == NONE)
                 return;
             go(lastChild);
         }
@@ -168,7 +174,10 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
             if (payloadBits > 0)
                 return;
 
-            go(transition(0));
+            long firstChild = transition(0);
+            if (firstChild == NONE)
+                return;
+            go(firstChild);
         }
     }
 
@@ -207,7 +216,7 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
      */
     public int followWithGreater(ByteComparable key)
     {
-        greaterBranch = -1;
+        greaterBranch = NONE;
 
         ByteSource stream = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
         go(root);
@@ -233,7 +242,7 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
      */
     public int followWithLesser(ByteComparable key)
     {
-        lesserBranch = -1;
+        lesserBranch = NONE;
 
         ByteSource stream = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
         go(root);
@@ -299,8 +308,8 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
     public <RESULT> RESULT prefixAndNeighbours(ByteComparable key, Extractor<RESULT, CONCRETE> extractor)
     {
         RESULT payload = null;
-        greaterBranch = -1;
-        lesserBranch = -1;
+        greaterBranch = NONE;
+        lesserBranch = NONE;
 
         ByteSource stream = key.asComparableBytes(BYTE_COMPARABLE_VERSION);
         go(root);
@@ -366,7 +375,7 @@ public class Walker<CONCRETE extends Walker<CONCRETE>> implements AutoCloseable
         for (int i = 0; i < range; ++i)
         {
             long child = transition(i);
-            if (child == -1)
+            if (child == NONE)
                 continue;
             out.format("%s%02x %s>", indent, transitionByte(i), PageAware.pageStart(position) == PageAware.pageStart(child) ? "--" : "==");
             dumpTrie(out, payloadReader, child, indent + "  ");

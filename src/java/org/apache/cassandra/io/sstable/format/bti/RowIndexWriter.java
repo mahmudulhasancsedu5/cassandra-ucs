@@ -30,10 +30,11 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
- * Preparer / writer of row index tries.
+ * Preparer / writer of row index tries that can be read by {@link RowIndexReader} and iterated by
+ * {@link RowIndexReverseIterator}.
  * <p>
- * Uses IncrementalTrieWriter to build a trie of index section separators of the shortest possible length such that
- * prevMax < separator <= nextMin.
+ * Uses {@link IncrementalTrieWriter} to build a trie of index section separators of the shortest possible length such
+ * that {@code prevMax < separator <= nextMin}.
  */
 class RowIndexWriter implements AutoCloseable
 {
@@ -108,7 +109,7 @@ class RowIndexWriter implements AutoCloseable
                     b = v.next();
                     if (cur == nudgeAt)
                     {
-                        if (b < 255)
+                        if (b < 0xFF)
                             ++b;
                         else
                             return b;  // can't nudge here, increase next instead (eventually will be -1)

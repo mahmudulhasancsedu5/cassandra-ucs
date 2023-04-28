@@ -58,6 +58,9 @@ import org.apache.cassandra.io.util.SizedInts;
 @SuppressWarnings({ "SameParameterValue" })
 public abstract class TrieNode
 {
+    /** Value used to indicate a branch (e.g. for transition and lastTransition) does not exist. */
+    public static int NONE = -1;
+
     // Consumption (read) methods
 
     /**
@@ -110,7 +113,7 @@ public abstract class TrieNode
     abstract long transitionDelta(ByteBuffer src, int position, int childIndex);
 
     /**
-     * Returns position of node to transition to for the given search index. Argument must be positive. May return -1
+     * Returns position of node to transition to for the given search index. Argument must be positive. May return NONE
      * if a transition with that index does not exist (DENSE nodes).
      * Position is the offset of the node within the ByteBuffer. positionLong is its global placement, which is the
      * base for any offset calculations.
@@ -127,7 +130,7 @@ public abstract class TrieNode
     }
 
     /**
-     * Returns the highest transition for this node, or -1 if none exist (PAYLOAD_ONLY nodes).
+     * Returns the highest transition for this node, or NONE if none exist (PAYLOAD_ONLY nodes).
      */
     public long lastTransition(ByteBuffer src, int position, long positionLong)
     {
@@ -230,13 +233,13 @@ public abstract class TrieNode
         @Override
         public long transition(ByteBuffer src, int position, long positionLong, int childIndex)
         {
-            return -1;
+            return NONE;
         }
 
         @Override
         public long lastTransition(ByteBuffer src, int position, long positionLong)
         {
-            return -1;
+            return NONE;
         }
 
         @Override
@@ -707,7 +710,7 @@ public abstract class TrieNode
         public long transition(ByteBuffer src, int position, long positionLong, int childIndex)
         {
             long v = transitionDelta(src, position, childIndex);
-            return v != NULL_VALUE ? v + positionLong : -1;
+            return v != NULL_VALUE ? v + positionLong : NONE;
         }
 
         @Override
@@ -721,7 +724,7 @@ public abstract class TrieNode
             for (; searchIndex < len; ++searchIndex)
             {
                 long t = transition(src, position, positionLong, searchIndex);
-                if (t != -1)
+                if (t != NONE)
                     return t;
             }
             return defaultValue;

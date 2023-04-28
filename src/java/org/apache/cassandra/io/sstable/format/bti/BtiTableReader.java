@@ -65,6 +65,8 @@ import static org.apache.cassandra.io.sstable.format.SSTableReader.Operator.GT;
 import static org.apache.cassandra.utils.concurrent.SharedCloseable.sharedCopyOrNull;
 
 /**
+ * Reader of SSTable files in BTI format (see {@link BtiFormat}), written by {@link BtiTableWriter}.
+ *
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
  * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
  */

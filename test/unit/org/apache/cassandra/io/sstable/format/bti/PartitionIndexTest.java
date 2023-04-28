@@ -788,7 +788,7 @@ public class PartitionIndexTest
             for (int i = 0; i < tr; ++i)
             {
                 long child = transition(i);
-                if (child == -1)
+                if (child == NONE)
                     continue;
                 run(child);
                 go(node);

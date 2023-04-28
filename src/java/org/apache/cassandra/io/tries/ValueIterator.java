@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.io.tries;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
@@ -24,6 +26,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 /**
  * Thread-unsafe value iterator for on-disk tries. Uses the assumptions of {@link Walker}.
  */
+@NotThreadSafe
 public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Walker<CONCRETE>
 {
     private final ByteSource limit;
@@ -112,7 +115,7 @@ public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Wal
                     break;
 
                 prev = new IterationPosition(position, childIndex, limitByte, prev);
-                go(transition(childIndex));
+                go(transition(childIndex)); // child index is positive, transition must exist
             }
 
             childIndex = -1 - childIndex - 1;
@@ -186,7 +189,7 @@ public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Wal
 
             child = transition(childIndex);
 
-            if (child != -1)
+            if (child != NONE)
             {
                 assert child >= 0 : String.format("Expected value >= 0 but got %d - %s", child, this);
 

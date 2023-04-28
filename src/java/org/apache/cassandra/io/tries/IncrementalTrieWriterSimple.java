@@ -19,6 +19,8 @@ package org.apache.cassandra.io.tries;
 
 import java.io.IOException;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 
@@ -35,6 +37,7 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  * Note: This class is currently unused (but tested) and stands only as form of documentation for
  * {@link IncrementalTrieWriterPageAware}.
  */
+@NotThreadSafe
 public class IncrementalTrieWriterSimple<VALUE>
         extends IncrementalTrieWriterBase<VALUE, DataOutputPlus, IncrementalTrieWriterSimple.Node<VALUE>>
         implements IncrementalTrieWriter<VALUE>

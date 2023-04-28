@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.io.tries;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
@@ -24,6 +26,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 /**
  * Thread-unsafe reverse value iterator for on-disk tries. Uses the assumptions of Walker.
  */
+@NotThreadSafe
 public class ReverseValueIterator<Concrete extends ReverseValueIterator<Concrete>> extends Walker<Concrete>
 {
     private final ByteSource limit;
@@ -85,7 +88,7 @@ public class ReverseValueIterator<Concrete extends ReverseValueIterator<Concrete
                 break;
 
             prev = new IterationPosition(position, childIndex, limitByte, prev);
-            go(transition(childIndex));
+            go(transition(childIndex)); // childIndex is positive, this transition must exist
         }
 
         // Advancing now gives us first match.
@@ -157,7 +160,7 @@ public class ReverseValueIterator<Concrete extends ReverseValueIterator<Concrete
             }
 
             child = transition(childIdx);
-            if (child != -1)
+            if (child != NONE)
             {
                 go(child);
 

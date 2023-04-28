@@ -20,6 +20,7 @@ package org.apache.cassandra.io.sstable.format.bti;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
+import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.io.tries.SerializationNode;
@@ -32,17 +33,18 @@ import org.apache.cassandra.io.util.SizedInts;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 /**
- * Reader class for row index files.
- *
+ * Reader class for row index files created by {@link RowIndexWriter}.
+ * <p>
  * Row index "tries" do not need to store whole keys, as what we need from them is to be able to tell where in the data file
  * to start looking for a given key. Instead, we store some prefix that is greater than the greatest key of the previous
  * index section and smaller than or equal to the smallest key of the next. So for a given key the first index section
  * that could potentially contain it is given by the trie's floor for that key.
- *
+ * <p>
  * This builds upon the trie Walker class which provides basic trie walking functionality. The class is thread-unsafe
  * and must be re-instantiated for every thread that needs access to the trie (its overhead is below that of a
- * RandomAccessReader).
+ * {@link org.apache.cassandra.io.util.RandomAccessReader}).
  */
+@NotThreadSafe
 public class RowIndexReader extends Walker<RowIndexReader>
 {
     private static final int FLAG_OPEN_MARKER = 8;
@@ -85,7 +87,7 @@ public class RowIndexReader extends Walker<RowIndexReader>
         // Otherwise return the IndexInfo for the closest entry of the smaller branch (which is the max of lesserBranch).
         // Note (see prefixAndNeighbours): since we accept prefix matches above, at this point there cannot be another
         // prefix match that is closer than max(lesserBranch).
-        if (lesserBranch == -1)
+        if (lesserBranch == NONE)
             return null;
         goMax(lesserBranch);
         return getCurrentIndexInfo();
@@ -137,7 +139,7 @@ public class RowIndexReader extends Walker<RowIndexReader>
             write(dest, TrieNode.typeFor(node, nodePosition), node, nodePosition);
         }
 
-        public int sizeof(IndexInfo payload)
+        private int sizeof(IndexInfo payload)
         {
             int size = 0;
             if (payload != null)
@@ -149,7 +151,7 @@ public class RowIndexReader extends Walker<RowIndexReader>
             return size;
         }
 
-        public void write(DataOutputPlus dest, TrieNode type, SerializationNode<IndexInfo> node, long nodePosition) throws IOException
+        private void write(DataOutputPlus dest, TrieNode type, SerializationNode<IndexInfo> node, long nodePosition) throws IOException
         {
             IndexInfo payload = node.payload();
             int bytes = 0;
@@ -157,6 +159,7 @@ public class RowIndexReader extends Walker<RowIndexReader>
             if (payload != null)
             {
                 bytes = SizedInts.nonZeroSize(payload.offset);
+                assert bytes < 8 : "Row index does not support rows larger than 32 PiB";
                 if (!payload.openDeletion.isLive())
                     hasOpenMarker = FLAG_OPEN_MARKER;
             }
@@ -165,7 +168,7 @@ public class RowIndexReader extends Walker<RowIndexReader>
             {
                 SizedInts.write(dest, payload.offset, bytes);
 
-                if (hasOpenMarker != 0)
+                if (hasOpenMarker == FLAG_OPEN_MARKER)
                     DeletionTime.serializer.serialize(payload.openDeletion, dest);
             }
         }

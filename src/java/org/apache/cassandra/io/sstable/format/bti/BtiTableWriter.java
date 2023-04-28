@@ -56,6 +56,9 @@ import org.apache.cassandra.utils.concurrent.Transactional;
 
 import static org.apache.cassandra.io.util.FileHandle.Builder.NO_LENGTH_OVERRIDE;
 
+/**
+ * Writes SSTables in BTI format (see {@link BtiFormat}), which can be read by {@link BtiTableReader}.
+ */
 @VisibleForTesting
 public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
 {
@@ -96,7 +99,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         return entry;
     }
 
-    @SuppressWarnings("resource")
+    @SuppressWarnings({"resource", "RedundantSuppression"})
     private BtiTableReader openInternal(OpenReason openReason, boolean isFinal, Supplier<PartitionIndex> partitionIndexSupplier)
     {
         IFilter filter = null;
@@ -133,7 +136,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         }
     }
 
-
+    @Override
     public void openEarly(Consumer<SSTableReader> callWhenReady)
     {
         long dataLength = dataWriter.position();
@@ -145,6 +148,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         });
     }
 
+    @Override
     public SSTableReader openFinalEarly()
     {
         // we must ensure the data is completely flushed to disk
@@ -153,12 +157,13 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         dataWriter.sync();
         iwriter.rowIndexWriter.sync();
         // Note: Nothing must be written to any of the files after this point, as the chunk cache could pick up and
-        // retain a partially-written page (see DB-2446).
+        // retain a partially-written page.
 
         return openFinal(OpenReason.EARLY);
     }
 
-    @SuppressWarnings("resource")
+    @Override
+    @SuppressWarnings({"resource", "RedundantSuppression"})
     protected SSTableReader openFinal(OpenReason openReason)
     {
 
@@ -168,6 +173,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
         return openInternal(openReason, true, iwriter::completedPartitionIndex);
     }
 
+    @Override
     protected TransactionalProxy txnProxy()
     {
         return new TransactionalProxy(() -> FBUtilities.immutableListWithFilteredNulls(iwriter, dataWriter));
@@ -214,7 +220,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter>
             // register listeners to be alerted when the data files are flushed
             partitionIndexWriter.setPostFlushListener(() -> partitionIndex.markPartitionIndexSynced(partitionIndexWriter.getLastFlushOffset()));
             rowIndexWriter.setPostFlushListener(() -> partitionIndex.markRowIndexSynced(rowIndexWriter.getLastFlushOffset()));
-            @SuppressWarnings("resource")
+            @SuppressWarnings({"resource", "RedundantSuppression"})
             SequentialWriter dataWriter = b.getDataWriter();
             dataWriter.setPostFlushListener(() -> partitionIndex.markDataSynced(dataWriter.getLastFlushOffset()));
         }

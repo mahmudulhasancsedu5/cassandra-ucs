@@ -53,7 +53,7 @@ import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.Pair;
 
 /**
- * Bigtable format with trie indices
+ * Bigtable format with trie indices. See BTIFormat.md for the format documentation.
  */
 public class BtiFormat extends AbstractSSTableFormat<BtiTableReader, BtiTableWriter>
 {

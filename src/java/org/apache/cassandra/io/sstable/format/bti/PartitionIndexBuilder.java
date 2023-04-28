@@ -30,6 +30,8 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
 /**
  * Partition index builder: stores index or data positions in an incrementally built, page aware on-disk trie.
+ * <p>
+ * The files created by this builder are read by {@link PartitionIndex}.
  */
 class PartitionIndexBuilder implements AutoCloseable
 {
