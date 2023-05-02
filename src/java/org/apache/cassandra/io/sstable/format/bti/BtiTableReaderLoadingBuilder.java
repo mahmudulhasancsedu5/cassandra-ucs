@@ -104,12 +104,8 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
             {
                 @SuppressWarnings({ "resource", "RedundantSuppression" })
                 IFilter filter = buildBloomFilter(statsComponent.statsMetadata());
-
-                if (filter != null)
-                {
-                    builder.setFilter(filter);
-                    FilterComponent.save(filter, descriptor, false);
-                }
+                builder.setFilter(filter);
+                FilterComponent.save(filter, descriptor, false);
             }
 
             if (builder.getFilter() == null)

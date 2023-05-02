@@ -26,11 +26,10 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 
 /**
- * An entry in the row index for a partition whose rows are indexed in a trie.
- * <p>
- * Not to be used outside of package. Public only for IndexRewriter tool.
+ * Index entry for the BTI partition index. This can be a simple position in the data file, or an entry in the row
+ * index file where the rows are indexed in blocks (see {@link RowIndexReader}).
  */
-public final class TrieIndexEntry extends AbstractRowIndexEntry
+final class TrieIndexEntry extends AbstractRowIndexEntry
 {
     final long indexTrieRoot;
     private final int rowIndexBlockCount;
@@ -107,9 +106,9 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
     {
         long dataFilePosition = in.readUnsignedVInt();
         long indexTrieRoot = in.readVInt() + basePosition;
-        int rowIndexCount = in.readUnsignedVInt32();
+        int rowIndexBlockCount = in.readUnsignedVInt32();
         DeletionTime deletionTime = DeletionTime.serializer.deserialize(in);
-        return new TrieIndexEntry(dataFilePosition, indexTrieRoot, rowIndexCount, deletionTime);
+        return new TrieIndexEntry(dataFilePosition, indexTrieRoot, rowIndexBlockCount, deletionTime);
     }
 
 }

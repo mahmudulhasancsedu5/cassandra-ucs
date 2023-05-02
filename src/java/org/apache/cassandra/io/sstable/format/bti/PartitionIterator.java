@@ -241,6 +241,6 @@ class PartitionIterator extends PartitionIndex.IndexPosIterator implements KeyRe
     @Override
     public String toString()
     {
-        return String.format("TrieIndex-PartitionIndexIterator(%s)", partitionIndex.getFileHandle().path());
+        return String.format("BTI-PartitionIterator(%s)", partitionIndex.getFileHandle().path());
     }
 }

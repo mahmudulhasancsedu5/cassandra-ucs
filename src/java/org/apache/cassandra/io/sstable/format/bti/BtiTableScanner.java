@@ -77,6 +77,7 @@ public class BtiTableScanner extends SSTableScanner<BtiTableReader, TrieIndexEnt
         FileUtils.close(dfile, iterator);
     }
 
+    @Override
     protected BtiScanningIterator doCreateIterator()
     {
         return new BtiScanningIterator();
@@ -86,6 +87,7 @@ public class BtiTableScanner extends SSTableScanner<BtiTableReader, TrieIndexEnt
     {
         private PartitionIterator iterator;
 
+        @Override
         protected boolean prepareToIterateRow() throws IOException
         {
             while (true)
@@ -113,6 +115,7 @@ public class BtiTableScanner extends SSTableScanner<BtiTableReader, TrieIndexEnt
             }
         }
 
+        @Override
         protected UnfilteredRowIterator getRowIterator(TrieIndexEntry indexEntry, DecoratedKey key)
         {
             if (dataRange == null)

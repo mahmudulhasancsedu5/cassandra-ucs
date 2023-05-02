@@ -128,7 +128,7 @@ class PartitionIndexBuilder implements AutoCloseable
     *    - positive if position points to an index entry in the index file
     *    - negative if ~position points directly to the key in the data file
     */
-    public PartitionIndexBuilder addEntry(DecoratedKey decoratedKey, long position) throws IOException
+    public void addEntry(DecoratedKey decoratedKey, long position) throws IOException
     {
         if (lastKey == null)
         {
@@ -145,7 +145,6 @@ class PartitionIndexBuilder implements AutoCloseable
         }
         lastKey = decoratedKey;
         lastPayload = new PartitionIndex.Payload(position, decoratedKey.filterHashLowerBits());
-        return this;
     }
 
     public long complete() throws IOException

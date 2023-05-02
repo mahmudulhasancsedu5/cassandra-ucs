@@ -17,18 +17,15 @@
  */
 package org.apache.cassandra.cql3;
 
-import java.util.Random;
-
 import org.junit.Test;
 
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.io.sstable.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.SSTableReadsListener;
+import org.apache.cassandra.io.sstable.format.ForwardingSSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.format.big.BigTableReader;
-import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
-import org.apache.cassandra.io.sstable.format.bti.BtiTableReader;
-import org.apache.cassandra.io.sstable.format.bti.TrieIndexEntry;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class QueryWithIndexedSSTableTest extends CQLTester
@@ -63,16 +60,22 @@ public class QueryWithIndexedSSTableTest extends CQLTester
         boolean hasIndexed = false;
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
         {
-            if (sstable instanceof BigTableReader)
+            class IndexEntryAccessor extends ForwardingSSTableReader
             {
-                RowIndexEntry indexEntry = ((BigTableReader) sstable).getRowIndexEntry(dk, SSTableReader.Operator.EQ);
-                hasIndexed |= indexEntry != null && indexEntry.isIndexed();
+                public IndexEntryAccessor(SSTableReader delegate)
+                {
+                    super(delegate);
+                }
+
+                public AbstractRowIndexEntry getRowIndexEntry(PartitionPosition key, Operator op, boolean updateCacheAndStats, boolean permitMatchPastLast, SSTableReadsListener listener)
+                {
+                    return super.getRowIndexEntry(key, op, updateCacheAndStats, permitMatchPastLast, listener);
+                }
             }
-            else if (sstable instanceof BtiTableReader)
-            {
-                TrieIndexEntry indexEntry = ((BtiTableReader) sstable).getExactPosition(dk, SSTableReadsListener.NOOP_LISTENER, false);
-                hasIndexed |= indexEntry != null && indexEntry.blockCount() > 0;
-            }
+
+            IndexEntryAccessor accessor = new IndexEntryAccessor(sstable);
+            AbstractRowIndexEntry indexEntry = accessor.getRowIndexEntry(dk, SSTableReader.Operator.EQ, false, false, SSTableReadsListener.NOOP_LISTENER);
+            hasIndexed |= indexEntry != null && indexEntry.isIndexed();
         }
         assert hasIndexed;
 
@@ -81,16 +84,5 @@ public class QueryWithIndexedSSTableTest extends CQLTester
 
         assertRowCount(execute("SELECT DISTINCT s FROM %s WHERE k = ?", 0), 1);
         assertRowCount(execute("SELECT DISTINCT s FROM %s WHERE k = ? ORDER BY t DESC", 0), 1);
-    }
-
-    // Creates a random string 
-    public static String makeRandomSt(int length)
-    {
-        Random random = new Random();
-        char[] chars = new char[26];
-        int i = 0;
-        for (char c = 'a'; c <= 'z'; c++)
-            chars[i++] = c;
-        return new String(chars);
     }
 }

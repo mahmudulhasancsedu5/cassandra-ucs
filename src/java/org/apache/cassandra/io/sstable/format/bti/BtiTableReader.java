@@ -66,7 +66,7 @@ import static org.apache.cassandra.utils.concurrent.SharedCloseable.sharedCopyOr
 
 /**
  * Reader of SSTable files in BTI format (see {@link BtiFormat}), written by {@link BtiTableWriter}.
- *
+ * <p>
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
  * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
  */
@@ -102,7 +102,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
     }
 
     /**
-     * Whether to filter out data before {@code first}. Needed for sources of data in a compaction, where the relevant
+     * Whether to filter out data before {@link #first}. Needed for sources of data in a compaction, where the relevant
      * output is opened early -- in this case the sstable's start is changed, but the data can still be found in the
      * file. Range and point queries must filter it out.
      */
@@ -112,7 +112,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
     }
 
     /**
-     * Whether to filter out data after {@code last}. Early-open sstables may contain data beyond the switch point
+     * Whether to filter out data after {@link #last}. Early-open sstables may contain data beyond the switch point
      * (because an early-opened sstable is not ready until buffers have been flushed), and leaving that data visible
      * will give a redundant copy with all associated overheads.
      */
@@ -225,9 +225,9 @@ public class BtiTableReader extends SSTableReaderWithFilter
         }
     }
 
-    public TrieIndexEntry getExactPosition(DecoratedKey dk,
-                                           SSTableReadsListener listener,
-                                           boolean updateStats)
+    TrieIndexEntry getExactPosition(DecoratedKey dk,
+                                    SSTableReadsListener listener,
+                                    boolean updateStats)
     {
         if ((filterFirst() && first.compareTo(dk) > 0) || (filterLast() && last.compareTo(dk) < 0))
         {
@@ -288,7 +288,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
 
     /**
      * @param bounds Must not be wrapped around ranges
-     * @return PartitionIndexIterator within the given bounds
+     * @return PartitionIterator within the given bounds
      */
     public PartitionIterator coveredKeysIterator(AbstractBounds<PartitionPosition> bounds) throws IOException
     {
@@ -300,7 +300,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
         return new ScrubIterator(partitionIndex, rowIndexFile);
     }
 
-    public PartitionIterator coveredKeysIterator(PartitionPosition left, boolean inclusiveLeft, PartitionPosition right, boolean inclusiveRight) throws IOException
+    private PartitionIterator coveredKeysIterator(PartitionPosition left, boolean inclusiveLeft, PartitionPosition right, boolean inclusiveRight) throws IOException
     {
         if (filterFirst() && left.compareTo(first) < 0)
         {
@@ -442,8 +442,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
     public BtiTableReader cloneWithNewStart(DecoratedKey newStart)
     {
         return runWithLock(d -> {
-            assert openReason != OpenReason.EARLY;
-            // TODO: merge with caller's firstKeyBeyond() work,to save time
+            assert openReason != OpenReason.EARLY : "Cannot open early an early-open SSTable";
             if (newStart.compareTo(first) > 0)
             {
                 final long dataStart = getPosition(newStart, Operator.EQ);

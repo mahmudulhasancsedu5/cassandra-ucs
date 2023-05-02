@@ -23,11 +23,12 @@ import java.nio.ByteBuffer;
 
 /**
  * Iterator over the partitions of an sstable used for scrubbing.
- *
- * The difference between this and PartitionIndexIterator is that this only uses information present in the index file
- * and does not try to read keys of the data file (for the trie index format), thus key() can be null.
- *
- * Starts advanced to a position, advance() is to be used to go to next, and iteration completes when dataPosition() == -1.
+ * <p>
+ * The difference between this and {@Link PartitionIterator} is that this only uses information present in the index file
+ * and does not try to read keys of the data file (for the trie index format), thus {@link #key()} can be null.
+ * <p>
+ * Starts advanced to a position, {@link #advance()} is to be used to go to next, and iteration completes when
+ * {@link #dataPosition()} == -1.
  */
 public interface ScrubPartitionIterator extends Closeable
 {

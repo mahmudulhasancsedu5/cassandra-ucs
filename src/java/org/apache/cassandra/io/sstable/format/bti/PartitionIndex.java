@@ -76,6 +76,7 @@ public class PartitionIndex implements SharedCloseable
 
     public static final long NOT_FOUND = Long.MIN_VALUE;
     public static final int FOOTER_LENGTH = 3 * 8;
+    private static final int FLAG_HAS_HASH_BYTE = 8;
 
     @VisibleForTesting
     public PartitionIndex(FileHandle fh, long trieRoot, long keyCount, DecoratedKey first, DecoratedKey last)
@@ -100,7 +101,7 @@ public class PartitionIndex implements SharedCloseable
         public Payload(long position, short hashBits)
         {
             this.position = position;
-            assert this.position != NOT_FOUND;
+            assert this.position != NOT_FOUND : "Partition position " + NOT_FOUND + " is not valid.";
             this.hashBits = hashBits;
         }
     }
@@ -121,14 +122,15 @@ public class PartitionIndex implements SharedCloseable
             write(dest, TrieNode.typeFor(node, nodePosition), node, nodePosition);
         }
 
-        public void write(DataOutputPlus dest, TrieNode type, SerializationNode<Payload> node, long nodePosition) throws IOException
+        private void write(DataOutputPlus dest, TrieNode type, SerializationNode<Payload> node, long nodePosition) throws IOException
         {
             Payload payload = node.payload();
             if (payload != null)
             {
-                int payloadBits;
                 int size = SizedInts.nonZeroSize(payload.position);
-                payloadBits = 7 + size;
+                // The reader supports payloads both with (payloadBits between 8 and 15) and without (payloadBits
+                // between 1 and 7) hash. To not introduce undue configuration complexity, we always write a hash.
+                int payloadBits = FLAG_HAS_HASH_BYTE + (size - 1);
                 type.serialize(dest, node, payloadBits, nodePosition);
                 dest.writeByte(payload.hashBits);
                 SizedInts.write(dest, payload.position, size);
@@ -247,10 +249,10 @@ public class PartitionIndex implements SharedCloseable
 
     private static long getIndexPos(ByteBuffer contents, int payloadPos, int bytes)
     {
-        if (bytes > 7)
+        if (bytes >= FLAG_HAS_HASH_BYTE)
         {
             ++payloadPos;
-            bytes -= 7;
+            bytes -= FLAG_HAS_HASH_BYTE - 1;
         }
         if (bytes == 0)
             return NOT_FOUND;
@@ -293,7 +295,7 @@ public class PartitionIndex implements SharedCloseable
         final boolean checkHashBits(short hashBits)
         {
             int bytes = payloadFlags();
-            if (bytes <= 7)
+            if (bytes < FLAG_HAS_HASH_BYTE)
                 return bytes > 0;
             return (buf.get(payloadPosition()) == (byte) hashBits);
         }
@@ -391,7 +393,7 @@ public class PartitionIndex implements SharedCloseable
 
         /**
          * @param index PartitionIndex to use for the iteration.
-         *
+         * <p>
          * Note: For performance reasons this class does not keep a reference of the index. Caller must ensure a
          * reference is held for the lifetime of this object.
          */
