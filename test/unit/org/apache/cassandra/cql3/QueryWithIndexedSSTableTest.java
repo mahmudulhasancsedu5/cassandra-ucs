@@ -67,14 +67,14 @@ public class QueryWithIndexedSSTableTest extends CQLTester
                     super(delegate);
                 }
 
-                public AbstractRowIndexEntry getRowIndexEntry(PartitionPosition key, Operator op, boolean updateCacheAndStats, boolean permitMatchPastLast, SSTableReadsListener listener)
+                public AbstractRowIndexEntry getRowIndexEntry(PartitionPosition key, Operator op, boolean updateCacheAndStats, SSTableReadsListener listener)
                 {
-                    return super.getRowIndexEntry(key, op, updateCacheAndStats, permitMatchPastLast, listener);
+                    return super.getRowIndexEntry(key, op, updateCacheAndStats, listener);
                 }
             }
 
             IndexEntryAccessor accessor = new IndexEntryAccessor(sstable);
-            AbstractRowIndexEntry indexEntry = accessor.getRowIndexEntry(dk, SSTableReader.Operator.EQ, false, false, SSTableReadsListener.NOOP_LISTENER);
+            AbstractRowIndexEntry indexEntry = accessor.getRowIndexEntry(dk, SSTableReader.Operator.EQ, false, SSTableReadsListener.NOOP_LISTENER);
             hasIndexed |= indexEntry != null && indexEntry.isIndexed();
         }
         assert hasIndexed;

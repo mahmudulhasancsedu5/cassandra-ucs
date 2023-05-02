@@ -130,11 +130,8 @@ public class BtiTableReader extends SSTableReaderWithFilter
     protected TrieIndexEntry getRowIndexEntry(PartitionPosition key,
                                               Operator operator,
                                               boolean updateStats,
-                                              boolean permitMatchPastLast,
                                               SSTableReadsListener listener)
     {
-        assert !permitMatchPastLast;
-
         PartitionPosition searchKey;
         Operator searchOp;
 
@@ -474,7 +471,7 @@ public class BtiTableReader extends SSTableReaderWithFilter
     {
         try
         {
-            TrieIndexEntry pos = getRowIndexEntry(token, Operator.GT, true, false, SSTableReadsListener.NOOP_LISTENER);
+            TrieIndexEntry pos = getRowIndexEntry(token, Operator.GT, true, SSTableReadsListener.NOOP_LISTENER);
             if (pos == null)
                 return null;
 
