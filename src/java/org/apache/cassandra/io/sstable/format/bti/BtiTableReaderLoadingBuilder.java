@@ -30,7 +30,7 @@ import org.apache.cassandra.io.sstable.KeyReader;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.FilterComponent;
-import org.apache.cassandra.io.sstable.format.SSTableReaderLoadingBuilder;
+import org.apache.cassandra.io.sstable.format.SortedTableReaderLoadingBuilder;
 import org.apache.cassandra.io.sstable.format.StatsComponent;
 import org.apache.cassandra.io.sstable.format.bti.BtiFormat.Components;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -38,7 +38,6 @@ import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.metrics.TableMetrics;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Throwables;
@@ -46,11 +45,10 @@ import org.apache.cassandra.utils.Throwables;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<BtiTableReader, BtiTableReader.Builder>
+public class BtiTableReaderLoadingBuilder extends SortedTableReaderLoadingBuilder<BtiTableReader, BtiTableReader.Builder>
 {
     private final static Logger logger = LoggerFactory.getLogger(BtiTableReaderLoadingBuilder.class);
 
-    private FileHandle.Builder dataFileBuilder;
     private FileHandle.Builder partitionIndexFileBuilder;
     private FileHandle.Builder rowIndexFileBuilder;
 
@@ -169,14 +167,6 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
         return bf;
     }
 
-    private IFilter loadFilter(ValidationMetadata validationMetadata)
-    {
-        return FilterComponent.maybeLoadBloomFilter(descriptor,
-                                                    components,
-                                                    tableMetadataRef.get(),
-                                                    validationMetadata);
-    }
-
     private PartitionIndex openPartitionIndex(boolean preload) throws IOException
     {
         try (FileHandle indexFile = partitionIndexFileBuilder().complete())
@@ -188,25 +178,6 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
             logger.debug("Partition index file is corrupted: " + descriptor.fileFor(Components.PARTITION_INDEX), ex);
             throw ex;
         }
-    }
-
-    private FileHandle.Builder dataFileBuilder(StatsMetadata statsMetadata)
-    {
-        assert this.dataFileBuilder == null || this.dataFileBuilder.file.equals(descriptor.fileFor(Components.DATA));
-
-        logger.info("Opening {} ({})", descriptor, FBUtilities.prettyPrintMemory(descriptor.fileFor(Components.DATA).length()));
-
-        long recordSize = statsMetadata.estimatedPartitionSize.percentile(ioOptions.diskOptimizationEstimatePercentile);
-        int bufferSize = ioOptions.diskOptimizationStrategy.bufferSize(recordSize);
-
-        if (dataFileBuilder == null)
-            dataFileBuilder = new FileHandle.Builder(descriptor.fileFor(Components.DATA));
-
-        dataFileBuilder.bufferSize(bufferSize);
-        dataFileBuilder.withChunkCache(chunkCache);
-        dataFileBuilder.mmapped(ioOptions.defaultDiskAccessMode);
-
-        return dataFileBuilder;
     }
 
     private FileHandle.Builder rowIndexFileBuilder()
