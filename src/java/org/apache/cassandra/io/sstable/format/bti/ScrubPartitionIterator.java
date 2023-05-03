@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 /**
  * Iterator over the partitions of an sstable used for scrubbing.
  * <p>
- * The difference between this and {@Link PartitionIterator} is that this only uses information present in the index file
+ * The difference between this and {@link PartitionIterator} is that this only uses information present in the index file
  * and does not try to read keys of the data file (for the trie index format), thus {@link #key()} can be null.
  * <p>
  * Starts advanced to a position, {@link #advance()} is to be used to go to next, and iteration completes when
@@ -35,7 +35,6 @@ public interface ScrubPartitionIterator extends Closeable
     /**
      * Serialized partition key or {@code null} if the iterator reached the end of the index or if the key may not
      * be fully retrieved from the index file.
-     * @return
      */
     ByteBuffer key();
 

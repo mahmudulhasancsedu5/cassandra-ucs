@@ -26,6 +26,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.io.sstable.IScrubber;
@@ -41,6 +42,7 @@ import org.apache.cassandra.utils.Throwables;
 public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implements IScrubber
 {
     private final boolean isIndex;
+    private final AbstractType<?> partitionKeyType;
     private ScrubPartitionIterator indexIterator;
 
     public BtiTableScrubber(ColumnFamilyStore cfs,
@@ -52,6 +54,7 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
 
         boolean hasIndexFile = sstable.getComponents().contains(Components.PARTITION_INDEX);
         this.isIndex = cfs.isIndex();
+        this.partitionKeyType = cfs.metadata.get().partitionKeyType;
         if (!hasIndexFile)
         {
             // if there's any corruption in the -Data.db then partitions can't be skipped over. but it's worth a shot.
@@ -89,9 +92,17 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
         return options.checkData && !isIndex ? UnfilteredRowIterators.withValidation(iter, filename) : iter;
     }
 
+    @Override
     public void scrubInternal(SSTableRewriter writer)
     {
-        assert !indexAvailable() || indexIterator.dataPosition() == 0 : indexIterator.dataPosition();
+        if (indexAvailable() && indexIterator.dataPosition() != 0)
+        {
+            outputHandler.warn("First position reported by index should be 0, was " +
+                               indexIterator.dataPosition() +
+                               ", continuing without index.");
+            indexIterator.close();
+            indexIterator = null;
+        }
 
         DecoratedKey prevKey = null;
 
@@ -109,8 +120,8 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
             try
             {
                 ByteBuffer raw = ByteBufferUtil.readWithShortLength(dataFile);
-                if (!cfs.metadata.getLocal().isIndex())
-                    cfs.metadata.getLocal().partitionKeyType.validate(raw);
+                if (!isIndex)
+                    partitionKeyType.validate(raw);
                 key = sstable.decorateKey(raw);
             }
             catch (Throwable th)
@@ -164,8 +175,7 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
                 if (currentIndexKey != null && !key.getKey().equals(currentIndexKey))
                 {
                     throw new IOError(new IOException(String.format("Key from data file (%s) does not match key from index file (%s)",
-                                                                    //ByteBufferUtil.bytesToHex(key.getKey()), ByteBufferUtil.bytesToHex(currentIndexKey))));
-                                                                    "_too big_", ByteBufferUtil.bytesToHex(currentIndexKey))));
+                                                                    ByteBufferUtil.bytesToHex(key.getKey()), ByteBufferUtil.bytesToHex(currentIndexKey))));
                 }
 
                 if (indexIterator != null && dataSizeFromIndex > dataFile.length())
@@ -193,8 +203,8 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
                     key = sstable.decorateKey(currentIndexKey);
                     try
                     {
-                        if (!cfs.metadata.getLocal().isIndex())
-                            cfs.metadata.getLocal().partitionKeyType.validate(key.getKey());
+                        if (!isIndex)
+                            partitionKeyType.validate(key.getKey());
                         dataFile.seek(rowStartFromIndex);
 
                         if (tryAppend(prevKey, key, writer))
@@ -288,6 +298,7 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
         super.throwIfCannotContinue(key, th);
     }
 
+    @Override
     public void close()
     {
         fileAccessLock.writeLock().lock();

@@ -107,6 +107,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
             super(file, shouldCloseFile);
         }
 
+        @Override
         public void setForSlice(Slice slice) throws IOException
         {
             // read full row and filter
@@ -118,6 +119,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
             fillOffsets(slice, true, true, Long.MAX_VALUE);
         }
 
+        @Override
         protected boolean hasNextInternal() throws IOException
         {
             if (next != null)
@@ -126,6 +128,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
             return next != null;
         }
 
+        @Override
         protected Unfiltered nextInternal() throws IOException
         {
             if (!hasNextInternal())
@@ -180,10 +183,9 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
         {
             filterStart &= !slice.start().equals(ClusteringBound.BOTTOM);
             filterEnd &= !slice.end().equals(ClusteringBound.TOP);
-            long currentPosition = -1;
 
-            ClusteringBound start = slice.start();
-            currentPosition = file.getFilePointer();
+            ClusteringBound<?> start = slice.start();
+            long currentPosition = file.getFilePointer();
             foundLessThan = false;
             // This is a copy of handlePreSliceData which also checks currentPosition < stopPosition.
             // Not extracted to method as we need both marker and currentPosition.

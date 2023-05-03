@@ -26,6 +26,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class ScrubIterator extends PartitionIndex.IndexPosIterator implements ScrubPartitionIterator
 {
+    public static final int EXHAUSTED = -1;
     ByteBuffer key;
     long dataPosition;
     final FileHandle rowIndexFile;
@@ -79,13 +80,13 @@ public class ScrubIterator extends PartitionIndex.IndexPosIterator implements Sc
         else
         {
             key = null;
-            dataPosition = -1;
+            dataPosition = EXHAUSTED;
         }
     }
 
     @Override
     public boolean isExhausted()
     {
-        return dataPosition == -1;
+        return dataPosition == EXHAUSTED;
     }
 }

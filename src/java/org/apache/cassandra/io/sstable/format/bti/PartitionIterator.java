@@ -31,6 +31,14 @@ import org.apache.cassandra.utils.Throwables;
 
 import static org.apache.cassandra.utils.FBUtilities.immutableListWithFilteredNulls;
 
+/**
+ * Partition iterator for the BTI format.
+ * <p>
+ * As the index stores prefixes of keys, the slice returned by the underlying {@link PartitionIndex.IndexPosIterator}
+ * may start and end with entries that have the same prefix as the provided bounds, but be in the wrong relationship
+ * with them. To filter these out, we start by checking the first item during initialization, and by working one item
+ * ahead, so that we can recognize the end of the slice and check the last item before we return it.
+ */
 class PartitionIterator extends PartitionIndex.IndexPosIterator implements KeyReader
 {
     private final PartitionIndex partitionIndex;
