@@ -154,7 +154,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
                 {
                     seekToPosition(rowOffsets.pop());
                     boolean hasNext = deserializer.hasNext();
-                    assert hasNext;
+                    assert hasNext : "Data file changed after offset collection pass";
                     toReturn = deserializer.readNext();
                     UnfilteredValidation.maybeValidateUnfiltered(toReturn, metadata(), key, sstable);
                     // We may get empty row for the same reason expressed on UnfilteredSerializer.deserializeOne.

@@ -33,20 +33,23 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  * Incremental builders of on-disk tries which packs trie stages into disk cache pages.
  *
  * The incremental core is as in {@link IncrementalTrieWriterSimple}, which this augments by:
- *   - calculating branch sizes reflecting the amount of data that needs to be written to store the trie
+ * <ul>
+ *   <li> calculating branch sizes reflecting the amount of data that needs to be written to store the trie
  *     branch rooted at each node
- *   - delaying writing any part of a completed node until its branch size is above the page size
- *   - laying out (some of) its children branches (each smaller than a page) to be contained within a page
- *   - adjusting the branch size to reflect the fact that the children are now written (i.e. removing their size)
- *
+ *   <li> delaying writing any part of a completed node until its branch size is above the page size
+ *   <li> laying out (some of) its children branches (each smaller than a page) to be contained within a page
+ *   <li> adjusting the branch size to reflect the fact that the children are now written (i.e. removing their size)
+ * </ul>
+ * <p>
  * The process is bottom-up, i.e. pages are packed at the bottom and the root page is usually smaller.
  * This may appear less efficient than a top-down process which puts more information in the top pages that
  * tend to stay in cache, but in both cases performing a search will usually require an additional disk read
  * for the leaf page. When we maximize the amount of relevant data that read brings by using the bottom-up
  * process, we have practically the same efficiency with smaller intermediate page footprint, i.e. fewer data
  * to keep in cache.
- *
+ * <p>
  * As an example, taking a sample page size fitting 4 nodes, a simple trie would be split like this:
+ * <pre>
  * Node 0 |
  *   -a-> | Node 1
  *        |   -s-> Node 2
@@ -58,18 +61,21 @@ import org.apache.cassandra.io.util.DataOutputPlus;
  *               |  -n-> Node 7
  *               |         -k-> Node 8 (payload 3)
  *               |                -s-> Node 9 (payload 4)
+ * </pre>
  * where lines denote page boundaries.
- *
+ * <p>
  * The process itself will start by adding "ask" which adds three nodes after the root to the stack. Adding "ass"
  * completes Node 3, setting its branch a size of 1 and replaces it on the stack with Node 4.
  * The step of adding "bank" starts by completing Node 4 (size 1), Node 2 (size 3), Node 1 (size 4), then adds 4 more
  * nodes to the stack. Adding "banks" descends one more node.
+ * <p>
  * The trie completion step completes nodes 9 (size 1), 8 (size 2), 7 (size 3), 6 (size 4), 5 (size 5). Since the size
  * of node 5 is above the page size, the algorithm lays out its children. Nodes 6, 7, 8, 9 are written in order. The
  * size of node 5 is now just the size of it individually, 1. The process continues with completing Node 0 (size 6).
  * This is bigger than the page size, so some of its children need to be written. The algorithm takes the largest,
  * Node 1, and lays it out with its children in the file. Node 0 now has an adjusted size of 2 which is below the
  * page size, and we can continue the process.
+ * <p>
  * Since this was the root of the trie, the current page is padded and the remaining nodes 0, 5 are written.
  */
 @NotThreadSafe

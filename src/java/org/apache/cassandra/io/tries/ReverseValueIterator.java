@@ -51,14 +51,6 @@ public class ReverseValueIterator<Concrete extends ReverseValueIterator<Concrete
         }
     }
 
-    protected ReverseValueIterator(Rebufferer source, long root)
-    {
-        super(source, root);
-        stack = new IterationPosition(root, -1, 256, null);
-        limit = null;
-        next = advanceNode();
-    }
-
     protected ReverseValueIterator(Rebufferer source, long root, ByteComparable start, ByteComparable end, boolean admitPrefix)
     {
         super(source, root);
