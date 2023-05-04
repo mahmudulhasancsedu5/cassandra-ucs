@@ -19,6 +19,7 @@
 package org.apache.cassandra.utils.concurrent;
 
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -70,6 +71,8 @@ public interface LightweightRecycler<T> extends LightweightRecyclerPoolHolder<T>
         {
             if (t instanceof Collection)
                 ((Collection<?>) t).clear();
+            else if (t instanceof Object[])
+                Arrays.fill((Object[]) t, null);
             pool.offerFirst(t);
             return true;
         }

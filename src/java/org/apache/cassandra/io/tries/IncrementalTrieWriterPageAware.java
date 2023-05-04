@@ -19,6 +19,7 @@ package org.apache.cassandra.io.tries;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.NavigableSet;
@@ -79,8 +80,10 @@ implements IncrementalTrieWriter<VALUE>
 {
     final int maxBytesPerPage;
 
-    private final static Comparator<Node<?>> BRANCH_SIZE_COMPARATOR = (l, r) ->
+    private final static Comparator<Object> BRANCH_SIZE_COMPARATOR = (ol, or) ->
     {
+        Node<?> l = (Node<?>) ol;
+        Node<?> r = (Node<?>) or;
         // Smaller branches first.
         int c = Integer.compare(l.branchSize + l.nodeSize, r.branchSize + r.nodeSize);
         if (c != 0)
@@ -92,6 +95,16 @@ implements IncrementalTrieWriter<VALUE>
         // - orders equal sized items so that most recently processed (and potentially having closer children) comes
         //   last and is thus the first one picked for layout.
         c = Integer.compare(l.transition, r.transition);
+
+        assert c != 0 || l == r;
+        return c;
+    };
+
+    private final static Comparator<Object> TRANSITION_COMPARATOR = (ol, or) ->
+    {
+        Node<?> l = (Node<?>) ol;
+        Node<?> r = (Node<?>) or;
+        int c = Integer.compare(l.transition, r.transition);
 
         assert c != 0 || l == r;
         return c;
@@ -152,24 +165,25 @@ implements IncrementalTrieWriter<VALUE>
         assert node.filePos == -1;
 
         int branchSize = 0;
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
             branchSize += child.branchSize + child.nodeSize;
 
         node.branchSize = branchSize;
 
         int nodeSize = serializer.sizeofNode(node, dest.position());
+        node.hasOutOfPageChildren = false;
         if (nodeSize + branchSize < maxBytesPerPage)
         {
             // Good. This node and all children will (most probably) fit page.
             node.nodeSize = nodeSize;
-            node.hasOutOfPageChildren = false;
             node.hasOutOfPageInBranch = false;
 
-            for (Node<VALUE> child : node.children)
-                if (child.filePos != -1)
-                    node.hasOutOfPageChildren = true;
-                else if (child.hasOutOfPageChildren || child.hasOutOfPageInBranch)
+            for (Node<VALUE> child : node)
+            {
+                assert child.filePos == -1 : "Illegal state: child branch written before parent's completion";
+                if (child.hasOutOfPageChildren || child.hasOutOfPageInBranch)
                     node.hasOutOfPageInBranch = true;
+            }
 
             return;
         }
@@ -181,24 +195,30 @@ implements IncrementalTrieWriter<VALUE>
     private void layoutChildren(Node<VALUE> node) throws IOException
     {
         assert node.filePos == -1;
+        assert !node.hasOutOfPageChildren;
 
-        NavigableSet<Node<VALUE>> children = node.getChildrenWithUnsetPosition();
+        Object[] children = node.children;
+        int stillToWrite = node.childCount;
+        Arrays.sort(children, 0, stillToWrite, BRANCH_SIZE_COMPARATOR);
 
         int bytesLeft = dest.bytesLeftInPage();
         Node<VALUE> cmp = new Node<>(256); // goes after all equal-sized unplaced nodes (whose transition character is 0-255)
         cmp.nodeSize = 0;
-        while (!children.isEmpty())
+        while (stillToWrite > 0)
         {
             cmp.branchSize = bytesLeft;
-            Node<VALUE> child = children.headSet(cmp, true).pollLast();    // grab biggest that could fit
-            if (child == null)
+            int childIndex = Arrays.binarySearch(children, 0, stillToWrite, cmp, BRANCH_SIZE_COMPARATOR);
+            assert childIndex < 0 : "Invalid state: artificial comparator equal to child";
+            childIndex = -1 - childIndex - 1;   // biggest that could fit
+            if (childIndex < 0)
             {
                 dest.padToPageBoundary();
                 bytesLeft = maxBytesPerPage;
-                child = children.pollLast();       // just biggest
+                childIndex = stillToWrite - 1; // just biggest
             }
 
-            assert child != null;
+            Node<VALUE> child = (Node<VALUE>) children[childIndex];
+            assert child.filePos == -1;
             if (child.hasOutOfPageChildren || child.hasOutOfPageInBranch)
             {
                 // We didn't know what size this branch will actually need to be, node's children may be far.
@@ -206,7 +226,7 @@ implements IncrementalTrieWriter<VALUE>
                 int actualSize = recalcTotalSize(child, dest.position());
                 if (actualSize > bytesLeft)
                 {
-                    if (bytesLeft == maxBytesPerPage)
+                    if (actualSize > maxBytesPerPage)
                     {
                         // Branch doesn't even fit in a page.
 
@@ -220,16 +240,25 @@ implements IncrementalTrieWriter<VALUE>
                         assert (child.filePos == -1);
                     }
 
-                    // Doesn't fit, but that's probably because we don't have a full page. Put it back with the new
-                    // size and retry when we do have enough space.
-                    children.add(child);
+                    // Doesn't fit, but that's probably because we don't have a full page. It's size has changed, so
+                    // resort the array (should be quick) to let it find its place.
+                    Arrays.sort(children, 0, stillToWrite, BRANCH_SIZE_COMPARATOR);
                     continue;
                 }
             }
 
             child.finalizeWithPosition(write(child));
             bytesLeft = dest.bytesLeftInPage();
+            --stillToWrite;
+            if (childIndex != stillToWrite)
+            {
+                // move child after end of active list
+                System.arraycopy(children, childIndex + 1, children, childIndex, stillToWrite - childIndex);
+                children[stillToWrite] = child;
+            }
         }
+        // resort children list by transition
+        Arrays.sort(children, 0, node.childCount, TRANSITION_COMPARATOR);
 
         // The sizing below will use the branch size, so make sure it's set.
         node.branchSize = 0;
@@ -243,7 +272,7 @@ implements IncrementalTrieWriter<VALUE>
         if (node.hasOutOfPageInBranch)
         {
             int sz = 0;
-            for (Node<VALUE> child : node.children)
+            for (Node<VALUE> child : node)
                 sz += recalcTotalSize(child, nodePosition + sz);
             node.branchSize = sz;
         }
@@ -259,7 +288,7 @@ implements IncrementalTrieWriter<VALUE>
     protected long write(Node<VALUE> node) throws IOException
     {
         long nodePosition = dest.position();
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
             if (child.filePos == -1)
                 child.filePos = write(child);
 
@@ -282,7 +311,7 @@ implements IncrementalTrieWriter<VALUE>
                                                             TrieNode.typeFor(node, nodePosition), node.childCount(), node.nodeSize, node.branchSize,
                                                             node.hasOutOfPageChildren ? "C" : "",
                                                             node.hasOutOfPageInBranch ? "B" : ""));
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
             res.append(String.format("Child %2x at %,d(%x) type %s child count %s size %s nodeSize %,d branchSize %,d %s%s%n",
                                      child.transition & 0xFF,
                                      child.filePos,
@@ -323,7 +352,7 @@ implements IncrementalTrieWriter<VALUE>
         long startPosition = dest.position() + baseOffset;
 
         List<Node<VALUE>> childrenToClear = new ArrayList<>();
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
         {
             if (child.filePos == -1)
             {
@@ -395,8 +424,8 @@ implements IncrementalTrieWriter<VALUE>
 
         public long serializedPositionDelta(int i, long nodePosition)
         {
-            assert (children.get(i).filePos != -1);
-            return children.get(i).filePos - nodePosition;
+            assert (child(i).filePos != -1);
+            return child(i).filePos - nodePosition;
         }
 
         /**
@@ -414,11 +443,11 @@ implements IncrementalTrieWriter<VALUE>
 
             if (!hasOutOfPageChildren)
                 // We need to be able to address the first child. We don't need to cover its branch, though.
-                return -(branchSize - children.get(0).branchSize);
+                return -(branchSize - child(0).branchSize);
 
             long minPlaced = 0;
             long minUnplaced = 1;
-            for (Node<Value> child : children)
+            for (Node<Value> child : this)
             {
                 if (child.filePos != -1)
                     minPlaced = Math.min(minPlaced, child.filePos - nodePosition);
@@ -427,16 +456,6 @@ implements IncrementalTrieWriter<VALUE>
             }
 
             return Math.min(minPlaced, minUnplaced);
-        }
-
-        NavigableSet<Node<Value>> getChildrenWithUnsetPosition()
-        {
-            NavigableSet<Node<Value>> result = new TreeSet<>(BRANCH_SIZE_COMPARATOR);
-            for (Node<Value> child : children)
-                if (child.filePos == -1)
-                    result.add(child);
-
-            return result;
         }
 
         @Override

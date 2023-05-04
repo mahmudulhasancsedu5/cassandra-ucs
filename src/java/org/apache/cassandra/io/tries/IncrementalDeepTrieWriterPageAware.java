@@ -138,7 +138,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         if (node.hasOutOfPageInBranch)
         {
             int sz = 0;
-            for (Node<VALUE> child : node.children)
+            for (Node<VALUE> child : node)
             {
                 if (depth < maxRecursionDepth)
                     sz += recalcTotalSizeRecursiveOnStack(child, nodePosition + sz, depth + 1);
@@ -174,7 +174,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
         RecalcTotalSizeRecursion(Node<VALUE> node, Recursion<Node<VALUE>> parent, long nodePosition)
         {
-            super(node, node.children.iterator(), parent);
+            super(node, node.iterator(), parent);
             sz = 0;
             this.nodePosition = nodePosition;
         }
@@ -220,7 +220,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
     private long writeRecursiveOnStack(Node<VALUE> node, int depth) throws IOException
     {
         long nodePosition = dest.position();
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
             if (child.filePos == -1)
             {
                 if (depth < maxRecursionDepth)
@@ -252,7 +252,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
         WriteRecursion(Node<VALUE> node, Recursion<Node<VALUE>> parent)
         {
-            super(node, node.children.iterator(), parent);
+            super(node, node.iterator(), parent);
             nodePosition = dest.position();
         }
 
@@ -293,7 +293,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         long startPosition = dest.position() + baseOffset;
 
         List<Node<VALUE>> childrenToClear = new ArrayList<>();
-        for (Node<VALUE> child : node.children)
+        for (Node<VALUE> child : node)
         {
             if (child.filePos == -1)
             {
@@ -346,7 +346,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
         WritePartialRecursion(Node<VALUE> node, WritePartialRecursion parent)
         {
-            super(node, node.children.iterator(), parent);
+            super(node, node.iterator(), parent);
             this.dest = parent.dest;
             this.baseOffset = parent.baseOffset;
             this.startPosition = dest.position() + baseOffset;
@@ -355,7 +355,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
 
         WritePartialRecursion(Node<VALUE> node, DataOutputPlus dest, long baseOffset)
         {
-            super(node, node.children.iterator(), null);
+            super(node, node.iterator(), null);
             this.dest = dest;
             this.baseOffset = baseOffset;
             this.startPosition = dest.position() + baseOffset;

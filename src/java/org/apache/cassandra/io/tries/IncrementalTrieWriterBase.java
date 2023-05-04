@@ -21,7 +21,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
+import java.util.Iterator;
 
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
@@ -177,34 +179,36 @@ implements IncrementalTrieWriter<VALUE>
         }
     }
 
-    static abstract class BaseNode<VALUE, NODE extends BaseNode<VALUE, NODE>> implements SerializationNode<VALUE>
+    static abstract class BaseNode<VALUE, NODE extends BaseNode<VALUE, NODE>> implements SerializationNode<VALUE>, Iterable<NODE>
     {
         private static final int CHILDREN_LIST_RECYCLER_LIMIT = 1024;
         @SuppressWarnings("rawtypes")
-        private static final LightweightRecycler<ArrayList> CHILDREN_LIST_RECYCLER = ThreadLocals.createLightweightRecycler(CHILDREN_LIST_RECYCLER_LIMIT);
+        private static final LightweightRecycler<Object[]> CHILDREN_LIST_RECYCLER = ThreadLocals.createLightweightRecycler(CHILDREN_LIST_RECYCLER_LIMIT);
         @SuppressWarnings("rawtypes")
-        private static final ArrayList EMPTY_LIST = new ArrayList<>(0);
+        private static final Object[] EMPTY_LIST = new Object[0];
 
         @SuppressWarnings({ "unchecked", "rawtypes" })
-        private static <NODE> ArrayList<NODE> allocateChildrenList()
+        private static Object[] allocateChildrenList()
         {
-            return CHILDREN_LIST_RECYCLER.reuseOrAllocate(() -> new ArrayList(4));
+            return CHILDREN_LIST_RECYCLER.reuseOrAllocate(() -> new Object[4]);
         }
 
-        private static <NODE> void recycleChildrenList(ArrayList<NODE> children)
+        private static void recycleChildrenList(Object[] children)
         {
             CHILDREN_LIST_RECYCLER.tryRecycle(children);
         }
 
         VALUE payload;
-        ArrayList<NODE> children;
+        Object[] children;
+        int childCount;
         final int transition;
         long filePos = -1;
 
         @SuppressWarnings("unchecked")
         BaseNode(int transition)
         {
-            children = EMPTY_LIST;
+            children = null;
+            childCount = 0;
             this.transition = transition;
         }
 
@@ -222,18 +226,20 @@ implements IncrementalTrieWriter<VALUE>
 
         public NODE addChild(byte b)
         {
-            assert children.isEmpty() || (children.get(children.size() - 1).transition & 0xFF) < (b & 0xFF);
+            assert childCount == 0 || (transition(childCount - 1) & 0xFF) < (b & 0xFF);
             NODE node = newNode(b);
-            if (children == EMPTY_LIST)
+            if (children == null)
                 children = allocateChildrenList();
 
-            children.add(node);
+            if (childCount == children.length)
+                children = Arrays.copyOf(children, childCount * 2);
+            children[childCount++] = node;
             return node;
         }
 
         public int childCount()
         {
-            return children.size();
+            return childCount;
         }
 
         void finalizeWithPosition(long position)
@@ -242,7 +248,7 @@ implements IncrementalTrieWriter<VALUE>
 
             // Make sure we are not holding on to pointers to data we no longer need
             // (otherwise we keep the whole trie in memory).
-            if (children != EMPTY_LIST)
+            if (children != null)
                 // the recycler will also clear the collection before adding it to the pool
                 recycleChildrenList(children);
 
@@ -250,9 +256,31 @@ implements IncrementalTrieWriter<VALUE>
             payload = null;
         }
 
+        public NODE child(int i)
+        {
+            return (NODE) children[i];
+        }
+
         public int transition(int i)
         {
-            return children.get(i).transition;
+            return child(i).transition;
+        }
+
+        public Iterator<NODE> iterator()
+        {
+            return new Iterator<NODE>() {
+                int i = 0;
+
+                public boolean hasNext()
+                {
+                    return i < childCount;
+                }
+
+                public NODE next()
+                {
+                    return child(i++);
+                }
+            };
         }
 
         @Override

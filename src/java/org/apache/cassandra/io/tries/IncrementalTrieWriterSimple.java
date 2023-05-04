@@ -112,14 +112,14 @@ public class IncrementalTrieWriterSimple<VALUE>
 
         public long serializedPositionDelta(int i, long nodePosition)
         {
-            assert children.get(i).filePos != -1;
-            return children.get(i).filePos - nodePosition;
+            assert child(i).filePos != -1;
+            return child(i).filePos - nodePosition;
         }
 
         public long maxPositionDelta(long nodePosition)
         {
             long min = 0;
-            for (Node<Value> child : children)
+            for (Node<Value> child : this)
             {
                 if (child.filePos != -1)
                     min = Math.min(min, child.filePos - nodePosition);
