@@ -21,8 +21,13 @@ package org.apache.cassandra.io.tries;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.function.BiFunction;
 
 import org.junit.Before;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,8 +38,37 @@ import org.apache.cassandra.io.util.PageAware;
 import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
+@RunWith(Parameterized.class)
 abstract public class AbstractTrieTestBase
 {
+    @Parameterized.Parameter(0)
+    public TestClass writerClass;
+
+    enum TestClass
+    {
+        SIMPLE(IncrementalTrieWriterSimple::new),
+        PAGE_AWARE(IncrementalTrieWriterPageAware::new),
+        PAGE_AWARE_DEEP_ON_STACK((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 256)),
+        PAGE_AWARE_DEEP_ON_HEAP((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 0)),
+        PAGE_AWARE_DEEP_MIXED((serializer, dest) -> new IncrementalDeepTrieWriterPageAware<>(serializer, dest, 2));
+
+        final BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter<Integer>> constructor;
+        TestClass(BiFunction<TrieSerializer<Integer, DataOutputPlus>, DataOutputPlus, IncrementalTrieWriter<Integer>> constructor)
+        {
+            this.constructor = constructor;
+        }
+    }
+
+    @Parameterized.Parameters(name = "{index}: trie writer class={0}")
+    public static Collection<Object[]> data()
+    {
+        return Arrays.asList(new Object[]{ TestClass.SIMPLE },
+                             new Object[]{ TestClass.PAGE_AWARE },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_ON_STACK },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_ON_HEAP },
+                             new Object[]{ TestClass.PAGE_AWARE_DEEP_MIXED });
+    }
+
     protected final static Logger logger = LoggerFactory.getLogger(TrieBuilderTest.class);
     protected final static int BASE = 80;
 
@@ -46,6 +80,11 @@ abstract public class AbstractTrieTestBase
     {
         dump = false;
         payloadSize = 0;
+    }
+
+    IncrementalTrieWriter<Integer> newTrieWriter(TrieSerializer<Integer, DataOutputPlus> serializer, DataOutputPlus out)
+    {
+        return writerClass.constructor.apply(serializer, out);
     }
 
     protected final TrieSerializer<Integer, DataOutputPlus> serializer = new TrieSerializer<Integer, DataOutputPlus>()

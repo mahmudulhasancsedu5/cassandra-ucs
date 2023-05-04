@@ -33,7 +33,7 @@ public class TrieBuilderTest extends AbstractTrieTestBase
     public void testPartialBuild_DB1148() throws IOException
     {
         DataOutputBuffer buf = new DataOutputBufferPaged();
-        IncrementalTrieWriter<Integer> builder = IncrementalTrieWriter.open(serializer, buf);
+        IncrementalTrieWriter<Integer> builder = newTrieWriter(serializer, buf);
         long count = 0;
 
         count += addUntilBytesWritten(buf, builder, "a", 1);            // Make a node whose children are written
