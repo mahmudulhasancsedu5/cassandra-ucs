@@ -152,19 +152,6 @@ abstract public class AbstractTrieTestBase
         }
     }
 
-    protected static class InternalIterator extends ValueIterator<InternalIterator>
-    {
-        public InternalIterator(Rebufferer source, long root)
-        {
-            super(source, root);
-        }
-
-        public InternalIterator(Rebufferer source, long root, ByteComparable start, ByteComparable end, boolean admitPrefix)
-        {
-            super(source, root, start, end, admitPrefix);
-        }
-    }
-
     protected static class ByteBufRebufferer implements Rebufferer, Rebufferer.BufferHolder
     {
         final ByteBuffer buffer;

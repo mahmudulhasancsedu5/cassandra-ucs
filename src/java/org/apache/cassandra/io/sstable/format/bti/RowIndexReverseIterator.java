@@ -41,9 +41,6 @@ class RowIndexReverseIterator extends ReverseValueIterator<RowIndexReverseIterat
         this(file, entry.indexTrieRoot, ByteComparable.EMPTY, end);
     }
 
-    /**
-     * This method must be async-read-safe.
-     */
     public IndexInfo nextIndexInfo()
     {
         if (currentNode == -1)

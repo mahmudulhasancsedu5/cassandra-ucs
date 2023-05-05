@@ -20,15 +20,22 @@ package org.apache.cassandra.io.tries;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.function.LongSupplier;
+import java.util.function.LongToIntFunction;
+import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
+import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.Rebufferer;
 import org.apache.cassandra.io.util.TailOverridingRebufferer;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -38,7 +45,7 @@ import static org.junit.Assert.assertNull;
 public class WalkerTest extends AbstractTrieTestBase
 {
     @Test
-    public void testWithoutBounds() throws IOException
+    public void testWalker() throws IOException
     {
         DataOutputBuffer buf = new DataOutputBufferPaged();
         IncrementalTrieWriter<Integer> builder = makeTrie(buf);
@@ -46,7 +53,7 @@ public class WalkerTest extends AbstractTrieTestBase
 
         Rebufferer source = new ByteBufRebufferer(buf.asNewBuffer());
 
-        InternalIterator it = new InternalIterator(source, rootPos);
+        Walker<?> it = new Walker<>(source, rootPos);
 
         DataOutputBuffer dumpBuf = new DataOutputBuffer();
         it.dumpTrie(new PrintStream(dumpBuf), (buf1, payloadPos, payloadFlags) -> String.format("%d/%d", payloadPos, payloadFlags));
@@ -54,7 +61,7 @@ public class WalkerTest extends AbstractTrieTestBase
         logger.info("Trie toString: {}", it);
 
         it.goMax(rootPos);
-        assertEquals(11, it.payloadFlags());
+        assertEquals(12, it.payloadFlags());
         assertEquals(TrieNode.Types.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
         assertEquals(1, it.nodeSize());
         assertFalse(it.hasChildren());
@@ -96,65 +103,99 @@ public class WalkerTest extends AbstractTrieTestBase
     }
 
     @Test
-    public void testWithBounds() throws IOException
+    public void testIteratorWithoutBounds() throws IOException
     {
         DataOutputBuffer buf = new DataOutputBufferPaged();
         IncrementalTrieWriter<Integer> builder = makeTrie(buf);
         long rootPos = builder.complete();
 
-        Rebufferer source = new ByteBufRebufferer(buf.asNewBuffer());
-
-        InternalIterator it = new InternalIterator(source, rootPos, source("151"), source("515"), false);
-        long pos;
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(3, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(4, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(5, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertEquals(-1, it.nextPayloadedNode());
-
-        it = new InternalIterator(source, rootPos, source("705"), source("73"), false);
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(8, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(9, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(10, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertEquals(-1, it.nextPayloadedNode());
+        int[] expected = IntStream.range(1, 13).toArray();
+        checkIterates(buf.asNewBuffer(), rootPos, expected);
     }
 
     @Test
-    public void testWithBoundsAndAdmitPrefix() throws IOException
+    public void testIteratorWithBounds() throws IOException
     {
         DataOutputBuffer buf = new DataOutputBufferPaged();
         IncrementalTrieWriter<Integer> builder = makeTrie(buf);
         long rootPos = builder.complete();
 
-        Rebufferer source = new ByteBufRebufferer(buf.asNewBuffer());
+        checkIterates(buf.asNewBuffer(), rootPos, "151", "515", false, 3, 4, 5);
+        checkIterates(buf.asNewBuffer(), rootPos, "15151", "51515", false, 3, 4, 5);
+        checkIterates(buf.asNewBuffer(), rootPos, "705", "73", false, 9, 10, 11);
+        checkIterates(buf.asNewBuffer(), rootPos, "7051", "735", false, 10, 11);
+        checkIterates(buf.asNewBuffer(), rootPos, "70", "737", false, 9, 10, 11, 12);
+        checkIterates(buf.asNewBuffer(), rootPos, "7054", "735", false, 10, 11);
+    }
 
-        InternalIterator it = new InternalIterator(source, rootPos, source("151"), source("515"), true);
-        long pos;
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(2, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos)); // exact match 151
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(3, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(4, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(5, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertEquals(-1, it.nextPayloadedNode());
+    @Test
+    public void testIteratorWithBoundsAndAdmitPrefix() throws IOException
+    {
+        DataOutputBuffer buf = new DataOutputBufferPaged();
+        IncrementalTrieWriter<Integer> builder = makeTrie(buf);
+        long rootPos = builder.complete();
 
-        it = new InternalIterator(source, rootPos, source("705"), source("73"), true);
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(7, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));  // prefix 70
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(8, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(9, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(10, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
-        assertEquals(-1, it.nextPayloadedNode());
+        checkIterates(buf.asNewBuffer(), rootPos, "151", "515", true, 2, 3, 4, 5);
+        checkIterates(buf.asNewBuffer(), rootPos, "15151", "51515", true, 2, 3, 4, 5);
+        checkIterates(buf.asNewBuffer(), rootPos, "705", "73", true, 8, 9, 10, 11);
+        checkIterates(buf.asNewBuffer(), rootPos, "7051", "735", true, 9, 10, 11);
+        checkIterates(buf.asNewBuffer(), rootPos, "70", "737", true, 8, 9, 10, 11, 12);
+        // Note: 7054 has 70 as prefix, but we don't include 70 because a clearly smaller non-prefix entry 7051
+        // exists between the bound and the prefix
+        checkIterates(buf.asNewBuffer(), rootPos, "7054", "735", true, 10, 11);
+    }
+
+    private void checkIterates(ByteBuffer buffer, long rootPos, String from, String to, boolean admitPrefix, int... expected)
+    {
+        Rebufferer source = new ByteBufRebufferer(buffer);
+        ValueIterator<?> it = new ValueIterator<>(source, rootPos, source(from), source(to), admitPrefix);
+        checkReturns(from + "-->" + to, it::nextPayloadedNode, pos -> getPayloadFlags(buffer, (int) pos), expected);
+
+        ReverseValueIterator<?> rit = new ReverseValueIterator<>(source, rootPos, source(from), source(to), admitPrefix);
+        reverse(expected);
+        checkReturns(from + "<--" + to, rit::nextPayloadedNode, pos -> getPayloadFlags(buffer, (int) pos), expected);
+        reverse(expected);  // return array in its original form if reused
+    }
+
+    private void checkIterates(ByteBuffer buffer, long rootPos, int... expected)
+    {
+        Rebufferer source = new ByteBufRebufferer(buffer);
+        ValueIterator<?> it = new ValueIterator<>(source, rootPos);
+        checkReturns("Forward", it::nextPayloadedNode, pos -> getPayloadFlags(buffer, (int) pos), expected);
+
+        ReverseValueIterator<?> rit = new ReverseValueIterator<>(source, rootPos);
+        reverse(expected);
+        checkReturns("Reverse", rit::nextPayloadedNode, pos -> getPayloadFlags(buffer, (int) pos), expected);
+        reverse(expected);  // return array in its original form if reused
+    }
+
+    private void reverse(int[] expected)
+    {
+        final int size = expected.length;
+        for (int i = 0; i < size / 2; ++i)
+        {
+            int t = expected[i];
+            expected[i] = expected[size - 1 - i];
+            expected[size - i - 1] = t;
+        }
+    }
+
+    private int getPayloadFlags(ByteBuffer buffer, int pos)
+    {
+        return TrieNode.at(buffer, pos).payloadFlags(buffer, pos);
+    }
+
+    private void checkReturns(String testCase, LongSupplier supplier, LongToIntFunction mapper, int... expected)
+    {
+        IntArrayList list = new IntArrayList();
+        while (true)
+        {
+            long pos = supplier.getAsLong();
+            if (pos == Walker.NONE)
+                break;
+            list.add(mapper.applyAsInt(pos));
+        }
+        assertArrayEquals(testCase + ": " + list + " != " + Arrays.toString(expected), expected, list.toIntArray());
     }
 
     @Test
@@ -166,8 +207,8 @@ public class WalkerTest extends AbstractTrieTestBase
         long rootPos = builder.complete();
         try (Rebufferer source = new ByteBufRebufferer(buf.asNewBuffer());
              Rebufferer partialSource = new TailOverridingRebufferer(new ByteBufRebufferer(buf.asNewBuffer()), ptail.cutoff(), ptail.tail());
-             InternalIterator it = new InternalIterator(new ByteBufRebufferer(buf.asNewBuffer()), rootPos, source("151"), source("515"), true);
-             InternalIterator tailIt = new InternalIterator(new TailOverridingRebufferer(new ByteBufRebufferer(buf.asNewBuffer()), ptail.cutoff(), ptail.tail()), ptail.root(), source("151"), source("515"), true))
+             ValueIterator<?> it = new ValueIterator<>(new ByteBufRebufferer(buf.asNewBuffer()), rootPos, source("151"), source("515"), true);
+             ValueIterator<?> tailIt = new ValueIterator<>(new TailOverridingRebufferer(new ByteBufRebufferer(buf.asNewBuffer()), ptail.cutoff(), ptail.tail()), ptail.root(), source("151"), source("515"), true))
         {
             while (true)
             {
@@ -202,7 +243,7 @@ public class WalkerTest extends AbstractTrieTestBase
 
         long rootPos = builder.complete();
         Rebufferer source = new ByteBufRebufferer(buf.asNewBuffer());
-        InternalIterator it = new InternalIterator(source, rootPos);
+        ValueIterator<?> it = new ValueIterator<>(source, rootPos);
 
         while (true)
         {
@@ -228,11 +269,11 @@ public class WalkerTest extends AbstractTrieTestBase
         builder.add(source("551"), 6);
         builder.add(source("555555555555555555555555555555555555555555555555555555555555555555"), 7);
 
-        builder.add(source("70"), 7);
-        builder.add(source("7051"), 8);
-        builder.add(source("717"), 9);
-        builder.add(source("73"), 10);
-        builder.add(source("737"), 11);
+        builder.add(source("70"), 8);
+        builder.add(source("7051"), 9);
+        builder.add(source("717"), 10);
+        builder.add(source("73"), 11);
+        builder.add(source("737"), 12);
         return builder;
     }
 

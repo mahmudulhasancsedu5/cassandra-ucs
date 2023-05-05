@@ -25,6 +25,11 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 
 /**
  * Thread-unsafe value iterator for on-disk tries. Uses the assumptions of {@link Walker}.
+ * <p>
+ * The main utility of this class is the {@link #nextPayloadedNode()} method, which lists all nodes that contain a
+ * payload within the requested bounds. The treatment of the bounds is non-standard (see
+ * {@link #ValueIterator(Rebufferer, long, ByteComparable, ByteComparable, boolean)}), necessary to properly walk
+ * tries of prefixes and separators.
  */
 @NotThreadSafe
 public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Walker<CONCRETE>
@@ -63,6 +68,17 @@ public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Wal
         initializeNoLeftBound(root, 256);
     }
 
+    /**
+     * Constrained iterator. The end position is always treated as inclusive, and we have two possible treatments for
+     * the start:
+     * <ul>
+     *   <li> When {@code admitPrefix=false}, exact matches and any prefixes of the start are excluded.
+     *   <li> When {@code admitPrefix=true}, the longest prefix of the start present in the trie is also included,
+     *        provided that there is no entry in the trie between that prefix and the start. An exact match also
+     *        satisfies this and is included.
+     * </ul>
+     * This behaviour is shared with the reverse counterpart {@link ReverseValueIterator}.
+     */
     protected ValueIterator(Rebufferer source, long root, ByteComparable start, ByteComparable end, boolean admitPrefix)
     {
         super(source, root);
@@ -154,9 +170,7 @@ public class ValueIterator<CONCRETE extends ValueIterator<CONCRETE>> extends Wal
     }
 
     /**
-     * Returns the payload node position.
-     *
-     * This method must be async-read-safe, see {@link #advanceNode()}.
+     * Returns the position of the next node with payload contained in the iterated span.
      */
     protected long nextPayloadedNode()
     {
