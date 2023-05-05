@@ -133,6 +133,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         return recalcTotalSizeRecursiveOnStack(node, nodePosition, 0);
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware
     private int recalcTotalSizeRecursiveOnStack(Node<VALUE> node, long nodePosition, int depth) throws IOException
     {
         if (node.hasOutOfPageInBranch)
@@ -194,6 +195,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
             node.branchSize = sz;
         }
 
+        @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware and onStack code
         @Override
         void completeChild(Node<VALUE> child)
         {
@@ -217,6 +219,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         return writeRecursiveOnStack(node, 0);
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware
     private long writeRecursiveOnStack(Node<VALUE> node, int depth) throws IOException
     {
         long nodePosition = dest.position();
@@ -265,6 +268,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
                 return null;
         }
 
+        @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware and onStack code
         @Override
         void complete() throws IOException
         {
@@ -288,6 +292,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
         return writePartialRecursiveOnStack(node, dest, baseOffset, 0);
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware
     private long writePartialRecursiveOnStack(Node<VALUE> node, DataOutputPlus dest, long baseOffset, int depth) throws IOException
     {
         long startPosition = dest.position() + baseOffset;
@@ -362,6 +367,7 @@ public class IncrementalDeepTrieWriterPageAware<VALUE> extends IncrementalTrieWr
             childrenToClear = new ArrayList<>();
         }
 
+        @SuppressWarnings("DuplicatedCode") // intentionally duplicates IncrementalTrieWriterPageAware and onStack code
         @Override
         Recursion<Node<VALUE>> makeChild(Node<VALUE> child)
         {

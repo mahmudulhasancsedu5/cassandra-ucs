@@ -98,7 +98,10 @@ abstract public class AbstractTrieTestBase
         {
             if (dump)
                 logger.info("Writing at {} type {} size {}: {}", Long.toHexString(nodePosition), TrieNode.typeFor(node, nodePosition), TrieNode.typeFor(node, nodePosition).sizeofNode(node), node);
+            // Our payload value is an integer of four bits.
+            // We use the payload bits in the trie node header to fully store it.
             TrieNode.typeFor(node, nodePosition).serialize(dataOutput, node, node.payload() != null ? node.payload() : 0, nodePosition);
+            // and we also add some padding if a test needs it
             dataOutput.write(new byte[payloadSize]);
         }
     };

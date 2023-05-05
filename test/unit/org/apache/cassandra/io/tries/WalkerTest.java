@@ -54,7 +54,7 @@ public class WalkerTest extends AbstractTrieTestBase
         logger.info("Trie toString: {}", it);
 
         it.goMax(rootPos);
-        assertEquals(7, it.payloadFlags());
+        assertEquals(11, it.payloadFlags());
         assertEquals(TrieNode.Types.PAYLOAD_ONLY.ordinal, it.nodeTypeOrdinal());
         assertEquals(1, it.nodeSize());
         assertFalse(it.hasChildren());
@@ -112,7 +112,15 @@ public class WalkerTest extends AbstractTrieTestBase
         assertEquals(4, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
         assertNotEquals(-1, pos = it.nextPayloadedNode());
         assertEquals(5, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertEquals(-1, it.nextPayloadedNode());
 
+        it = new InternalIterator(source, rootPos, source("705"), source("73"), false);
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(8, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(9, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(10, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
         assertEquals(-1, it.nextPayloadedNode());
     }
 
@@ -128,14 +136,24 @@ public class WalkerTest extends AbstractTrieTestBase
         InternalIterator it = new InternalIterator(source, rootPos, source("151"), source("515"), true);
         long pos;
         assertNotEquals(-1, pos = it.nextPayloadedNode());
-        assertEquals(2, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertEquals(2, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos)); // exact match 151
         assertNotEquals(-1, pos = it.nextPayloadedNode());
         assertEquals(3, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
         assertNotEquals(-1, pos = it.nextPayloadedNode());
         assertEquals(4, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
         assertNotEquals(-1, pos = it.nextPayloadedNode());
         assertEquals(5, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertEquals(-1, it.nextPayloadedNode());
 
+        it = new InternalIterator(source, rootPos, source("705"), source("73"), true);
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(7, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));  // prefix 70
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(8, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(9, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
+        assertNotEquals(-1, pos = it.nextPayloadedNode());
+        assertEquals(10, TrieNode.at(buf.asNewBuffer(), (int) pos).payloadFlags(buf.asNewBuffer(), (int) pos));
         assertEquals(-1, it.nextPayloadedNode());
     }
 
@@ -209,6 +227,12 @@ public class WalkerTest extends AbstractTrieTestBase
         builder.add(source("515"), 5);
         builder.add(source("551"), 6);
         builder.add(source("555555555555555555555555555555555555555555555555555555555555555555"), 7);
+
+        builder.add(source("70"), 7);
+        builder.add(source("7051"), 8);
+        builder.add(source("717"), 9);
+        builder.add(source("73"), 10);
+        builder.add(source("737"), 11);
         return builder;
     }
 

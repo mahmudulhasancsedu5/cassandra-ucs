@@ -244,6 +244,7 @@ implements IncrementalTrieWriter<VALUE>
         node.nodeSize = serializer.sizeofNode(node, dest.position());
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicated in IncrementalDeepTrieWriterPageAware
     protected int recalcTotalSize(Node<VALUE> node, long nodePosition) throws IOException
     {
         if (node.hasOutOfPageInBranch)
@@ -262,6 +263,7 @@ implements IncrementalTrieWriter<VALUE>
         return node.branchSize + node.nodeSize;
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicated in IncrementalDeepTrieWriterPageAware
     protected long write(Node<VALUE> node) throws IOException
     {
         long nodePosition = dest.position();
@@ -324,6 +326,7 @@ implements IncrementalTrieWriter<VALUE>
         }
     }
 
+    @SuppressWarnings("DuplicatedCode") // intentionally duplicated in IncrementalDeepTrieWriterPageAware
     protected long writePartial(Node<VALUE> node, DataOutputPlus dest, long baseOffset) throws IOException
     {
         long startPosition = dest.position() + baseOffset;

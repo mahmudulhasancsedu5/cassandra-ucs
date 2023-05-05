@@ -399,7 +399,7 @@ public class PartitionIndex implements SharedCloseable
          */
         public IndexPosIterator(PartitionIndex index)
         {
-            super(index.instantiateRebufferer(), index.root, null, null, true);
+            super(index.instantiateRebufferer(), index.root);
         }
 
         IndexPosIterator(PartitionIndex index, PartitionPosition start, PartitionPosition end)

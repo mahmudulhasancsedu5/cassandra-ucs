@@ -38,6 +38,7 @@ import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multiset;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -66,8 +67,10 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
@@ -85,7 +88,7 @@ public class PartitionIndexTest
         DatabaseDescriptor.daemonInitialization();
     }
 
-    IPartitioner partitioner = Util.testPartitioner();
+    static final IPartitioner partitioner = Util.testPartitioner();
     //Lower the size of the indexes when running without the chunk cache, otherwise the test times out on Jenkins
     static final int COUNT = ChunkCache.instance != null ? 245256 : 24525;
 
@@ -99,6 +102,7 @@ public class PartitionIndexTest
     @Parameterized.Parameter(value = 0)
     public static Config.DiskAccessMode accessMode = Config.DiskAccessMode.standard;
 
+    @BeforeClass
     public static void beforeClass()
     {
         logger.info("Using random seed: {}", SEED);
@@ -108,7 +112,7 @@ public class PartitionIndexTest
      * Tests last-nodes-sizing failure uncovered during code review.
      */
     @Test
-    public void testSizingBug() throws IOException, InterruptedException
+    public void testSizingBug() throws IOException
     {
         for (int i = 1; i < COUNT; i *= 10)
         {
@@ -118,14 +122,14 @@ public class PartitionIndexTest
     }
 
     @Test
-    public void testGetEq() throws IOException, InterruptedException
+    public void testGetEq() throws IOException
     {
         testGetEq(generateRandomIndex(COUNT));
         testGetEq(generateSequentialIndex(COUNT));
     }
 
     @Test
-    public void testBrokenFile() throws IOException, InterruptedException
+    public void testBrokenFile() throws IOException
     {
         // put some garbage in the file
         final Pair<List<DecoratedKey>, PartitionIndex> data = generateRandomIndex(COUNT);
@@ -135,20 +139,11 @@ public class PartitionIndexTest
             ch.write(generateRandomKey().getKey(), f.length() * 2 / 3);
         }
 
-        boolean thrown = false;
-        try
-        {
-            testGetEq(data);
-        }
-        catch (Throwable e)
-        {
-            thrown = true;
-        }
-        assertTrue(thrown);
+        assertThatThrownBy(() -> testGetEq(data)).isInstanceOfAny(AssertionError.class, IndexOutOfBoundsException.class);
     }
 
     @Test
-    public void testLongKeys() throws IOException, InterruptedException
+    public void testLongKeys() throws IOException
     {
         testGetEq(generateLongKeysIndex(COUNT / 10));
     }
@@ -320,27 +315,12 @@ public class PartitionIndexTest
     @Test
     public void testIteration() throws IOException
     {
-//        assertEquals(0, ChunkReader.bufferPool.usedMemoryBytes());
         Pair<List<DecoratedKey>, PartitionIndex> random = generateRandomIndex(COUNT);
-        checkIteration(random.left, random.left.size(), random.right);
+        checkIteration(random.left.size(), random.right);
         random.right.close();
-//        assertEquals(0, ChunkReader.bufferPool.usedMemoryBytes());
     }
 
-    @Test
-    public void testZeroCopyOffsets() throws IOException
-    {
-        Pair<List<DecoratedKey>, PartitionIndex> random = generateRandomIndexWithZeroCopy(COUNT, 1, COUNT - 2);
-        List<DecoratedKey> keys = random.left;
-        try (PartitionIndex index = random.right)
-        {
-            assertEquals(COUNT - 2, index.size());
-            assertEquals(keys.get(1), index.firstKey());
-            assertEquals(keys.get(COUNT - 2), index.lastKey());
-        }
-    }
-
-    public void checkIteration(List<DecoratedKey> keys, int keysSize, PartitionIndex index)
+    public void checkIteration(int keysSize, PartitionIndex index)
     {
         try (PartitionIndex enforceIndexClosing = index;
              PartitionIndex.IndexPosIterator iter = index.allKeysIterator())
@@ -401,7 +381,7 @@ public class PartitionIndexTest
                     if (p < keys.size() - 1)
                         assertTrue(left.compareTo(keys.get(idx + 1)) < 0);
                     if (exactLeft)      // must be precise on exact, otherwise could be in any relation
-                        assertTrue(left == keys.get(idx));
+                        assertSame(left, keys.get(idx));
                     while (true)
                     {
                         ++idx;
@@ -416,7 +396,7 @@ public class PartitionIndexTest
                     if (idx > 0)
                         assertTrue(right.compareTo(keys.get(idx - 1)) > 0);
                     if (exactRight)      // must be precise on exact, otherwise could be in any relation
-                        assertTrue(right == keys.get(idx));
+                        assertSame(right, keys.get(idx));
                 }
                 catch (AssertionError e)
                 {
@@ -469,7 +449,7 @@ public class PartitionIndexTest
                                          {
                                              int indexSize = Collections.binarySearch(list, index.lastKey()) + 1;
                                              assert indexSize >= addedSize - 1;
-                                             checkIteration(list, indexSize, index);
+                                             checkIteration(indexSize, index);
                                              callCount.incrementAndGet();
                                          }, 0, i * 1024L);
                     builder.markDataSynced(i * 1024L);
@@ -481,7 +461,7 @@ public class PartitionIndexTest
                 builder.complete();
                 try (PartitionIndex index = loadPartitionIndex(fhBuilder, writer))
                 {
-                    checkIteration(list, list.size(), index);
+                    checkIteration(list.size(), index);
                 }
                 if (COUNT / parts > 16000)
                 {
@@ -489,15 +469,11 @@ public class PartitionIndexTest
                                callCount.get() == parts - 1 || callCount.get() == parts);
                 }
             }
-            catch (IOException e)
-            {
-                throw new RuntimeException(e);
-            }
         }
     }
 
     @Test
-    public void testDeepRecursion() throws InterruptedException
+    public void testDeepRecursion()
     {
         CompletableFuture<Void> future = new CompletableFuture<>();
         // Check that long repeated strings don't cause stack overflow
@@ -538,7 +514,7 @@ public class PartitionIndexTest
                                          {
                                              int indexSize = Collections.binarySearch(list, index.lastKey()) + 1;
                                              assert indexSize >= addedSize - 1;
-                                             checkIteration(list, indexSize, index);
+                                             checkIteration(indexSize, index);
                                              index.close();
                                              callCount.incrementAndGet();
                                          }, 0, i * 1024L);
@@ -549,7 +525,7 @@ public class PartitionIndexTest
 
                     try (PartitionIndex index = PartitionIndex.load(fhBuilder, partitioner, true))
                     {
-                        checkIteration(list, list.size(), index);
+                        checkIteration(list.size(), index);
                     }
                 }
                 future.complete(null);
@@ -709,7 +685,7 @@ public class PartitionIndexTest
                      PartitionIndex index = new PartitionIndexJumping(fh, root, COUNT, null, null, cutoffsAndOffsets);
                      Analyzer analyzer = new Analyzer(index))
                 {
-                    checkIteration(list, list.size(), index);
+                    checkIteration(list.size(), index);
 
                     analyzer.run();
                     if (analyzer.countPerType.elementSet().size() < 7)
@@ -717,10 +693,6 @@ public class PartitionIndexTest
                         Assert.fail("Expecting at least 7 different node types, got " + analyzer.countPerType.elementSet().size() + "\n" + analyzer.countPerType);
                     }
                 }
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeException(e);
             }
         }
     }
@@ -757,10 +729,6 @@ public class PartitionIndexTest
                 logger.info("Dumped trie: \n{}", dumpContent);
                 assertFalse(dumpContent.isEmpty());
             }
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
         }
     }
 
@@ -820,17 +788,7 @@ public class PartitionIndexTest
         });
     }
 
-    private Pair<List<DecoratedKey>, PartitionIndex> generateRandomIndexWithZeroCopy(int size, int firstKeyOffset, int lastKeyOffset) throws IOException
-    {
-        return generateIndex(size, this::generateRandomKey, firstKeyOffset, lastKeyOffset, true);
-    }
-
     Pair<List<DecoratedKey>, PartitionIndex> generateIndex(int size, Supplier<DecoratedKey> keyGenerator) throws IOException
-    {
-        return generateIndex(size, keyGenerator, 0, size - 1, false);
-    }
-
-    Pair<List<DecoratedKey>, PartitionIndex> generateIndex(int size, Supplier<DecoratedKey> keyGenerator, int firstKeyOffset, int lastKeyOffset, boolean hasZeroCopy) throws IOException
     {
         File file = FileUtils.createTempFile("ColumnTrieReaderTest", "");
         List<DecoratedKey> list = Lists.newArrayList();
@@ -846,17 +804,13 @@ public class PartitionIndexTest
             }
             Collections.sort(list);
 
-            for (int i = firstKeyOffset; i <= lastKeyOffset; i++)
+            for (int i = 0; i < size; i++)
                 builder.addEntry(list.get(i), i);
             builder.complete();
 
             PartitionIndex summary = loadPartitionIndex(fhBuilder, writer);
 
             return Pair.create(list, summary);
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
         }
     }
 

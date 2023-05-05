@@ -88,18 +88,27 @@ public class MockSchema
                              new Object[]{ Util.newUUIDGen() });
     }
 
+    private static final File tempFile = temp("mocksegmentedfile");
+
     static
     {
         Memory offsets = Memory.allocate(4);
         offsets.setInt(0, 0);
         indexSummary = new IndexSummary(Murmur3Partitioner.instance, offsets, 0, Memory.allocate(4), 0, 0, 0, 1);
+
+        try (DataOutputStreamPlus out = tempFile.newOutputStream(File.WriteMode.OVERWRITE))
+        {
+            out.write(new byte[10]);
+        }
+        catch (IOException ex)
+        {
+            throw Throwables.throwAsUncheckedException(ex);
+        }
     }
     private static final AtomicInteger id = new AtomicInteger();
     public static final Keyspace ks = Keyspace.mockKS(KeyspaceMetadata.create("mockks", KeyspaceParams.simpleTransient(1)));
 
     public static final IndexSummary indexSummary;
-
-    private static final File tempFile = temp("mocksegmentedfile");
 
     public static Memtable memtable(ColumnFamilyStore cfs)
     {
@@ -168,14 +177,6 @@ public class MockSchema
 
     public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, ColumnFamilyStore cfs, int minLocalDeletionTime, long timestamp)
     {
-        try (DataOutputStreamPlus out = tempFile.newOutputStream(File.WriteMode.OVERWRITE))
-        {
-            out.write(new byte[10]);
-        }
-        catch (IOException ex)
-        {
-            throw Throwables.throwAsUncheckedException(ex);
-        }
         SSTableFormat<?, ?> format = SSTableFormat.Type.current().info;
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -194,18 +195,7 @@ public class MockSchema
             // .complete() with size to make sstable.onDiskLength work
             try (FileHandle fileHandle = new FileHandle.Builder(tempFile).bufferSize(size).withLengthOverride(size).complete())
             {
-                if (size > 0)
-                {
-                    try
-                    {
-                        File file = descriptor.fileFor(Components.DATA);
-                        Util.setFileLength(file, size);
-                    }
-                    catch (IOException e)
-                    {
-                        throw new RuntimeException(e);
-                    }
-                }
+                maybeSetDataLength(descriptor, size);
                 SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
                 MetadataCollector collector = new MetadataCollector(cfs.metadata().comparator);
                 collector.update(new DeletionTime(timestamp, minLocalDeletionTime));
@@ -244,18 +234,7 @@ public class MockSchema
             // .complete() with size to make sstable.onDiskLength work
             try (FileHandle fileHandle = new FileHandle.Builder(tempFile).bufferSize(size).withLengthOverride(size).complete())
             {
-                if (size > 0)
-                {
-                    try
-                    {
-                        File file = descriptor.fileFor(Components.DATA);
-                        Util.setFileLength(file, size);
-                    }
-                    catch (IOException e)
-                    {
-                        throw new RuntimeException(e);
-                    }
-                }
+                maybeSetDataLength(descriptor, size);
                 SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
                 MetadataCollector collector = new MetadataCollector(cfs.metadata().comparator);
                 collector.update(new DeletionTime(timestamp, minLocalDeletionTime));
@@ -285,6 +264,22 @@ public class MockSchema
         else
         {
             throw Util.testMustBeImplementedForSSTableFormat();
+        }
+    }
+
+    private static void maybeSetDataLength(Descriptor descriptor, long size)
+    {
+        if (size > 0)
+        {
+            try
+            {
+                File file = descriptor.fileFor(Components.DATA);
+                Util.setFileLength(file, size);
+            }
+            catch (IOException e)
+            {
+                throw new RuntimeException(e);
+            }
         }
     }
 
