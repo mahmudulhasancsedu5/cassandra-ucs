@@ -40,7 +40,7 @@ public class VersionSupportedFeaturesTest extends AbstractTestVersionSupportedFe
     @Override
     protected Stream<String> getPartitionLevelDeletionPresenceMarkerSupportedVersions()
     {
-        return range("aa", "zz");
+        return ALL_VERSIONS.stream();
     }
 
     @Override
