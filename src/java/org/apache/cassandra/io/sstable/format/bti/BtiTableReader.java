@@ -169,9 +169,9 @@ public class BtiTableReader extends SSTableReaderWithFilter
     }
 
     /**
-     * Called by getPosition above (via Reader.ceiling/floor) to check if the position satisfies the full key constraint.
-     * This is called once if there is a prefix match (which can be in any relationship with the sought key, thus
-     * assumeNoMatch: false), and if it returns null it is called again for the closest greater position
+     * Called by {@link #getRowIndexEntry} above (via Reader.ceiling/floor) to check if the position satisfies the full
+     * key constraint. This is called once if there is a prefix match (which can be in any relationship with the sought
+     * key, thus assumeNoMatch: false), and if it returns null it is called again for the closest greater position
      * (with assumeNoMatch: true).
      * Returns the index entry at this position, or null if the search op rejects it.
      */
