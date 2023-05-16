@@ -67,7 +67,7 @@ public class JMXCompatabilityTest extends CQLTester
     public static void setup() throws Exception
     {
         DatabaseDescriptor.daemonInitialization();
-        DatabaseDescriptor.setColumnIndexSize(0); // make sure the column index is created
+        DatabaseDescriptor.setColumnIndexSizeInKiB(0); // make sure the column index is created
 
         startJMXServer();
     }

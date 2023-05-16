@@ -47,7 +47,7 @@ public class RowIndexSizeWarningTest extends AbstractClientSizeWarning
 
             // hack to force multiple index entries
             DatabaseDescriptor.setColumnIndexCacheSize(1 << 20);
-            DatabaseDescriptor.setColumnIndexSize(0);
+            DatabaseDescriptor.setColumnIndexSizeInKiB(0);
         }));
     }
 
