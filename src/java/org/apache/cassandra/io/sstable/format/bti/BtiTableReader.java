@@ -284,45 +284,25 @@ public class BtiTableReader extends SSTableReaderWithFilter
     }
 
     /**
-     * @param bounds Must not be wrapped around ranges
-     * @return PartitionIterator within the given bounds
+     * Create a PartitionIterator listing all partitions within the given bounds.
+     * This method relies on its caller to prepare the bounds correctly.
+     *
+     * @param bounds A range of keys. Must not be a wraparound range, and will not be checked against
+     *               the sstable's bounds (i.e. this will return data before a moved start or after an early-open limit)
      */
-    public PartitionIterator coveredKeysIterator(AbstractBounds<PartitionPosition> bounds) throws IOException
+    PartitionIterator coveredKeysIterator(AbstractBounds<PartitionPosition> bounds) throws IOException
     {
-        return coveredKeysIterator(bounds.left, bounds.inclusiveLeft(), bounds.right, bounds.inclusiveRight());
+        return PartitionIterator.create(partitionIndex,
+                                        metadata().partitioner,
+                                        rowIndexFile,
+                                        dfile,
+                                        bounds.left, bounds.inclusiveLeft() ? -1 : 0,
+                                        bounds.right, bounds.inclusiveRight() ? 0 : -1);
     }
 
     public ScrubPartitionIterator scrubPartitionsIterator() throws IOException
     {
         return new ScrubIterator(partitionIndex, rowIndexFile);
-    }
-
-    private PartitionIterator coveredKeysIterator(PartitionPosition left, boolean inclusiveLeft, PartitionPosition right, boolean inclusiveRight) throws IOException
-    {
-        if (filterFirst() && left.compareTo(first) < 0)
-        {
-            left = first;
-            inclusiveLeft = true;
-        }
-        if (filterLast() && right.compareTo(last) > 0)
-        {
-            right = last;
-            inclusiveRight = true;
-        }
-        // If a bound was adjusted, also check that the resulting bounds did not become empty.
-        if (filterFirst() || filterLast())
-        {
-            int cmp = left.compareTo(right);
-            if (cmp > 0 || cmp == 0 && !(inclusiveLeft && inclusiveRight))
-                return PartitionIterator.empty(partitionIndex);
-        }
-
-        return PartitionIterator.create(partitionIndex,
-                                        metadata().partitioner,
-                                        rowIndexFile,
-                                        dfile,
-                                        left, inclusiveLeft ? -1 : 0,
-                                        right, inclusiveRight ? 0 : -1);
     }
 
     @Override

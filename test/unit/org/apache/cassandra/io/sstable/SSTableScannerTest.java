@@ -240,7 +240,7 @@ public class SSTableScannerTest
         // end of range edge conditions
         assertScanMatches(sstable, 1, 8, 2, 8);
         assertScanMatches(sstable, 1, 9, 2, 9);
-        assertScanMatches(sstable, 1, 9, 2, 9);
+        assertScanMatches(sstable, 1, 99, 2, 9);
 
         // single item ranges
         assertScanMatches(sstable, 2, 2, 2, 2);
@@ -289,6 +289,93 @@ public class SSTableScannerTest
         assertScanMatches(sstable, 1, -1, 2, 9);
         assertScanMatches(sstable, 1, Integer.MIN_VALUE, 2, 9);
         assertScanMatches(sstable, 1, 0, 2, 9);
+    }
+
+    @Test
+    public void testSingleDataRangeWithMovedStart() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(TABLE);
+        store.clearUnsafe();
+
+        // disable compaction while flushing
+        store.disableAutoCompaction();
+
+        for (int i = 2; i < 10; i++)
+            insertRowWithKey(store.metadata(), i);
+        Util.flush(store);
+
+        assertEquals(1, store.getLiveSSTables().size());
+        SSTableReader sstable = store.getLiveSSTables().iterator().next();
+        sstable = sstable.cloneWithNewStart(dk(4));
+
+        // full range scan
+        ISSTableScanner scanner = sstable.getScanner();
+        for (int i = 4; i < 10; i++)
+            assertEquals(toKey(i), new String(scanner.next().partitionKey().getKey().array()));
+
+        scanner.close();
+
+        // a simple read of a chunk in the middle
+        assertScanMatches(sstable, 3, 6, 4, 6);
+
+        // start of range edge conditions
+        assertScanMatches(sstable, 3, 9, 4, 9);
+        assertScanMatches(sstable, 4, 9, 4, 9);
+        assertScanMatches(sstable, 5, 9, 4, 9);
+
+        // end of range edge conditions
+        assertScanMatches(sstable, 1, 8, 4, 8);
+        assertScanMatches(sstable, 1, 9, 4, 9);
+        assertScanMatches(sstable, 1, 99, 4, 9);
+
+        // single item ranges
+        assertScanMatches(sstable, 4, 4, 4, 4);
+        assertScanMatches(sstable, 5, 5, 5, 5);
+        assertScanMatches(sstable, 9, 9, 9, 9);
+
+        // empty ranges
+        assertScanEmpty(sstable, 2, 3);
+        assertScanEmpty(sstable, 10, 11);
+
+        // wrapping, starts in middle
+        assertScanMatches(sstable, 7, 5, 4, 5, 7, 9);
+        assertScanMatches(sstable, 5, 4, 4, 4, 5, 9);
+        assertScanMatches(sstable, 5, 3, 5, 9);
+        assertScanMatches(sstable, 5, Integer.MIN_VALUE, 5, 9);
+        // wrapping, starts at end
+        assertScanMatches(sstable, 9, 8, 4, 8, 9, 9);
+        assertScanMatches(sstable, 9, 5, 4, 5, 9, 9);
+        assertScanMatches(sstable, 9, 4, 4, 4, 9, 9);
+        assertScanMatches(sstable, 9, 3, 9, 9);
+        assertScanMatches(sstable, 9, Integer.MIN_VALUE, 9, 9);
+        assertScanMatches(sstable, 8, 5, 4, 5, 8, 9);
+        assertScanMatches(sstable, 8, 4, 4, 4, 8, 9);
+        assertScanMatches(sstable, 8, 3, 8, 9);
+        assertScanMatches(sstable, 8, Integer.MIN_VALUE, 8, 9);
+        // wrapping, starts past end
+        assertScanMatches(sstable, 10, 9, 4, 9);
+        assertScanMatches(sstable, 10, 5, 4, 5);
+        assertScanMatches(sstable, 10, 4, 4, 4);
+        assertScanEmpty(sstable, 10, 3);
+        assertScanEmpty(sstable, 10, Integer.MIN_VALUE);
+        assertScanMatches(sstable, 11, 10, 4, 9);
+        assertScanMatches(sstable, 11, 9, 4, 9);
+        assertScanMatches(sstable, 11, 5, 4, 5);
+        assertScanMatches(sstable, 11, 4, 4, 4);
+        assertScanEmpty(sstable, 11, 3);
+        assertScanEmpty(sstable, 11, Integer.MIN_VALUE);
+        // wrapping, starts at start
+        assertScanMatches(sstable, 5, 1, 5, 9);
+        assertScanMatches(sstable, 5, Integer.MIN_VALUE, 5, 9);
+        assertScanMatches(sstable, 4, 1, 4, 9);
+        assertScanMatches(sstable, 4, Integer.MIN_VALUE, 4, 9);
+        assertScanMatches(sstable, 1, 0, 4, 9);
+        assertScanMatches(sstable, 1, Integer.MIN_VALUE, 4, 9);
+        // wrapping, starts before
+        assertScanMatches(sstable, 3, -1, 4, 9);
+        assertScanMatches(sstable, 3, Integer.MIN_VALUE, 4, 9);
+        assertScanMatches(sstable, 3, 0, 4, 9);
     }
 
     private static void assertScanContainsRanges(ISSTableScanner scanner, int ... rangePairs) throws IOException
