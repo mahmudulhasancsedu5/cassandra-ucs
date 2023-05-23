@@ -101,8 +101,7 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.random()).thenCallRealMethod();
@@ -165,8 +164,7 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
         when(controller.getMaxLevelDensity(anyInt(), anyDouble())).thenCallRealMethod();
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.random()).thenCallRealMethod();

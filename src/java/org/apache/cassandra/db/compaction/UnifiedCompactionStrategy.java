@@ -18,7 +18,6 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,12 +37,10 @@ import java.util.regex.Pattern;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.db.SerializationHeader;
@@ -89,6 +86,15 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     private volatile ShardManager shardManager;
 
     private long lastExpiredCheck;
+
+    static final Level EXPIRED_TABLES_LEVEL = new Level(-1, 0, 0, 0, 0, 0, 0)
+    {
+        @Override
+        public String toString()
+        {
+            return "expired";
+        }
+    };
 
     public UnifiedCompactionStrategy(CompactionStrategyFactory factory, BackgroundCompactions backgroundCompactions, Map<String, String> options)
     {
@@ -581,25 +587,27 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         if (expiredCheck)
             lastExpiredCheck = ts;
 
+        Set<CompactionSSTable> expired = Collections.emptySet();
         for (Map.Entry<Arena, List<Level>> entry : getLevels().entrySet())
         {
             Arena arena = entry.getKey();
-            Set<CompactionSSTable> expired;
             if (expiredCheck)
             {
                 expired = arena.getExpiredSSTables(gcBefore, controller.getIgnoreOverlapsInExpirationCheck());
-                if (logger.isTraceEnabled() && !expired.isEmpty())
-                    logger.trace("Expiration check for arena {} found {} fully expired SSTables", arena.name(), expired.size());
+                if (!expired.isEmpty())
+                {
+                    if (logger.isTraceEnabled())
+                        logger.trace("Expiration check for arena {} found {} fully expired SSTables", arena.name(), expired.size());
+                    pending.add(CompactionAggregate.createUnified(expired, 0, CompactionPick.create(-1, expired, expired), Collections.emptySet(), arena, EXPIRED_TABLES_LEVEL));
+                }
             }
-            else
-                expired = Collections.emptySet();
 
             for (Level level : entry.getValue())
             {
-                CompactionAggregate.UnifiedAggregate aggregate = level.getCompactionAggregate(arena, expired, controller, spaceAvailable);
+                Collection<CompactionAggregate.UnifiedAggregate> aggregates = level.getCompactionAggregates(arena, expired, controller, spaceAvailable);
                 // Note: We allow empty aggregates into the list of pending compactions. The pending compactions list
                 // is for progress tracking only, and it is helpful to see empty levels there.
-                pending.add(aggregate);
+                pending.addAll(aggregates);
             }
         }
 
@@ -655,106 +663,69 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                            int runningAdaptiveCompactions,
                                            int maxAdaptiveCompactions)
     {
-        pending = controller.maybeSort(pending);
-
+        // Prepare parameters for the selection.
         int perLevelCount = totalCount / levelCount;   // each level has this number of tasks reserved for it
         int remainder = totalCount % levelCount;       // and the remainder is distributed randomly, up to 1 per level
 
-        // TODO: Rethink / simplify
-
-        // List the indexes of all compaction picks.
-        IntArrayList list = new IntArrayList(pending.size(), -1);
-        IntArrayList expired = new IntArrayList(pending.size(), -1);
-        for (int aggregateIndex = 0; aggregateIndex < pending.size(); ++aggregateIndex)
+        // Calculate how many new ones we can add in each level, and how many we can assign randomly.
+        int remaining = totalCount;
+        for (int i = 0; i < levelCount; ++i)
         {
-            CompactionAggregate.UnifiedAggregate aggregate = pending.get(aggregateIndex);
+            remaining -= perLevel[i];
+            if (perLevel[i] > perLevelCount)
+                remainder -= perLevel[i] - perLevelCount;
+        }
+        // Note: if we are in the middle of changes in the parameters or level count, remainder might become negative.
+        // This is okay, some buckets will temporarily not get their rightful share until these tasks complete.
+
+        if (maxAdaptiveCompactions == -1)
+            maxAdaptiveCompactions = Integer.MAX_VALUE;
+
+        // Let the controller prioritize the compactions.
+        pending = controller.prioritize(pending);
+
+        // Select the first ones, permitting only the specified number per level.
+        List<CompactionAggregate> selected = new ArrayList<>(pending.size());
+        for (CompactionAggregate.UnifiedAggregate aggregate : pending)
+        {
             final CompactionPick pick = aggregate.getSelected();
             if (pick.isEmpty())
                 continue;
             if (pick.hasExpiredOnly())
             {
-                expired.add(aggregateIndex);
+                selected.add(aggregate);    // always add expired-only compactions, they are not subject to any limits
                 continue;
             }
             if (controller.getOverheadSizeInBytes(pick) > spaceAvailable)
-                continue;
-            if (perLevel[levelOf(pick)] > perLevelCount)
-                continue;  // this level is already using up all its share + one, we can ignore candidate altogether
+                continue; // compaction is too large for current cycle
+
             int currentLevel = levelOf(pick);
-            if (maxAdaptiveCompactions == -1)
-                maxAdaptiveCompactions = Integer.MAX_VALUE;
+            if (perLevel[currentLevel] > perLevelCount)
+                continue;  // this level is already using up all its share + one, we can ignore candidate altogether
+            else if (perLevel[currentLevel] == perLevelCount)
+            {
+                if (remainder <= 0)
+                    continue;   // share used up, no remainder to distribute
+                --remainder;
+            }
+
             if (pick.isAdaptive(controller.getThreshold(currentLevel), controller.getPreviousThreshold(currentLevel)))
             {
                 if (runningAdaptiveCompactions >= maxAdaptiveCompactions)
-                    continue; //do not allow more than maxAdaptiveCompactions to limit latency spikes upon changing W
+                    continue; // do not allow more than maxAdaptiveCompactions to limit latency spikes upon changing W
                 runningAdaptiveCompactions++;
             }
 
+            --remaining;
+            ++perLevel[currentLevel];
+            spaceAvailable -= controller.getOverheadSizeInBytes(aggregate.selected);
+            selected.add(aggregate);
 
-            list.addInt(aggregateIndex);
-        }
-        if (list.isEmpty() && expired.isEmpty())
-            return ImmutableList.of();
-
-        BitSet selection = new BitSet(pending.size());
-
-        // Always include expire-only aggregates
-        for (int i = 0; i < expired.size(); i++)
-            selection.set(expired.get(i));
-
-        int selectedSize = 0;
-        if (!list.isEmpty())
-        {
-            // Randomize the list.
-            list = controller.maybeRandomize(list);
-
-            // Calculate how many new ones we can add in each level, and how many we can assign randomly.
-            int remaining = totalCount;
-            for (int i = 0; i < levelCount; ++i)
-            {
-                remaining -= perLevel[i];
-                if (perLevel[i] > perLevelCount)
-                    remainder -= perLevel[i] - perLevelCount;
-            }
-            int toAdd = remaining;
-            // Note: if we are in the middle of changes in the parameters or level count, remainder might become negative.
-            // This is okay, some buckets will temporarily not get their rightful share until these tasks complete.
-
-            // Select the first ones, skipping over duplicates and permitting only the specified number per level.
-            for (int i = 0; remaining > 0 && i < list.size(); ++i)
-            {
-                final int aggregateIndex = list.getInt(i);
-                if (selection.get(aggregateIndex))
-                    continue; // this is a repeat
-                CompactionAggregate.UnifiedAggregate aggregate = pending.get(aggregateIndex);
-                if (controller.getOverheadSizeInBytes(aggregate.selected) > spaceAvailable)
-                    continue; // compaction is too large for current cycle
-                int level = levelOf(aggregate.getSelected());
-
-                if (perLevel[level] > perLevelCount)
-                    continue;   // share + one already used
-                else if (perLevel[level] == perLevelCount)
-                {
-                    if (remainder <= 0)
-                        continue;   // share used up, no remainder to distribute
-                    --remainder;
-                }
-
-                --remaining;
-                ++perLevel[level];
-                spaceAvailable -= controller.getOverheadSizeInBytes(aggregate.selected);
-                selection.set(aggregateIndex);
-            }
-
-            selectedSize = toAdd - remaining;
+            if (remaining == 0)
+                break;
         }
 
-        // Return in the order of the pending aggregates to satisfy tests.
-        List<CompactionAggregate> aggregates = new ArrayList<>(selectedSize + expired.size());
-        for (int i = selection.nextSetBit(0); i >= 0; i = selection.nextSetBit(i+1))
-            aggregates.add(pending.get(i));
-
-        return aggregates;
+        return selected;
     }
 
     @Override
@@ -1165,16 +1136,27 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         double avg = 0; // avg size of sstables in this level
         int maxOverlap = -1; // maximum number of overlapping sstables
 
-        Level(Controller controller, int index, double minSize, double maxSize)
+        Level(int index, int scalingParameter, int fanout, int threshold, double survivalFactor, double min, double max)
         {
             this.index = index;
-            this.survivalFactor = controller.getSurvivalFactor(index);
-            this.scalingParameter = controller.getScalingParameter(index);
-            this.fanout = controller.getFanout(index);
-            this.threshold = controller.getThreshold(index);
+            this.scalingParameter = scalingParameter;
+            this.fanout = fanout;
+            this.threshold = threshold;
+            this.survivalFactor = survivalFactor;
+            this.min = min;
+            this.max = max;
             this.sstables = new ArrayList<>(threshold);
-            this.min = minSize;
-            this.max = maxSize;
+        }
+
+        Level(Controller controller, int index, double minSize, double maxSize)
+        {
+            this(index,
+                 controller.getScalingParameter(index),
+                 controller.getFanout(index),
+                 controller.getThreshold(index),
+                 controller.getSurvivalFactor(index),
+                 minSize,
+                 maxSize);
         }
 
         public Collection<CompactionSSTable> getSSTables()
@@ -1202,28 +1184,18 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         /**
          * Return the compaction aggregate
          */
-        CompactionAggregate.UnifiedAggregate getCompactionAggregate(Arena arena,
-                                                                    Set<CompactionSSTable> allExpiredSSTables,
-                                                                    Controller controller,
-                                                                    long spaceAvailable)
+        Collection<CompactionAggregate.UnifiedAggregate> getCompactionAggregates(Arena arena,
+                                                                                 Set<CompactionSSTable> expired,
+                                                                                 Controller controller,
+                                                                                 long spaceAvailable)
         {
-            // TODO: Rework so that we get more than one pick for a level.
-            List<CompactionSSTable> expiredSet = Collections.emptyList();
-            List<CompactionSSTable> liveSet = sstables;
-            if (!allExpiredSSTables.isEmpty())
-            {
-                liveSet = new ArrayList<>();
-                expiredSet = new ArrayList<>();
-                bipartitionSSTables(sstables, allExpiredSSTables, liveSet, expiredSet);
-            }
+            sstables.removeAll(expired);
 
             if (logger.isTraceEnabled())
-                logger.trace("Creating compaction aggregate with live set {}, and expired set {}", liveSet, expiredSet);
+                logger.trace("Creating compaction aggregate with sstable set {}", sstables);
 
-            List<CompactionPick> pending = new ArrayList<>();
-            CompactionPick selected = null;
 
-            List<Set<CompactionSSTable>> overlaps = constructOverlapSets(liveSet,
+            List<Set<CompactionSSTable>> overlaps = constructOverlapSets(sstables,
                                                                          UnifiedCompactionStrategy::startsAfter,
                                                                          CompactionSSTable.firstKeyComparator,
                                                                          CompactionSSTable.lastKeyComparator);
@@ -1234,39 +1206,25 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                              controller.overlapInclusionMethod(),
                                                              overlaps,
                                                              this::makeBucket);
-            int picksCount = 0;
 
+            List<CompactionPick> pending = new ArrayList<>();
+            List<CompactionAggregate.UnifiedAggregate> aggregates = new ArrayList<>();
             for (Bucket bucket : buckets)
             {
-                CompactionPick bucketSelection = bucket.constructPicks(pending, controller, spaceAvailable);
-                if (bucketSelection != null)
+                CompactionPick pick = bucket.constructPicks(pending, controller, spaceAvailable);
+                if (pick != null)
                 {
-                    // We can have just one pick in an aggregate. Picking a fixed one may cause us to neglect parts of
-                    // the token space, so choose one uniformly randomly. The choice below implements reservoir sampling
-                    // for size 1.
-                    if (controller.random().nextInt(++picksCount) == 0)
-                    {
-                        if (selected != null)
-                            pending.add(selected);
-                        selected = bucketSelection;
-                    }
+                    aggregates.add(CompactionAggregate.createUnified(sstables, bucket.maxOverlap, pick, pending, arena, this));
+                    pending = new ArrayList<>();
                 }
             }
-
-            if (selected == null)
-                selected = CompactionPick.EMPTY;
-
-            boolean hasExpiredSSTables = !expiredSet.isEmpty();
-            if (hasExpiredSSTables && selected.equals(CompactionPick.EMPTY))
-                // overrides default CompactionPick.EMPTY with parent equal to -1
-                selected = CompactionPick.create(index, expiredSet, expiredSet);
-            else if (hasExpiredSSTables)
-                selected = selected.withExpiredSSTables(expiredSet);
+            if (!pending.isEmpty())
+                aggregates.add(CompactionAggregate.createUnified(sstables, maxOverlap, null, pending, arena, this));
 
             if (logger.isTraceEnabled())
-                logger.trace("Returning compaction aggregate with selected compaction {}, and pending {}, for arena {}",
-                             selected, pending, arena);
-            return CompactionAggregate.createUnified(sstables, maxOverlap, selected, pending, arena, this);
+                logger.trace("Returning compaction aggregates {} for level {} of arena {}",
+                             aggregates, this, arena);
+            return aggregates;
         }
 
         private Bucket makeBucket(List<Set<CompactionSSTable>> overlaps, int startIndex, int endIndex)
@@ -1274,28 +1232,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             return endIndex == startIndex + 1
                    ? new SimpleBucket(this, overlaps.get(startIndex))
                    : new MultiSetBucket(this, overlaps.subList(startIndex, endIndex));
-        }
-
-        /**
-         * Bipartitions SSTables into liveSet and expiredSet, depending on whether they are present in allExpiredSSTables.
-         *
-         * @param sstables list of SSTables in a bucket
-         * @param allExpiredSSTables set of expired SSTables for all buckets
-         * @param liveSet empty list that is going to be filled up with SSTables that are not present in {@param allExpiredSSTables}
-         * @param expiredSet empty list that is going to be filled up with SSTables that are present in {@param allExpiredSSTables}
-         */
-        private static void bipartitionSSTables(List<CompactionSSTable> sstables,
-                                                Set<CompactionSSTable> allExpiredSSTables,
-                                                List<CompactionSSTable> liveSet,
-                                                List<CompactionSSTable> expiredSet)
-        {
-            for (CompactionSSTable sstable : sstables)
-            {
-                if (allExpiredSSTables.contains(sstable))
-                    expiredSet.add(sstable);
-                else
-                    liveSet.add(sstable);
-            }
         }
 
         @Override
@@ -1317,7 +1253,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             return FBUtilities.prettyPrintBinary(density, "B", " ");
         }
     }
-
 
     /**
      * A compaction bucket, i.e. a selection of overlapping sstables from which a compaction should be selected.

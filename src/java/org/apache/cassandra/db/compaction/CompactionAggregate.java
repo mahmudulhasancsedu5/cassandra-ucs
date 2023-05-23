@@ -727,6 +727,11 @@ public abstract class CompactionAggregate
             return level.min;
         }
 
+        public int maxOverlap()
+        {
+            return maxOverlap;
+        }
+
         @Override
         public String toString()
         {

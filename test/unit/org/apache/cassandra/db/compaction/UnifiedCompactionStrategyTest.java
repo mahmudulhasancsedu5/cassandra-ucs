@@ -49,12 +49,9 @@ import org.junit.runners.Parameterized;
 import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.SortedLocalRanges;
 import org.apache.cassandra.db.compaction.unified.Controller;
 import org.apache.cassandra.db.compaction.unified.UnifiedCompactionTask;
 import org.apache.cassandra.dht.IPartitioner;
-import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Splitter;
 import org.apache.cassandra.dht.Token;
@@ -124,8 +121,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
@@ -204,8 +200,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
 
         when(controller.getScalingParameter(anyInt())).thenAnswer(answer -> {
             int index = answer.getArgument(0);
@@ -255,9 +250,9 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                 assertEquals(i, level.getIndex());
 
                 if (level.getSSTables().size() >= expectedTs[i])
-                    assertFalse(level.getCompactionAggregate(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
+                    assertFalse(level.getCompactionAggregates(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
                 else
-                    assertTrue(level.getCompactionAggregate(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
+                    assertTrue(level.getCompactionAggregates(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
             }
         }
     }
@@ -441,8 +436,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.areL0ShardsEnabled()).thenReturn(true);
         when(controller.getMaxSpaceOverhead()).thenReturn(1.0);
         when(controller.getBaseSstableSize(anyInt())).thenReturn((double) minSstableSizeBytes);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
 
         if (maxSSTablesToCompact >= numSSTables)
             when(controller.maxConcurrentCompactions()).thenReturn(levels * (W < 0 ? 1 : F)); // make sure the work is assigned to different levels
@@ -604,8 +598,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxCompactionSpaceBytes()).thenCallRealMethod();
         when(controller.maxThroughput()).thenReturn(maxThroughput);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         // Calculate the minimum shard size such that the top bucket compactions won't be considered "oversized" and
         // all will be allowed to run. The calculation below assumes (1) that compactions are considered "oversized"
         // if they are more than 1/2 of the max shard size; (2) that mockSSTables uses 15% less than the max SSTable
@@ -971,8 +964,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxConcurrentCompactions()).thenReturn(1000); // let it generate as many candidates as it can
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
@@ -1019,8 +1011,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
@@ -1057,8 +1048,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
         when(controller.getMaxAdaptiveCompactions()).thenReturn(-1);
 
@@ -1187,8 +1177,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.getIgnoreOverlapsInExpirationCheck()).thenReturn(false);
         when(controller.random()).thenCallRealMethod();
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
@@ -1215,7 +1204,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                 assertEquals(sstables.size() / 3, pick.expired().size());
                 assertEquals(0L, pick.totSizeInBytes());
                 assertEquals(0L, pick.avgSizeInBytes());
-                assertEquals(0, pick.parent());
+                assertEquals(-1, pick.parent());
             }
         }
         finally
@@ -1244,8 +1233,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.getIgnoreOverlapsInExpirationCheck()).thenReturn(false);
         when(controller.maxSSTablesToCompact()).thenReturn(1000);
 
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
         strategy.startup();
@@ -1267,18 +1255,26 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
 
             for (CompactionPick pick : picks)
             {
-                assertFalse(pick.hasExpiredOnly());
-                assertEquals(pick.sstables().size() / 2, pick.expired().size());
-                Set<CompactionSSTable> nonExpired = pick.sstables().stream()
-                                                                 .filter(sstable -> !pick.expired().contains(sstable))
-                                                                 .collect(Collectors.toSet());
-                assertEquals(pick.sstables().size() / 2, nonExpired.size());
-                long expectedTotSize = nonExpired.stream()
-                                                 .mapToLong(CompactionSSTable::onDiskLength)
-                                                 .sum();
-                assertEquals(expectedTotSize, pick.totSizeInBytes());
-                assertEquals(expectedTotSize / nonExpired.size(), pick.avgSizeInBytes());
-                assertEquals(0, pick.parent());
+                if (pick.hasExpiredOnly())
+                {
+                    assertEquals(4, pick.sstables().size());
+                    assertEquals(4, pick.expired().size());
+                    assertEquals(0L, pick.totSizeInBytes());
+                    assertEquals(0L, pick.avgSizeInBytes());
+                    assertEquals(-1, pick.parent());
+                }
+                else
+                {
+                    assertEquals(4, pick.sstables().size());
+                    assertEquals(0, pick.expired().size());
+                    Set<CompactionSSTable> nonExpired = pick.sstables();
+                    long expectedTotSize = nonExpired.stream()
+                                                     .mapToLong(CompactionSSTable::onDiskLength)
+                                                     .sum();
+                    assertEquals(expectedTotSize, pick.totSizeInBytes());
+                    assertEquals(expectedTotSize / nonExpired.size(), pick.avgSizeInBytes());
+                    assertEquals(0, pick.parent());
+                }
             }
         }
         finally
@@ -1321,12 +1317,11 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxCompactionSpaceBytes()).thenReturn(Long.MAX_VALUE);
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.maxSSTablesToCompact()).thenReturn(2);
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> {
+        when(controller.prioritize(anyList())).thenAnswer(answ -> {
             List<CompactionAggregate.UnifiedAggregate> pending = answ.getArgument(0);
             pending.sort(Comparator.comparingLong(a -> ((CompactionAggregate.UnifiedAggregate) a).sstables.stream().mapToLong(CompactionSSTable::onDiskLength).sum()).reversed());
             return pending;
         });
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
         when(controller.random()).thenCallRealMethod();
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
@@ -1390,8 +1385,7 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         when(controller.maxThroughput()).thenReturn(Double.MAX_VALUE);
         when(controller.getIgnoreOverlapsInExpirationCheck()).thenReturn(false);
         when(controller.random()).thenCallRealMethod();
-        when(controller.maybeSort(anyList())).thenAnswer(answ -> answ.getArgument(0));
-        when(controller.maybeRandomize(any(IntArrayList.class))).thenAnswer(answ -> answ.getArgument(0));
+        when(controller.prioritize(anyList())).thenAnswer(answ -> answ.getArgument(0));
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
         strategy.startup();

@@ -18,7 +18,7 @@
 
 # Unified compaction strategy (UCS)
 
-This is a new compaction strategy that unifies tiered and leveled compaction strategies, adds sharding, lends itself to 
+This is a new compaction strategy that unifies tiered and leveled compaction strategies, adds sharding, lends itself to
 be reconfigured at any time and forms the basis for future compaction improvements including automatic adaptation to the
 workload.
 
@@ -53,7 +53,7 @@ behaviours. For example level zero could use tiered compaction (STCS-like) but h
 (LCS-like) with increasing levels of read optimization.
 
 The strategy splits sstables at specific shard boundaries whose number grows with the density of an sstable, and
-uses the non-overlap between sstables created by this splitting to be able to perform compactions concurrently. 
+uses the non-overlap between sstables created by this splitting to be able to perform compactions concurrently.
 
 ## Size-based levels
 
@@ -74,8 +74,9 @@ $$
 
 This means that sstables are assigned to levels as follows:
 
+
 | Level | Min sstable size | Max sstable size  |
-|-------|-----------------|-------------------|
+| ----- | ---------------- | ----------------- |
 | 0     | 0               | $m \cdot f$       |
 | 1     | $m \cdot f$     | $m \cdot f^2$     |
 | 2     | $m \cdot f^2$   | $m \cdot f^3$     |
@@ -118,14 +119,14 @@ that range from:
 This can be easily generalised to varying fan factors, by replacing the exponentiation with the product of the fan 
 factors for all lower levels:
 
+
 | Level | Min sstable size            | Max sstable size                  |
-|-------|-----------------------------|-----------------------------------|
+| ----- | --------------------------- | --------------------------------- |
 | 0     | 0                           | $m \cdot f_0$                     |
 | 1     | $m \cdot f_0$               | $m \cdot f_0 \cdot f_1$           |
 | 2     | $m \cdot f_0 \cdot f_1$     | $m \cdot f_0 \cdot f_1 \cdot f_2$ |
 | ...   | ...                         | ...                               |
 | n     | $m \cdot \prod_{i < n} f_i$ | $m \cdot \prod_{i\le n} f_i$      |
-
 
 ## Density levelling
 
@@ -242,16 +243,13 @@ than this set alone.
 
 It is possible for our sharding scheme to end up constructing sstables spanning differently-sized shards for the same
 level. One clear example is the case of levelled compaction, where, for example, sstables enter at some density, and
-after the first compaction the result &mdash; being 2x bigger than that density &mdash; is split in the middle because it has
-double the density. As another sstable enters the same level, we will have separate overlap sets for the first and
-second half of that older sstable; to be efficient, the compaction that is triggered next needs to select both.
+after the first compaction the result &mdash; being 2x bigger than that density &mdash; is split in the middle because 
+it has double the density. As another sstable enters the same level, we will have separate overlap sets for the first 
+and second half of that older sstable; to be efficient, the compaction that is triggered next needs to select both.
 
 To deal with this and any other cases of partial overlap, the compaction strategy will transitively extend
 the overlap sets with all neighboring ones that share some sstable, constructing the set of all sstables that have some
 chain of overlapping ones that connects it to the initial set[^1]. This extended set forms the compaction bucket.
-
-[^1]: Note: in addition to TRANSITIVE, "overlap inclusion methods" of NONE and SINGLE are also implemented for
-experimentation, but they are not recommended for the UCS sharding scheme.
 
 In normal operation we compact all sstables in the compaction bucket. If compaction is very late we may apply a limit
 on the number of overlapping sources we compact; in that case we use the collection of oldest sstables that would 
@@ -260,26 +258,43 @@ all older ones are also included to maintain time order.
 
 ## Selecting compactions to run
 
-Because of sharding, UCS can do more compactions in parallel. However, it will often not use all available compaction 
+Because of sharding, UCS can do more compactions in parallel. However, it will often not use all available compaction
 threads.
 
-The reason for this is that UCS splits the available compaction threads equally among the levels of the compaction 
+The reason for this is that UCS splits the available compaction threads equally among the levels of the compaction
 hierarchy. For example, if there are 16 compaction threads and we have no other work to do but compact the highest
 level 5, we can only use up to $\lceil 16/6 \rceil = 3$ threads to do compactions on level 5. If we permit more, we
 risk starving the lower levels of resources, which can result in sstables accumulating on level 0 for as long as that
 compaction takes, which can be a very long time, and breaking our read amplification expectations.
 
-In theory, with a fixed compaction parameter each level requires an equal amount of processing resources: for tiered 
+In theory, with a fixed compaction parameter each level requires an equal amount of processing resources: for tiered
 compaction, every piece of data that enters the system goes through one compaction for each level, and for leveled -
-through $f-1$. Because of this UCS reserves an equal number of compaction threads for each level, and assign tasks to 
+through $f-1$. Because of this UCS reserves an equal number of compaction threads for each level, and assign tasks to
 the remainder of threads randomly.
 
-Make sure the number of compaction threads is greater than the number of expected levels to ensure compaction runs 
+Make sure the number of compaction threads is greater than the number of expected levels to ensure compaction runs
 smoothly.
 
-TODO: Revisit this and related code, required resources are proportional to a level's WA; density sharding should make
-this much less of a problem.
+# Prioritization of compactions
 
+Compaction strategies aim to minimize the read amplification of queries, which is defined by the number of sstables
+that overlap on any given key. In order to do this most efficiently in situations where compaction is late, we
+prioritize compaction buckets whose overlap is higher. If there are multiple choices with the same overlap, we randomize
+the selection among them.
+
+Under sustained load, this mechanism in combination with the above prevents the accumulation of sstables on some level 
+that could sometimes happen with legacy strategies (e.g. all resources consumed by L0 and sstables accumulating on L1) 
+and can lead to a steady state where compactions always use more sstables than the assigned threshold and fan factor and 
+maintain a tiered hierarchy based on the lowest overlap they are able to maintain for the load.
+
+## Major compaction
+
+Under the working principles of UCS, a major compaction is an operation which compacts together all sstables that have
+(transitive) overlap, and where the output is split on shard boundaries appropriate for the expected result density.
+
+In other words, it is expected that a major compaction will result in $b$ concurrent compactions, each containing all
+sstables covered in each of the base shards, and that the result will be split on shard boundaries whose number
+depends on the total size of data contained in the shard.
 
 ## Differences with STCS and LCS
 
@@ -338,7 +353,7 @@ the span of the lower-density ones.
 
 UCS accepts these compaction strategy parameters:
 
-* **static_scaling_parameters**. A list of per-level scaling parameters, specified as L*f*, T*f*, N, or an integer value
+* **scaling_parameters**. A list of per-level scaling parameters, specified as L*f*, T*f*, N, or an integer value
   specifying $w$ directly. If more levels are present than the length of this list, the last value is used for all
   higher levels. Often this will be a single parameter, specifying the behaviour for all levels of the
   hierarchy.
@@ -352,7 +367,6 @@ UCS accepts these compaction strategy parameters:
   compaction to be promoted to the next level) and a fan factor of 2. This can also be specified as T2 or L2.
   <br/>The default value is T4, matching the default STCS behaviour with threshold 4. To select an equivalent of LCS 
   with its default fan factor 10, use L10.
-
 * **target_sstable_size**. The target sstable size $t$, specified as a human-friendly size in bytes (e.g. 100 MiB =
   $100\cdot 2^{20}$ B or (10 MB = 10,000,000 B)). The strategy will split data in shards that aim to produce sstables
   of size between $t / \sqrt 2$ and $t \cdot \sqrt 2$.
@@ -360,15 +374,16 @@ UCS accepts these compaction strategy parameters:
   on disk has a non-trivial in-memory footprint that also affects garbage collection times.
   <br/>Increase this if the memory pressure from the number of sstables in the system becomes too high.
   <br/>The default value is 1 GiB.
-
 * **base_shard_count**. The minimum number of shards $b$, used for levels with the smallest density. This gives the 
   minimum compaction concurrency for the lowest levels. A low number would result in larger L0 sstables but may limit
   the overall maximum write throughput (as every piece of data has to go through L0).
   <br/>The default value is 4 (1 for system tables, or when multiple data locations are defined).
-
 * **expired_sstable_check_frequency_seconds**. Determines how often to check for expired SSTables.
   <br/>The default value is 10 minutes.
 
 In **cassandra.yaml**:
 
 * **concurrent_compactors**. The number of compaction threads available. Set this to a large number, at minimum the number of expected levels of the compaction hierarchy to make sure that each level is given a dedicated compaction thread. This will avoid latency spikes caused by lower levels of the compaction hierarchy not getting a chance to run.
+
+[^1]: Note: in addition to TRANSITIVE, "overlap inclusion methods" of NONE and SINGLE are also implemented for
+    experimentation, but they are not recommended for the UCS sharding scheme.

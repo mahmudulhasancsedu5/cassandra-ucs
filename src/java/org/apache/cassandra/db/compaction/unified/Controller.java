@@ -17,6 +17,7 @@
 package org.apache.cassandra.db.compaction.unified;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,6 @@ import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1023,14 +1023,20 @@ public abstract class Controller
         return builder.toString();
     }
 
-    public List<CompactionAggregate.UnifiedAggregate> maybeSort(List<CompactionAggregate.UnifiedAggregate> pending)
+    /**
+     * Prioritize the given aggregates. Because overlap is the primary measure we aim to control, reducing the max
+     * overlap of the aggregates is the primary goal. We do this by sorting the aggregates by max overlap, so that
+     * the ones with the highest overlap are chosen first.
+     * Among choices with matching overlap, we order randomly to give each level and bucket a good chance to run.
+     */
+    public List<CompactionAggregate.UnifiedAggregate> prioritize(List<CompactionAggregate.UnifiedAggregate> aggregates)
     {
-        return env.maybeSort(pending);
-    }
-
-    public IntArrayList maybeRandomize(IntArrayList aggregateIndexes)
-    {
-        return env.maybeRandomize(aggregateIndexes, random());
+        // Randomize the list.
+        Collections.shuffle(aggregates, random());
+        // Sort the array so that aggregates with the highest overlap come first. Because this is a stable sort,
+        // entries with the same overlap will remain randomly ordered.
+        aggregates.sort((a1, a2) -> Long.compare(a2.maxOverlap(), a1.maxOverlap()));
+        return aggregates;
     }
 
     static final class Metrics
