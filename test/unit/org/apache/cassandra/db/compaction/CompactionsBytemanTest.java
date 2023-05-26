@@ -284,11 +284,12 @@ public class CompactionsBytemanTest extends CQLTester
 
             // This is probably already started when we flushed the 4th sstable, but let's make sure.
             CompactionManager.instance.submitBackground(cfs);
+            STARTED.acquireUninterruptibly();
             List<CompactionStrategyStatistics> statistics = cfs.getCompactionStrategy().getStatistics();
             assertEquals(1, statistics.size());
             assertEquals(1, statistics.get(0).aggregates().size());
 
-            execute("ALTER TABLE %s WITH COMPACTION={'class': 'UnifiedCompactionStrategy', 'num_shards': '2'}");
+            execute("ALTER TABLE %s WITH COMPACTION={'class': 'UnifiedCompactionStrategy', 'scaling_parameters': '4'}");
             statistics = cfs.getCompactionStrategy().getStatistics();
             assertEquals(1, statistics.size());
             assertEquals(1, statistics.get(0).aggregates().size());
