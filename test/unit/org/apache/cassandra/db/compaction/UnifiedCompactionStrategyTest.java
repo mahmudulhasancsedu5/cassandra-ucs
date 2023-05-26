@@ -46,6 +46,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.agrona.collections.IntArrayList;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.compaction.unified.Controller;
@@ -60,8 +61,8 @@ import org.apache.cassandra.utils.Interval;
 import org.apache.cassandra.utils.Pair;
 import org.mockito.Mockito;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -248,10 +249,13 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                 UnifiedCompactionStrategy.Level level = levels.get(i);
                 assertEquals(i, level.getIndex());
 
-                if (level.getSSTables().size() >= expectedTs[i])
-                    assertFalse(level.getCompactionAggregates(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
-                else
-                    assertTrue(level.getCompactionAggregates(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes).isEmpty());
+                Collection<CompactionAggregate.UnifiedAggregate> compactionAggregates =
+                    level.getCompactionAggregates(entry.getKey(), Collections.EMPTY_SET, controller, dataSetSizeBytes);
+                long selectedCount = compactionAggregates.stream()
+                                                         .filter(a -> !a.isEmpty())
+                                                         .count();
+                int expectedCount = level.getSSTables().size() >= expectedTs[i] ? 1 : 0;
+                assertEquals(expectedCount, selectedCount);
             }
         }
     }
@@ -1616,29 +1620,36 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
         "NPQ",
         "RST",
         };
+        int[] noneUnselected = new int[]{2, 3, 4, 5};
         String[] single3 = new String[]{
         "ABCDE",
         "LNOPQ",
         "RST",
         };
+        int[] singleUnselected = new int[]{2, 3};
         String[] transitive3 = new String[]{
         "ABCDEF",
         "LNOPQ",
         "RST",
         };
+        int[] transitiveUnselected = new int[]{3};
 
         List<Set<Character>> input = Arrays.stream(sets).map(UnifiedCompactionStrategyTest::asSet).collect(Collectors.toList());
+
+        verifyAssignment(Controller.OverlapInclusionMethod.NONE, input, none3, noneUnselected);
+
+        verifyAssignment(Controller.OverlapInclusionMethod.SINGLE, input, single3, singleUnselected);
+
+        verifyAssignment(Controller.OverlapInclusionMethod.TRANSITIVE, input, transitive3, transitiveUnselected);
+    }
+
+    private void verifyAssignment(Controller.OverlapInclusionMethod method, List<Set<Character>> input, String[] expected, int[] expectedUnselected)
+    {
         List<String> actual;
-
-        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.NONE, input, this::makeBucket);
-        assertEquals(Arrays.asList(none3), actual);
-
-        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.SINGLE, input, this::makeBucket);
-        assertEquals(Arrays.asList(single3), actual);
-
-        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, Controller.OverlapInclusionMethod.TRANSITIVE, input, this::makeBucket);
-        assertEquals(Arrays.asList(transitive3), actual);
-
+        IntArrayList unselected = new IntArrayList();
+        actual = UnifiedCompactionStrategy.assignOverlapsIntoBuckets(3, method, input, this::makeBucket, s -> unselected.add(input.indexOf(s)));
+        assertEquals(Arrays.asList(expected), actual);
+        assertArrayEquals(expectedUnselected, unselected.toIntArray());
     }
 
     private String makeBucket(List<Set<Character>> sets, int startIndex, int endIndex)

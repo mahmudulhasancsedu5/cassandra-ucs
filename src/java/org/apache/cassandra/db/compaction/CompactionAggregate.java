@@ -343,6 +343,14 @@ public abstract class CompactionAggregate
         return clone(retained, CompactionPick.EMPTY, comps);
     }
 
+    /**
+     * Merge an aggregate with another one with the same key.
+     */
+    protected CompactionAggregate mergeWith(CompactionAggregate other)
+    {
+        return withAdditionalCompactions(other.compactions);
+    }
+
     @Override
     public int hashCode()
     {
@@ -715,6 +723,17 @@ public abstract class CompactionAggregate
         protected CompactionAggregate clone(Iterable<CompactionSSTable> sstables, CompactionPick selected, Iterable<CompactionPick> compactions)
         {
             return new UnifiedAggregate(sstables, maxOverlap, selected, compactions, arena, level);
+        }
+
+        @Override
+        protected CompactionAggregate mergeWith(CompactionAggregate other)
+        {
+            return new UnifiedAggregate(Iterables.concat(sstables, other.sstables),
+                                        Math.max(maxOverlap, ((UnifiedAggregate) other).maxOverlap),
+                                        selected,
+                                        Iterables.concat(compactions, other.compactions),
+                                        arena,
+                                        level);
         }
 
         public int bucketIndex()

@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -994,16 +995,18 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      *                               all sets that have an overlap chain to a selected bucket.
      * @param overlaps An ordered list of overlap sets as returned by {@link #constructOverlapSets}.
      * @param bucketer Method used to create a bucket out of the supplied set indexes.
+     * @param unselectedHandler Action to take on sets that are below the threshold and not included in any bucket.
      */
     @VisibleForTesting
     static <E, B> List<B> assignOverlapsIntoBuckets(int threshold,
                                                     Controller.OverlapInclusionMethod overlapInclusionMethod,
                                                     List<Set<E>> overlaps,
-                                                    BucketMaker<E, B> bucketer)
+                                                    BucketMaker<E, B> bucketer,
+                                                    Consumer<Set<E>> unselectedHandler)
     {
         List<B> buckets = new ArrayList<>();
         int regionCount = overlaps.size();
-        int lastEnd = -1;
+        int lastEnd = 0;
         for (int i = 0; i < regionCount; ++i)
         {
             Set<E> bucket = overlaps.get(i);
@@ -1020,7 +1023,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                        ? allOverlapping
                                        : bucket;
                 int j;
-                for (j = i - 1; j > lastEnd; --j)
+                for (j = i - 1; j >= lastEnd; --j)
                 {
                     Set<E> next = overlaps.get(j);
                     if (!setsIntersect(next, overlapTarget))
@@ -1039,8 +1042,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 endIndex = j;
             }
             buckets.add(bucketer.makeBucket(overlaps, startIndex, endIndex));
-            lastEnd = i;
+            for (int k = lastEnd; k < startIndex; ++k)
+                unselectedHandler.accept(overlaps.get(k));
+            lastEnd = endIndex;
         }
+        for (int k = lastEnd; k < regionCount; ++k)
+            unselectedHandler.accept(overlaps.get(k));
         return buckets;
     }
 
@@ -1203,25 +1210,27 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                                          CompactionSSTable.lastKeyComparator);
             for (Set<CompactionSSTable> overlap : overlaps)
                 maxOverlap = Math.max(maxOverlap, overlap.size());
+            List<CompactionSSTable> unbucketed = new ArrayList<>();
 
             List<Bucket> buckets = assignOverlapsIntoBuckets(threshold,
                                                              controller.overlapInclusionMethod(),
                                                              overlaps,
-                                                             this::makeBucket);
+                                                             this::makeBucket,
+                                                             unbucketed::addAll);
 
-            List<CompactionPick> pending = new ArrayList<>();
             List<CompactionAggregate.UnifiedAggregate> aggregates = new ArrayList<>();
             for (Bucket bucket : buckets)
-            {
-                CompactionPick pick = bucket.constructPicks(pending, controller, spaceAvailable);
-                if (pick != null)
-                {
-                    aggregates.add(CompactionAggregate.createUnified(sstables, bucket.maxOverlap, pick, pending, arena, this));
-                    pending = new ArrayList<>();
-                }
-            }
-            if (!pending.isEmpty())
-                aggregates.add(CompactionAggregate.createUnified(sstables, maxOverlap, null, pending, arena, this));
+                aggregates.add(bucket.constructAggregate(controller, spaceAvailable, arena));
+
+            // Add all unbucketed sstables separately. Note that this will list the level (with its set of sstables)
+            // even if it does not need compaction.
+            if (!unbucketed.isEmpty())
+                aggregates.add(CompactionAggregate.createUnified(unbucketed,
+                                                                 maxOverlap,
+                                                                 CompactionPick.EMPTY,
+                                                                 Collections.emptySet(),
+                                                                 arena,
+                                                                 this));
 
             if (logger.isTraceEnabled())
                 logger.trace("Returning compaction aggregates {} for level {} of arena {}",
@@ -1304,14 +1313,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
          * the example above, if B is oldest and C is older than D, the limit-two choice would be ABC (if A is older
          * than D) or BC (if A is younger, avoiding combining C with A skipping D).
          *
-         * @param pending A list where any "pending" compactions are placed, i.e. operations that will need to be
-         *                executed in the future.
          * @param controller The compaction controller.
          * @param spaceAvailable The amount of space available for compaction, limits the maximum number of sstables
          *                       that can be selected.
          * @return A compaction pick to execute next.
          */
-        CompactionPick constructPicks(List<CompactionPick> pending, Controller controller, long spaceAvailable)
+        CompactionAggregate.UnifiedAggregate constructAggregate(Controller controller, long spaceAvailable, Arena arena)
         {
             int count = maxOverlap;
             int threshold = level.threshold;
@@ -1328,7 +1335,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                  * this pick at maxSSTablesToCompact due to an assumption that maxSSTablesToCompact is much
                  * greater than F. See {@link Controller#MAX_SSTABLES_TO_COMPACT_OPTION} for more details.
                  */
-                return CompactionPick.create(index, allSSTablesSorted);
+                return CompactionAggregate.createUnified(allSSTablesSorted,
+                                                         count,
+                                                         CompactionPick.create(index, allSSTablesSorted),
+                                                         Collections.emptySet(),
+                                                         arena,
+                                                         level);
             }
             // The choices below assume that pulling the oldest sstables will reduce maxOverlap by the selected
             // number of sstables. This is not always true (we may, e.g. select alternately from different overlap
@@ -1339,17 +1351,23 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 // Compaction is a bit late, but not enough to jump levels via layout compactions. We need a special
                 // case to cap compaction pick at maxSSTablesToCompact.
                 if (count <= maxSSTablesToCompact)
-                    return CompactionPick.create(index, allSSTablesSorted);
+                    return CompactionAggregate.createUnified(allSSTablesSorted,
+                                                             count,
+                                                             CompactionPick.create(index, allSSTablesSorted),
+                                                             Collections.emptySet(),
+                                                             arena,
+                                                             level);
 
                 CompactionPick pick = CompactionPick.create(index, pullOldestSSTables(maxSSTablesToCompact));
                 count -= maxSSTablesToCompact;
+                List<CompactionPick> pending = new ArrayList<>();
                 while (count >= threshold)
                 {
                     pending.add(CompactionPick.create(index, pullOldestSSTables(maxSSTablesToCompact)));
                     count -= maxSSTablesToCompact;
                 }
 
-                return pick;
+                return CompactionAggregate.createUnified(allSSTablesSorted, count, pick, pending, arena, level);
             }
             // We may, however, have accumulated a lot more than T if compaction is very late, or a set of small
             // tables was dumped on us (e.g. when converting from legacy LCS or for tests).
@@ -1367,8 +1385,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 // dump.
                 assert !picks.isEmpty();  // we only enter this if count > F: layoutCompactions must have selected something to run
                 CompactionPick selected = picks.remove(controller.random().nextInt(picks.size()));
-                pending.addAll(picks);
-                return selected;
+                return CompactionAggregate.createUnified(allSSTablesSorted, count, selected, picks, arena, level);
             }
         }
 
