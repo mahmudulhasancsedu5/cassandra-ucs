@@ -275,7 +275,7 @@ the remainder of threads randomly.
 Make sure the number of compaction threads is greater than the number of expected levels to ensure compaction runs
 smoothly.
 
-# Prioritization of compactions
+## Prioritization of compactions
 
 Compaction strategies aim to minimize the read amplification of queries, which is defined by the number of sstables
 that overlap on any given key. In order to do this most efficiently in situations where compaction is late, we

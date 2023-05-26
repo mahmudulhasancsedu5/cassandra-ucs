@@ -43,7 +43,7 @@ public class RangeAwareSSTableWriter implements SSTableMultiWriter
     private final List<Token> boundaries;
     private final List<Directories.DataDirectory> directories;
     private final int sstableLevel;
-    private final IntervalSet commitLogIntervals;
+    private final IntervalSet<CommitLogPosition> commitLogIntervals;
     private final long estimatedKeys;
     private final long repairedAt;
     private final UUID pendingRepair;

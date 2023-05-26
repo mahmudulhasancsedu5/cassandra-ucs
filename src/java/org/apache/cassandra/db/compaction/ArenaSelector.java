@@ -94,11 +94,21 @@ public class ArenaSelector implements Comparator<CompactionSSTable>
         public int compare(CompactionSSTable a, CompactionSSTable b)
         {
             // This is the same as name(a).compareTo(name(b))
-            int af = a.isRepaired() ? 1 : !a.isPendingRepair() ? 2 : 0;
-            int bf = b.isRepaired() ? 1 : !b.isPendingRepair() ? 2 : 0;
+            int af = repairClassValue(a);
+            int bf = repairClassValue(b);
             if (af != 0 || bf != 0)
                 return Integer.compare(af, bf);
             return a.getPendingRepair().compareTo(b.getPendingRepair());
+        }
+
+        private static int repairClassValue(CompactionSSTable a)
+        {
+            if (a.isRepaired())
+                return 1;
+            if (!a.isPendingRepair())
+                return 2;
+            else
+                return 0;
         }
 
         @Override

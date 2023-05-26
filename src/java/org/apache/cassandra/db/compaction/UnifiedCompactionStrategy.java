@@ -323,9 +323,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                        Collection<Index.Group> indexGroups,
                                                        LifecycleNewTracker lifecycleNewTracker)
     {
-        ShardManager shardManager = getShardManager();
-        double flushDensity = realm.metrics().flushSizeOnDisk().get() / shardManager.localSpaceCoverage();
-        ShardTracker boundaries = shardManager.boundaries(controller.getNumShards(flushDensity));
+        ShardManager currentShardManager = getShardManager();
+        double flushDensity = realm.metrics().flushSizeOnDisk().get() / currentShardManager.localSpaceCoverage();
+        ShardTracker boundaries = currentShardManager.boundaries(controller.getNumShards(flushDensity));
         return new ShardedMultiWriter(realm,
                                       descriptor,
                                       keyCount,
@@ -640,10 +640,12 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
     }
 
     /**
-     * Returns a random selection of the compactions to be submitted. The selection will be chosen so that the total
+     * Returns a selection of the compactions to be submitted. The selection will be chosen so that the total
      * number of compactions is at most totalCount, where each level gets a share that is the whole part of the ratio
-     * between the the total permitted number of compactions, and the remainder gets distributed randomly among the
-     * levels. Note that if a level does not have tasks to fill its share, its quota will remain unused in this
+     * between the total permitted number of compactions, and the remainder gets distributed among the levels
+     * according to the preferences of the {@link Controller#prioritize} method. Usually this means preferring
+     * compaction picks with a higher max overlap, with a random selection when multiple picks have the same maximum.
+     * Note that if a level does not have tasks to fill its share, its quota will remain unused in this
      * allocation.
      *
      * The selection also limits the size of the newly scheduled compactions to be below spaceAvailable by not
