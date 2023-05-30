@@ -80,6 +80,8 @@ public class AdaptiveControllerTest extends ControllerTest
                                       Controller.DEFAULT_L0_SHARDS_ENABLED,
                                       Controller.DEFAULT_BASE_SHARD_COUNT,
                                       Controller.DEFAULT_TARGET_SSTABLE_SIZE,
+                                      Controller.DEFAULT_GROWTH_MODIFIER,
+                                      Controller.DEFAULT_RESERVED_THREADS,
                                       Controller.DEFAULT_OVERLAP_INCLUSION_METHOD,
                                       interval,
                                       minW,

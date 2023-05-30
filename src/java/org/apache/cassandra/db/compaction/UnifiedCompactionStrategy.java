@@ -670,8 +670,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                            int maxAdaptiveCompactions)
     {
         // Prepare parameters for the selection.
-        int perLevelCount = totalCount / levelCount;   // each level has this number of tasks reserved for it
-        int remainder = totalCount % levelCount;       // and the remainder is distributed randomly, up to 1 per level
+        int perLevelCount = Math.min(totalCount / levelCount,    // each level has this number of tasks reserved for it
+                                     controller.getReservedThreadsPerLevel());
+        int remainder = totalCount - perLevelCount * levelCount; // and the remainder is distributed randomly
 
         // Calculate how many new ones we can add in each level, and how many we can assign randomly.
         int remaining = totalCount;

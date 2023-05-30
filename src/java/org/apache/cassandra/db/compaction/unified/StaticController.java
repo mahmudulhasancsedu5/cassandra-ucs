@@ -56,6 +56,8 @@ public class StaticController extends Controller
                             boolean l0ShardsEnabled,
                             int baseShardCount,
                             double targetSStableSize,
+                            double sstableGrowthModifier,
+                            int reservedThreadsPerLevel,
                             OverlapInclusionMethod overlapInclusionMethod)
     {
         super(MonotonicClock.preciseTime,
@@ -72,6 +74,8 @@ public class StaticController extends Controller
               l0ShardsEnabled,
               baseShardCount,
               targetSStableSize,
+              sstableGrowthModifier,
+              reservedThreadsPerLevel,
               overlapInclusionMethod);
         this.scalingParameters = scalingParameters;
     }
@@ -89,6 +93,8 @@ public class StaticController extends Controller
                                   boolean l0ShardsEnabled,
                                   int baseShardCount,
                                   double targetSStableSize,
+                                  double sstableGrowthModifier,
+                                  int reservedThreadsPerLevel,
                                   OverlapInclusionMethod overlapInclusionMethod,
                                   Map<String, String> options)
     {
@@ -111,6 +117,8 @@ public class StaticController extends Controller
                                     l0ShardsEnabled,
                                     baseShardCount,
                                     targetSStableSize,
+                                    sstableGrowthModifier,
+                                    reservedThreadsPerLevel,
                                     overlapInclusionMethod);
     }
 

@@ -104,6 +104,8 @@ public class AdaptiveController extends Controller
                               boolean l0ShardsEnabled,
                               int baseShardCount,
                               double targetSStableSize,
+                              double sstableGrowthModifier,
+                              int reservedThreadsPerLevel,
                               OverlapInclusionMethod overlapInclusionMethod,
                               int intervalSec,
                               int minScalingParameter,
@@ -126,6 +128,8 @@ public class AdaptiveController extends Controller
               l0ShardsEnabled,
               baseShardCount,
               targetSStableSize,
+              sstableGrowthModifier,
+              reservedThreadsPerLevel,
               overlapInclusionMethod);
 
         this.scalingParameters = scalingParameters;
@@ -151,6 +155,8 @@ public class AdaptiveController extends Controller
                                   boolean l0ShardsEnabled,
                                   int baseShardCount,
                                   double targetSSTableSize,
+                                  double sstableGrowthModifier,
+                                  int reservedThreadsPerLevel,
                                   OverlapInclusionMethod overlapInclusionMethod,
                                   Map<String, String> options)
     {
@@ -182,6 +188,8 @@ public class AdaptiveController extends Controller
                                       l0ShardsEnabled,
                                       baseShardCount,
                                       targetSSTableSize,
+                                      sstableGrowthModifier,
+                                      reservedThreadsPerLevel,
                                       overlapInclusionMethod,
                                       intervalSec,
                                       minScalingParameter, maxScalingParameter,

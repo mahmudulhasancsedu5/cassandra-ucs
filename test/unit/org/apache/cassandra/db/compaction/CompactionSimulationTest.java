@@ -405,6 +405,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          l0ShardsEnabled,
                                                          baseShardCount,
                                                          Math.scalb(targetSSTableSizeMB, 20),
+                                                         1,
+                                                         0,
                                                          overlapInclusionMethod,
                                                          updateTimeSec,
                                                          minW,
@@ -426,6 +428,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        l0ShardsEnabled,
                                                        baseShardCount,
                                                        Math.scalb(targetSSTableSizeMB, 20),
+                                                       1,
+                                                       0,
                                                        overlapInclusionMethod);
 
         return new UnifiedCompactionStrategy(strategyFactory, controller);

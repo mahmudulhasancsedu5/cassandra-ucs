@@ -118,9 +118,62 @@ public abstract class Controller
      */
     public static final int DEFAULT_BASE_SHARD_COUNT = Integer.parseInt(System.getProperty(PREFIX + BASE_SHARD_COUNT_OPTION, "4"));
 
+    /**
+     * The target SSTable size. This is the size of the SSTables that the controller will try to create.
+     */
     static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
     public static final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
     static final double MIN_TARGET_SSTABLE_SIZE = 1L << 20;
+
+
+    /**
+     * Provision for growth of the constructed SSTables as the size of the data grows. By default the target SSTable
+     * size is fixed for all levels. In some scenarios is may be better to reduce the overall number of SSTables when
+     * the data size becomes larger to avoid using too much memory and processing for the corresponding structures.
+     * The setting enables such control and determines how much we reduce the growth of the number of split points as
+     * the data size grows. The number is a multiplier applied to the logarithm of the data size, before it is rounded
+     * down and applied as an exponent in the number of split points. In other words, the given value applies as an
+     * exponent in the calculation of the number of split points.
+     * <p>
+     * Using 1 (the default) applies no correction to the number of split points, resulting in SSTables close to the
+     * targer size. Setting this number to 0 will make UCS never split beyong the base shard count. Using 0.5 will
+     * make the number of split points a square root of the required number for the target SSTable size, making
+     * the number of split points and the size of SSTables grow in lockstep as the density grows.
+     * <p>
+     * For example, given a data size of 1TiB on the top density level and 1GiB target size with base shard count of 1,
+     * modifier 1 would result in 1024 SSTables of ~1GiB each, 0.5 would yield 32 SSTables of ~32GiB each, and 0 would
+     * yield 1 SSTable of 1TiB.
+     * <p>
+     * Note that this correction only applies after the base shard count is reached, so for the above example with
+     * base count of 4, the number of SSTables will be 4 (~256GiB each) for a modifier value of 0, and 64 (~16GiB each)
+     * for 0.5.
+     */
+    static final String GROWTH_MODIFIER_OPTION = "growth_modifier";
+    static final double DEFAULT_GROWTH_MODIFIER = Double.parseDouble(System.getProperty(PREFIX + GROWTH_MODIFIER_OPTION, "1"));
+
+    /**
+     * Alternate method of defining the above, as percentage by which an SSTable should grow for every doubling of
+     * the density. This is a convenience setting that is converted to the above setting by the controller, and cannot
+     * be used in combination with it.
+     * <p>
+     * Setting this number to 1 (or 100%) will make UCS never split beyong the base shard count. Using 0.41 (or 41%)
+     * will make SSTables double in size for every quadrupling of data size.
+     */
+    static final String TARGET_SSTABLE_GROWTH_OPTION = "target_sstable_growth";
+
+    /**
+     * Number of reserved threads to keep for each compaction level. This is used to ensure that there are always
+     * threads ready to start processing a level when new data arrives. This is most valuable to prevent large
+     * compactions from keeping all threads busy for a long time; with smaller target sizes the overlap-driven
+     * preference mechanism should achieve better results.
+     * <p>
+     * If the number is greater than the number of compaction threads divided by the number of levels rounded down, the
+     * latter will apply. Specifying "max" reserves as many threads as possible for each level.
+     * <p>
+     * The default value is 0, no reserved threads.
+     */
+    static final String RESERVED_THREADS_OPTION = "reserved_threads_per_level";
+    public static final int DEFAULT_RESERVED_THREADS = FBUtilities.parseIntAllowingMax(System.getProperty(PREFIX + RESERVED_THREADS_OPTION, "0"));
 
     /**
      * This parameter is intended to modify the shape of the LSM by taking into account the survival ratio of data, for now it is fixed to one.
@@ -173,6 +226,8 @@ public abstract class Controller
     /** The maximum splitting factor for shards. The maximum number of shards is this number multiplied by the base count. */
     static final double MAX_SHARD_SPLIT = 1048576;
 
+    private static final double INVERSE_LOG_2 = 1.0 / Math.log(2);
+
     public enum OverlapInclusionMethod
     {
         NONE, SINGLE, TRANSITIVE;
@@ -206,6 +261,9 @@ public abstract class Controller
     protected final int baseShardCount;
 
     protected final double targetSSTableSizeMin;
+    protected final double sstableGrowthModifier;
+
+    protected final int reservedThreadsPerLevel;
 
     @Nullable protected volatile CostsCalculator calculator;
     @Nullable private volatile Metrics metrics;
@@ -226,6 +284,8 @@ public abstract class Controller
                boolean l0ShardsEnabled,
                int baseShardCount,
                double targetSStableSize,
+               double sstableGrowthModifier,
+               int reservedThreadsPerLevel,
                OverlapInclusionMethod overlapInclusionMethod)
     {
         this.clock = clock;
@@ -241,6 +301,8 @@ public abstract class Controller
         this.baseShardCount = baseShardCount;
         this.targetSSTableSizeMin = targetSStableSize * Math.sqrt(0.5);
         this.overlapInclusionMethod = overlapInclusionMethod;
+        this.sstableGrowthModifier = sstableGrowthModifier;
+        this.reservedThreadsPerLevel = reservedThreadsPerLevel;
 
         double maxSpaceOverheadLowerBound = 1.0d / numShards;
         if (maxSpaceOverhead < maxSpaceOverheadLowerBound)
@@ -311,6 +373,9 @@ public abstract class Controller
      */
     public int getNumShards(double density)
     {
+//        if (sstableGrowthModifier == 0)
+//            return baseShardCount;
+
         // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
         // the result is a multiple of it by multiplying back below.
         double count = density / (targetSSTableSizeMin * baseShardCount);
@@ -318,11 +383,21 @@ public abstract class Controller
             count = MAX_SHARD_SPLIT;
         assert !(count < 0);    // Must be positive, 0 or NaN, which should translate to baseShardCount
 
-        // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
-        // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
-        // already applied in targetSSTableSizeMin.
-        // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
-        int shards = baseShardCount * Integer.highestOneBit((int) count | 1);
+        int shards;
+//        if (sstableGrowthModifier == 1)
+//        {
+//            // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
+//            // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
+//            // already applied in targetSSTableSizeMin.
+//            // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
+//            shards = baseShardCount * Integer.highestOneBit((int) count | 1);
+//        }
+//        else
+        {
+            // Take a logarithm of the count (in base 2), and adjust it by the given growth modifier.
+            int pow = Math.max(0, (int) (Math.log(count) * INVERSE_LOG_2 * sstableGrowthModifier));
+            shards = baseShardCount << pow;
+        }
         logger.debug("Shard count {} for density {}, {} times target {}",
                      shards,
                      FBUtilities.prettyPrintBinary(density, "B", " "),
@@ -439,6 +514,17 @@ public abstract class Controller
     public double getMaxSpaceOverhead()
     {
         return maxSpaceOverhead;
+    }
+
+    /**
+     * Returns the number of reserved threads per level. If the size of SSTables is small, this can be 0 as operations
+     * finish quickly and the prioritization will do a good job of assigning threads to the levels. If the size of
+     * SSTables can grow large, threads must be reserved to ensure that compactions, esp. on level 0, do not have to
+     * wait for long operations to complete.
+     */
+    public int getReservedThreadsPerLevel()
+    {
+        return reservedThreadsPerLevel;
     }
 
     /**
@@ -654,6 +740,17 @@ public abstract class Controller
                                    ? FBUtilities.parseHumanReadable(options.get(TARGET_SSTABLE_SIZE_OPTION), null, "B")
                                    : DEFAULT_TARGET_SSTABLE_SIZE;
 
+
+        double sstableGrowthModifier = DEFAULT_GROWTH_MODIFIER;
+        if (options.containsKey(GROWTH_MODIFIER_OPTION))
+            sstableGrowthModifier = Double.parseDouble(options.get(GROWTH_MODIFIER_OPTION));
+        else if (options.containsKey(TARGET_SSTABLE_GROWTH_OPTION))
+            sstableGrowthModifier = Math.log(1 + FBUtilities.parsePercent(options.get(TARGET_SSTABLE_GROWTH_OPTION))) * INVERSE_LOG_2;
+
+        int reservedThreadsPerLevel = options.containsKey(RESERVED_THREADS_OPTION)
+                                      ? FBUtilities.parseIntAllowingMax(options.get(RESERVED_THREADS_OPTION))
+                                      : DEFAULT_RESERVED_THREADS;
+
         // Multiple data directories normally indicate multiple disks and we cannot compact sstables together if they belong to
         // different disks (or else loosing a disk may result in resurrected data due to lost tombstones). Because UCS sharding
         // subsumes disk sharding, it is not safe to disable shards on L0 if there are multiple data directories.
@@ -686,6 +783,8 @@ public abstract class Controller
                                                 l0ShardsEnabled,
                                                 baseShardCount,
                                                 targetSStableSize,
+                                                sstableGrowthModifier,
+                                                reservedThreadsPerLevel,
                                                 overlapInclusionMethod,
                                                 options)
                : StaticController.fromOptions(env,
@@ -701,6 +800,8 @@ public abstract class Controller
                                               l0ShardsEnabled,
                                               baseShardCount,
                                               targetSStableSize,
+                                              sstableGrowthModifier,
+                                              reservedThreadsPerLevel,
                                               overlapInclusionMethod,
                                               options);
     }
@@ -896,6 +997,71 @@ public abstract class Controller
             {
                 throw new ConfigurationException(String.format("%s is not a valid size in bytes: %s",
                                                                TARGET_SSTABLE_SIZE_OPTION,
+                                                               e.getMessage()),
+                                                 e);
+            }
+        }
+
+        if (options.containsKey(TARGET_SSTABLE_GROWTH_OPTION) && options.containsKey(GROWTH_MODIFIER_OPTION))
+        {
+            throw new ConfigurationException(String.format("Cannot specify both %s and %s",
+                                                           TARGET_SSTABLE_SIZE_OPTION,
+                                                           GROWTH_MODIFIER_OPTION));
+        }
+        s = options.remove(GROWTH_MODIFIER_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                double targetSSTableGrowth = Double.parseDouble(s);
+                if (targetSSTableGrowth < 0 || targetSSTableGrowth > 1)
+                    throw new ConfigurationException(String.format("%s %s must be between 0 and 1",
+                                                                   GROWTH_MODIFIER_OPTION,
+                                                                   s));
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ConfigurationException(String.format("%s is not a valid number between 0 and 1: %s",
+                                                               GROWTH_MODIFIER_OPTION,
+                                                               e.getMessage()),
+                                                 e);
+            }
+        }
+        s = options.remove(TARGET_SSTABLE_GROWTH_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                double targetSSTableGrowth = FBUtilities.parsePercent(s);
+                if (targetSSTableGrowth < 0 || targetSSTableGrowth > 1)
+                    throw new ConfigurationException(String.format("%s %s must be between 0 and 1",
+                                                                   TARGET_SSTABLE_GROWTH_OPTION,
+                                                                   s));
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ConfigurationException(String.format("%s is not a valid number between 0 and 1: %s",
+                                                               TARGET_SSTABLE_GROWTH_OPTION,
+                                                               e.getMessage()),
+                                                 e);
+            }
+        }
+
+        s = options.remove(RESERVED_THREADS_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                int reservedThreads = FBUtilities.parseIntAllowingMax(s);
+                if (reservedThreads < 0)
+                    throw new ConfigurationException(String.format("%s %s must be an integer >= 0 or \"max\"",
+                                                                   RESERVED_THREADS_OPTION,
+                                                                   s));
+            }
+            catch (NumberFormatException e)
+            {
+                throw new ConfigurationException(String.format("%s is not a valid integer >= 0 or \"max\": %s",
+                                                               RESERVED_THREADS_OPTION,
                                                                e.getMessage()),
                                                  e);
             }
