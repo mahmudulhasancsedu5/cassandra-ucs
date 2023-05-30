@@ -81,6 +81,7 @@ import org.apache.cassandra.utils.ExpMovingAverage;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MonotonicClock;
 import org.apache.cassandra.utils.MovingAverage;
+import org.apache.cassandra.utils.Overlaps;
 import org.apache.cassandra.utils.PageAware;
 import org.mockito.Mockito;
 
@@ -210,9 +211,6 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     @Option(name= {"-unsafe-aggressive-sstable-expiration"}, description = "Whether to drop expired SSTables without checking if the partitions appear in other SSTables")
     boolean ignoreOverlaps = false;
 
-    @Option(name= {"-l0-shards-enabed"}, description = "Whether to use shards on L0, true by default")
-    boolean l0ShardsEnabled = true;
-
     @Option(name= {"-base-shard-count"}, description = "Base shard count, 4 by default")
     int baseShardCount = 4;
 
@@ -220,7 +218,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     long targetSSTableSizeMB = 1024;
 
     @Option(name= {"-overlap-inclusion-method"}, description = "Overlap inclusion method, NONE, SINGLE or TRANSITIVE")
-    Controller.OverlapInclusionMethod overlapInclusionMethod = Controller.OverlapInclusionMethod.TRANSITIVE;
+    Overlaps.InclusionMethod overlapInclusionMethod = Overlaps.InclusionMethod.TRANSITIVE;
 
     @BeforeClass
     public static void setUpClass()
@@ -394,18 +392,18 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 ? new AdaptiveController(MonotonicClock.preciseTime,
                                                          new SimulatedEnvironment(counters, valueSize), Ws, previousWs,
                                                          new double[] { o },
-                                                         datasetSizeGB << 13,  // MB, leave some room
-                                                         numShards,
-                                                         sstableSize >> 20, // MB
+                                                         datasetSizeGB << 33,  // MB, leave some room
+                                                         sstableSize, // MB
                                                          0,
                                                          0,
                                                          maxSpaceOverhead,
                                                          0,
                                                          expiredSSTableCheckFrequency,
                                                          ignoreOverlaps,
-                                                         l0ShardsEnabled,
                                                          baseShardCount,
-                                                         Math.scalb(targetSSTableSizeMB, 20),
+                                                         targetSSTableSizeMB << 20,
+                                                         1,
+                                                         0,
                                                          overlapInclusionMethod,
                                                          updateTimeSec,
                                                          minW,
@@ -418,18 +416,18 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 : new StaticController(new SimulatedEnvironment(counters, valueSize),
                                                        Ws,
                                                        new double[] { o },
-                                                       datasetSizeGB << 13,  // MB
-                                                       numShards,
-                                                       sstableSize >> 20,
+                                                       datasetSizeGB << 33,  // MB
+                                                       sstableSize,
                                                        0,
                                                        0,
                                                        maxSpaceOverhead, // MB
                                                        0,
                                                        expiredSSTableCheckFrequency,
                                                        ignoreOverlaps,
-                                                       l0ShardsEnabled,
                                                        baseShardCount,
-                                                       Math.scalb(targetSSTableSizeMB, 20),
+                                                       targetSSTableSizeMB << 20,
+                                                       1,
+                                                       0,
                                                        overlapInclusionMethod,
                                                        "ks",
                                                        "tbl");
