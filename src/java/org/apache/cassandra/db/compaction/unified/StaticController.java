@@ -45,10 +45,9 @@ public class StaticController extends Controller
     public StaticController(Environment env,
                             int[] scalingParameters,
                             double[] survivalFactors,
-                            long dataSetSizeMB,
-                            int numShards,
+                            long dataSetSize,
                             long minSSTableSizeMB,
-                            long flushSizeOverrideMB,
+                            long flushSizeOverride,
                             double maxSpaceOverhead,
                             int maxSSTablesToCompact,
                             long expiredSSTableCheckFrequency,
@@ -63,10 +62,9 @@ public class StaticController extends Controller
         super(MonotonicClock.preciseTime,
               env,
               survivalFactors,
-              dataSetSizeMB,
-              numShards,
+              dataSetSize,
               minSSTableSizeMB,
-              flushSizeOverrideMB,
+              flushSizeOverride,
               maxSpaceOverhead,
               maxSSTablesToCompact,
               expiredSSTableCheckFrequency,
@@ -82,10 +80,9 @@ public class StaticController extends Controller
 
     static Controller fromOptions(Environment env,
                                   double[] survivalFactors,
-                                  long dataSetSizeMB,
-                                  int numShards,
+                                  long dataSetSize,
                                   long minSSTableSizeMB,
-                                  long flushSizeOverrideMB,
+                                  long flushSizeOverride,
                                   double maxSpaceOverhead,
                                   int maxSSTablesToCompact,
                                   long expiredSSTableCheckFrequency,
@@ -106,10 +103,9 @@ public class StaticController extends Controller
         return new StaticController(env,
                                     scalingParameters,
                                     survivalFactors,
-                                    dataSetSizeMB,
-                                    numShards,
+                                    dataSetSize,
                                     minSSTableSizeMB,
-                                    flushSizeOverrideMB,
+                                    flushSizeOverride,
                                     maxSpaceOverhead,
                                     maxSSTablesToCompact,
                                     expiredSSTableCheckFrequency,
@@ -160,6 +156,6 @@ public class StaticController extends Controller
     @Override
     public String toString()
     {
-        return String.format("Static controller, m: %d, o: %s, scalingParameters: %s, cost: %s", minSstableSizeMB, Arrays.toString(survivalFactors), printScalingParameters(scalingParameters), calculator);
+        return String.format("Static controller, m: %d, o: %s, scalingParameters: %s, cost: %s", minSSTableSize, Arrays.toString(survivalFactors), printScalingParameters(scalingParameters), calculator);
     }
 }

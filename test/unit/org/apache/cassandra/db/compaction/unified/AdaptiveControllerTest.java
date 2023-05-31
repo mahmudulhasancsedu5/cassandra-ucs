@@ -62,23 +62,22 @@ public class AdaptiveControllerTest extends ControllerTest
         return makeController(dataSizeGB, numShards, sstableSizeMB);
     }
 
-    private AdaptiveController makeController(int dataSizeGB, int numShards, int sstableSizeMB)
+    private AdaptiveController makeController(long dataSizeGB, int numShards, long sstableSizeMB)
     {
         return new AdaptiveController(clock,
                                       env,
                                       Ws,
                                       previousWs,
                                       Controller.DEFAULT_SURVIVAL_FACTORS,
-                                      dataSizeGB << 10,
-                                      numShards,
-                                      sstableSizeMB,
+                                      dataSizeGB << 30,
+                                      sstableSizeMB << 20,
                                       0,
                                       Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                       0,
                                       Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS,
                                       Controller.DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                       Controller.DEFAULT_L0_SHARDS_ENABLED,
-                                      Controller.DEFAULT_BASE_SHARD_COUNT,
+                                      numShards,
                                       Controller.DEFAULT_TARGET_SSTABLE_SIZE,
                                       Controller.DEFAULT_GROWTH_MODIFIER,
                                       Controller.DEFAULT_RESERVED_THREADS,

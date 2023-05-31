@@ -394,9 +394,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 ? new AdaptiveController(MonotonicClock.preciseTime,
                                                          new SimulatedEnvironment(counters, valueSize), Ws, previousWs,
                                                          new double[] { o },
-                                                         datasetSizeGB << 13,  // MB, leave some room
-                                                         numShards,
-                                                         sstableSize >> 20, // MB
+                                                         datasetSizeGB << 33,  // MB, leave some room
+                                                         sstableSize, // MB
                                                          0,
                                                          maxSpaceOverhead,
                                                          0,
@@ -417,9 +416,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 : new StaticController(new SimulatedEnvironment(counters, valueSize),
                                                        Ws,
                                                        new double[] { o },
-                                                       datasetSizeGB << 13,  // MB
-                                                       numShards,
-                                                       sstableSize >> 20,
+                                                       datasetSizeGB << 33,  // MB
+                                                       sstableSize,
                                                        0,
                                                        maxSpaceOverhead, // MB
                                                        0,

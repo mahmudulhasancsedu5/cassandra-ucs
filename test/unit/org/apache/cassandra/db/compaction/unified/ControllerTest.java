@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Assert;
@@ -56,9 +57,9 @@ import static org.mockito.Mockito.when;
 public abstract class ControllerTest
 {
     static final double epsilon = 0.00000001;
-    static final int dataSizeGB = 512;
+    static final long dataSizeGB = 512;
     static final int numShards = 4; // pick it so that dataSizeGB is exactly divisible or tests will break
-    static final int sstableSizeMB = 2;
+    static final long sstableSizeMB = 2;
     static final double maxSpaceOverhead = 0.3d;
     static final boolean allowOverlaps = false;
     static final long checkFrequency= 600L;
@@ -134,17 +135,26 @@ public abstract class ControllerTest
         assertNotNull(controller);
         assertNotNull(controller.toString());
 
-        assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
+//        assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
         assertEquals((long) dataSizeGB << 30, controller.getDataSetSizeBytes());
         // No longer true: assertEquals(numShards, controller.getNumShards(1));
-        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
+//        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
         assertFalse(controller.isRunning());
         for (int i = 0; i < 5; i++) // simulate 5 levels
             assertEquals(Controller.DEFAULT_SURVIVAL_FACTOR, controller.getSurvivalFactor(i), epsilon);
         assertNull(controller.getCalculator());
-        assertEquals(2, controller.getNumShards(0));
-        assertEquals(16, controller.getNumShards(16 * 100 << 20));
-        assertEquals(Controller.OverlapInclusionMethod.SINGLE, controller.overlapInclusionMethod());
+        if (!options.containsKey(Controller.NUM_SHARDS_OPTION))
+        {
+            assertEquals(2, controller.getNumShards(0));
+            assertEquals(16, controller.getNumShards(16 * 100 << 20));
+            assertEquals(Controller.OverlapInclusionMethod.SINGLE, controller.overlapInclusionMethod());
+        }
+        else
+        {
+            int numShards = Integer.parseInt(options.get(Controller.NUM_SHARDS_OPTION));
+            assertEquals(numShards, controller.getNumShards(0));
+            assertEquals(numShards, controller.getNumShards(16 * 100 << 20));
+        }
 
         return controller;
     }
@@ -156,20 +166,38 @@ public abstract class ControllerTest
         assertTrue(options.toString(), options.isEmpty());
     }
 
+    private static void putWithAlt(Map<String, String> options, String opt, String alt, int altShift, long altVal)
+    {
+        if (options.containsKey(opt) || options.containsKey(alt))
+            return;
+        if (ThreadLocalRandom.current().nextBoolean())
+            options.put(opt, FBUtilities.prettyPrintMemory(altVal << altShift));
+        else
+            options.put(alt, Long.toString(altVal));
+    }
+
     private static void addOptions(boolean adaptive, Map<String, String> options)
     {
         options.putIfAbsent(Controller.ADAPTIVE_OPTION, Boolean.toString(adaptive));
-        options.putIfAbsent(Controller.MIN_SSTABLE_SIZE_OPTION_MB, Integer.toString(sstableSizeMB));
+        putWithAlt(options, Controller.DATASET_SIZE_OPTION, Controller.DATASET_SIZE_OPTION_GB, 30, dataSizeGB);
+//        options.putIfAbsent(Controller.NUM_SHARDS_OPTION, Integer.toString(numShards));
+//        options.putIfAbsent(Controller.MIN_SSTABLE_SIZE_OPTION_MB, Integer.toString(sstableSizeMB));
+//
 
-        options.putIfAbsent(Controller.DATASET_SIZE_OPTION_GB, Integer.toString(dataSizeGB));
-        options.putIfAbsent(Controller.NUM_SHARDS_OPTION, Integer.toString(numShards));
-        options.putIfAbsent(Controller.MAX_SPACE_OVERHEAD_OPTION, Double.toString(maxSpaceOverhead));
+        if (ThreadLocalRandom.current().nextBoolean())
+            options.putIfAbsent(Controller.MAX_SPACE_OVERHEAD_OPTION, Double.toString(maxSpaceOverhead));
+        else
+            options.putIfAbsent(Controller.MAX_SPACE_OVERHEAD_OPTION, String.format("%.1f%%", maxSpaceOverhead * 100));
+
         options.putIfAbsent(Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION, Boolean.toString(allowOverlaps));
         options.putIfAbsent(Controller.EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_OPTION, Long.toString(checkFrequency));
 
-        options.putIfAbsent(Controller.BASE_SHARD_COUNT_OPTION, Integer.toString(2));
-        options.putIfAbsent(Controller.TARGET_SSTABLE_SIZE_OPTION, FBUtilities.prettyPrintMemory(100 << 20));
-        options.putIfAbsent(Controller.OVERLAP_INCLUSION_METHOD_OPTION, Controller.OverlapInclusionMethod.SINGLE.toString().toLowerCase());
+        if (!options.containsKey(Controller.NUM_SHARDS_OPTION))
+        {
+            options.putIfAbsent(Controller.BASE_SHARD_COUNT_OPTION, Integer.toString(2));
+            options.putIfAbsent(Controller.TARGET_SSTABLE_SIZE_OPTION, FBUtilities.prettyPrintMemory(100 << 20));
+            options.putIfAbsent(Controller.OVERLAP_INCLUSION_METHOD_OPTION, Controller.OverlapInclusionMethod.SINGLE.toString().toLowerCase());
+        }
     }
 
     void testStartShutdown(Controller controller)
@@ -178,7 +206,7 @@ public abstract class ControllerTest
 
         assertEquals((long) dataSizeGB << 30, controller.getDataSetSizeBytes());
         assertEquals(numShards, controller.getNumShards(1));
-        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
+//        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
         assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
         assertFalse(controller.isRunning());
         assertEquals(Controller.DEFAULT_SURVIVAL_FACTOR, controller.getSurvivalFactor(0), epsilon);

@@ -1116,6 +1116,11 @@ public class FBUtilities
         return v;
     }
 
+    public static long parseHumanReadableBytes(String value)
+    {
+        return (long) parseHumanReadable(value, null, "B");
+    }
+
     /**
      * Parse a double where both a direct value and a percentage are accepted.
      * For example, for inputs "0.1" and "10%", this function will return 0.1.

@@ -107,7 +107,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
         testStaticOptions(2048, 10, 250, 2);
     }
 
-    private void testStaticOptions(int dataSetSizeGB, int numShards, int minSstableSizeMB, int ... Ws)
+    private void testStaticOptions(int dataSetSizeGB, int numShards, int minSSTableSize, int ... Ws)
     {
         String scalingParametersStr = String.join(",", Arrays.stream(Ws)
                                                           .mapToObj(i -> Integer.toString(i))
@@ -117,7 +117,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
                     "{'class':'UnifiedCompactionStrategy', 'adaptive' : 'false', " +
                     String.format("'dataset_size_in_gb' : '%d', ", dataSetSizeGB) +
                     String.format("'base_shard_count' : '%d', ", numShards) +
-                    String.format("'min_sstable_size_in_mb' : '%d', ", minSstableSizeMB) +
+                    String.format("'min_sstable_size_in_mb' : '%d', ", minSSTableSize) +
                     String.format("'scaling_parameters' : '%s'}", scalingParametersStr));
 
         CompactionStrategy strategy = getCurrentCompactionStrategy();
@@ -127,7 +127,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
         Controller controller = unifiedCompactionStrategy.getController();
         assertEquals((long) dataSetSizeGB << 30, controller.getDataSetSizeBytes());
         assertEquals(numShards, controller.getNumShards(1));
-        assertEquals((long) minSstableSizeMB << 20, controller.getMinSstableSizeBytes());
+        assertEquals((long) minSSTableSize << 20, controller.getMinSstableSizeBytes());
 
         assertTrue(unifiedCompactionStrategy.getController() instanceof StaticController);
         for (int i = 0; i < Ws.length; i++)

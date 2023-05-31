@@ -93,10 +93,9 @@ public class AdaptiveController extends Controller
                               int[] scalingParameters,
                               int[] previousScalingParameters,
                               double[] survivalFactors,
-                              long dataSetSizeMB,
-                              int numShards,
-                              long minSstableSizeMB,
-                              long flushSizeOverrideMB,
+                              long dataSetSize,
+                              long minSSTableSize,
+                              long flushSizeOverride,
                               double maxSpaceOverhead,
                               int maxSSTablesToCompact,
                               long expiredSSTableCheckFrequency,
@@ -117,10 +116,9 @@ public class AdaptiveController extends Controller
         super(clock,
               env,
               survivalFactors,
-              dataSetSizeMB,
-              numShards,
-              minSstableSizeMB,
-              flushSizeOverrideMB,
+              dataSetSize,
+              minSSTableSize,
+              flushSizeOverride,
               maxSpaceOverhead,
               maxSSTablesToCompact,
               expiredSSTableCheckFrequency,
@@ -144,10 +142,9 @@ public class AdaptiveController extends Controller
 
     static Controller fromOptions(Environment env,
                                   double[] survivalFactors,
-                                  long dataSetSizeMB,
-                                  int numShards,
-                                  long minSstableSizeMB,
-                                  long flushSizeOverrideMB,
+                                  long dataSetSize,
+                                  long minSSTableSize,
+                                  long flushSizeOverride,
                                   double maxSpaceOverhead,
                                   int maxSSTablesToCompact,
                                   long expiredSSTableCheckFrequency,
@@ -177,10 +174,9 @@ public class AdaptiveController extends Controller
                                       env,
                                       scalingParameters, previousScalingParameters,
                                       survivalFactors,
-                                      dataSetSizeMB,
-                                      numShards,
-                                      minSstableSizeMB,
-                                      flushSizeOverrideMB,
+                                      dataSetSize,
+                                      minSSTableSize,
+                                      flushSizeOverride,
                                       maxSpaceOverhead,
                                       maxSSTablesToCompact,
                                       expiredSSTableCheckFrequency,
@@ -393,7 +389,7 @@ public class AdaptiveController extends Controller
             }
         }
 
-        logger.debug("Min cost: {}, min scaling parameter: {}, min sstable size: {}\nread costs: {}\nwrite costs: {}\ntot costs: {}\nAverages: {}",
+        logger.debug("Min cost: {}, min scaling parameter: {}, target sstable size: {}\nread costs: {}\nwrite costs: {}\ntot costs: {}\nAverages: {}",
                      candCost,
                      candScalingParameter,
                      FBUtilities.prettyPrintMemory(getMinSstableSizeBytes()),
@@ -445,6 +441,6 @@ public class AdaptiveController extends Controller
     @Override
     public String toString()
     {
-        return String.format("m: %d, o: %s, scalingParameter: %s - %s", minSstableSizeMB, Arrays.toString(survivalFactors), Arrays.toString(scalingParameters), calculator);
+        return String.format("m: %s, o: %s, scalingParameter: %s - %s", FBUtilities.prettyPrintMemory(minSSTableSize), Arrays.toString(survivalFactors), Arrays.toString(scalingParameters), calculator);
     }
 }

@@ -165,16 +165,15 @@ public class StaticControllerTest extends ControllerTest
         StaticController controller = new StaticController(env,
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
-                                                           dataSizeGB << 10,
-                                                           numShards,
-                                                           sstableSizeMB,
+                                                           dataSizeGB << 30,
+                                                           sstableSizeMB << 20,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                                            0,
                                                            Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS,
                                                            Controller.DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
-                                                           Controller.DEFAULT_BASE_SHARD_COUNT,
+                                                           numShards,
                                                            Controller.DEFAULT_TARGET_SSTABLE_SIZE,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
@@ -188,16 +187,15 @@ public class StaticControllerTest extends ControllerTest
         StaticController controller = new StaticController(env,
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
-                                                           dataSizeGB << 10,
-                                                           numShards,
-                                                           sstableSizeMB,
+                                                           dataSizeGB << 30,
+                                                           sstableSizeMB << 20,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                                            0,
                                                            Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS,
                                                            Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
-                                                           Controller.DEFAULT_BASE_SHARD_COUNT,
+                                                           numShards,
                                                            Controller.DEFAULT_TARGET_SSTABLE_SIZE,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
@@ -211,8 +209,7 @@ public class StaticControllerTest extends ControllerTest
         StaticController controller = new StaticController(env,
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
-                                                           dataSizeGB << 10,
-                                                           numShards,
+                                                           dataSizeGB << 30,
                                                            sstableSizeMB,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
@@ -220,7 +217,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Controller.DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS,
                                                            Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
-                                                           Controller.DEFAULT_BASE_SHARD_COUNT,
+                                                           numShards,
                                                            Controller.DEFAULT_TARGET_SSTABLE_SIZE,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
@@ -229,9 +226,10 @@ public class StaticControllerTest extends ControllerTest
     }
 
     @Test
-    public void testMaxSpaceOverhead()
+    public void testV1MaxSpaceOverhead()
     {
         Map<String, String> options = new HashMap<>();
+        options.put(Controller.NUM_SHARDS_OPTION, Integer.toString(numShards));
 
         Controller controller = testFromOptions(false, options);
         assertTrue(controller instanceof StaticController);
@@ -276,11 +274,11 @@ public class StaticControllerTest extends ControllerTest
     {
         Map<String, String> options = new HashMap<>();
         Controller controller = testFromOptions(false, options);
-        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSizeMB * controller.maxSpaceOverhead / controller.minSstableSizeMB);
+        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSize * controller.maxSpaceOverhead / controller.minSSTableSize);
 
         options.put(Controller.MAX_SPACE_OVERHEAD_OPTION, "0.1");
         controller = testFromOptions(false, options);
-        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSizeMB * controller.maxSpaceOverhead / controller.minSstableSizeMB);
+        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSize * controller.maxSpaceOverhead / controller.minSSTableSize);
 
         options.put(Controller.MAX_SSTABLES_TO_COMPACT_OPTION, "100");
         controller = testFromOptions(false, options);
@@ -288,7 +286,7 @@ public class StaticControllerTest extends ControllerTest
 
         options.put(Controller.MAX_SSTABLES_TO_COMPACT_OPTION, "0");
         controller = testFromOptions(false, options);
-        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSizeMB * controller.maxSpaceOverhead / controller.minSstableSizeMB);
+        assertTrue(controller.maxSSTablesToCompact <= controller.dataSetSize * controller.maxSpaceOverhead / controller.minSSTableSize);
     }
 
     @Test

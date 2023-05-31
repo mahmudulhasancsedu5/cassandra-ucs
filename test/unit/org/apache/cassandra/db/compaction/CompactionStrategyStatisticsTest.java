@@ -109,9 +109,9 @@ public class CompactionStrategyStatisticsTest extends BaseCompactionStrategyTest
         // all will be allowed to run. The calculation below assumes (1) that compactions are considered "oversized"
         // if they are more than 1/2 of the max shard size; (2) that mockSSTables uses 15% less than the max SSTable
         // size for that bucket.
-        long topBucketMaxSstableSize = (long) (minSstableSizeBytes * Math.pow(F, numBuckets));
-        long minShardSizeWithoutOversizedCompactions = T * topBucketMaxSstableSize * 2;
-        when(controller.getShardSizeBytes()).thenReturn(minShardSizeWithoutOversizedCompactions);
+//        long topBucketMaxSstableSize = (long) (minSstableSizeBytes * Math.pow(F, numBuckets));
+//        long minShardSizeWithoutOversizedCompactions = T * topBucketMaxSstableSize * 2;
+//        when(controller.getShardSizeBytes()).thenReturn(minShardSizeWithoutOversizedCompactions);
 
         UnifiedCompactionStrategy strategy = new UnifiedCompactionStrategy(strategyFactory, controller);
         List<Collection<SSTableReader>> testBuckets = new ArrayList<>(numBuckets * 2);

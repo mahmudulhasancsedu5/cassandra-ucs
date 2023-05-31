@@ -28,6 +28,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -64,35 +65,53 @@ public abstract class Controller
     //TODO: Remove some options, add deprecation messages
     static final String PREFIX = "unified_compaction.";
 
-    /** The data size in GB, it will be assumed that the node will have on disk roughly this size of data when it
-     * reaches equilibrium. By default 1 TB. */
+    /**
+     * The data size in GB, it will be assumed that the node will have on disk roughly this size of data when it
+     * reaches equilibrium. The default is calculated by looking at the free space on all data directories, adjusting
+     * for ones belonging to the same drive.
+     */
+    public static final String DATASET_SIZE_OPTION = "dataset_size";
+    @Deprecated
     public static final String DATASET_SIZE_OPTION_GB = "dataset_size_in_gb";
-    static final long DEFAULT_DATASET_SIZE_GB = Long.getLong(PREFIX + DATASET_SIZE_OPTION_GB,
-                                                             DatabaseDescriptor.getDataFileDirectoriesMinTotalSpaceInGB());
-
-    /** The number of shards. The shard size will be calculated by dividing the data size by this number.
-     * By default, 10 would be used for single disk. If the data size is 1 TB, then the shard size becomes 100 GB.
-     * If JBOD / multi-drive, it would be 10 * disks. For example, if there are 5 disks, there would be 50 shards.
-     * With data size 10 TB, the shard size would be 200 GB.
-     * */
-    static final String NUM_SHARDS_OPTION = "num_shards";
-    static final int DEFAULT_NUM_SHARDS = Integer.getInteger(PREFIX + NUM_SHARDS_OPTION,
-                                                             10 * DatabaseDescriptor.getAllDataFileLocations().length);
+    static final long DEFAULT_DATASET_SIZE =
+        FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + DATASET_SIZE_OPTION,
+                                                              DatabaseDescriptor.getDataFileDirectoriesMinTotalSpaceInGB() + "GiB"));
 
     /**
-     * The minimum sstable size. Sharded writers split sstables over shard only if they are at least as large
-     * as the minimum size.
-     *
-     * When the minimum sstable size is zero in the compaction options, then it is calculated by the controller by
-     * looking at the initial flush size.
+     * The number of shards. This is the main configuration option for UCS V1 (i.e. before the density/overlap
+     * improvements). If the value is set, the strategy will switch to V1 mode which entails:
+     * <ul>
+     * <li>base_shard_count = num_shards
+     * <li>growth_factor = 0 (i.e. always use the same number of shards)
+     * <li>min_sstable_size = 100 MiB
+     * <li>reserved_threads_per_level = max
+     * </ul>
+     * The option is undefined by default to engage the density version of UCS.
      */
+    @Deprecated
+    static final String NUM_SHARDS_OPTION = "num_shards";
+
+    /**
+     * The minimum sstable size. Sharded writers split sstables over shard only if they are at least as large as the
+     * minimum size.
+     * <p>
+     * This is mainly present to support UCS V1 mode, which relies heavily on minimal SSTable
+     * size, and defaults to 0 which provides minimal parallelism on all levels of the hierarchy.
+     * In UCS V1 mode (engaged by using "num_shards" above) the default is 100MiB.
+     */
+    static final String MIN_SSTABLE_SIZE_OPTION = "min_sstable_size";
+    @Deprecated
     static final String MIN_SSTABLE_SIZE_OPTION_MB = "min_sstable_size_in_mb";
-    static final int DEFAULT_MIN_SSTABLE_SIZE_MB = Integer.getInteger(PREFIX + MIN_SSTABLE_SIZE_OPTION_MB, 100);
+
+    static final long DEFAULT_MIN_SSTABLE_SIZE = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + MIN_SSTABLE_SIZE_OPTION, "0B"));
+    static final long DEFAULT_MIN_SSTABLE_SIZE_V1 = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + MIN_SSTABLE_SIZE_OPTION, "100MiB"));
 
     /**
      * Override for the flush size in MB. The database should be able to calculate this from executing flushes, this
      * should only be necessary in rare cases.
      */
+    static final String FLUSH_SIZE_OVERRIDE_OPTION = "flush_size_override";
+    @Deprecated
     static final String FLUSH_SIZE_OVERRIDE_OPTION_MB = "flush_size_override_mb";
 
     /**
@@ -104,7 +123,7 @@ public abstract class Controller
      * behind, higher read amplification, and other problems of that nature.
      */
     public static final String MAX_SPACE_OVERHEAD_OPTION = "max_space_overhead";
-    static final double DEFAULT_MAX_SPACE_OVERHEAD = Double.parseDouble(System.getProperty(PREFIX + MAX_SPACE_OVERHEAD_OPTION, "0.2"));
+    static final double DEFAULT_MAX_SPACE_OVERHEAD = FBUtilities.parsePercent(System.getProperty(PREFIX + MAX_SPACE_OVERHEAD_OPTION, "0.2"));
     static final double MAX_SPACE_OVERHEAD_LOWER_BOUND = 0.01;
     static final double MAX_SPACE_OVERHEAD_UPPER_BOUND = 1.0;
 
@@ -246,12 +265,10 @@ public abstract class Controller
     protected final MonotonicClock clock;
     protected final Environment env;
     protected final double[] survivalFactors;
-    protected final long dataSetSizeMB;
-    protected final int numShards;
-    protected final long shardSizeMB;
-    protected volatile long minSstableSizeMB;
+    protected final long dataSetSize;
+    protected volatile long minSSTableSize;
     protected final double maxSpaceOverhead;
-    protected final long flushSizeOverrideMB;
+    protected final long flushSizeOverride;
     protected volatile long currentFlushSize;
     protected final int maxSSTablesToCompact;
     protected final long expiredSSTableCheckFrequency;
@@ -273,10 +290,9 @@ public abstract class Controller
     Controller(MonotonicClock clock,
                Environment env,
                double[] survivalFactors,
-               long dataSetSizeMB,
-               int numShards,
-               long minSstableSizeMB,
-               long flushSizeOverrideMB,
+               long dataSetSize,
+               long minSSTableSize,
+               long flushSizeOverride,
                double maxSpaceOverhead,
                int maxSSTablesToCompact,
                long expiredSSTableCheckFrequency,
@@ -291,36 +307,20 @@ public abstract class Controller
         this.clock = clock;
         this.env = env;
         this.survivalFactors = survivalFactors;
-        this.dataSetSizeMB = dataSetSizeMB;
-        this.numShards = numShards;
-        this.shardSizeMB = (int) Math.ceil((double) dataSetSizeMB / numShards);
-        this.minSstableSizeMB = minSstableSizeMB;
-        this.flushSizeOverrideMB = flushSizeOverrideMB;
-        this.currentFlushSize = flushSizeOverrideMB << 20;
+        this.dataSetSize = dataSetSize;
+        this.minSSTableSize = minSSTableSize;
+        this.flushSizeOverride = flushSizeOverride;
+        this.currentFlushSize = flushSizeOverride;
         this.expiredSSTableCheckFrequency = TimeUnit.MILLISECONDS.convert(expiredSSTableCheckFrequency, TimeUnit.SECONDS);
         this.baseShardCount = baseShardCount;
         this.targetSSTableSizeMin = targetSStableSize * Math.sqrt(0.5);
         this.overlapInclusionMethod = overlapInclusionMethod;
         this.sstableGrowthModifier = sstableGrowthModifier;
         this.reservedThreadsPerLevel = reservedThreadsPerLevel;
-
-        double maxSpaceOverheadLowerBound = 1.0d / numShards;
-        if (maxSpaceOverhead < maxSpaceOverheadLowerBound)
-        {
-            logger.warn("{} shards are not enough to maintain the required maximum space overhead of {}!\n" +
-                        "Falling back to {}={} instead. If this limit needs to be satisfied, please increase the number" +
-                        " of shards.",
-                        numShards,
-                        maxSpaceOverhead,
-                        MAX_SPACE_OVERHEAD_OPTION,
-                        String.format("%.3f", maxSpaceOverheadLowerBound));
-            this.maxSpaceOverhead = maxSpaceOverheadLowerBound;
-        }
-        else
-            this.maxSpaceOverhead = maxSpaceOverhead;
+        this.maxSpaceOverhead = maxSpaceOverhead;
 
         if (maxSSTablesToCompact <= 0)  // use half the maximum permitted compaction size as upper bound by default
-            maxSSTablesToCompact = (int) (dataSetSizeMB * this.maxSpaceOverhead * 0.5 / minSstableSizeMB);
+            maxSSTablesToCompact = (int) (dataSetSize * this.maxSpaceOverhead * 0.5 / minSSTableSize);
 
         this.maxSSTablesToCompact = maxSSTablesToCompact;
 
@@ -370,33 +370,65 @@ public abstract class Controller
      * This is calculated as a power-of-two multiple of baseShardCount, so that the expected size of resulting sstables
      * is between targetSSTableSizeMin and 2*targetSSTableSizeMin (in other words, sqrt(0.5) * targetSSTableSize and
      * sqrt(2) * targetSSTableSize), with a minimum of baseShardCount shards for smaller sstables.
+     * Additionally, if a minimum sstable size is set, we can go below the baseShardCount when that would result in
+     * sstables smaller than that minimum. Note that in the case of a non-power-of-two base count this will cause
+     * smaller sstables to not be aligned with the ones whose size is enough for the base count.
      */
     public int getNumShards(double density)
     {
-//        if (sstableGrowthModifier == 0)
-//            return baseShardCount;
-
-        // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
-        // the result is a multiple of it by multiplying back below.
-        double count = density / (targetSSTableSizeMin * baseShardCount);
-        if (count > MAX_SHARD_SPLIT)
-            count = MAX_SHARD_SPLIT;
-        assert !(count < 0);    // Must be positive, 0 or NaN, which should translate to baseShardCount
-
         int shards;
-//        if (sstableGrowthModifier == 1)
-//        {
-//            // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
-//            // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
-//            // already applied in targetSSTableSizeMin.
-//            // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
-//            shards = baseShardCount * Integer.highestOneBit((int) count | 1);
-//        }
-//        else
+        if (sstableGrowthModifier == 0)
         {
-            // Take a logarithm of the count (in base 2), and adjust it by the given growth modifier.
-            int pow = Math.max(0, (int) (Math.log(count) * INVERSE_LOG_2 * sstableGrowthModifier));
-            shards = baseShardCount << pow;
+            shards = baseShardCount;
+        }
+        else
+        {
+            // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
+            // the result is a multiple of it by multiplying back below.
+            double count = density / (targetSSTableSizeMin * baseShardCount);
+            if (count > MAX_SHARD_SPLIT)
+                count = MAX_SHARD_SPLIT;
+            assert !(count < 0);    // Must be positive, 0 or NaN, which should translate to baseShardCount
+
+            if (sstableGrowthModifier == 1)
+            {
+                // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
+                // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
+                // already applied in targetSSTableSizeMin.
+                // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
+                shards = baseShardCount * Integer.highestOneBit((int) count | 1);
+            }
+            else
+            {
+                // Take a logarithm of the count (in base 2), and adjust it by the given growth modifier.
+                // Then round down (to get fewer shards and thus bigger sstables than the target minimum)
+                // and make sure the exponent is at least 0.
+                // Note: This code also works correctly for the special cases of sstableGrowthModifier == 0 and 1,
+                //       but the above code avoids the floating point arithmetic for these common cases.
+                // Note: We use log instead of getExponent because we also need the non-integer part of the logarithm
+                //       in order to apply the growth modifier correctly.
+                int pow = Math.max(0, (int) (Math.log(count) * INVERSE_LOG_2 * sstableGrowthModifier));
+                shards = baseShardCount << pow;
+            }
+        }
+
+        if (shards == baseShardCount && minSSTableSize > 0)
+        {
+            // Adjust for minimum size.
+            double count = density / minSSTableSize;
+            if (count < baseShardCount)
+            {
+                // Make it a power of two, rounding down so that sstables are greater in size than the min.
+                // Setting the bottom bit to 1 ensures the result is at least 1.
+                shards = Integer.highestOneBit((int) count | 1);
+                logger.debug("Shard count {} for density {}, {} times min size {}",
+                             shards,
+                             FBUtilities.prettyPrintBinary(density, "B", " "),
+                             density / minSSTableSize,
+                             FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
+                // skip logging below
+                return shards;
+            }
         }
         logger.debug("Shard count {} for density {}, {} times target {}",
                      shards,
@@ -433,17 +465,7 @@ public abstract class Controller
      */
     public long getDataSetSizeBytes()
     {
-        return dataSetSizeMB << 20;
-    }
-
-    /**
-     * The user specified shard, or compaction arena, size.
-     *
-     * @return the desired size of each shard, or compaction arena, in bytes.
-     */
-    public long getShardSizeBytes()
-    {
-        return shardSizeMB << 20;
+        return dataSetSize;
     }
 
     /**
@@ -455,13 +477,13 @@ public abstract class Controller
      */
     public long getMinSstableSizeBytes()
     {
-        if (minSstableSizeMB > 0)
-            return minSstableSizeMB << 20;
+        if (minSSTableSize > 0)
+            return minSSTableSize;
 
         synchronized (this)
         {
-            if (minSstableSizeMB > 0)
-                return minSstableSizeMB << 20;
+            if (minSSTableSize > 0)
+                return minSSTableSize;
 
             // round the avg flush size to the nearest byte
             long envFlushSize = Math.round(env.flushSize());
@@ -472,7 +494,7 @@ public abstract class Controller
 
             // If the env flush size is positive, then we've flushed at least once and we use this value permanently
             if (envFlushSize > 0)
-                minSstableSizeMB = flushSize >> 20;
+                minSSTableSize = flushSize;
 
             return flushSize;
         }
@@ -489,8 +511,8 @@ public abstract class Controller
      */
     public long getFlushSizeBytes()
     {
-        if (flushSizeOverrideMB > 0)
-            return flushSizeOverrideMB << 20;
+        if (flushSizeOverride > 0)
+            return flushSizeOverride;
 
         double envFlushSize = env.flushSize();
         if (currentFlushSize == 0 || Math.abs(1 - (currentFlushSize / envFlushSize)) > 0.5)
@@ -705,12 +727,11 @@ public abstract class Controller
     public static Controller fromOptions(CompactionRealm realm, Map<String, String> options)
     {
         boolean adaptive = options.containsKey(ADAPTIVE_OPTION) ? Boolean.parseBoolean(options.get(ADAPTIVE_OPTION)) : DEFAULT_ADAPTIVE;
-        long dataSetSizeMb = (options.containsKey(DATASET_SIZE_OPTION_GB) ? Long.parseLong(options.get(DATASET_SIZE_OPTION_GB)) : DEFAULT_DATASET_SIZE_GB) << 10;
-        int numShards = options.containsKey(NUM_SHARDS_OPTION) ? Integer.parseInt(options.get(NUM_SHARDS_OPTION)) : DEFAULT_NUM_SHARDS;
-        long sstableSizeMb = options.containsKey(MIN_SSTABLE_SIZE_OPTION_MB) ? Long.parseLong(options.get(MIN_SSTABLE_SIZE_OPTION_MB)) : DEFAULT_MIN_SSTABLE_SIZE_MB;
-        long flushSizeOverrideMb = Long.parseLong(options.getOrDefault(FLUSH_SIZE_OVERRIDE_OPTION_MB, "0"));
+        long dataSetSize = getSizeWithAlt(options, DATASET_SIZE_OPTION, DATASET_SIZE_OPTION_GB, 30, DEFAULT_DATASET_SIZE);
+        long minSSTableSize = getSizeWithAlt(options, MIN_SSTABLE_SIZE_OPTION, MIN_SSTABLE_SIZE_OPTION_MB, 20, DEFAULT_MIN_SSTABLE_SIZE);
+        long flushSizeOverride = getSizeWithAlt(options, FLUSH_SIZE_OVERRIDE_OPTION, FLUSH_SIZE_OVERRIDE_OPTION_MB, 20, 0);
         double maxSpaceOverhead = options.containsKey(MAX_SPACE_OVERHEAD_OPTION)
-                ? Double.parseDouble(options.get(MAX_SPACE_OVERHEAD_OPTION))
+                ? FBUtilities.parsePercent(options.get(MAX_SPACE_OVERHEAD_OPTION))
                 : DEFAULT_MAX_SPACE_OVERHEAD;
         int maxSSTablesToCompact = Integer.parseInt(options.getOrDefault(MAX_SSTABLES_TO_COMPACT_OPTION, "0"));
         long expiredSSTableCheckFrequency = options.containsKey(EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_OPTION)
@@ -740,7 +761,6 @@ public abstract class Controller
                                    ? FBUtilities.parseHumanReadable(options.get(TARGET_SSTABLE_SIZE_OPTION), null, "B")
                                    : DEFAULT_TARGET_SSTABLE_SIZE;
 
-
         double sstableGrowthModifier = DEFAULT_GROWTH_MODIFIER;
         if (options.containsKey(GROWTH_MODIFIER_OPTION))
             sstableGrowthModifier = Double.parseDouble(options.get(GROWTH_MODIFIER_OPTION));
@@ -750,6 +770,32 @@ public abstract class Controller
         int reservedThreadsPerLevel = options.containsKey(RESERVED_THREADS_OPTION)
                                       ? FBUtilities.parseIntAllowingMax(options.get(RESERVED_THREADS_OPTION))
                                       : DEFAULT_RESERVED_THREADS;
+
+        if (options.containsKey(NUM_SHARDS_OPTION))
+        {
+            // Legacy V1 mode.
+            int numShards = Integer.parseInt(options.get(NUM_SHARDS_OPTION));
+            if (!options.containsKey(RESERVED_THREADS_OPTION))
+                reservedThreadsPerLevel = Integer.MAX_VALUE;
+            if (!options.containsKey(MIN_SSTABLE_SIZE_OPTION))
+                minSSTableSize = DEFAULT_MIN_SSTABLE_SIZE_V1;
+            baseShardCount = numShards;
+            sstableGrowthModifier = 0.0;
+            targetSStableSize = minSSTableSize; // this no longer plays a part, the result of getNumShards is always baseShardCount
+
+            double maxSpaceOverheadLowerBound = 1.0d / numShards;
+            if (maxSpaceOverhead < maxSpaceOverheadLowerBound)
+            {
+                logger.warn("{} shards are not enough to maintain the required maximum space overhead of {}!\n" +
+                            "Falling back to {}={} instead. If this limit needs to be satisfied, please increase the number" +
+                            " of shards.",
+                            numShards,
+                            maxSpaceOverhead,
+                            MAX_SPACE_OVERHEAD_OPTION,
+                            String.format("%.3f", maxSpaceOverheadLowerBound));
+                maxSpaceOverhead = maxSpaceOverheadLowerBound;
+            }
+        }
 
         // Multiple data directories normally indicate multiple disks and we cannot compact sstables together if they belong to
         // different disks (or else loosing a disk may result in resurrected data due to lost tombstones). Because UCS sharding
@@ -772,10 +818,9 @@ public abstract class Controller
         return adaptive
                ? AdaptiveController.fromOptions(env,
                                                 survivalFactors,
-                                                dataSetSizeMb,
-                                                numShards,
-                                                sstableSizeMb,
-                                                flushSizeOverrideMb,
+                                                dataSetSize,
+                                                minSSTableSize,
+                                                flushSizeOverride,
                                                 maxSpaceOverhead,
                                                 maxSSTablesToCompact,
                                                 expiredSSTableCheckFrequency,
@@ -789,10 +834,9 @@ public abstract class Controller
                                                 options)
                : StaticController.fromOptions(env,
                                               survivalFactors,
-                                              dataSetSizeMb,
-                                              numShards,
-                                              sstableSizeMb,
-                                              flushSizeOverrideMb,
+                                              dataSetSize,
+                                              minSSTableSize,
+                                              flushSizeOverride,
                                               maxSpaceOverhead,
                                               maxSSTablesToCompact,
                                               expiredSSTableCheckFrequency,
@@ -817,6 +861,10 @@ public abstract class Controller
         String s;
         boolean adaptive = DEFAULT_ADAPTIVE;
 
+        validateNoneWith(options, NUM_SHARDS_OPTION, TARGET_SSTABLE_SIZE_OPTION, TARGET_SSTABLE_GROWTH_OPTION, BASE_SHARD_COUNT_OPTION);
+        validateOneOf(options, GROWTH_MODIFIER_OPTION, TARGET_SSTABLE_GROWTH_OPTION);
+
+
         s = options.remove(ADAPTIVE_OPTION);
         if (s != null)
         {
@@ -827,62 +875,9 @@ public abstract class Controller
             adaptive = Boolean.parseBoolean(s);
         }
 
-        s = options.remove(MIN_SSTABLE_SIZE_OPTION_MB);
-        if (s != null)
-        {
-            try
-            {
-                long minSStableSize = Long.parseLong(s);
-                if (minSStableSize <= 0)
-                    throw new ConfigurationException(String.format(nonPositiveErr,
-                                                                   MIN_SSTABLE_SIZE_OPTION_MB,
-                                                                   minSStableSize));
-            }
-            catch (NumberFormatException e)
-            {
-                throw new ConfigurationException(String.format(longParseErr,
-                                                               s,
-                                                               MIN_SSTABLE_SIZE_OPTION_MB),
-                                                 e);
-            }
-        }
-
-        s = options.remove(FLUSH_SIZE_OVERRIDE_OPTION_MB);
-        if (s != null)
-        {
-            try
-            {
-                long flushSize = Long.parseLong(s);
-                if (flushSize <= 0)
-                    throw new ConfigurationException(String.format(nonPositiveErr,
-                                                                   FLUSH_SIZE_OVERRIDE_OPTION_MB,
-                                                                   flushSize));
-            }
-            catch (NumberFormatException e)
-            {
-                throw new ConfigurationException(String.format(longParseErr,
-                                                               s,
-                                                               FLUSH_SIZE_OVERRIDE_OPTION_MB),
-                                                 e);
-            }
-        }
-
-        s = options.remove(DATASET_SIZE_OPTION_GB);
-        if (s != null)
-        {
-            try
-            {
-                long dataSetSizeMb = Long.parseLong(s);
-                if (dataSetSizeMb <= 0)
-                    throw new ConfigurationException(String.format(nonPositiveErr,
-                                                                   DATASET_SIZE_OPTION_GB,
-                                                                   dataSetSizeMb));
-            }
-            catch (NumberFormatException e)
-            {
-                throw new ConfigurationException(String.format(longParseErr, s, DATASET_SIZE_OPTION_GB), e);
-            }
-        }
+        validateSizeWithAlt(options, MIN_SSTABLE_SIZE_OPTION, MIN_SSTABLE_SIZE_OPTION_MB, 20);
+        validateSizeWithAlt(options, FLUSH_SIZE_OVERRIDE_OPTION, FLUSH_SIZE_OVERRIDE_OPTION_MB, 20);
+        validateSizeWithAlt(options, DATASET_SIZE_OPTION, DATASET_SIZE_OPTION_GB, 30);
 
         s = options.remove(NUM_SHARDS_OPTION);
         if (s != null)
@@ -940,7 +935,7 @@ public abstract class Controller
         {
             try
             {
-                double maxSpaceOverhead = Double.parseDouble(s);
+                double maxSpaceOverhead = FBUtilities.parsePercent(s);
                 if (maxSpaceOverhead < MAX_SPACE_OVERHEAD_LOWER_BOUND || maxSpaceOverhead > MAX_SPACE_OVERHEAD_UPPER_BOUND)
                     throw new ConfigurationException(String.format("Invalid configuration, %s must be between %f and %f: %s",
                                                                    MAX_SPACE_OVERHEAD_OPTION,
@@ -986,7 +981,7 @@ public abstract class Controller
         {
             try
             {
-                long targetSSTableSize = (long) FBUtilities.parseHumanReadable(s, null, "B");
+                long targetSSTableSize = FBUtilities.parseHumanReadableBytes(s);
                 if (targetSSTableSize < MIN_TARGET_SSTABLE_SIZE)
                     throw new ConfigurationException(String.format("%s %s is not acceptable, size must be at least %s",
                                                                    TARGET_SSTABLE_SIZE_OPTION,
@@ -1002,12 +997,6 @@ public abstract class Controller
             }
         }
 
-        if (options.containsKey(TARGET_SSTABLE_GROWTH_OPTION) && options.containsKey(GROWTH_MODIFIER_OPTION))
-        {
-            throw new ConfigurationException(String.format("Cannot specify both %s and %s",
-                                                           TARGET_SSTABLE_SIZE_OPTION,
-                                                           GROWTH_MODIFIER_OPTION));
-        }
         s = options.remove(GROWTH_MODIFIER_OPTION);
         if (s != null)
         {
@@ -1083,6 +1072,71 @@ public abstract class Controller
         }
 
         return adaptive ? AdaptiveController.validateOptions(options) : StaticController.validateOptions(options);
+    }
+
+    private static long getSizeWithAlt(Map<String, String> options, String optionHumanReadable, String optionAlt, int altShift, long defaultValue)
+    {
+        if (options.containsKey(optionHumanReadable))
+            return FBUtilities.parseHumanReadableBytes(options.get(optionHumanReadable));
+        else if (options.containsKey(optionAlt))
+            return Long.parseLong(options.get(optionAlt)) << altShift;
+        else
+            return defaultValue;
+    }
+
+    private static void validateSizeWithAlt(Map<String, String> options, String optionHumanReadable, String optionAlt, int altShift)
+    {
+        validateOneOf(options, optionHumanReadable, optionAlt);
+        long sizeInBytes = 1;
+        String s = null;
+        String opt = optionHumanReadable;
+        try
+        {
+            s = options.remove(opt);
+            if (s != null)
+            {
+                sizeInBytes = FBUtilities.parseHumanReadableBytes(s);
+            }
+            else
+            {
+                opt = optionAlt;
+                s = options.remove(opt);
+                if (s != null)
+                    sizeInBytes = Long.parseLong(s) << altShift;
+            }
+
+        }
+        catch (NumberFormatException e)
+        {
+            throw new ConfigurationException(String.format("%s is not a valid size in bytes for %s",
+                                                           s,
+                                                           opt),
+                                             e);
+        }
+
+        if (s != null && sizeInBytes <= 0)
+            throw new ConfigurationException(String.format("Invalid configuration, %s should be positive: %s",
+                                                           opt,
+                                                           s));
+    }
+
+    private static void validateNoneWith(Map<String, String> options, String option, String... incompatibleOptions)
+    {
+        if (!options.containsKey(option) || Arrays.stream(incompatibleOptions).noneMatch(options::containsKey))
+            return;
+        throw new ConfigurationException(String.format("Option %s cannot be used in combination with %s",
+                                                       option,
+                                                       Arrays.stream(incompatibleOptions).filter(options::containsKey).collect(Collectors.joining(", "))));
+    }
+
+    private static void validateOneOf(Map<String, String> options, String option1, String option2)
+    {
+        if (options.containsKey(option1) && options.containsKey(option2))
+        {
+            throw new ConfigurationException(String.format("Cannot specify both %s and %s",
+                                                           option1,
+                                                           option2));
+        }
     }
 
     // The methods below are implemented here (rather than directly in UCS) to aid testability.
