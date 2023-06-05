@@ -190,7 +190,7 @@ $S$ to split the local token space into to be
 $$
 S = 
 \begin{cases}
-2^{\left\lfloor g \cdot \log_2 \left( {\frac d t \cdot \frac {\sqrt 2} b}\right)\right\rfloor} \cdot b
+2^{\left\lfloor \log_2 \left( {\frac d t \cdot \frac {\sqrt 2} b}\right)\right\rfloor} \cdot b
   & \text{if } d \ge \sqrt 2 tb\\
 b 
   & \text{otherwise}
