@@ -104,7 +104,7 @@ public abstract class Controller
     static final String MIN_SSTABLE_SIZE_OPTION_MB = "min_sstable_size_in_mb";
 
     static final long DEFAULT_MIN_SSTABLE_SIZE = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + MIN_SSTABLE_SIZE_OPTION, "0B"));
-    static final long DEFAULT_MIN_SSTABLE_SIZE_V1 = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + MIN_SSTABLE_SIZE_OPTION, "100MiB"));
+    static final long DEFAULT_MIN_SSTABLE_SIZE_V1 = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + MIN_SSTABLE_SIZE_OPTION, "-1B"));
 
     /**
      * Override for the flush size in MB. The database should be able to calculate this from executing flushes, this
@@ -411,11 +411,14 @@ public abstract class Controller
                 shards = baseShardCount << pow;
             }
         }
+        if (shards > baseShardCount)
+            return shards;
 
-        if (shards == baseShardCount && minSSTableSize > 0)
+        long minSize = getMinSstableSizeBytes();
+        if (minSize > 0)
         {
             // Adjust for minimum size.
-            double count = density / minSSTableSize;
+            double count = density / minSize;
             if (count < baseShardCount)
             {
                 // Make it a power of two, rounding down so that sstables are greater in size than the min.
@@ -424,7 +427,7 @@ public abstract class Controller
                 logger.debug("Shard count {} for density {}, {} times min size {}",
                              shards,
                              FBUtilities.prettyPrintBinary(density, "B", " "),
-                             density / minSSTableSize,
+                             density / minSize,
                              FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
                 // skip logging below
                 return shards;
@@ -468,6 +471,11 @@ public abstract class Controller
         return dataSetSize;
     }
 
+    public long getTargetSSTableSize()
+    {
+        return Math.round(targetSSTableSizeMin * Math.sqrt(2.0));
+    }
+
     /**
      * Return the sstable size in bytes.
      *
@@ -477,12 +485,12 @@ public abstract class Controller
      */
     public long getMinSstableSizeBytes()
     {
-        if (minSSTableSize > 0)
+        if (minSSTableSize >= 0)
             return minSSTableSize;
 
         synchronized (this)
         {
-            if (minSSTableSize > 0)
+            if (minSSTableSize >= 0)
                 return minSSTableSize;
 
             // round the avg flush size to the nearest byte

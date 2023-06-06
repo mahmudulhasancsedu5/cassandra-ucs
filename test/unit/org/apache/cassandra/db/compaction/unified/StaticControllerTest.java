@@ -166,7 +166,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
                                                            dataSizeGB << 30,
-                                                           sstableSizeMB << 20,
+                                                           0,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                                            0,
@@ -174,7 +174,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Controller.DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
                                                            numShards,
-                                                           Controller.DEFAULT_TARGET_SSTABLE_SIZE,
+                                                           sstableSizeMB << 20,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
                                                            Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
@@ -188,7 +188,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
                                                            dataSizeGB << 30,
-                                                           sstableSizeMB << 20,
+                                                           0,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                                            0,
@@ -196,7 +196,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
                                                            numShards,
-                                                           Controller.DEFAULT_TARGET_SSTABLE_SIZE,
+                                                           sstableSizeMB << 20,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
                                                            Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
@@ -210,7 +210,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Ws,
                                                            Controller.DEFAULT_SURVIVAL_FACTORS,
                                                            dataSizeGB << 30,
-                                                           sstableSizeMB,
+                                                           0,
                                                            0,
                                                            Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                                            0,
@@ -218,7 +218,7 @@ public class StaticControllerTest extends ControllerTest
                                                            Controller.ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION,
                                                            Controller.DEFAULT_L0_SHARDS_ENABLED,
                                                            numShards,
-                                                           Controller.DEFAULT_TARGET_SSTABLE_SIZE,
+                                                           sstableSizeMB << 20,
                                                            Controller.DEFAULT_GROWTH_MODIFIER,
                                                            Controller.DEFAULT_RESERVED_THREADS,
                                                            Controller.DEFAULT_OVERLAP_INCLUSION_METHOD);
@@ -230,6 +230,7 @@ public class StaticControllerTest extends ControllerTest
     {
         Map<String, String> options = new HashMap<>();
         options.put(Controller.NUM_SHARDS_OPTION, Integer.toString(numShards));
+        options.put(Controller.MIN_SSTABLE_SIZE_OPTION, "20MiB");
 
         Controller controller = testFromOptions(false, options);
         assertTrue(controller instanceof StaticController);

@@ -135,10 +135,7 @@ public abstract class ControllerTest
         assertNotNull(controller);
         assertNotNull(controller.toString());
 
-//        assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
-        assertEquals((long) dataSizeGB << 30, controller.getDataSetSizeBytes());
-        // No longer true: assertEquals(numShards, controller.getNumShards(1));
-//        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
+        assertEquals(dataSizeGB << 30, controller.getDataSetSizeBytes());
         assertFalse(controller.isRunning());
         for (int i = 0; i < 5; i++) // simulate 5 levels
             assertEquals(Controller.DEFAULT_SURVIVAL_FACTOR, controller.getSurvivalFactor(i), epsilon);
@@ -152,7 +149,9 @@ public abstract class ControllerTest
         else
         {
             int numShards = Integer.parseInt(options.get(Controller.NUM_SHARDS_OPTION));
-            assertEquals(numShards, controller.getNumShards(0));
+            long minSSTableSize = FBUtilities.parseHumanReadableBytes(options.get(Controller.MIN_SSTABLE_SIZE_OPTION));
+            assertEquals(1, controller.getNumShards(0));
+            assertEquals(numShards, controller.getNumShards(numShards * minSSTableSize));
             assertEquals(numShards, controller.getNumShards(16 * 100 << 20));
         }
 
@@ -207,7 +206,7 @@ public abstract class ControllerTest
         assertEquals((long) dataSizeGB << 30, controller.getDataSetSizeBytes());
         assertEquals(numShards, controller.getNumShards(1));
 //        assertEquals(((long) dataSizeGB << 30) / numShards, controller.getShardSizeBytes());
-        assertEquals((long) sstableSizeMB << 20, controller.getMinSstableSizeBytes());
+        assertEquals((long) sstableSizeMB << 20, controller.getTargetSSTableSize());
         assertFalse(controller.isRunning());
         assertEquals(Controller.DEFAULT_SURVIVAL_FACTOR, controller.getSurvivalFactor(0), epsilon);
         assertNull(controller.getCalculator());
