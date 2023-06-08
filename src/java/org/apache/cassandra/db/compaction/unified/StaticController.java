@@ -54,7 +54,7 @@ public class StaticController extends Controller
                             boolean ignoreOverlapsInExpirationCheck,
                             boolean l0ShardsEnabled,
                             int baseShardCount,
-                            double targetSStableSize,
+                            long targetSStableSize,
                             double sstableGrowthModifier,
                             int reservedThreadsPerLevel,
                             OverlapInclusionMethod overlapInclusionMethod)
@@ -89,7 +89,7 @@ public class StaticController extends Controller
                                   boolean ignoreOverlapsInExpirationCheck,
                                   boolean l0ShardsEnabled,
                                   int baseShardCount,
-                                  double targetSStableSize,
+                                  long targetSStableSize,
                                   double sstableGrowthModifier,
                                   int reservedThreadsPerLevel,
                                   OverlapInclusionMethod overlapInclusionMethod,
