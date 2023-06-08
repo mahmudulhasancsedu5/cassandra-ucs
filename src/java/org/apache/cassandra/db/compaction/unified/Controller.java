@@ -350,7 +350,8 @@ public abstract class Controller
 
     public abstract int getPreviousScalingParameter(int index);
 
-    public abstract int getMaxAdaptiveCompactions();
+    public abstract int getMaxRecentAdaptiveCompactions();
+    public abstract boolean isRecentAdaptive(CompactionPick pick);
 
     public int getFanout(int index) {
         return UnifiedCompactionStrategy.fanoutFromScalingParameter(getScalingParameter(index));

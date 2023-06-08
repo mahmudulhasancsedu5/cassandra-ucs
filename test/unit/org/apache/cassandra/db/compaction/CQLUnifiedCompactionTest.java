@@ -176,7 +176,7 @@ public class CQLUnifiedCompactionTest extends CQLTester
         assertEquals(300, controller.getInterval());
         assertEquals(0.25, controller.getThreshold(), 0.000001);
         assertEquals(1, controller.getMinCost());
-        assertEquals(5, controller.getMaxAdaptiveCompactions());
+        assertEquals(5, controller.getMaxRecentAdaptiveCompactions());
     }
 
     @Test
