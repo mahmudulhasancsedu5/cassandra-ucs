@@ -227,15 +227,10 @@ public abstract class Controller
     static final String EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_OPTION = "expired_sstable_check_frequency_seconds";
 
     /**
-     * Either true or false. This parameter determines whether L0 will use
-     * shards or not. If L0 does not use shards then:
-     * - all flushed sstables use an ordinary writer, not a sharded writer
-     * - the arena selector disregards the first token of L0 sstables, placing
-     *   them all in a unique shard.
+     * Deprecated V1 option.
      */
+    @Deprecated
     static final String L0_SHARDS_ENABLED_OPTION = "l0_shards_enabled";
-    static final boolean DEFAULT_L0_SHARDS_ENABLED = System.getProperty(PREFIX + L0_SHARDS_ENABLED_OPTION) == null
-                                                     || Boolean.getBoolean(PREFIX + L0_SHARDS_ENABLED_OPTION);
 
     /**
      * True if L0 data may be coming from different replicas.
@@ -273,7 +268,6 @@ public abstract class Controller
     protected final int maxSSTablesToCompact;
     protected final long expiredSSTableCheckFrequency;
     protected final boolean ignoreOverlapsInExpirationCheck;
-    protected final boolean l0ShardsEnabled;
 
     protected final int baseShardCount;
 
@@ -297,7 +291,6 @@ public abstract class Controller
                int maxSSTablesToCompact,
                long expiredSSTableCheckFrequency,
                boolean ignoreOverlapsInExpirationCheck,
-               boolean l0ShardsEnabled,
                int baseShardCount,
                double targetSStableSize,
                double sstableGrowthModifier,
@@ -330,7 +323,6 @@ public abstract class Controller
                     "Set it to 'true' to enable aggressive SSTable expiration.");
         }
         this.ignoreOverlapsInExpirationCheck = ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION && ignoreOverlapsInExpirationCheck;
-        this.l0ShardsEnabled = l0ShardsEnabled;
     }
 
     @VisibleForTesting
@@ -439,14 +431,6 @@ public abstract class Controller
                      density / targetSSTableSizeMin,
                      FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
         return shards;
-    }
-
-    /**
-     * @return whether L0 should use shards
-     */
-    public boolean areL0ShardsEnabled()
-    {
-        return l0ShardsEnabled;
     }
 
     /**
@@ -748,9 +732,6 @@ public abstract class Controller
         boolean ignoreOverlapsInExpirationCheck = options.containsKey(ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION)
                 ? Boolean.parseBoolean(options.get(ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION_OPTION))
                 : DEFAULT_ALLOW_UNSAFE_AGGRESSIVE_SSTABLE_EXPIRATION;
-        boolean l0ShardsEnabled = options.containsKey(L0_SHARDS_ENABLED_OPTION)
-                                  ? Boolean.parseBoolean(options.get(L0_SHARDS_ENABLED_OPTION))
-                                  : DEFAULT_L0_SHARDS_ENABLED;
 
         int baseShardCount;
         if (options.containsKey(BASE_SHARD_COUNT_OPTION))
@@ -805,12 +786,6 @@ public abstract class Controller
             }
         }
 
-        // Multiple data directories normally indicate multiple disks and we cannot compact sstables together if they belong to
-        // different disks (or else loosing a disk may result in resurrected data due to lost tombstones). Because UCS sharding
-        // subsumes disk sharding, it is not safe to disable shards on L0 if there are multiple data directories.
-        if (!l0ShardsEnabled && DatabaseDescriptor.getAllDataFileLocations().length > 1)
-            throw new IllegalArgumentException("Disabling shards on L0 is not supported with multiple data directories since shards also separate sstables in different directories");
-
         Environment env = new RealEnvironment(realm);
 
         // For remote storage, the sstables on L0 are created by the different replicas, and therefore it is likely
@@ -833,7 +808,6 @@ public abstract class Controller
                                                 maxSSTablesToCompact,
                                                 expiredSSTableCheckFrequency,
                                                 ignoreOverlapsInExpirationCheck,
-                                                l0ShardsEnabled,
                                                 baseShardCount,
                                                 targetSStableSize,
                                                 sstableGrowthModifier,
@@ -849,7 +823,6 @@ public abstract class Controller
                                               maxSSTablesToCompact,
                                               expiredSSTableCheckFrequency,
                                               ignoreOverlapsInExpirationCheck,
-                                              l0ShardsEnabled,
                                               baseShardCount,
                                               targetSStableSize,
                                               sstableGrowthModifier,

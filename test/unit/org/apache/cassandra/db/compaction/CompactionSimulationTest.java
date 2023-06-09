@@ -210,9 +210,6 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     @Option(name= {"-unsafe-aggressive-sstable-expiration"}, description = "Whether to drop expired SSTables without checking if the partitions appear in other SSTables")
     boolean ignoreOverlaps = false;
 
-    @Option(name= {"-l0-shards-enabed"}, description = "Whether to use shards on L0, true by default")
-    boolean l0ShardsEnabled = true;
-
     @Option(name= {"-base-shard-count"}, description = "Base shard count, 4 by default")
     int baseShardCount = 4;
 
@@ -401,7 +398,6 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          0,
                                                          expiredSSTableCheckFrequency,
                                                          ignoreOverlaps,
-                                                         l0ShardsEnabled,
                                                          baseShardCount,
                                                          Math.scalb(targetSSTableSizeMB, 20),
                                                          1,
@@ -423,7 +419,6 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        0,
                                                        expiredSSTableCheckFrequency,
                                                        ignoreOverlaps,
-                                                       l0ShardsEnabled,
                                                        baseShardCount,
                                                        Math.scalb(targetSSTableSizeMB, 20),
                                                        1,
