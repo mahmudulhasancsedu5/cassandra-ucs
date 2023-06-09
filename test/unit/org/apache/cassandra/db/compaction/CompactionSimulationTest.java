@@ -399,7 +399,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          expiredSSTableCheckFrequency,
                                                          ignoreOverlaps,
                                                          baseShardCount,
-                                                         Math.scalb(targetSSTableSizeMB, 20),
+                                                         targetSSTableSizeMB << 20,
                                                          1,
                                                          0,
                                                          overlapInclusionMethod,
@@ -420,7 +420,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        expiredSSTableCheckFrequency,
                                                        ignoreOverlaps,
                                                        baseShardCount,
-                                                       Math.scalb(targetSSTableSizeMB, 20),
+                                                       targetSSTableSizeMB << 20,
                                                        1,
                                                        0,
                                                        overlapInclusionMethod);

@@ -59,10 +59,10 @@ public class AdaptiveControllerTest extends ControllerTest
 
     private AdaptiveController makeController()
     {
-        return makeController(dataSizeGB, numShards, sstableSizeMB);
+        return makeController(dataSizeGB, numShards, sstableSizeMB, 0);
     }
 
-    private AdaptiveController makeController(long dataSizeGB, int numShards, long sstableSizeMB)
+    private AdaptiveController makeController(long dataSizeGB, int numShards, long sstableSizeMB, long minSSTableSizeMB)
     {
         return new AdaptiveController(clock,
                                       env,
@@ -70,7 +70,7 @@ public class AdaptiveControllerTest extends ControllerTest
                                       previousWs,
                                       Controller.DEFAULT_SURVIVAL_FACTORS,
                                       dataSizeGB << 30,
-                                      0,
+                                      minSSTableSizeMB << 20,
                                       0,
                                       Controller.DEFAULT_MAX_SPACE_OVERHEAD,
                                       0,
@@ -179,7 +179,7 @@ public class AdaptiveControllerTest extends ControllerTest
     private void testMinSSTableSizeDynamic(long flushSizeBytes1, int minSSTableSizeMB1, long flushSizeBytes2, int minSSTableSizeMB2)
     {
         // create a controller with minSSTableSizeMB set to zero so that it will calculate the min sstable size from the flush size
-        AdaptiveController controller = makeController(dataSizeGB, numShards, 0);
+        AdaptiveController controller = makeController(dataSizeGB, numShards, Integer.MAX_VALUE, -1);
 
         when(env.flushSize()).thenReturn(flushSizeBytes1 * 1.0);
         assertEquals(minSSTableSizeMB1 << 20, controller.getMinSstableSizeBytes());
@@ -282,7 +282,7 @@ public class AdaptiveControllerTest extends ControllerTest
     private void testUpdateWithSize(long totSize, double[] readCosts, double[] writeCosts, int[] expectedWs) throws InterruptedException
     {
         int shardSizeGB = (int) (totSize >> 30);
-        AdaptiveController controller = makeController(shardSizeGB, 1, sstableSizeMB); // one unique shard
+        AdaptiveController controller = makeController(shardSizeGB, 1, sstableSizeMB, 0); // one unique shard
         controller.startup(strategy, calculator);
 
         assertEquals(readCosts.length, writeCosts.length);

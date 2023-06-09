@@ -21,6 +21,7 @@ import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.db.compaction.CompactionPick;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.MonotonicClock;
@@ -53,7 +54,7 @@ public class StaticController extends Controller
                             long expiredSSTableCheckFrequency,
                             boolean ignoreOverlapsInExpirationCheck,
                             int baseShardCount,
-                            double targetSStableSize,
+                            long targetSStableSize,
                             double sstableGrowthModifier,
                             int reservedThreadsPerLevel,
                             OverlapInclusionMethod overlapInclusionMethod)
@@ -86,7 +87,7 @@ public class StaticController extends Controller
                                   long expiredSSTableCheckFrequency,
                                   boolean ignoreOverlapsInExpirationCheck,
                                   int baseShardCount,
-                                  double targetSStableSize,
+                                  long targetSStableSize,
                                   double sstableGrowthModifier,
                                   int reservedThreadsPerLevel,
                                   OverlapInclusionMethod overlapInclusionMethod,
@@ -144,7 +145,13 @@ public class StaticController extends Controller
     }
 
     @Override
-    public int getMaxAdaptiveCompactions()
+    public boolean isRecentAdaptive(CompactionPick pick)
+    {
+        return false;
+    }
+
+    @Override
+    public int getMaxRecentAdaptiveCompactions()
     {
         return Integer.MAX_VALUE;
     }

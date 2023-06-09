@@ -141,8 +141,8 @@ public abstract class Controller
      * The target SSTable size. This is the size of the SSTables that the controller will try to create.
      */
     static final String TARGET_SSTABLE_SIZE_OPTION = "target_sstable_size";
-    public static final double DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadable(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"), null, "B");
-    static final double MIN_TARGET_SSTABLE_SIZE = 1L << 20;
+    public static final long DEFAULT_TARGET_SSTABLE_SIZE = FBUtilities.parseHumanReadableBytes(System.getProperty(PREFIX + TARGET_SSTABLE_SIZE_OPTION, "1GiB"));
+    static final long MIN_TARGET_SSTABLE_SIZE = 1L << 20;
 
 
     /**
@@ -237,10 +237,13 @@ public abstract class Controller
      */
     public static final String SHARED_STORAGE = "shared_storage";
 
+    /** The maximum exponent for shard splitting. The maximum number of shards is this number the base count shifted this many times left. */
+    static final int MAX_SHARD_SHIFT = 20;
     /** The maximum splitting factor for shards. The maximum number of shards is this number multiplied by the base count. */
-    static final double MAX_SHARD_SPLIT = 1048576;
+    static final double MAX_SHARD_SPLIT = Math.scalb(1, MAX_SHARD_SHIFT);
 
     private static final double INVERSE_LOG_2 = 1.0 / Math.log(2);
+    private static final double INVERSE_SQRT_2 = Math.sqrt(0.5);
 
     public enum OverlapInclusionMethod
     {
@@ -271,7 +274,7 @@ public abstract class Controller
 
     protected final int baseShardCount;
 
-    protected final double targetSSTableSizeMin;
+    protected final long targetSSTableSize;
     protected final double sstableGrowthModifier;
 
     protected final int reservedThreadsPerLevel;
@@ -292,7 +295,7 @@ public abstract class Controller
                long expiredSSTableCheckFrequency,
                boolean ignoreOverlapsInExpirationCheck,
                int baseShardCount,
-               double targetSStableSize,
+               long targetSStableSize,
                double sstableGrowthModifier,
                int reservedThreadsPerLevel,
                OverlapInclusionMethod overlapInclusionMethod)
@@ -306,7 +309,7 @@ public abstract class Controller
         this.currentFlushSize = flushSizeOverride;
         this.expiredSSTableCheckFrequency = TimeUnit.MILLISECONDS.convert(expiredSSTableCheckFrequency, TimeUnit.SECONDS);
         this.baseShardCount = baseShardCount;
-        this.targetSSTableSizeMin = targetSStableSize * Math.sqrt(0.5);
+        this.targetSSTableSize = targetSStableSize;
         this.overlapInclusionMethod = overlapInclusionMethod;
         this.sstableGrowthModifier = sstableGrowthModifier;
         this.reservedThreadsPerLevel = reservedThreadsPerLevel;
@@ -339,7 +342,8 @@ public abstract class Controller
 
     public abstract int getPreviousScalingParameter(int index);
 
-    public abstract int getMaxAdaptiveCompactions();
+    public abstract int getMaxRecentAdaptiveCompactions();
+    public abstract boolean isRecentAdaptive(CompactionPick pick);
 
     public int getFanout(int index) {
         return UnifiedCompactionStrategy.fanoutFromScalingParameter(getScalingParameter(index));
@@ -373,36 +377,44 @@ public abstract class Controller
         {
             shards = baseShardCount;
         }
-        else
+        else if (sstableGrowthModifier == 1)
         {
             // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
-            // the result is a multiple of it by multiplying back below.
-            double count = density / (targetSSTableSizeMin * baseShardCount);
+            // the result is a multiple of it by multiplying back below. Adjusted by sqrt(0.5) to calculate the split
+            // points needed for the minimum size.
+            double count = density / (targetSSTableSize * INVERSE_SQRT_2 * baseShardCount);
             if (count > MAX_SHARD_SPLIT)
                 count = MAX_SHARD_SPLIT;
             assert !(count < 0);    // Must be positive, 0 or NaN, which should translate to baseShardCount
 
-            if (sstableGrowthModifier == 1)
-            {
-                // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
-                // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
-                // already applied in targetSSTableSizeMin.
-                // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
-                shards = baseShardCount * Integer.highestOneBit((int) count | 1);
-            }
-            else
-            {
-                // Take a logarithm of the count (in base 2), and adjust it by the given growth modifier.
-                // Then round down (to get fewer shards and thus bigger sstables than the target minimum)
-                // and make sure the exponent is at least 0.
-                // Note: This code also works correctly for the special cases of sstableGrowthModifier == 0 and 1,
-                //       but the above code avoids the floating point arithmetic for these common cases.
-                // Note: We use log instead of getExponent because we also need the non-integer part of the logarithm
-                //       in order to apply the growth modifier correctly.
-                int pow = Math.max(0, (int) (Math.log(count) * INVERSE_LOG_2 * sstableGrowthModifier));
-                shards = baseShardCount << pow;
-            }
+            // Make it a power of two multiple of the base count so that split points for lower levels remain split points for higher.
+            // The conversion to int and highestOneBit round down, for which we compensate by using the sqrt(0.5) multiplier
+            // already applied in the count.
+            // Setting the bottom bit to 1 ensures the result is at least baseShardCount.
+            shards = baseShardCount * Integer.highestOneBit((int) count | 1);
         }
+        else
+        {
+            // How many we would have to aim for the target size. Divided by the base shard count, so that we can ensure
+            // the result is a multiple of it by multiplying back below.
+            double count = density / (targetSSTableSize * baseShardCount);
+            // Take a logarithm of the count (in base 2), and adjust it by the given growth modifier.
+            // Adjust by 0.5 to round the exponent so that the result falls between targetSSTableSize * sqrt(0.5) and
+            // targetSSTableSize * sqrt(2). Finally, make sure the exponent is at least 0 and not greater than the
+            // fixed maximum.
+            // Note: This code also works correctly for the special cases of sstableGrowthModifier == 0 and 1,
+            //       but the above code avoids the floating point arithmetic for these common cases.
+            // Note: We use log instead of getExponent because we also need the non-integer part of the logarithm
+            //       in order to apply the growth modifier correctly.
+            double pow = Math.log(count) * INVERSE_LOG_2 * sstableGrowthModifier + 0.5;
+            if (pow >= MAX_SHARD_SHIFT)
+                shards = baseShardCount << MAX_SHARD_SHIFT;
+            else if (pow >= 0)
+                shards = baseShardCount << (int) pow;
+            else
+                shards = baseShardCount;    // this also covers the case of pow == NaN
+        }
+
         if (shards > baseShardCount)
             return shards;
 
@@ -420,7 +432,7 @@ public abstract class Controller
                              shards,
                              FBUtilities.prettyPrintBinary(density, "B", " "),
                              density / minSize,
-                             FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
+                             FBUtilities.prettyPrintBinary(minSize, "B", " "));
                 // skip logging below
                 return shards;
             }
@@ -428,8 +440,8 @@ public abstract class Controller
         logger.debug("Shard count {} for density {}, {} times target {}",
                      shards,
                      FBUtilities.prettyPrintBinary(density, "B", " "),
-                     density / targetSSTableSizeMin,
-                     FBUtilities.prettyPrintBinary(targetSSTableSizeMin, "B", " "));
+                     density / targetSSTableSize,
+                     FBUtilities.prettyPrintBinary(targetSSTableSize, "B", " "));
         return shards;
     }
 
@@ -457,7 +469,7 @@ public abstract class Controller
 
     public long getTargetSSTableSize()
     {
-        return Math.round(targetSSTableSizeMin * Math.sqrt(2.0));
+        return targetSSTableSize;
     }
 
     /**
@@ -746,9 +758,9 @@ public abstract class Controller
                 baseShardCount = DEFAULT_BASE_SHARD_COUNT;
         }
 
-        double targetSStableSize = options.containsKey(TARGET_SSTABLE_SIZE_OPTION)
-                                   ? FBUtilities.parseHumanReadable(options.get(TARGET_SSTABLE_SIZE_OPTION), null, "B")
-                                   : DEFAULT_TARGET_SSTABLE_SIZE;
+        long targetSStableSize = options.containsKey(TARGET_SSTABLE_SIZE_OPTION)
+                                 ? FBUtilities.parseHumanReadableBytes(options.get(TARGET_SSTABLE_SIZE_OPTION))
+                                 : DEFAULT_TARGET_SSTABLE_SIZE;
 
         double sstableGrowthModifier = DEFAULT_GROWTH_MODIFIER;
         if (options.containsKey(GROWTH_MODIFIER_OPTION))
@@ -770,7 +782,8 @@ public abstract class Controller
                 minSSTableSize = DEFAULT_MIN_SSTABLE_SIZE_V1;
             baseShardCount = numShards;
             sstableGrowthModifier = 0.0;
-            targetSStableSize = minSSTableSize; // this no longer plays a part, the result of getNumShards is always baseShardCount
+            targetSStableSize = minSSTableSize; // this no longer plays a part, the result of getNumShards before
+                                                // accounting for minimum size is always baseShardCount
 
             double maxSpaceOverheadLowerBound = 1.0d / numShards;
             if (maxSpaceOverhead < maxSpaceOverheadLowerBound)
@@ -967,7 +980,7 @@ public abstract class Controller
                     throw new ConfigurationException(String.format("%s %s is not acceptable, size must be at least %s",
                                                                    TARGET_SSTABLE_SIZE_OPTION,
                                                                    s,
-                                                                   FBUtilities.prettyPrintBinary(MIN_TARGET_SSTABLE_SIZE, "B", "")));
+                                                                   FBUtilities.prettyPrintMemory(MIN_TARGET_SSTABLE_SIZE)));
             }
             catch (NumberFormatException e)
             {

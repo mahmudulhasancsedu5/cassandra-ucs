@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.compaction.CompactionPick;
 import org.apache.cassandra.db.compaction.UnifiedCompactionStrategy;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.utils.FBUtilities;
@@ -101,7 +102,7 @@ public class AdaptiveController extends Controller
                               long expiredSSTableCheckFrequency,
                               boolean ignoreOverlapsInExpirationCheck,
                               int baseShardCount,
-                              double targetSStableSize,
+                              long targetSStableSize,
                               double sstableGrowthModifier,
                               int reservedThreadsPerLevel,
                               OverlapInclusionMethod overlapInclusionMethod,
@@ -148,7 +149,7 @@ public class AdaptiveController extends Controller
                                   long expiredSSTableCheckFrequency,
                                   boolean ignoreOverlapsInExpirationCheck,
                                   int baseShardCount,
-                                  double targetSSTableSize,
+                                  long targetSSTableSize,
                                   double sstableGrowthModifier,
                                   int reservedThreadsPerLevel,
                                   OverlapInclusionMethod overlapInclusionMethod,
@@ -299,8 +300,20 @@ public class AdaptiveController extends Controller
         return minCost;
     }
 
+    /**
+     * Checks to see if the chosen compaction is a result of recent adaptive parameter change.
+     * An adaptive compaction is a compaction triggered by changing the scaling parameter W
+     */
     @Override
-    public int getMaxAdaptiveCompactions()
+    public boolean isRecentAdaptive(CompactionPick pick)
+    {
+        int numTables = pick.sstables().size();
+        int level = (int) pick.parent();
+        return (numTables >= getThreshold(level) && numTables < getPreviousThreshold(level));
+    }
+
+    @Override
+    public int getMaxRecentAdaptiveCompactions()
     {
         return maxAdaptiveCompactions;
     }
