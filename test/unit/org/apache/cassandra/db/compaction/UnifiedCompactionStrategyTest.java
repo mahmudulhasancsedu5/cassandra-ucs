@@ -60,6 +60,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Interval;
 import org.apache.cassandra.utils.Pair;
+import org.hamcrest.Matchers;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -1769,54 +1770,6 @@ public class UnifiedCompactionStrategyTest extends BaseCompactionStrategyTest
                     for (SSTableReader r2 : compacting2)
                         assertTrue(r1 + " intersects " + r2, r1.getFirst().compareTo(r2.getLast()) > 0 || r1.getLast().compareTo(r2.getFirst()) < 0);
             }
-        }
-    }
-
-
-    @Test
-    public void getSelectionTest(int reservations, int totalCount, int levelCount, long spaceAvailable)
-    {
-        int[] perLevel = new int[levelCount];
-        Controller controller = Mockito.mock(Controller.class);
-        when(controller.random()).thenAnswer(inv -> ThreadLocalRandom.current());
-        when(controller.prioritize(anyList())).thenCallRealMethod();
-        when(controller.getReservedThreadsPerLevel()).thenReturn(reservations);
-        when(controller.getOverheadSizeInBytes(any())).thenAnswer(inv -> ((CompactionPick) inv.getArgument(0)).totSizeInBytes());
-        when(controller.isRecentAdaptive(any())).thenReturn(false); // TODO: maybe test this too
-
-        List<CompactionAggregate.UnifiedAggregate> compactions = new ArrayList<>();
-        List<CompactionAggregate> running = new ArrayList<>();
-        // insert
-
-        while (!compactions.isEmpty())
-        {
-            Arrays.fill(perLevel, 0);
-            int runningCompactions = 0;
-            long spaceTaken = 0;
-            for (CompactionAggregate aggregate : running)
-            {
-                CompactionPick compaction = aggregate.getSelected();
-                final int level = (int) compaction.parent();
-                ++perLevel[level];
-                ++runningCompactions;
-                spaceTaken += controller.getOverheadSizeInBytes(compaction);
-
-//                if (controller.isRecentAdaptive(compaction))
-//                    --remainingAdaptiveCompactions;
-            }
-
-            List<CompactionAggregate> result = UnifiedCompactionStrategy.getSelection(compactions,
-                                                                                      controller,
-                                                                                      totalCount - runningCompactions,
-                                                                                      levelCount,
-                                                                                      perLevel,
-                                                                                      spaceAvailable - spaceTaken,
-                                                                                      Integer.MAX_VALUE);
-            compactions.removeAll(result);
-            running.addAll(result);
-            // randomly simulate some of them completing
-            for (int i = 0; i < result.size() / 2; ++i)
-                running.remove(random.nextInt(result.size()));
         }
     }
 }

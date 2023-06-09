@@ -690,9 +690,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         // Note: if we are in the middle of changes in the parameters or level count, remainder might become negative.
         // This is okay, some buckets will temporarily not get their rightful share until these tasks complete.
 
-        if (remainingAdaptiveCompactions == -1)
-            remainingAdaptiveCompactions = Integer.MAX_VALUE;
-
         // Let the controller prioritize the compactions.
         pending = controller.prioritize(pending);
 
