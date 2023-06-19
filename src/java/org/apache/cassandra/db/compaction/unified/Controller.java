@@ -821,10 +821,6 @@ public abstract class Controller
                                  ? FBUtilities.parseHumanReadableBytes(options.get(TARGET_SSTABLE_SIZE_OPTION))
                                  : DEFAULT_TARGET_SSTABLE_SIZE;
         long minSSTableSize = getSizeWithAltAndSpecial(options, MIN_SSTABLE_SIZE_OPTION, MIN_SSTABLE_SIZE_OPTION_MB, 20, MIN_SSTABLE_SIZE_OPTION_AUTO, MIN_SSTABLE_SIZE_AUTO, DEFAULT_MIN_SSTABLE_SIZE);
-        if (minSSTableSize > targetSStableSize * INVERSE_SQRT_2)
-            throw new ConfigurationException(String.format("The minimum sstable size %s cannot be larger than the target size's lower bound %s.",
-                                                           FBUtilities.prettyPrintMemory(minSSTableSize),
-                                                           FBUtilities.prettyPrintMemory((long) (targetSStableSize * INVERSE_SQRT_2))));
 
         double sstableGrowthModifier = DEFAULT_SSTABLE_GROWTH;
         if (options.containsKey(SSTABLE_GROWTH_OPTION))
@@ -920,6 +916,8 @@ public abstract class Controller
         options = new HashMap<>(options);
         String s;
         boolean adaptive = DEFAULT_ADAPTIVE;
+        long minSSTableSize = -1;
+        long targetSSTableSize = DEFAULT_TARGET_SSTABLE_SIZE;
 
         validateNoneWith(options, NUM_SHARDS_OPTION, TARGET_SSTABLE_SIZE_OPTION, SSTABLE_GROWTH_OPTION, BASE_SHARD_COUNT_OPTION);
 
@@ -933,7 +931,7 @@ public abstract class Controller
             adaptive = Boolean.parseBoolean(s);
         }
 
-        validateSizeWithAlt(options, MIN_SSTABLE_SIZE_OPTION, MIN_SSTABLE_SIZE_OPTION_MB, 20, MIN_SSTABLE_SIZE_OPTION_AUTO);
+        minSSTableSize = validateSizeWithAlt(options, MIN_SSTABLE_SIZE_OPTION, MIN_SSTABLE_SIZE_OPTION_MB, 20, MIN_SSTABLE_SIZE_OPTION_AUTO, -1, DEFAULT_MIN_SSTABLE_SIZE);
         validateSizeWithAlt(options, FLUSH_SIZE_OVERRIDE_OPTION, FLUSH_SIZE_OVERRIDE_OPTION_MB, 20);
         validateSizeWithAlt(options, DATASET_SIZE_OPTION, DATASET_SIZE_OPTION_GB, 30);
 
@@ -1039,7 +1037,7 @@ public abstract class Controller
         {
             try
             {
-                long targetSSTableSize = FBUtilities.parseHumanReadableBytes(s);
+                targetSSTableSize = FBUtilities.parseHumanReadableBytes(s);
                 if (targetSSTableSize < MIN_TARGET_SSTABLE_SIZE)
                     throw new ConfigurationException(String.format("%s %s is not acceptable, size must be at least %s",
                                                                    TARGET_SSTABLE_SIZE_OPTION,
@@ -1110,6 +1108,11 @@ public abstract class Controller
             }
         }
 
+        if (minSSTableSize > targetSSTableSize * INVERSE_SQRT_2)
+            throw new ConfigurationException(String.format("The minimum sstable size %s cannot be larger than the target size's lower bound %s.",
+                                                           FBUtilities.prettyPrintMemory(minSSTableSize),
+                                                           FBUtilities.prettyPrintMemory((long) (targetSSTableSize * INVERSE_SQRT_2))));
+
         return adaptive ? AdaptiveController.validateOptions(options) : StaticController.validateOptions(options);
     }
 
@@ -1131,10 +1134,15 @@ public abstract class Controller
             return getSizeWithAlt(options, optionHumanReadable, optionAlt, altShift, defaultValue);
     }
 
-    private static void validateSizeWithAlt(Map<String, String> options, String optionHumanReadable, String optionAlt, int altShift, String... specials)
+    private static void validateSizeWithAlt(Map<String, String> options, String optionHumanReadable, String optionAlt, int altShift)
+    {
+        validateSizeWithAlt(options, optionHumanReadable, optionAlt, altShift, null, 0, 0);
+    }
+
+    private static long validateSizeWithAlt(Map<String, String> options, String optionHumanReadable, String optionAlt, int altShift, String specialText, long specialValue, long defaultValue)
     {
         validateOneOf(options, optionHumanReadable, optionAlt);
-        long sizeInBytes = 1;
+        long sizeInBytes;
         String s = null;
         String opt = optionHumanReadable;
         try
@@ -1142,9 +1150,8 @@ public abstract class Controller
             s = options.remove(opt);
             if (s != null)
             {
-                for (String special : specials)
-                    if (s.equalsIgnoreCase(special))
-                        return; // all good
+                if (s.equalsIgnoreCase(specialText))
+                    return specialValue; // all good
                 sizeInBytes = FBUtilities.parseHumanReadableBytes(s);
             }
             else
@@ -1153,15 +1160,17 @@ public abstract class Controller
                 s = options.remove(opt);
                 if (s != null)
                     sizeInBytes = Long.parseLong(s) << altShift;
+                else
+                    return defaultValue;
             }
 
         }
         catch (NumberFormatException e)
         {
-            if (specials.length > 0)
+            if (specialText != null)
                 throw new ConfigurationException(String.format("%s must be a valid size in bytes or %s for %s",
                                                                s,
-                                                               Arrays.toString(specials),
+                                                               specialText,
                                                                opt),
                                                  e);
             else
@@ -1171,10 +1180,11 @@ public abstract class Controller
                                                  e);
         }
 
-        if (s != null && sizeInBytes <= 0)
+        if (sizeInBytes <= 0)
             throw new ConfigurationException(String.format("Invalid configuration, %s should be positive: %s",
                                                            opt,
                                                            s));
+        return sizeInBytes;
     }
 
     private static void validateNoneWith(Map<String, String> options, String option, String... incompatibleOptions)

@@ -146,12 +146,12 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     private static final int warmupPeriodSec = 15;
 
     /** The minimum sstable size in bytes */
-    private static final long sstableSize = 50 << 20; // 50 MB
+    private static final long sstableSize = 500 << 20; // 50 MB
 
     /** The number of unique keys that cause an sstable to be flushed, the value size is calculated by dividing
      * {@link this#sstableSize} by this value. The smaller this value is, the greater the number of sstables generated.
      */
-    private static final int uniqueKeysPerSStable = 5000;
+    private static final int uniqueKeysPerSStable = 50000;
 
     /** When calculating the read cost, we multiply by this factor to simulate a Bloom Filter false positive rate of 1%. So
      * we estimate that we'll access 1% of the live sstables.
@@ -179,7 +179,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
     int maxW = 32;
 
     @Option(name= {"--data-size"}, description = "The data set size in GB")
-    int datasetSizeGB = 128;
+    int datasetSizeGB = 32;
 
     @Option(name= {"--num-shards"}, description = "The number of compaction shards")
     int numShards = 4;
@@ -392,8 +392,8 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 ? new AdaptiveController(MonotonicClock.preciseTime,
                                                          new SimulatedEnvironment(counters, valueSize), Ws, previousWs,
                                                          new double[] { o },
-                                                         datasetSizeGB << 33,  // MB, leave some room
-                                                         sstableSize, // MB
+                                                         ((long) datasetSizeGB) << 33,  // leave some room
+                                                         sstableSize,
                                                          0,
                                                          0,
                                                          maxSpaceOverhead,
@@ -402,7 +402,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          ignoreOverlaps,
                                                          baseShardCount,
                                                          targetSSTableSizeMB << 20,
-                                                         1,
+                                                         0,
                                                          0,
                                                          overlapInclusionMethod,
                                                          updateTimeSec,
@@ -416,7 +416,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                 : new StaticController(new SimulatedEnvironment(counters, valueSize),
                                                        Ws,
                                                        new double[] { o },
-                                                       datasetSizeGB << 33,  // MB
+                                                       ((long) datasetSizeGB) << 33,  // leave some room
                                                        sstableSize,
                                                        0,
                                                        0,
@@ -426,7 +426,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        ignoreOverlaps,
                                                        baseShardCount,
                                                        targetSSTableSizeMB << 20,
-                                                       1,
+                                                       0,
                                                        0,
                                                        overlapInclusionMethod,
                                                        "ks",
@@ -1453,13 +1453,12 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
             while (true)
             {
                 ++numSStables;
-                if (boundaries.shardEnd() == null || boundaries.shardEnd().compareTo(maxToken) > 0)
+                if (boundaries.shardEnd() == null || maxToken.compareTo(boundaries.shardEnd()) <= 0)
                     break;
                 boundaries.advanceTo(boundaries.shardEnd().nextValidToken());
             }
 
             boundaries = strategy.getShardManager().boundaries(shards);
-            //sstableSize / strategy.getShardManager().rangeSpanned(new Range<>(minToken, maxToken)));
 
             List<SSTableReader> sstables = new ArrayList<>(numSStables);
             long keyCount = (long) Math.ceil(numEntries / (double) numSStables);
@@ -1470,13 +1469,13 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
             while (true)
             {
                 Range<Token> span = boundaries.shardSpan();
-                Token firstToken = span.left;
+                Token firstToken = span.left.nextValidToken();
                 if (minToken.compareTo(firstToken) > 0)
                     firstToken = minToken;
                 Token lastToken = partitioner.split(span.left, span.right, 1 - Math.scalb(1, -24)); // something that is < span.right
                 if (maxToken.compareTo(lastToken) < 0)
                     lastToken = maxToken;
-                DecoratedKey first = new BufferDecoratedKey(boundaries.shardStart(), ByteBuffer.allocate(0));
+                DecoratedKey first = new BufferDecoratedKey(firstToken, ByteBuffer.allocate(0));
                 DecoratedKey last = new BufferDecoratedKey(lastToken, ByteBuffer.allocate(0));
 
                 SSTableReader sstable = mockSSTable(0, bytesOnDisk, timestamp, 0, first, last, 0, true, null, 0);
@@ -1484,7 +1483,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                 when(sstable.estimatedKeys()).thenReturn(keyCount);
                 sstables.add(sstable);
 
-                if (boundaries.shardEnd() == null || boundaries.shardEnd().compareTo(maxToken) > 0)
+                if (boundaries.shardEnd() == null || maxToken.compareTo(boundaries.shardEnd()) <= 0)
                     break;
                 boundaries.advanceTo(boundaries.shardEnd().nextValidToken());
             }
