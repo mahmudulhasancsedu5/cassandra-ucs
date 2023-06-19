@@ -161,21 +161,21 @@ public abstract class Controller
      * the data size becomes larger to avoid using too much memory and processing for the corresponding structures.
      * The setting enables such control and determines how much we reduce the growth of the number of split points as
      * the data size grows. The number specifies the sstable growth part, and the difference from 1 is the shard count
-     * growth component, which is a multiplier applied to the logarithm of the data size, before it is rounded
-     * down and applied as an exponent in the number of split points. In other words, the given value applies as a
-     * negative exponent in the calculation of the number of split points.
+     * growth component, which is a multiplier applied to the logarithm of the data size, before it is rounded and
+     * applied as an exponent in the number of split points. In other words, the given value applies as a negative
+     * exponent in the calculation of the number of split points.
      * <p>
      * Using 0 (the default) applies no correction to the number of split points, resulting in SSTables close to the
-     * targer size. Setting this number to 0 will make UCS never split beyong the base shard count. Using 0.5 will
+     * target size. Setting this number to 1 will make UCS never split beyong the base shard count. Using 0.5 will
      * make the number of split points a square root of the required number for the target SSTable size, making
      * the number of split points and the size of SSTables grow in lockstep as the density grows.
      * <p>
      * For example, given a data size of 1TiB on the top density level and 1GiB target size with base shard count of 1,
-     * modifier 0 would result in 1024 SSTables of ~1GiB each, 0.5 would yield 32 SSTables of ~32GiB each, and 1 would
+     * growth 0 would result in 1024 SSTables of ~1GiB each, 0.5 would yield 32 SSTables of ~32GiB each, and 1 would
      * yield 1 SSTable of 1TiB.
      * <p>
      * Note that this correction only applies after the base shard count is reached, so for the above example with
-     * base count of 4, the number of SSTables will be 4 (~256GiB each) for a modifier value of 0, and 64 (~16GiB each)
+     * base count of 4, the number of SSTables will be 4 (~256GiB each) for a growth value of 1, and 64 (~16GiB each)
      * for 0.5.
      */
     static final String SSTABLE_GROWTH_OPTION = "sstable_growth";

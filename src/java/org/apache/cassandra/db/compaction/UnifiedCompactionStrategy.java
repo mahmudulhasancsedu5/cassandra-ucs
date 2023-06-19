@@ -499,7 +499,6 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                                  limits.perLevel,
                                                                  limits.spaceAvailable,
                                                                  limits.remainingAdaptiveCompactions);
-        logger.debug("Starting {} compactions (out of {})", selection.size(), pending.stream().filter(agg -> !agg.getSelected().isEmpty()).count());
         return selection;
     }
 
@@ -681,9 +680,8 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         boolean oneRemainderPerLevel = perLevelCount < reservedThreadsTarget;
         // If the inclusion method is not transitive, we may have multiple buckets/selections for the same sstable.
         boolean shouldCheckSSTableSelected = controller.overlapInclusionMethod() != Overlaps.InclusionMethod.TRANSITIVE;
-        // If so, make sure we only select on such compaction.
+        // If so, make sure we only select one such compaction.
         Set<CompactionSSTable> selectedSSTables = shouldCheckSSTableSelected ? new HashSet<>() : null;
-
 
         // Calculate how many new ones we can add in each level, and how many we can assign randomly.
         int remaining = totalCount;
@@ -698,6 +696,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
         // Let the controller prioritize the compactions.
         pending = controller.prioritize(pending);
+        int proposed = 0;
 
         // Select the first ones, permitting only the specified number per level.
         List<CompactionAggregate> selected = new ArrayList<>(pending.size());
@@ -711,6 +710,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 selected.add(aggregate);    // always add expired-only compactions, they are not subject to any limits
                 continue;
             }
+            ++proposed;
             long overheadSizeInBytes = controller.getOverheadSizeInBytes(pick);
             if (overheadSizeInBytes > spaceAvailable)
                 continue; // compaction is too large for current cycle
@@ -747,6 +747,9 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (remaining == 0)
                 break;
         }
+
+        logger.debug("Selected {} compactions (out of {} pending). Compactions per level {} (reservations {}{}) remaining reserved {} non-reserved {}.",
+                     selected.size(), proposed, perLevel, perLevelCount, oneRemainderPerLevel ? "+1" : "", remaining - remainder, remainder);
 
         return selected;
     }
