@@ -327,7 +327,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                                                        LifecycleNewTracker lifecycleNewTracker)
     {
         ShardManager currentShardManager = getShardManager();
-        double flushDensity = realm.metrics().flushSizeOnDisk().get() / currentShardManager.localSpaceCoverage();
+        double flushDensity = realm.metrics().flushSizeOnDisk().get() * shardManager.shardSetCoverage() / currentShardManager.localSpaceCoverage();
         ShardTracker boundaries = currentShardManager.boundaries(controller.getNumShards(flushDensity));
         return new ShardedMultiWriter(realm,
                                       descriptor,
@@ -463,7 +463,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 --remainingAdaptiveCompactions;
         }
 
-        CompactionLimits limits = new CompactionLimits(runningCompactions, 
+        CompactionLimits limits = new CompactionLimits(runningCompactions,
                                                        maxCompactions,
                                                        maxConcurrentCompactions,
                                                        perLevel,
@@ -504,7 +504,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
     /**
      * Selects compactions to run next.
-     * 
+     *
      * @param gcBefore
      * @return a subset of compaction aggregates to run next
      */
@@ -530,7 +530,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
         return updateLevelCountWithParentAndGetSelection(limits, pending);
     }
-    
+
     /**
      * Selects compactions to run next from the passed aggregates.
      *
@@ -541,7 +541,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      * @param maxConcurrentCompactions the maximum number of concurrent compactions
      * @return a subset of compaction aggregates to run next
      */
-    public Collection<CompactionAggregate> getNextCompactionAggregates(Collection<CompactionAggregate.UnifiedAggregate> aggregates, 
+    public Collection<CompactionAggregate> getNextCompactionAggregates(Collection<CompactionAggregate.UnifiedAggregate> aggregates,
                                                                        int maxConcurrentCompactions)
     {
         final CompactionLimits limits = getCurrentLimits(maxConcurrentCompactions);
@@ -567,7 +567,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
      * that the compaction statistics will be accurate.
      * <p/>
      * This is called by {@link UnifiedCompactionStrategy#getNextCompactionAggregates(int)}
-     * and externally after calling {@link UnifiedCompactionStrategy#getPendingCompactionAggregates(int)} 
+     * and externally after calling {@link UnifiedCompactionStrategy#getPendingCompactionAggregates(int)}
      * or before submitting tasks.
      *
      * Also, note that skipping the call to {@link BackgroundCompactions#setPending(CompactionStrategy, Collection)}
