@@ -192,8 +192,17 @@ public abstract class Controller
      * <p>
      * The default value is 0, no reserved threads.
      */
-    static final String RESERVED_THREADS_OPTION = "reserved_threads_per_level";
-    public static final int DEFAULT_RESERVED_THREADS = FBUtilities.parseIntAllowingMax(System.getProperty(PREFIX + RESERVED_THREADS_OPTION, "0"));
+    static final String RESERVED_THREADS_OPTION = "reserved_threads";
+    public static final int DEFAULT_RESERVED_THREADS = FBUtilities.parseIntAllowingMax(System.getProperty(PREFIX + RESERVED_THREADS_OPTION, "max"));
+
+    public enum ReservedThreadsType {
+        PER_LEVEL,
+        LEVEL_OR_BELOW
+    }
+    static final String RESERVED_THREADS_TYPE_OPTION = "reserved_threads_type";
+    public static final ReservedThreadsType DEFAULT_RESERVED_THREADS_TYPE =
+        ReservedThreadsType.valueOf(System.getProperty(PREFIX + RESERVED_THREADS_TYPE_OPTION,
+                                                       ReservedThreadsType.LEVEL_OR_BELOW.name()).toUpperCase());
 
     /**
      * This parameter is intended to modify the shape of the LSM by taking into account the survival ratio of data, for now it is fixed to one.
@@ -277,6 +286,7 @@ public abstract class Controller
     protected final double sstableGrowthModifier;
 
     protected final int reservedThreadsPerLevel;
+    protected final ReservedThreadsType reservedThreadsType;
 
     @Nullable protected volatile CostsCalculator calculator;
     @Nullable private volatile Metrics metrics;
@@ -298,6 +308,7 @@ public abstract class Controller
                long targetSStableSize,
                double sstableGrowthModifier,
                int reservedThreadsPerLevel,
+               ReservedThreadsType reservedThreadsType,
                Overlaps.InclusionMethod overlapInclusionMethod)
     {
         this.clock = clock;
@@ -313,6 +324,7 @@ public abstract class Controller
         this.overlapInclusionMethod = overlapInclusionMethod;
         this.sstableGrowthModifier = sstableGrowthModifier;
         this.reservedThreadsPerLevel = reservedThreadsPerLevel;
+        this.reservedThreadsType = reservedThreadsType;
         this.maxSpaceOverhead = maxSpaceOverhead;
 
         if (maxSSTablesToCompact <= 0)  // use half the maximum permitted compaction size as upper bound by default
@@ -614,6 +626,11 @@ public abstract class Controller
         return reservedThreadsPerLevel;
     }
 
+    public ReservedThreadsType getReservedThreadsType()
+    {
+        return reservedThreadsType;
+    }
+
     /**
      * @return whether is allowed to drop expired SSTables without checking if partition keys appear in other SSTables.
      * Same behavior as in TWCS.
@@ -835,6 +852,9 @@ public abstract class Controller
         int reservedThreadsPerLevel = options.containsKey(RESERVED_THREADS_OPTION)
                                       ? FBUtilities.parseIntAllowingMax(options.get(RESERVED_THREADS_OPTION))
                                       : DEFAULT_RESERVED_THREADS;
+        ReservedThreadsType reservedThreadsType = options.containsKey(RESERVED_THREADS_TYPE_OPTION)
+                                                  ? ReservedThreadsType.valueOf(options.get(RESERVED_THREADS_TYPE_OPTION).toUpperCase())
+                                                  : DEFAULT_RESERVED_THREADS_TYPE;
 
         if (options.containsKey(NUM_SHARDS_OPTION))
         {
@@ -842,6 +862,8 @@ public abstract class Controller
             int numShards = Integer.parseInt(options.get(NUM_SHARDS_OPTION));
             if (!options.containsKey(RESERVED_THREADS_OPTION))
                 reservedThreadsPerLevel = Integer.MAX_VALUE;
+            if (!options.containsKey(RESERVED_THREADS_TYPE_OPTION))
+                reservedThreadsType = ReservedThreadsType.PER_LEVEL;
             if (!options.containsKey(MIN_SSTABLE_SIZE_OPTION))
                 minSSTableSize = MIN_SSTABLE_SIZE_AUTO;
             baseShardCount = numShards;
@@ -889,6 +911,7 @@ public abstract class Controller
                                                 targetSStableSize,
                                                 sstableGrowthModifier,
                                                 reservedThreadsPerLevel,
+                                                reservedThreadsType,
                                                 overlapInclusionMethod,
                                                 keyspaceName,
                                                 tableName,
@@ -906,6 +929,7 @@ public abstract class Controller
                                               targetSStableSize,
                                               sstableGrowthModifier,
                                               reservedThreadsPerLevel,
+                                              reservedThreadsType,
                                               overlapInclusionMethod,
                                               keyspaceName,
                                               tableName,
@@ -1096,6 +1120,21 @@ public abstract class Controller
                                                                RESERVED_THREADS_OPTION,
                                                                e.getMessage()),
                                                  e);
+            }
+        }
+
+        s = options.remove(RESERVED_THREADS_TYPE_OPTION);
+        if (s != null)
+        {
+            try
+            {
+                ReservedThreadsType.valueOf(s.toUpperCase());
+            }
+            catch (IllegalArgumentException e)
+            {
+                throw new ConfigurationException(String.format("Invalid reserved threads type %s. The valid options are %s.",
+                                                               s,
+                                                               Arrays.toString(ReservedThreadsType.values())));
             }
         }
 

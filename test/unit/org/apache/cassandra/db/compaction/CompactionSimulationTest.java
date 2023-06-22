@@ -404,6 +404,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                          targetSSTableSizeMB << 20,
                                                          0,
                                                          0,
+                                                         Controller.ReservedThreadsType.PER_LEVEL,
                                                          overlapInclusionMethod,
                                                          updateTimeSec,
                                                          minW,
@@ -428,6 +429,7 @@ public class CompactionSimulationTest extends BaseCompactionStrategyTest
                                                        targetSSTableSizeMB << 20,
                                                        0,
                                                        0,
+                                                       Controller.ReservedThreadsType.PER_LEVEL,
                                                        overlapInclusionMethod,
                                                        "ks",
                                                        "tbl");

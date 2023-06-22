@@ -492,14 +492,13 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 limits.levelCount = Math.max(limits.levelCount, levelOf(selected));
         }
 
-        final List<CompactionAggregate> selection = getSelection(pending,
-                                                                 controller,
-                                                                 limits.maxCompactions,
-                                                                 limits.levelCount,
-                                                                 limits.perLevel,
-                                                                 limits.spaceAvailable,
-                                                                 limits.remainingAdaptiveCompactions);
-        return selection;
+        return getSelection(pending,
+                            controller,
+                            limits.maxCompactions,
+                            limits.levelCount,
+                            limits.perLevel,
+                            limits.spaceAvailable,
+                            limits.remainingAdaptiveCompactions);
     }
 
     /**
@@ -640,7 +639,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                         FBUtilities.prettyPrintMemory(spaceOverheadLimit),
                         controller.getMaxSpaceOverhead() * 100,
                         FBUtilities.prettyPrintMemory(controller.getDataSetSizeBytes()),
-                        Controller.DATASET_SIZE_OPTION_GB,
+                        Controller.DATASET_SIZE_OPTION,
                         Controller.MAX_SPACE_OVERHEAD_OPTION);
     }
 
@@ -678,6 +677,10 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         int remainder = totalCount - perLevelCount * levelCount;
         // If the user requested more than we can give, do not allow more than one extra per level.
         boolean oneRemainderPerLevel = perLevelCount < reservedThreadsTarget;
+        // Reservation type -- just for the level, or can be used for levels before.
+        Controller.ReservedThreadsType reservedThreadsType = controller.getReservedThreadsType();
+        if (perLevelCount == 0 && !oneRemainderPerLevel)
+            reservedThreadsType = Controller.ReservedThreadsType.PER_LEVEL; // Type does not matter without reservations, use simpler scheme
         // If the inclusion method is not transitive, we may have multiple buckets/selections for the same sstable.
         boolean shouldCheckSSTableSelected = controller.overlapInclusionMethod() != Overlaps.InclusionMethod.TRANSITIVE;
         // If so, make sure we only select one such compaction.
@@ -688,7 +691,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
         for (int i = 0; i < levelCount; ++i)
         {
             remaining -= perLevel[i];
-            if (perLevel[i] > perLevelCount)
+            if (reservedThreadsType == Controller.ReservedThreadsType.PER_LEVEL && perLevel[i] > perLevelCount)
                 remainder -= perLevel[i] - perLevelCount;
         }
         // Note: if we are in the middle of changes in the parameters or level count, remainder might become negative.
@@ -700,6 +703,7 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
 
         // Select the first ones, permitting only the specified number per level.
         List<CompactionAggregate> selected = new ArrayList<>(pending.size());
+        selectionLoop:
         for (CompactionAggregate.UnifiedAggregate aggregate : pending)
         {
             final CompactionPick pick = aggregate.getSelected();
@@ -725,13 +729,26 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
             if (shouldCheckSSTableSelected && !Collections.disjoint(selectedSSTables, pick.sstables()))
                 continue; // do not allow multiple selections on the same sstable
 
-            if (perLevel[currentLevel] >= perLevelCount)
+            switch (reservedThreadsType)
             {
-                if (remainder <= 0)
-                    continue;  // share used up and no remainder to distribute
-                if (oneRemainderPerLevel && perLevel[currentLevel] > perLevelCount)
-                    continue;  // this level is already using up all its share + one, we can ignore candidate altogether
-                --remainder;
+                case PER_LEVEL:
+                {
+                    if (perLevel[currentLevel] >= perLevelCount)
+                    {
+                        if (remainder <= 0)
+                            continue;  // share used up and no remainder to distribute
+                        if (oneRemainderPerLevel && perLevel[currentLevel] > perLevelCount)
+                            continue;  // this level is already using up all its share + one, we can ignore candidate altogether
+                        --remainder;
+                    }
+                    break;
+                }
+                case LEVEL_OR_BELOW:
+                {
+                    if (!isAcceptableSelectionForLevelOrBelow(levelCount, perLevel, perLevelCount, remainder, oneRemainderPerLevel, currentLevel))
+                        continue;
+                    break;
+                }
             }
             // Note: if any additional checks are added, make sure remainder is not decreased if they fail.
 
@@ -748,10 +765,48 @@ public class UnifiedCompactionStrategy extends AbstractCompactionStrategy
                 break;
         }
 
-        logger.debug("Selected {} compactions (out of {} pending). Compactions per level {} (reservations {}{}) remaining reserved {} non-reserved {}.",
-                     selected.size(), proposed, perLevel, perLevelCount, oneRemainderPerLevel ? "+1" : "", remaining - remainder, remainder);
-
+        switch (reservedThreadsType)
+        {
+            case PER_LEVEL:
+                logger.debug("Selected {} compactions (out of {} pending). Compactions per level {} (reservations {}{}) remaining reserved {} non-reserved {}.",
+                             selected.size(), proposed, perLevel, perLevelCount, oneRemainderPerLevel ? "+1" : "", remaining - remainder, remainder);
+                break;
+            case LEVEL_OR_BELOW:
+                logger.debug("Selected {} compactions (out of {} pending). Compactions per level {} (reservations level or below {}{}) remaining {}.",
+                             selected.size(), proposed, perLevel, perLevelCount, oneRemainderPerLevel ? "+1" : "", remaining);
+                break;
+        }
         return selected;
+    }
+
+    private static boolean isAcceptableSelectionForLevelOrBelow(int levelCount, int[] perLevel, int perLevelCount, int remainder, boolean oneRemainderPerLevel, int currentLevel)
+    {
+        // Limit the sum of the number of threads of this level and all higher to their number
+        // times perLevelCount, plus any remainder (up to the number when oneRemainderPerLevel is true).
+        int sum = 0;
+        int permitted = 0;
+        int permittedRemainder = oneRemainderPerLevel ? 0 : remainder;
+        int level = levelCount - 1;
+        // For all higher levels, calculate the total number of threads used and permitted.
+        for (; level > currentLevel; --level)
+        {
+            sum += perLevel[level];
+            permitted += perLevelCount;
+            if (oneRemainderPerLevel && permittedRemainder < remainder)
+                ++permittedRemainder;
+        }
+
+        // For this level and all below, check that the limit is not yet hit.
+        for (; level >= 0; --level)
+        {
+            sum += perLevel[level];
+            permitted += perLevelCount;
+            if (oneRemainderPerLevel && permittedRemainder < remainder)
+                ++permittedRemainder;
+            if (sum >= permitted + permittedRemainder)
+                return false; // some lower level used up our share
+        }
+        return true;
     }
 
     @Override

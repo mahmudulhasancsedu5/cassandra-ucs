@@ -16,51 +16,25 @@
 
 package org.apache.cassandra.db.compaction;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Ordering;
-import com.google.common.collect.Sets;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import org.agrona.collections.IntArrayList;
-import org.apache.cassandra.db.BufferDecoratedKey;
-import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.compaction.unified.Controller;
-import org.apache.cassandra.db.compaction.unified.UnifiedCompactionTask;
-import org.apache.cassandra.dht.IPartitioner;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Splitter;
-import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.Interval;
 import org.apache.cassandra.utils.Overlaps;
-import org.apache.cassandra.utils.Pair;
 import org.hamcrest.Matchers;
 import org.mockito.Mockito;
 
@@ -70,109 +44,46 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
+@RunWith(Parameterized.class)
 public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStrategyTest
 {
-    @Test
-    public void testGetSelection_Modifier1_Reservations0()
+    @Parameterized.Parameter(0)
+    public double modifier;
+
+    @Parameterized.Parameter(1)
+    public int reservations;
+
+    @Parameterized.Parameter(2)
+    public Controller.ReservedThreadsType reservedThreadsType;
+
+    @Parameterized.Parameters(name = "Modifier {0} Reservations {1} ReservedThreadsType {2}")
+    public static List<Object[]> params()
     {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 1.0), 0, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
+        ArrayList<Object[]> params = new ArrayList<>();
+        for (Controller.ReservedThreadsType reservedThreadsType : Controller.ReservedThreadsType.values())
+            for (int reservations : new int[]{ 0, 1, Integer.MAX_VALUE })
+                for (double modifier : new double[]{ 0.0, 0.5, 1.0 })
+                    params.add(new Object[]{ modifier, reservations, reservedThreadsType });
+        return params;
     }
 
     @Test
-    public void testGetSelection_Modifier1_Reservations1()
+    public void testGetSelection()
     {
         long startSize = 1L << 30;
         for (int levels = 1; levels < 5; ++levels)
             for (int compactors = 1; compactors <= 32; compactors *= 2)
             {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 1.0), 1, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier1_ReservationsMax()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 1.0), Integer.MAX_VALUE, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0_Reservations0()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.0), 0, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0_Reservations1()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.0), 1, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0_ReservationsMax()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.0), Integer.MAX_VALUE, compactors, levels, 100L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0pt5_Reservations0()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.5), 0, compactors, levels, 20L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0pt5_Reservations1()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.5), 1, compactors, levels, 20L << 30, random.nextInt(20) + 1);
-            }
-    }
-
-    @Test
-    public void testGetSelection_Modifier0pt5_ReservationsMax()
-    {
-        long startSize = 1L << 30;
-        for (int levels = 1; levels < 5; ++levels)
-            for (int compactors = 1; compactors <= 32; compactors *= 2)
-            {
-                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, 0.5), Integer.MAX_VALUE, compactors, levels, 20L << 30, random.nextInt(20) + 1);
+                testGetSelection(generateCompactions(levels, 10 + compactors * 5, startSize, modifier),
+                                 reservations,
+                                 reservedThreadsType,
+                                 compactors,
+                                 levels,
+                                 100L << 30,
+                                 random.nextInt(20) + 1);
             }
     }
 
@@ -206,13 +117,20 @@ public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStr
     }
 
     @Test
-    public void testGetSelection_Modifier0_Reservations0_Repeats()
+    public void testGetSelection_Repeats()
     {
         long startSize = 1L << 30;
         for (int levels = 1; levels < 5; ++levels)
             for (int compactors = 1; compactors <= 32; compactors *= 2)
             {
-                testGetSelection(generateCompactionsWithRepeats(levels, 10 + compactors * 5, startSize, 0.0), 0, compactors, levels, 100L << 30, random.nextInt(20) + 1, false);
+                testGetSelection(generateCompactionsWithRepeats(levels, 10 + compactors * 5, startSize, modifier),
+                                 reservations,
+                                 reservedThreadsType,
+                                 compactors,
+                                 levels,
+                                 100L << 30,
+                                 random.nextInt(20) + 1,
+                                 false);
             }
     }
 
@@ -264,12 +182,25 @@ public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStr
         return String.format("level %d size %s overlap %d%s", levelOf(p), FBUtilities.prettyPrintMemory(p.totSizeInBytes()), u.maxOverlap(), p.hotness() < 0 ? " adaptive" : "");
     }
 
-    public void testGetSelection(List<CompactionAggregate.UnifiedAggregate> compactions, int reservations, int totalCount, int levelCount, long spaceAvailable, int adaptiveLimit)
+    public void testGetSelection(List<CompactionAggregate.UnifiedAggregate> compactions,
+                                 int reservations,
+                                 Controller.ReservedThreadsType reservationType,
+                                 int totalCount,
+                                 int levelCount,
+                                 long spaceAvailable,
+                                 int adaptiveLimit)
     {
-        testGetSelection(compactions, reservations, totalCount, levelCount, spaceAvailable, adaptiveLimit, true);  // do not reject repeated sstables when we only mock one
+        testGetSelection(compactions, reservations, reservationType, totalCount, levelCount, spaceAvailable, adaptiveLimit, true);  // do not reject repeated sstables when we only mock one
     }
 
-    public void testGetSelection(List<CompactionAggregate.UnifiedAggregate> compactions, int reservations, int totalCount, int levelCount, long spaceAvailable, int adaptiveLimit, boolean ignoreRepeats)
+    public void testGetSelection(List<CompactionAggregate.UnifiedAggregate> compactions,
+                                 int reservations,
+                                 Controller.ReservedThreadsType reservationType,
+                                 int totalCount,
+                                 int levelCount,
+                                 long spaceAvailable,
+                                 int adaptiveLimit,
+                                 boolean ignoreRepeats)
     {
         System.out.println(String.format("Starting testGetSelection: reservations %d, totalCount %d, levelCount %d, spaceAvailable %s, adaptiveLimit %d",
                                          reservations,
@@ -282,18 +213,16 @@ public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStr
         when(controller.random()).thenAnswer(inv -> ThreadLocalRandom.current());
         when(controller.prioritize(anyList())).thenCallRealMethod();
         when(controller.getReservedThreadsPerLevel()).thenReturn(reservations);
+        when(controller.getReservedThreadsType()).thenReturn(reservationType);
         when(controller.getOverheadSizeInBytes(any())).thenAnswer(inv -> ((CompactionPick) inv.getArgument(0)).totSizeInBytes());
         when(controller.isRecentAdaptive(any())).thenAnswer(inv -> ((CompactionPick) inv.getArgument(0)).hotness() < 0);  // hotness is used to mock adaptive
         when(controller.overlapInclusionMethod()).thenReturn(ignoreRepeats ? Overlaps.InclusionMethod.TRANSITIVE : Overlaps.InclusionMethod.NONE);
 
         int[] perLevel = new int[levelCount];
-        long remainder = totalCount - levelCount * (long) reservations; // long to deal with MAX_VALUE
-        int allowedExtra = remainder >= 0 ? (int) remainder : totalCount % levelCount == 0 ? 0 : 1; // one remainder per level if reservations cannot be matched
-        if (remainder < 0)
-        {
-            remainder = totalCount % levelCount;
-            reservations = totalCount / levelCount;
-        }
+        int maxReservations = totalCount / levelCount;
+        boolean oneExtra = maxReservations < reservations;
+        reservations = Math.min(reservations, maxReservations);
+        int remainder = totalCount - levelCount * reservations;
 
         List<CompactionAggregate> running = new ArrayList<>();
 
@@ -350,21 +279,14 @@ public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStr
             Assert.assertThat(running.size(), Matchers.lessThanOrEqualTo(totalCount));
             Assert.assertThat(spaceTaken, Matchers.lessThanOrEqualTo(spaceAvailable));
             Assert.assertThat(adaptiveUsed, Matchers.lessThanOrEqualTo(adaptiveLimit));
-            long remainderUsed = 0;
-            for (int i = 0; i < levelCount; ++i)
-            {
-                Assert.assertThat(perLevel[i], Matchers.lessThanOrEqualTo(reservations + allowedExtra));
-                if (perLevel[i] > reservations)
-                    remainderUsed += perLevel[i] - reservations;
-            }
-            Assert.assertThat(remainderUsed, Matchers.lessThanOrEqualTo(remainder));
+            boolean extrasExhausted = verifyReservations(reservationType, reservations, levelCount, perLevel, remainder, oneExtra);
 
             // Check that we do select what we can select
             if (running.size() < totalCount)
             {
                 for (int i = 0; i < levelCount; ++i)
                 {
-                    if (perLevel[i] < reservations || (perLevel[i] < reservations + allowedExtra && remainderUsed < remainder))
+                    if (hasRoomInLevel(reservationType, reservations, remainder, oneExtra, extrasExhausted, perLevel, i))
                     {
                         List<CompactionAggregate.UnifiedAggregate> failures = getSelectablePicks(compactions,
                                                                                                  ignoreRepeats
@@ -406,6 +328,96 @@ public class UnifiedCompactionStrategyGetSelectionTest extends BaseCompactionStr
             for (int i = 0; i < toRemove; ++i)
                 running.remove(random.nextInt(running.size()));
         }
+    }
+
+    private static boolean verifyReservations(Controller.ReservedThreadsType type, int reservations, int levelCount, int[] perLevel, int remainder, boolean oneExtra)
+    {
+        switch (type)
+        {
+            case PER_LEVEL:
+                return verifyReservationsPerLevel(reservations, levelCount, perLevel, remainder, oneExtra);
+            case LEVEL_OR_BELOW:
+                return verifyReservationsLevelOrBelow(reservations, levelCount, perLevel, remainder, oneExtra);
+            default:
+                throw new AssertionError();
+        }
+    }
+    private static boolean verifyReservationsPerLevel(int reservations, int levelCount, int[] perLevel, int remainder, boolean oneExtra)
+    {
+        int remainderUsed = 0;
+        int allowedExtra = oneExtra ? 1 : remainder;
+        for (int i = 0; i < levelCount; ++i)
+        {
+            Assert.assertThat(perLevel[i], Matchers.lessThanOrEqualTo(reservations + allowedExtra));
+            if (perLevel[i] > reservations)
+                remainderUsed += perLevel[i] - reservations;
+        }
+        Assert.assertThat(remainderUsed, Matchers.lessThanOrEqualTo(remainder));
+        return remainderUsed >= remainder;
+    }
+
+    private static boolean verifyReservationsLevelOrBelow(int reservations, int levelCount, int[] perLevel, long remainder, boolean oneExtra)
+    {
+        long sum = 0;
+        long allowed = oneExtra ? 0 : remainder;
+        int count = 0;
+        for (int i = levelCount - 1; i >= 0; --i)
+        {
+            sum += perLevel[i];
+            allowed += reservations;
+            if (++count <= remainder && oneExtra)
+                ++allowed;
+            Assert.assertThat(sum, Matchers.lessThanOrEqualTo(allowed));
+        }
+        Assert.assertThat(sum, Matchers.lessThanOrEqualTo(remainder + levelCount * reservations));
+        assertEquals(allowed, remainder + levelCount * reservations);   // if failed, the problem is in the test
+        return sum >= remainder + levelCount * reservations;
+    }
+
+    private static boolean isAcceptableLevelOrBelow(int reservations, int levelCount, int[] perLevel, long remainder, boolean oneExtra)
+    {
+        long sum = 0;
+        long allowed = oneExtra ? 0 : remainder;
+        int count = 0;
+        for (int i = levelCount - 1; i >= 0; --i)
+        {
+            sum += perLevel[i];
+            allowed += reservations;
+            if (++count <= remainder && oneExtra)
+                ++allowed;
+            if (sum > allowed)
+                return false;
+        }
+        return true;
+    }
+
+    private static boolean hasRoomInLevel(Controller.ReservedThreadsType type, int reservations, int remainder, boolean oneExtra, boolean extrasExhausted, int perLevel[], int level)
+    {
+        switch (type)
+        {
+            case PER_LEVEL:
+                return hasRoomInLevelPerLevel(reservations, remainder, oneExtra, extrasExhausted, perLevel, level);
+            case LEVEL_OR_BELOW:
+                return hasRoomInLevelOrAbove(reservations, remainder, oneExtra, extrasExhausted, perLevel, level);
+            default:
+                throw new AssertionError();
+        }
+    }
+
+    private static boolean hasRoomInLevelPerLevel(int reservations, int remainder, boolean oneExtra, boolean extrasExhausted, int perLevel[], int level)
+    {
+        int allowedExtra = extrasExhausted ? 0 : (oneExtra ? 1 : remainder);
+        return perLevel[level] < reservations + allowedExtra;
+    }
+
+    private static boolean hasRoomInLevelOrAbove(int reservations, int remainder, boolean oneExtra, boolean extrasExhausted, int perLevel[], int level)
+    {
+        if (extrasExhausted)
+            return false;
+        ++perLevel[level];
+        boolean result = isAcceptableLevelOrBelow(reservations, perLevel.length, perLevel, remainder, oneExtra);
+        --perLevel[level];
+        return result;
     }
 
     private static <T extends CompactionAggregate> List<T> getSelectablePicks(List<T> compactions, Set<CompactionSSTable> rejectIfContained, long spaceRemaining, boolean adaptiveAtLimit, Controller controller, int level)

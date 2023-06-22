@@ -412,6 +412,7 @@ public abstract class ControllerTest
         assertEquals(3, controller.getNumShards(Double.NaN));
 
         assertEquals(Integer.MAX_VALUE, controller.getReservedThreadsPerLevel());
+        assertEquals(Controller.ReservedThreadsType.PER_LEVEL, controller.getReservedThreadsType());
     }
 
     @Test
