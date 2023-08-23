@@ -403,7 +403,8 @@ public abstract class Trie<T>
     {
         if (left == null && right == null)
             return this;
-        return new SlicedTrie<>(this, left, includeLeft, right, includeRight);
+        return new IntersectionTrie<>(this, RangeTrie.create(left, includeLeft, right, includeRight));
+//        return new SlicedTrie<>(this, left, includeLeft, right, includeRight);
     }
 
     /**
@@ -423,7 +424,18 @@ public abstract class Trie<T>
      */
     public Trie<T> subtrie(ByteComparable left, ByteComparable right)
     {
-        return subtrie(left, true, right, false);
+        return new IntersectionTrie<>(this, RangeTrie.create(left, right));
+//        return subtrie(left, true, right, false);
+    }
+
+    /**
+     * Returns a view of this trie that is an intersection of its content with the given set.
+     *
+     * The view is live, i.e. any write to the source will be reflected in the intersection.
+     */
+    public Trie<T> intersect(Trie<Boolean> set)
+    {
+        return new IntersectionTrie<>(this, set);
     }
 
     /**

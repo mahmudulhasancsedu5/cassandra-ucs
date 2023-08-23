@@ -18,22 +18,19 @@
 
 package org.apache.cassandra.db.tries;
 
-import com.carrotsearch.hppc.IntArrayDeque;
-import org.agrona.DirectBuffer;
-import org.agrona.collections.IntArrayQueue;
-
 public class IntersectionTrie<T> extends Trie<T>
 {
-    enum SetBoundary
+    enum SetState
     {
-        START,
-        END
+        PREFIX, // no content()
+        IN_SET; // content() == true
+        // outside of set: no node
     }
 
     final Trie<T> trie;
-    final Trie<SetBoundary> set;
+    final Trie<Boolean> set;
 
-    public IntersectionTrie(Trie<T> trie, Trie<SetBoundary> set)
+    public IntersectionTrie(Trie<T> trie, Trie<Boolean> set)
     {
         this.trie = trie;
         this.set = set;
@@ -45,30 +42,15 @@ public class IntersectionTrie<T> extends Trie<T>
         return new IntersectionCursor(trie.cursor(), set.cursor());
     }
 
-    private static class IntersectionCursor<T> implements Cursor<T>, ResettingTransitionsReceiver
+    private static class IntersectionCursor<T> implements Cursor<T>
     {
         final Cursor<T> source;
-        final Cursor<SetBoundary> set;
-        final IntArrayDeque toBoundary;
-        int queueStartDepth;
-        boolean inSet;
+        final Cursor<Boolean> set;
 
-        enum State
-        {
-            ON_PREFIX,
-            IN_SET;
-        }
-
-        static final int EMPTY_QUEUE = Integer.MAX_VALUE;
-
-        public IntersectionCursor(Cursor<T> source, Cursor<SetBoundary> set)
+        public IntersectionCursor(Cursor<T> source, Cursor<Boolean> set)
         {
             this.source = source;
             this.set = set;
-            toBoundary = new IntArrayDeque();
-            inSet = set.content() == SetBoundary.START;
-            queueStartDepth = set.advance();
-            toBoundary.addLast(set.incomingTransition());
         }
 
         @Override
@@ -86,185 +68,41 @@ public class IntersectionTrie<T> extends Trie<T>
         @Override
         public T content()
         {
-            return inSet ? source.content() : null;
+            return set.content() != null ? source.content() : null;
         }
 
         @Override
         public int advance()
         {
-            while (true)
-            {
-                int depth;
-                int transition;
-                if (inSet)
-                {
-                    depth = source.advance();
-                    if (depth > queueStartDepth)
-                        return depth;
-                    transition = source.incomingTransition();
-                    int boundaryFirst = toBoundary.getFirst();
-                    if (depth == queueStartDepth && boundaryFirst >= transition)
-                    {
-                        if (boundaryFirst == transition)
-                        {
-                            toBoundary.removeFirst();
-                            ++queueStartDepth;
-                            if (toBoundary.isEmpty())
-                            {
-                                SetBoundary b = set.content();
-                                queueStartDepth = set.advance();
-                                toBoundary.addLast(set.incomingTransition());
-                                if (b != null)
-                                {
-                                    assert b == SetBoundary.END;
-                                    inSet = false;
-                                    continue;
-                                }
-                            }
-                        }
-                        return depth;
-                    }
-                    // Went out of the set.
-                }
-                else
-                {
-                    int boundaryFirst = toBoundary.removeFirst();
-                    depth = source.skipTo(queueStartDepth, boundaryFirst);
-                    transition = source.incomingTransition();
-                    if (depth == queueStartDepth && transition == boundaryFirst)
-                    {
-                        // Still following boundary.
-                        if (toBoundary.isEmpty())
-                        {
-                            SetBoundary b = set.content();
-                            queueStartDepth = set.advance();
-                            toBoundary.addLast(set.incomingTransition());
-                            if (b != null)
-                            {
-                                assert b == SetBoundary.START;
-                                inSet = true;
-                            }
-                        }
-                        else
-                            ++queueStartDepth;
-                        return depth;
-                    }
-                    // Otherwise we have gone over the boundary, but we may also have gone over the end one.
-                }
-                // Find next set boundary one and check if it's an END
-                if (advanceToNextSetBoundary(depth, transition))
-                    return depth;
-            }
+            // we are starting with both positioned on the same node
+            int depth = source.advance();
+            int transition = source.incomingTransition();
+            return advanceToIntersection(depth, transition);
         }
 
-        private boolean advanceToNextSetBoundary(int depth, int transition)
+        private int advanceToIntersection(int depth, int transition)
         {
-            toBoundary.clear();
-            queueStartDepth = set.skipTo(depth, transition);
-            toBoundary.addLast(set.incomingTransition());
-            SetBoundary b = set.advanceToContent(this);
-            return inSet = (b == SetBoundary.END);
+            int setDepth = set.skipTo(depth, transition);
+            int setTransition = set.incomingTransition();
+            while (setDepth != depth || (depth != -1 && setTransition != transition))
+            {
+                depth = source.skipTo(setDepth, setTransition);
+                transition = source.incomingTransition();
+                if (setDepth != depth || (depth != -1 && setTransition != transition))
+                {
+                    setDepth = set.skipTo(depth, transition);
+                    setTransition = set.incomingTransition();
+                }
+            }
+            return depth;
         }
 
         @Override
         public int skipTo(int skipDepth, int skipTransition)
         {
-            int depth;
-            int transition;
-            if (inSet)
-            {
-                depth = source.skipTo(skipDepth, skipTransition);
-                if (depth > queueStartDepth)
-                    return depth;
-                transition = source.incomingTransition();
-                int boundaryFirst = toBoundary.getFirst();
-                if (depth == queueStartDepth && boundaryFirst >= transition)
-                {
-                    if (boundaryFirst == transition)
-                    {
-                        toBoundary.removeFirst();
-                        ++queueStartDepth;
-                        if (toBoundary.isEmpty())
-                        {
-                            SetBoundary b = set.content();
-                            queueStartDepth = set.advance();
-                            toBoundary.addLast(set.incomingTransition());
-                            if (b != null)
-                            {
-                                assert b == SetBoundary.END;
-                                inSet = false;
-                                return advance();
-                            }
-                        }
-                    }
-                    return depth;
-                }
-                // Went out of the set.
-            }
-            else
-            {
-                int boundaryFirst = toBoundary.removeFirst();
-                if (queueStartDepth < skipDepth || skipTransition < boundaryFirst)
-                {
-                    skipDepth = queueStartDepth;
-                    skipTransition = boundaryFirst; // set boundary is beyond skip position, skip to that instead
-                }
-                depth = source.skipTo(skipDepth, skipTransition);
-                transition = source.incomingTransition();
-                if (depth == queueStartDepth && transition == boundaryFirst)
-                {
-                    // Still following boundary.
-                    if (toBoundary.isEmpty())
-                    {
-                        SetBoundary b = set.content();
-                        queueStartDepth = set.advance();
-                        toBoundary.addLast(set.incomingTransition());
-                        if (b != null)
-                        {
-                            assert b == SetBoundary.START;
-                            inSet = true;
-                        }
-                    }
-                    else
-                        ++queueStartDepth;
-                    return depth;
-                }
-                // Otherwise we have gone over the boundary, but we may also have gone over the end one.
-            }
-            // Find next set boundary one and check if it's an END
-            if (advanceToNextSetBoundary(depth, transition))
-                return depth;
-            else
-                return advance();
-        }
-
-
-        @Override
-        public void addPathByte(int nextByte)
-        {
-            toBoundary.addLast(nextByte);
-        }
-
-        @Override
-        public void addPathBytes(DirectBuffer buffer, int pos, int count)
-        {
-            for (int i = 0; i < count; ++i)
-                addPathByte(buffer.getByte(pos + i) & 0xFF);
-        }
-
-        @Override
-        public void resetPathLength(int newLength)
-        {
-            if (newLength <= queueStartDepth)
-            {
-                queueStartDepth = newLength - 1;
-                toBoundary.clear();
-            }
-            else
-            {
-                while (newLength > queueStartDepth + toBoundary.size() - 1)
-                    toBoundary.removeLast();
-            }
+            int depth = source.skipTo(skipDepth, skipTransition);
+            int transition = source.incomingTransition();
+            return advanceToIntersection(depth, transition);
         }
     }
 }
