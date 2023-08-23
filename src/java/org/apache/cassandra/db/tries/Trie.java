@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.tries;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -637,5 +638,38 @@ public abstract class Trie<T>
     public static <T> Trie<T> empty()
     {
         return (Trie<T>) EMPTY;
+    }
+
+    public static Trie<Boolean> range(ByteComparable left, ByteComparable right)
+    {
+        return RangeTrie.create(left, right);
+    }
+
+    public static Trie<Boolean> ranges(ByteComparable... boundaries)
+    {
+        assert boundaries.length % 2 == 0;
+        var sets = new ArrayList<Trie<Boolean>>(boundaries.length / 2);
+        for (int i = 0; i < boundaries.length; i += 2)
+            sets.add(range(boundaries[i], boundaries[i + 1]));
+        return merge(sets, resolverAny());
+    }
+
+    static final CollectionMergeResolver<Object> RESOLVER_ANY = new CollectionMergeResolver<Object>()
+    {
+        @Override
+        public Object resolve(Object c1, Object c2)
+        {
+            return c1;
+        }
+
+        @Override
+        public Object resolve(Collection<Object> contents)
+        {
+            return contents.iterator().next();
+        }
+    };
+    static <T> CollectionMergeResolver<T> resolverAny()
+    {
+        return (CollectionMergeResolver<T>) RESOLVER_ANY;
     }
 }

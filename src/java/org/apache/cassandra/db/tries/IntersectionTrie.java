@@ -88,11 +88,11 @@ public class IntersectionTrie<T> extends Trie<T>
             {
                 depth = source.skipTo(setDepth, setTransition);
                 transition = source.incomingTransition();
-                if (setDepth != depth || (depth != -1 && setTransition != transition))
-                {
-                    setDepth = set.skipTo(depth, transition);
-                    setTransition = set.incomingTransition();
-                }
+                if (!(setDepth != depth || (depth != -1 && setTransition != transition)))
+                    break;
+
+                setDepth = set.skipTo(depth, transition);
+                setTransition = set.incomingTransition();
             }
             return depth;
         }
